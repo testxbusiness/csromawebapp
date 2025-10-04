@@ -321,7 +321,9 @@ export default function ImportManager({ type, onComplete }: ImportManagerProps) 
       {showPreview && previewData.length > 0 && (
         <div className="mb-6">
           <h3 className="font-medium mb-2">Anteprima Dati (prime 5 righe)</h3>
-          <div className="overflow-x-auto cs-card">
+          <div className="cs-card">
+            {/* Desktop */}
+            <div className="hidden md:block">
             <table className="cs-table">
               <thead>
                 <tr>
@@ -344,6 +346,19 @@ export default function ImportManager({ type, onComplete }: ImportManagerProps) 
                 ))}
               </tbody>
             </table>
+            </div>
+            {/* Mobile cards */}
+            <div className="md:hidden p-3 space-y-2">
+              {previewData.map((row, index) => (
+                <div key={index} className="cs-card">
+                  {Object.entries(row).map(([key, value]) => (
+                    <div key={key} className="text-sm">
+                      <strong>{key.replace('_',' ')}:</strong> <span className="text-secondary">{String(value || '')}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

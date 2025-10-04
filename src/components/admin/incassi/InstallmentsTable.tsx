@@ -163,8 +163,8 @@ export default function InstallmentsTable({
         </div>
       </div>
 
-      {/* Table */}
-      <div className="cs-card p-4">
+      {/* Table (Desktop) */}
+      <div className="hidden md:block cs-card p-4">
         <table className="cs-table">
           <thead>
             <tr>
@@ -262,6 +262,54 @@ export default function InstallmentsTable({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden p-4 space-y-3">
+        {installments.map((installment) => (
+          <div key={installment.id} className="cs-card">
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={selectedInstallments.has(installment.id)}
+                onChange={() => onInstallmentSelect(installment.id)}
+                className="h-4 w-4 mt-1"
+              />
+              <div className="flex-1">
+                <button
+                  onClick={() => onAthleteClick(installment.profile_id)}
+                  className="cs-btn cs-btn--ghost cs-btn--sm text-left"
+                >
+                  <div className="font-semibold">
+                    {installment.profile?.first_name} {installment.profile?.last_name}
+                  </div>
+                  <div className="text-sm text-secondary">{installment.profile?.email}</div>
+                </button>
+
+                <div className="mt-2 grid gap-2 text-sm">
+                  <div><strong>Squadra:</strong> {installment.team?.name} ({installment.team?.code})</div>
+                  <div><strong>Piano:</strong> {installment.membership_fee?.name}</div>
+                  <div><strong>Rata:</strong> {installment.installment_number}</div>
+                  <div><strong>Importo:</strong> €{installment.amount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                  <div><strong>Scadenza:</strong> {formatDate(installment.due_date)}</div>
+                  <div>
+                    <strong>Stato:</strong>
+                    <span className={`ml-2 cs-badge ${
+                      installment.status==='paid' ? 'cs-badge--success' :
+                      installment.status==='overdue' ? 'cs-badge--danger' :
+                      installment.status==='due_soon' ? 'cs-badge--warning' :
+                      'cs-badge--neutral'
+                    }`}>
+                      {getStatusLabel(installment.status)}
+                    </span>
+                  </div>
+                  <div><strong>Residuo:</strong> €{getRemainingAmount(installment).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+                  <div className="text-secondary"><strong>Note:</strong> {installment.notes || '-'}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Pagination */}

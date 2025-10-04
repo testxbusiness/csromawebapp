@@ -353,7 +353,7 @@ export default function AthletesManager() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="hidden md:block">
           <table className="cs-table">
             <thead>
               <tr>
@@ -419,6 +419,40 @@ export default function AthletesManager() {
           </table>
 
           {filteredAthletes.length === 0 && (<div className="p-8 text-center text-secondary">Nessun atleta trovato con i filtri selezionati</div>)}
+        </div>
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {filteredAthletes.map(athlete => (
+            <div key={athlete.id} className="cs-card">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedAthletes.has(athlete.id)}
+                  onChange={() => toggleAthleteSelection(athlete.id)}
+                />
+                <div className="flex-1">
+                  <div className="font-semibold">{athlete.first_name} {athlete.last_name}</div>
+                  <div className="text-sm text-secondary">{athlete.email}</div>
+                  <div className="mt-2 grid gap-2 text-sm">
+                    <div>
+                      <strong>Squadre:</strong>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {athlete.teams?.length ? athlete.teams.map(team => (
+                          <span key={team.id} className="cs-badge cs-badge--neutral">{team.name} {team.jersey_number && `#${team.jersey_number}`}</span>
+                        )) : <span className="text-secondary">Nessuna squadra</span>}
+                      </div>
+                    </div>
+                    <div><strong>Tessera:</strong> {athlete.membership_number || '-'}</div>
+                    <div><strong>Certificato:</strong> {athlete.medical_certificate_expiry ? new Date(athlete.medical_certificate_expiry).toLocaleDateString('it-IT') : '-'}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3">
+                <button className="cs-btn cs-btn--outline cs-btn--sm w-full">Dettagli</button>
+              </div>
+            </div>
+          ))}
+          {filteredAthletes.length === 0 && (<div className="p-4 text-center text-secondary">Nessun atleta trovato con i filtri selezionati</div>)}
         </div>
       </section>
 

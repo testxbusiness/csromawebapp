@@ -338,7 +338,7 @@ export default function CoachesManager() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="hidden md:block">
           <table className="cs-table">
             <thead>
               <tr>
@@ -403,6 +403,43 @@ export default function CoachesManager() {
           </table>
 
           {filteredCoaches.length === 0 && (<div className="p-8 text-center text-secondary">Nessun collaboratore trovato con i filtri selezionati</div>)}
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {filteredCoaches.map(coach => (
+            <div key={coach.id} className="cs-card">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selectedCoaches.has(coach.id)}
+                  onChange={() => toggleCoachSelection(coach.id)}
+                  className="rounded mt-1"
+                />
+                <div className="flex-1">
+                  <div className="font-semibold">{coach.first_name} {coach.last_name}</div>
+                  <div className="text-sm text-secondary">{coach.email}</div>
+                  <div className="mt-2 grid gap-2 text-sm">
+                    <div>
+                      <strong>Squadre:</strong>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {coach.teams?.length ? coach.teams.map(team => (
+                          <span key={team.id} className="cs-badge cs-badge--success">{team.name} ({team.role})</span>
+                        )) : <span className="text-secondary">Nessuna squadra</span>}
+                      </div>
+                    </div>
+                    <div><strong>Livello:</strong> {coach.level || '-'}</div>
+                    <div><strong>Specializzazione:</strong> {coach.specialization || '-'}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <button className="cs-btn cs-btn--outline cs-btn--sm w-full">Dettagli</button>
+              </div>
+            </div>
+          ))}
+          {filteredCoaches.length === 0 && (<div className="p-4 text-center text-secondary">Nessun collaboratore trovato con i filtri selezionati</div>)}
         </div>
       </section>
 

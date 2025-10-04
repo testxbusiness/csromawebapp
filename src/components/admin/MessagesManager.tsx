@@ -239,6 +239,8 @@ export default function MessagesManager() {
 />
 
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -294,6 +296,42 @@ export default function MessagesManager() {
             ))}
           </tbody>
         </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {messages.map((message) => (
+            <div key={message.id} className="cs-card">
+              <div className="font-semibold">{message.subject}</div>
+              <div className="text-sm text-secondary line-clamp-3">{message.content}</div>
+              <div className="mt-2 grid gap-2 text-sm">
+                <div><strong>Mittente:</strong> {message.created_by_profile ? `${message.created_by_profile.first_name} ${message.created_by_profile.last_name}` : 'N/D'}</div>
+                <div>
+                  <strong>Data:</strong> {message.created_at ? new Date(message.created_at).toLocaleDateString('it-IT') : 'N/D'}
+                  <span className="text-secondary ml-2">{message.created_at ? new Date(message.created_at).toLocaleTimeString('it-IT') : ''}</span>
+                </div>
+                <div>
+                  <strong>Destinatari:</strong>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {message.message_recipients && message.message_recipients.length > 0 ? (
+                      message.message_recipients.map((mr) => (
+                        <span key={mr.id} className="cs-badge cs-badge--neutral">
+                          {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name}`}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-secondary">Nessun destinatario</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => { setEditingMessage(message); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
+                <button onClick={() => handleDeleteMessage(message.id!)} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
+              </div>
+            </div>
+          ))}
+        </div>
 
         {messages.length === 0 && (
           <div className="px-6 py-8 text-center">

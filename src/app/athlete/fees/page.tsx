@@ -333,6 +333,8 @@ export default function AthleteFeesPage() {
   </div>
 ) : (
   <div className="cs-card overflow-hidden">
+    {/* Desktop */}
+    <div className="hidden md:block">
     <table className="cs-table">
       <thead>
         <tr>
@@ -390,6 +392,38 @@ export default function AthleteFeesPage() {
         ))}
       </tbody>
     </table>
+    </div>
+
+    {/* Mobile cards */}
+    <div className="md:hidden p-4 space-y-3">
+      {filteredInstallments.map((inst) => (
+        <div key={inst.id} className="cs-card">
+          <div className="font-semibold">
+            {inst.membership_fee.name} — Rata {inst.installment_number}
+          </div>
+          {inst.membership_fee.description && (
+            <div className="text-sm text-secondary line-clamp-2">{inst.membership_fee.description}</div>
+          )}
+
+          <div className="mt-2 grid gap-2 text-sm">
+            <div><strong>Importo:</strong> €{Number(inst.amount).toFixed(2)}</div>
+            <div>
+              <strong>Stato:</strong>
+              <span className={`ml-2 cs-badge ${statusToBadge(inst.status)}`}>
+                {getStatusText(inst.status)}
+              </span>
+            </div>
+            <div><strong>Scadenza:</strong> {new Date(inst.due_date).toLocaleDateString('it-IT')}</div>
+            {inst.paid_at && (
+              <div><strong>Pagata il:</strong> {new Date(inst.paid_at).toLocaleDateString('it-IT')}</div>
+            )}
+            <div className="text-secondary">
+              <strong>Riferimento:</strong> {inst.membership_fee.team.name} ({inst.membership_fee.team.code}) – {inst.membership_fee.team.activity.name}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   </div>
             )}
           </div>

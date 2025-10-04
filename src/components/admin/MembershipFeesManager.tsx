@@ -490,6 +490,8 @@ export default function MembershipFeesManager() {
 
       {tab==='fees' ? (
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -555,6 +557,46 @@ export default function MembershipFeesManager() {
             ))}
           </tbody>
         </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {fees.map((fee) => (
+            <div key={fee.id} className="cs-card">
+              <div className="font-semibold">{fee.name}</div>
+              {fee.description && (
+                <div className="text-sm text-secondary">{fee.description}</div>
+              )}
+
+              <div className="mt-2 grid gap-2 text-sm">
+                <div><strong>Squadra:</strong> {fee.teams?.name} <span className="text-secondary">{fee.teams?.code}</span></div>
+                <div><strong>Importo:</strong> €{fee.total_amount.toFixed(2)}</div>
+                <div>
+                  <strong>Dettagli:</strong>
+                  <div>Iscrizione: €{fee.enrollment_fee.toFixed(2)}</div>
+                  <div>Assicurazione: €{fee.insurance_fee.toFixed(2)}</div>
+                  <div>Mensilità: €{fee.monthly_fee.toFixed(2)} × {fee.months_count} mesi</div>
+                </div>
+                <div><strong>Rate predefinite:</strong> {fee.predefined_installments?.length || 0}</div>
+              </div>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => setShowInstallments(showInstallments === fee.id ? null : fee.id!)} className="cs-btn cs-btn--ghost cs-btn--sm">
+                  {showInstallments === fee.id ? 'Nascondi' : 'Mostra'} rate
+                </button>
+                <button
+                  onClick={() => generateInstallments(fee.id!)}
+                  className="cs-btn cs-btn--primary cs-btn--sm"
+                  title="Genera rate per gli atleti della squadra basandosi sulle rate predefinite"
+                >
+                  Genera
+                </button>
+                <button onClick={() => { setEditingFee(fee); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
+                <button onClick={() => handleDeleteFee(fee.id!)} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
+              </div>
+            </div>
+          ))}
+        </div>
 
         {fees.length === 0 && (
           <div className="text-center py-8">
@@ -608,7 +650,8 @@ export default function MembershipFeesManager() {
             <button onClick={bulkMarkPaid} className="ml-auto cs-btn cs-btn--primary cs-btn--sm disabled:opacity-50" disabled={selectedInstallments.size===0}>Segna selezionate pagate</button>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Desktop */}
+          <div className="hidden md:block">
             <table className="cs-table">
               <thead>
                 <tr>
@@ -650,6 +693,41 @@ export default function MembershipFeesManager() {
                 ))}
               </tbody>
             </table>
+            {flatInstallments.length === 0 && (
+              <div className="text-center text-sm text-secondary py-8">Nessun risultato per i filtri correnti</div>
+            )}
+          </div>
+          {/* Mobile cards */}
+          <div className="md:hidden space-y-3">
+            {flatInstallments.map((row:any)=> (
+              <div key={row.id} className="cs-card">
+                <div className="flex items-start gap-3">
+                  <input type="checkbox" checked={selectedInstallments.has(row.id)} onChange={(e)=>{
+                    setSelectedInstallments((prev:any) => { const n = new Set(prev); if (e.target.checked) n.add(row.id); else n.delete(row.id); return n })
+                  }} />
+                  <div className="flex-1">
+                    <div className="font-semibold">{row.profile ? `${row.profile.first_name} ${row.profile.last_name}` : '—'}</div>
+                    <div className="text-sm text-secondary">{row.team ? `${row.team.name} (${row.team.code})` : '—'}</div>
+                    <div className="mt-2 grid gap-2 text-sm">
+                      <div><strong>Quota:</strong> {row.membership_fee?.name || '—'}</div>
+                      <div><strong>Rata:</strong> {row.installment_number}</div>
+                      <div><strong>Scadenza:</strong> {new Date(row.due_date).toLocaleDateString('it-IT')}</div>
+                      <div><strong>Importo:</strong> €{Number(row.amount).toFixed(2)}</div>
+                      <div>
+                        <strong>Stato:</strong> <span className={`ml-1 cs-badge ${row.status==='paid'?'cs-badge--success': row.status==='overdue'?'cs-badge--danger': row.status==='due_soon'?'cs-badge--warning':'cs-badge--neutral'}`}>{getStatusText(row.status)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  {row.status !== 'paid' ? (
+                    <button onClick={async ()=>{ const ok = await updateInstallmentStatus(row.id, 'paid'); if (ok) loadFlatInstallments() }} className="cs-btn cs-btn--primary cs-btn--sm w-full">Segna pagata</button>
+                  ) : (
+                    <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
+                  )}
+                </div>
+              </div>
+            ))}
             {flatInstallments.length === 0 && (
               <div className="text-center text-sm text-secondary py-8">Nessun risultato per i filtri correnti</div>
             )}

@@ -167,6 +167,8 @@ export default function ActivitiesManager() {
       />
 
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -214,6 +216,37 @@ export default function ActivitiesManager() {
             ))}
           </tbody>
         </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {activities.map((activity) => (
+            <div key={activity.id} className="cs-card">
+              <div className="flex items-start gap-3">
+                <div className="text-2xl">⚽</div>
+                <div className="flex-1">
+                  <div className="font-semibold">{activity.name}</div>
+                  <div className="text-sm text-secondary">{activity.description || 'Nessuna descrizione'}</div>
+                  <div className="mt-2 text-sm"><strong>Stagione:</strong> {activity.seasons?.name || '-'}</div>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => { setEditingActivity(activity); setShowModal(true) }}
+                  className="cs-btn cs-btn--outline cs-btn--sm flex-1"
+                >
+                  Modifica
+                </button>
+                <button
+                  onClick={() => handleDeleteActivity(activity.id!)}
+                  className="cs-btn cs-btn--danger cs-btn--sm flex-1"
+                >
+                  Elimina
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
 
         {activities.length === 0 && (
           <div className="px-6 py-8 text-center">

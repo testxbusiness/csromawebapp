@@ -212,14 +212,6 @@ a{ color:inherit; text-decoration:none }
 .cs-table tbody tr:hover{ background: var(--cs-surface-2) }
 .cs-table__actions{ display:flex; gap:6px; align-items:center; justify-content:flex-end }
 
-/* Responsive tables: enable horizontal scroll on small screens */
-@media (max-width: 768px){
-  /* If a card directly contains a table, allow x-scroll without affecting y */
-  .cs-card:has(> .cs-table){ overflow-x:auto; }
-  /* Ensure table can expand beyond container to trigger scroll */
-  .cs-table{ min-width: 640px; }
-}
-
 /* ----------------------------
    7) Tabs
    ---------------------------- */
@@ -275,8 +267,19 @@ a{ color:inherit; text-decoration:none }
 .cs-sidebar{ width: 280px; border-right:1px solid var(--cs-border); padding: 24px 16px }
 @media (max-width: 768px){ .cs-sidebar{ display:none } }
 
-/* Drawer (mobile sidebar) */
-.cs-drawer{ position: fixed; inset: 0 0 0 auto; width: 78vw; max-width: 320px; height: 100dvh; background: var(--cs-surface); border-left:1px solid var(--cs-border); padding: 24px 16px; z-index: 120; transform: translateX(0) }
+/* Drawer (mobile sidebar) — ancorato a SINISTRA */
+.cs-drawer{
+  position: fixed;
+  inset: 0 auto 0 0;             /* left:0; right:auto → SINISTRA */
+  width: 78vw;
+  max-width: 320px;
+  height: 100dvh;
+  background: var(--cs-surface);
+  border-right: 1px solid var(--cs-border);  /* bordo sul lato aperto */
+  padding: 24px 16px;
+  z-index: 120;
+  transform: translateX(0);      /* ; mancava */
+}
 
 /* ----------------------------
    12) Brand utilities / helpers

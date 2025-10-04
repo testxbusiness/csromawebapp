@@ -184,6 +184,8 @@ export default function GymsManager() {
   />
 
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -237,6 +239,43 @@ export default function GymsManager() {
             ))}
           </tbody>
         </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {gyms.map((gym) => (
+            <div key={gym.id} className="cs-card">
+              <div className="font-semibold">{gym.name}</div>
+              <div className="text-sm text-secondary">{gym.address}</div>
+              <div className="text-sm text-secondary">{gym.city}</div>
+              <div className="mt-2 grid gap-2 text-sm">
+                <div>
+                  <strong>Capacità:</strong> {gym.capacity ?? '-'}
+                </div>
+                <div>
+                  <strong>Stato:</strong> <span className={`cs-badge ${gym.is_active ? 'cs-badge--success' : 'cs-badge--danger'}`}>{gym.is_active ? 'Attiva' : 'Inattiva'}</span>
+                </div>
+                <div>
+                  <strong>Stagione:</strong> {gym.seasons?.name || '-'}
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => { setEditingGym(gym); setShowModal(true) }}
+                  className="cs-btn cs-btn--outline cs-btn--sm flex-1"
+                >
+                  Modifica
+                </button>
+                <button
+                  onClick={() => handleDeleteGym(gym.id!)}
+                  className="cs-btn cs-btn--danger cs-btn--sm flex-1"
+                >
+                  Elimina
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
 
         {gyms.length === 0 && (
           <div className="px-6 py-8 text-center">

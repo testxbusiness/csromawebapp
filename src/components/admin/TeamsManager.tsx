@@ -286,6 +286,8 @@ export default function TeamsManager() {
 />
 
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -347,6 +349,38 @@ export default function TeamsManager() {
             ))}
           </tbody>
         </table>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {teams.map((team) => (
+            <div key={team.id} className="cs-card">
+              <div className="font-semibold">{team.name}</div>
+              <div className="mt-1"><span className="cs-badge cs-badge--neutral">{team.code}</span></div>
+              <div className="mt-2 grid gap-2 text-sm">
+                <div><strong>Attività:</strong> {team.activities?.name || '-'}</div>
+                <div><strong>Stagione:</strong> {team.activities?.seasons?.name || '-'}</div>
+                <div>
+                  <strong>Allenatore:</strong> {team.coach ? `${team.coach.first_name} ${team.coach.last_name}` : 'Nessun allenatore'}
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => { setEditingTeam(team); setShowModal(true) }}
+                  className="cs-btn cs-btn--outline cs-btn--sm flex-1"
+                >
+                  Modifica
+                </button>
+                <button
+                  onClick={() => handleDeleteTeam(team.id!)}
+                  className="cs-btn cs-btn--danger cs-btn--sm flex-1"
+                >
+                  Elimina
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
 
         {teams.length === 0 && (
           <div className="px-6 py-8 text-center">

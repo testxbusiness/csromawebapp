@@ -52,6 +52,8 @@ export default function AthleteMessagesManager() {
       </div>
 
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -94,14 +96,46 @@ export default function AthleteMessagesManager() {
             ))}
           </tbody>
         </table>
+        </div>
 
-        {messages.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4"><span className="text-4xl">✉️</span></div>
-            <h3 className="text-lg font-semibold mb-2">Nessun messaggio</h3>
-            <p className="text-secondary">Qui troverai i messaggi indirizzati a te o alle tue squadre.</p>
-          </div>
-        )}
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {messages.map((m) => (
+            <button key={m.id} className="cs-card text-left w-full" onClick={() => setSelectedMessage(m)}>
+              <div className="font-semibold">{m.subject}</div>
+              <div className="text-sm text-secondary line-clamp-3">{m.content}</div>
+              <div className="mt-2 grid gap-1 text-sm">
+                <div><strong>Mittente:</strong> {m.created_by_profile ? `${m.created_by_profile.first_name} ${m.created_by_profile.last_name}` : 'N/D'}</div>
+                <div>
+                  <strong>Data:</strong> {m.created_at ? new Date(m.created_at).toLocaleDateString('it-IT') : 'N/D'}
+                  <span className="text-secondary ml-2">{m.created_at ? new Date(m.created_at).toLocaleTimeString('it-IT') : ''}</span>
+                </div>
+                <div>
+                  <strong>Destinatari:</strong>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {m.message_recipients && m.message_recipients.length > 0 ? (
+                      m.message_recipients.map((mr) => (
+                        <span key={mr.id} className="cs-badge cs-badge--neutral">
+                          {mr.teams ? `🏀 ${mr.teams.name}` : mr.profiles ? `👤 ${mr.profiles.first_name} ${mr.profiles.last_name}` : '—'}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-secondary">Nessun destinatario visibile</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+          {messages.length === 0 && (
+            <div className="px-6 py-8 text-center">
+              <div className="text-secondary mb-4"><span className="text-4xl">✉️</span></div>
+              <h3 className="text-lg font-semibold mb-2">Nessun messaggio</h3>
+              <p className="text-secondary">Qui troverai i messaggi indirizzati a te o alle tue squadre.</p>
+            </div>
+          )}
+        </div>
+        
       </div>
 
       {selectedMessage && (

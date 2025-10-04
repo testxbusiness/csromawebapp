@@ -135,6 +135,8 @@ export default function SeasonsManager() {
       />
 
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -183,6 +185,28 @@ export default function SeasonsManager() {
             ))}
           </tbody>
         </table>
+        </div>
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {seasons.map((season) => (
+            <div key={season.id} className="cs-card">
+              <div className="font-semibold">{season.name}</div>
+              <div className="text-sm text-secondary">
+                {new Date(season.start_date).toLocaleDateString('it-IT')} - {new Date(season.end_date).toLocaleDateString('it-IT')}
+              </div>
+              <div className="mt-2">
+                <span className={`cs-badge ${season.is_active ? 'cs-badge--success' : 'cs-badge--neutral'}`}>{season.is_active ? 'Attiva' : 'Inattiva'}</span>
+              </div>
+              <div className="mt-3 flex gap-2">
+                {!season.is_active && (
+                  <button onClick={() => handleSetActiveSeason(season.id!)} className="cs-btn cs-btn--primary cs-btn--sm flex-1">Attiva</button>
+                )}
+                <button onClick={() => { setEditingSeason(season); setModalOpen(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
+                <button onClick={() => handleDeleteSeason(season.id!)} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
+              </div>
+            </div>
+          ))}
+        </div>
         {seasons.length === 0 && (
           <div className="text-center text-secondary py-6">Nessuna stagione creata</div>
         )}

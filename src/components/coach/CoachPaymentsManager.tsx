@@ -94,6 +94,8 @@ export default function CoachPaymentsManager() {
       </div>
 
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -133,14 +135,38 @@ export default function CoachPaymentsManager() {
             ))}
           </tbody>
         </table>
+        </div>
 
-        {filtered.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4"><span className="text-4xl">💶</span></div>
-            <h3 className="text-lg font-semibold mb-2">Nessun pagamento</h3>
-            <p className="text-secondary">Qui vedrai i pagamenti a te assegnati dall'amministratore.</p>
-          </div>
-        )}
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {filtered.map(p => (
+            <div key={p.id} className="cs-card">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold">{p.description}</div>
+                  <div className="text-xs text-secondary">{p.frequency === 'one_time' ? 'Una tantum' : 'Ricorrente'}</div>
+                </div>
+                <span className="cs-badge cs-badge--neutral">Allenatore</span>
+              </div>
+              <div className="mt-2 grid gap-2 text-sm">
+                <div><strong>Importo:</strong> €{(p.amount ?? 0).toFixed(2)}</div>
+                <div>
+                  <strong>Stato:</strong>
+                  <span className={`ml-2 ${statusBadge(p.status)}`}>{p.status === 'paid' ? 'Pagato' : 'Da pagare'}</span>
+                </div>
+                <div><strong>Scadenza:</strong> {p.due_date ? new Date(p.due_date).toLocaleDateString('it-IT') : 'N/D'}</div>
+                <div className="text-secondary"><strong>Riferimento:</strong> {p.coaches ? `Allenatore: ${p.coaches.first_name} ${p.coaches.last_name}` : '—'}</div>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="px-6 py-8 text-center">
+              <div className="text-secondary mb-4"><span className="text-4xl">💶</span></div>
+              <h3 className="text-lg font-semibold mb-2">Nessun pagamento</h3>
+              <p className="text-secondary">Qui vedrai i pagamenti a te assegnati dall'amministratore.</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

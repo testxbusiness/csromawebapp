@@ -494,7 +494,7 @@ export default function PaymentsManager() {
     </div>
   </div>
 
-  <div className="overflow-x-auto">
+  <div className="hidden md:block">
     <table className="cs-table">
       <thead>
         <tr>
@@ -588,6 +588,75 @@ export default function PaymentsManager() {
         ))}
       </tbody>
     </table>
+  </div>
+
+  {/* Vista Mobile */}
+  <div className="space-y-3 md:hidden p-4">
+    {filteredPayments.map((payment) => (
+      <div key={payment.id} className="cs-card">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="font-semibold">{payment.description}</div>
+            <div className="text-xs text-secondary">
+              {payment.frequency === 'recurring' ? 'Ricorrente' : 'Una tantum'}
+            </div>
+          </div>
+          <span className={`cs-badge cs-badge--neutral`}>
+            {payment.type === 'general_cost' ? 'Costo Generale' : 'Allenatore'}
+          </span>
+        </div>
+
+        <div className="mt-3 grid gap-2">
+          <div className="text-sm"><strong>Importo:</strong> €{payment.amount.toFixed(2)}</div>
+          <div className="text-sm">
+            <strong>Stato:</strong>
+            <span className={`ml-2 cs-badge ${payment.status === 'paid' ? 'cs-badge--success' : 'cs-badge--warning'}`}>
+              {payment.status === 'paid' ? 'Pagato' : 'Da pagare'}
+            </span>
+          </div>
+          <div className="text-sm"><strong>Scadenza:</strong> {payment.due_date ? new Date(payment.due_date).toLocaleDateString('it-IT') : 'N/D'}</div>
+          <div className="text-sm text-secondary">
+            {payment.gyms && <>Palestra: {payment.gyms.name}<br/></>}
+            {payment.activities && <>Attività: {payment.activities.name}<br/></>}
+            {payment.teams && <>Squadra: {payment.teams.name}<br/></>}
+            {payment.coaches && <>Allenatore: {payment.coaches.first_name} {payment.coaches.last_name}</>}
+            {!payment.gyms && !payment.activities && !payment.teams && !payment.coaches && 'Generale'}
+          </div>
+        </div>
+
+        <div className="mt-4 flex gap-2">
+          {payment.status === 'to_pay' ? (
+            <button
+              onClick={() => markAsPaid(payment.id!)}
+              className="cs-btn cs-btn--ghost cs-btn--sm flex-1"
+              title="Segna come pagato"
+            >
+              Segna pagato
+            </button>
+          ) : (
+            <button
+              onClick={() => markAsToPay(payment.id!)}
+              className="cs-btn cs-btn--ghost cs-btn--sm flex-1"
+              title="Segna come da pagare"
+            >
+              Segna da pagare
+            </button>
+          )}
+          <button
+            onClick={() => { setEditingPayment(payment); setShowModal(true) }}
+            className="cs-btn cs-btn--outline cs-btn--sm flex-1"
+          >
+            Modifica
+          </button>
+          <button
+            onClick={() => handleDeletePayment(payment.id!)}
+            className="cs-btn cs-btn--primary cs-btn--sm flex-1"
+          >
+            Elimina
+          </button>
+        </div>
+      </div>
+    ))}
   </div>
 </section>
 

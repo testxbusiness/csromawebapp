@@ -375,6 +375,8 @@ export default function EventsManager() {
         </div>
       ) : (
       <div className="cs-card overflow-hidden">
+        {/* Desktop */}
+        <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
@@ -432,16 +434,49 @@ export default function EventsManager() {
             ))}
           </tbody>
         </table>
+        </div>
 
-        {events.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4"><span className="text-4xl">📅</span></div>
-            <h3 className="text-lg font-semibold mb-2">Nessun evento creato</h3>
-            <p className="text-secondary mb-4">Crea il tuo primo evento per iniziare a organizzare il calendario delle attività.</p>
-            <button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo evento
-            </button>
-          </div>
-        )}
+        {/* Mobile cards */}
+        <div className="md:hidden p-4 space-y-3">
+          {events.map((event) => (
+            <div key={event.id} className="cs-card" onClick={() => setSelectedEvent(event)}>
+              <div className="font-semibold">{event.title}</div>
+              {event.description && (
+                <div className="text-sm text-secondary line-clamp-3">{event.description}</div>
+              )}
+              <div className="mt-2 grid gap-2 text-sm">
+                <div>
+                  <strong>Data:</strong> {new Date(event.start_date).toLocaleDateString('it-IT')}
+                  <span className="text-secondary ml-2">
+                    {new Date(event.start_date).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                    {' - '}
+                    {new Date(event.end_date).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div><strong>Luogo:</strong> {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'N/D'}</div>
+                <div><strong>Squadre:</strong> {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}</div>
+                <div>
+                  <strong>Tipo:</strong>
+                  <span className={`ml-2 cs-badge ${event.event_type==='one_time'?'cs-badge--neutral':'cs-badge--accent'}`}>
+                    {event.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}
+                  </span>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
+                <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
+              </div>
+            </div>
+          ))}
+          {events.length === 0 && (
+            <div className="px-6 py-8 text-center">
+              <div className="text-secondary mb-4"><span className="text-4xl">📅</span></div>
+              <h3 className="text-lg font-semibold mb-2">Nessun evento creato</h3>
+              <p className="text-secondary mb-4">Crea il tuo primo evento per iniziare a organizzare il calendario delle attività.</p>
+              <button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo evento</button>
+            </div>
+          )}
+        </div>
       </div>
       )}
 
