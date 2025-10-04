@@ -512,3 +512,31 @@ a{ color:inherit; text-decoration:none }
 @keyframes cs-tgl{
   0%{ transform: scale(1); } 50%{ transform: scale(0.96); } 100%{ transform: scale(1); }
 }
+
+/* Numero di maglia */
+.jersey-number {
+  /* responsive size: modifica i clamp in base allo spazio */
+  font-size: clamp(64px, 10vw, 160px);
+  line-height: 1;
+  letter-spacing: 1px;
+  font-weight: 800;
+
+  /* Colori con variabili override */
+  color: var(--jersey-number-color, var(--cs-warm)); /* default: giallo CS */
+  /* Outline principale (Chrome, Edge, Safari, Firefox moderno) */
+  -webkit-text-stroke: var(--jersey-outline-width, 4px)
+                       var(--jersey-number-outline, #0b1220);
+  paint-order: stroke fill;
+
+  /* Fallback extra contrasto */
+  text-shadow:
+    0 1px 1px rgba(0,0,0,.35),
+    0 2px 3px rgba(0,0,0,.25);
+}
+
+/* Dark mode ritocco (opzionale) */
+.theme-dark .jersey-number {
+  text-shadow:
+    0 1px 1px rgba(0,0,0,.5),
+    0 3px 6px rgba(0,0,0,.35);
+}

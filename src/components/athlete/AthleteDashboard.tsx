@@ -85,7 +85,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [messageDetail, setMessageDetail] = useState<any>(null)
   const supabase = createClient()
-  
+
   // Enrich selected message on open
   useEffect(() => {
     const loadDetail = async () => {
@@ -396,6 +396,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
             <div className="text-3xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
           </div>
         </div>
+        <div className="cs-card mt-4">
+    <h3 className="font-semibold mb-3">La tua maglia</h3>
+  </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

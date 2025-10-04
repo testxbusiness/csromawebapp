@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { JerseyCard } from '@/components/athlete/JerseyCard'
 
 interface ProfileData {
   first_name: string
@@ -92,6 +93,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
           const composed = list.map((r:any)=>{
             const t = teamMap.get(r.team_id)
             const a = t ? activityMap.get(t.activity_id) : null
+
             return {
               id: r.id,
               jersey_number: r.jersey_number,
@@ -168,6 +170,11 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       alert('Errore nel cambio password')
     }
   }
+
+          const jerseyNumber =
+            (teamMemberships.find(m => !!m.jersey_number)?.jersey_number ??
+            (profile as any)?.athlete_profile?.jersey_number ??
+          null);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -364,6 +371,20 @@ export default function UserProfile({ userRole }: UserProfileProps) {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+          {userRole === 'athlete' && (
+            <div className="cs-card p-6">
+              <h2 className="text-xl font-semibold mb-4">La tua maglia</h2>
+            {/* Contenitore responsivo: centrato, dimensione controllata su desktop */}
+              <div className="mx-auto w-full max-w-[420px]">
+                <JerseyCard
+                  number={jerseyNumber ? String(jerseyNumber) : '—'}
+                  color="var(--cs-warm)"         // giallo brand
+                  outline="var(--cs-accent)"     // blu/viola brand
+                  outlineWidth={4}
+                  />
+              </div>
             </div>
           )}
 
