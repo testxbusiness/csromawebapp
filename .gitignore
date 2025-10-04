@@ -37,5 +37,23 @@ yarn-error.log*
 .vercel
 
 # typescript
-*.tsbuildinfo
+*.tsbuild.info
 next-env.d.ts
+
+# local supabase
+supabase/
+
+# local development files
+cookies.txt
+.serena/
+
+# docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

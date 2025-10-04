@@ -1,0 +1,322 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const adminClient = createAdminClient()
+    const body = await request.json()
+    
+    const {
+      email,
+      first_name,
+      last_name,
+      role,
+      phone,
+      birth_date,
+      team_ids
+    } = body
+
+    // Verifica che l'utente corrente sia admin
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    let userId: string | null = null
+    let tempPassword: string | undefined
+    let wasCreated = false
+    
+    // 1. Verifica se l'utente esiste già in profiles O in auth.users
+    const { data: existingUser } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
+    
+    // Verifica anche in auth.users provando a creare l'utente e gestendo l'errore
+    let authUserExists = false
+    let existingAuthUserId: string | null = null
+    
+    // Prima prova a creare l'utente - se fallisce per email esistente, recupera l'ID
+    if (existingUser) {
+      userId = existingUser.id
+    } else {
+      // Prova a creare l'utente per vedere se l'email esiste già
+      const tempTestPassword = 'temp_test_password_123!'
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password: tempTestPassword,
+        email_confirm: true
+      })
+
+      if (authError) {
+        if (authError.status === 422 && authError.code === 'email_exists') {
+          // Email esiste già - cerca di recuperare l'utente
+          authUserExists = true
+          
+          // Cerca l'utente nella tabella auth.users usando una query diretta (se possibile)
+          // Oppure gestisci come errore che l'utente esiste già
+          console.log(`Utente con email ${email} esiste già in auth.users`)
+          
+          // Per ora, considera questo come un caso di errore
+          return NextResponse.json({ 
+            error: 'Email già registrata nel sistema. Contatta il supporto per risolvere.' 
+          }, { status: 400 })
+        } else {
+          // Altro errore
+          console.error('Errore verifica utente auth:', authError)
+          return NextResponse.json({ error: authError.message }, { status: 400 })
+        }
+      } else {
+        // Utente creato con successo - procedi
+        userId = authData.user.id
+        tempPassword = tempTestPassword
+        wasCreated = true
+      }
+    }
+        email,
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: {
+          first_name,
+          last_name,
+          role,
+          must_change_password: true,
+          temp_password_set_at: new Date().toISOString(),
+          temp_password_expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString() // 24h
+        }
+      })
+
+      if (authError || !authData.user) {
+        console.error('Errore creazione utente auth.admin.createUser:', authError)
+        
+        // Se è un errore di autorizzazione, potrebbe essere perché stiamo usando ANON_KEY invece di SERVICE_ROLE_KEY
+        if (authError?.message?.includes('JWT')) {
+          return NextResponse.json({ 
+            error: 'Errore di autorizzazione. Verifica la Service Role Key di Supabase.' 
+          }, { status: 403 })
+        }
+        
+        return NextResponse.json({ error: authError?.message || 'Errore creazione utente' }, { status: 400 })
+      }
+      
+      userId = authData.user.id
+
+      // 3. Crea il profilo iniziale (trigger dovrebbe gestirlo, ma forziamo la creazione)
+      const { error: profileError } = await adminClient
+        .from('profiles')
+        .upsert({
+          id: userId,
+          email,
+          first_name,
+          last_name,
+          role,
+          phone: phone || null,
+          birth_date: birth_date || null,
+          must_change_password: true
+        })
+
+      if (profileError) {
+        console.error('Errore creazione profilo upsert:', profileError)
+        return NextResponse.json({ error: 'Errore creazione profilo' }, { status: 400 })
+      }
+    }
+
+    // 4. Aggiorna o crea il profilo
+    if (existingUser) {
+      // Aggiorna profilo esistente
+      const { error: updateError } = await adminClient
+        .from('profiles')
+        .update({
+          first_name,
+          last_name,
+          role,
+          phone: phone || null,
+          birth_date: birth_date || null
+        })
+        .eq('id', userId)
+
+      if (updateError) {
+        console.error('Errore aggiornamento profilo:', updateError)
+        return NextResponse.json({ error: 'Errore aggiornamento profilo' }, { status: 400 })
+      }
+    } else if (authUserExists) {
+      // Crea profilo per utente che esiste in auth.users ma non in profiles
+      const { error: profileError } = await adminClient
+        .from('profiles')
+        .upsert({
+          id: userId,
+          email,
+          first_name,
+          last_name,
+          role,
+          phone: phone || null,
+          birth_date: birth_date || null,
+          must_change_password: true
+        })
+
+      if (profileError) {
+        console.error('Errore creazione profilo per utente auth esistente:', profileError)
+        return NextResponse.json({ error: 'Errore creazione profilo' }, { status: 400 })
+      }
+    }
+
+    // 5. Gestisci assegnazione squadre (solo per coach e atleti)
+    if (team_ids && team_ids.length > 0 && role !== 'admin') {
+      // Rimuovi assegnazioni esistenti
+      await adminClient
+        .from('team_members')
+        .delete()
+        .eq('profile_id', userId)
+
+      // Aggiungi nuove assegnazioni
+      const teamMemberships = team_ids.map((team_id: string) => ({
+        team_id,
+        profile_id: userId
+      }))
+
+      const { error: teamError } = await adminClient
+        .from('team_members')
+        .insert(teamMemberships)
+
+      if (teamError) {
+        console.error('Errore assegnazione squadre:', teamError)
+        return NextResponse.json({ error: 'Errore assegnazione squadre' }, { status: 400 })
+      }
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      user_id: userId,
+      ...(tempPassword ? { temp_password: tempPassword } : {}),
+      message: wasCreated ? 'Utente creato con successo' : 'Utente aggiornato con successo'
+    })
+
+  } catch (error) {
+    console.error('Errore API creazione utente:', error)
+    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+  }
+}
+
+export async function GET() {
+  try {
+    const supabase = await createClient()
+    const adminClient = createAdminClient()
+    
+    // Verifica che l'utente corrente sia admin
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // Lista utenti dai profiles invece che da auth.users
+    const { data: users, error } = await adminClient
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
+    }
+
+    return NextResponse.json({ users })
+
+  } catch (error) {
+    console.error('Errore API lista utenti:', error)
+    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const adminClient = createAdminClient()
+    
+    // Verifica che l'utente corrente sia admin
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('id')
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'ID utente richiesto' }, { status: 400 })
+    }
+
+    // 1. Elimina le assegnazioni squadre
+    await adminClient
+      .from('team_members')
+      .delete()
+      .eq('profile_id', userId)
+
+    // 2. Elimina il profilo
+    const { error: profileError } = await adminClient
+      .from('profiles')
+      .delete()
+      .eq('id', userId)
+
+    if (profileError) {
+      console.error('Errore eliminazione profilo:', profileError)
+      return NextResponse.json({ error: 'Errore eliminazione profilo' }, { status: 400 })
+    }
+
+    // 3. Elimina l'utente auth (opzionale - dipende dalla politica di retention)
+    // const { error: authError } = await supabase.auth.admin.deleteUser(userId)
+    // if (authError) {
+    //   console.error('Errore eliminazione utente auth:', authError)
+    //   // Potrebbe essere normale se vogliamo mantenere l'utente auth per storico
+    // }
+
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Utente eliminato con successo'
+    })
+
+  } catch (error) {
+    console.error('Errore API eliminazione utente:', error)
+    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+  }
+}
+
+// Funzione per generare password temporanea
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*'
+  let password = ''
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return password
+}

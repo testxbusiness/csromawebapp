@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  supabase-db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - /Users/famigliapoliti/Desktop/csromawebappclaude/supabase/data:/var/lib/postgresql/data
+      - /Users/famigliapoliti/Desktop/csromawebappclaude/supabase/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  supabase-studio:
+    image: supabase/studio:latest
+    environment:
+      STUDIO_PG_URL: postgresql://postgres:postgres@supabase-db:5432/postgres
+    ports:
+      - "54323:3000"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+    volumes:
+      - ./supabase/migrations:/migrations
+
+  supabase-auth:
+    image: supabase/gotrue:v2.178.0
+    environment:
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://postgres:postgres@supabase-db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_JWT_SECRET: your-super-secret-jwt
+      GOTRUE_DISABLE_SIGNUP: "false"
+    ports:
+      - "9999:9999"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+
+  supabase-realtime:
+    image: supabase/realtime:v2.43.0
+    environment:
+      DB_HOST: supabase-db
+      DB_PORT: 5432
+      DB_NAME: postgres
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_SSL: "false"
+      JWT_SECRET: your-super-secret-jwt
+      SECRET_KEY_BASE: your-secret-key-base
+    ports:
+      - "4000:4000"
+    depends_on:
+      supabase-db:
+        condition: service_healthy
+
+volumes:
+  supabase_data:

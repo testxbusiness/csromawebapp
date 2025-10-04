@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSRoma UI — Demo Finale</title>
+  <link rel="stylesheet" href="csroma-ui-final.css" />
+  <script>
+    // Early theme boot (persist with localStorage)
+    (function () {
+      const key = "cs-theme";
+      const saved = localStorage.getItem(key);
+      const root = document.documentElement;
+      if (saved === "dark") root.classList.add("theme-dark");
+      if (saved === "light") root.classList.remove("theme-dark");
+    })();
+  </script>
+  <style>
+    .demo-section { margin-top: var(--cs-sp-8); }
+  </style>
+</head>
+<body class="cs-page">
+
+  <!-- NAVBAR -->
+  <header class="cs-navbar">
+    <div class="cs-navbar__inner cs-container">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div class="cs-avatar cs-bg-primary" aria-hidden="true">CR</div>
+        <strong>CSRoma WebApp</strong>
+      </div>
+      <nav style="display:flex; gap:12px; align-items:center;">
+        <!-- Theme toggler -->
+        <button id="themeToggle" class="cs-theme-toggle" aria-label="Attiva tema scuro" aria-pressed="false">
+  <svg class="cs-theme-toggle__svg" viewBox="0 0 24 24" aria-hidden="true">
+    <!-- Sole -->
+    <g class="sun">
+      <circle cx="12" cy="12" r="5" fill="" />
+      <!-- raggi -->
+      <g stroke="" stroke-linecap="round">
+        <line x1="12" y1="2" x2="12" y2="5" />
+        <line x1="12" y1="19" x2="12" y2="22" />
+        <line x1="2" y1="12" x2="5" y2="12" />
+        <line x1="19" y1="12" x2="22" y2="12" />
+        <line x1="4.2" y1="4.2" x2="6.3" y2="6.3" />
+        <line x1="17.7" y1="17.7" x2="19.8" y2="19.8" />
+        <line x1="4.2" y1="19.8" x2="6.3" y2="17.7" />
+        <line x1="17.7" y1="6.3" x2="19.8" y2="4.2" />
+      </g>
+    </g>
+
+    <!-- Luna (crescente) -->
+    <g class="moon">
+      <!-- crescent: un cerchio meno un offset (resa semplice con path) -->
+      <path fill=""
+        d="M16.5 12c0 4-3.2 7.2-7.2 7.5a7.5 7.5 0 1 0 6.7-12.9
+           a6 6 0 0 1 .5 2.9z" />
+      <circle cx="16.5" cy="8.5" r="0.6" fill="none" stroke="" />
+    </g>
+  </svg>
+</button>
+        <button class="cs-btn cs-btn--accent">Accedi</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- LAYOUT -->
+  <div class="cs-layout">
+    <!-- SIDEBAR -->
+    <aside class="cs-sidebar">
+      <div class="cs-sidebar__section">
+        <div class="cs-chip cs-chip--primary">Navigazione</div>
+      </div>
+      <nav style="display:grid; gap:6px;">
+        <a href="#dashboard">🏠 Dashboard</a>
+        <a href="#calendario">📅 Calendario</a>
+        <a href="#squadre">🏐 Squadre</a>
+        <a href="#pagamenti">💳 Pagamenti</a>
+        <a href="#moduli">📝 Moduli</a>
+        <a href="#tabelle">📋 Tabelle</a>
+        <a href="#alert-badge">⚠️ Alert & Badge</a>
+      </nav>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="cs-main cs-container">
+
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="demo-section">
+        <h1 class="cs-card__title">Dashboard</h1>
+        <div class="cs-grid cs-grid--3">
+          <div class="cs-card cs-card--hover">
+            <div class="cs-card__title">Prossimo allenamento</div>
+            <div class="cs-card__meta">Dom 19:30 – Palestra A</div>
+            <div class="cs-badge cs-badge--neutral">Under 16</div>
+            <div class="cs-card__actions">
+              <button class="cs-btn cs-btn--primary" id="openModal">Conferma</button>
+              <button class="cs-btn cs-btn--outline">Dettagli</button>
+            </div>
+          </div>
+          <div class="cs-card cs-card--hover">
+            <div class="cs-card__title">Pagamenti mese</div>
+            <p class="cs-card__meta">Stato rate</p>
+            <div class="cs-progress"><div class="cs-progress__bar" style="width: 62%"></div></div>
+            <div class="cs-card__actions">
+              <button class="cs-btn cs-btn--accent" id="openDrawer">Registra pagamento</button>
+            </div>
+          </div>
+          <div class="cs-card cs-card--hover">
+            <div class="cs-card__title">Messaggi</div>
+            <p class="cs-card__meta">Ultimi avvisi della società</p>
+            <div class="cs-alert cs-alert--info">
+              <div>ℹ️</div>
+              <div>Allenamento anticipato alle 18:30.</div>
+              <div><button class="cs-btn cs-btn--ghost cs-btn--sm">Ok</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CALENDARIO -->
+      <section id="calendario" class="demo-section">
+        <h2 class="cs-card__title">Calendario</h2>
+        <div class="cs-grid cs-grid--3">
+          <div class="cs-card"><div class="cs-card__title">Lun 18:00</div><div class="cs-card__meta">Tecnica</div><div class="cs-badge cs-badge--success">Confermato</div></div>
+          <div class="cs-card"><div class="cs-card__title">Mer 19:30</div><div class="cs-card__meta">Tattica</div><div class="cs-badge cs-badge--warning">In attesa</div></div>
+          <div class="cs-card"><div class="cs-card__title">Ven 20:00</div><div class="cs-card__meta">Amichevole</div><div class="cs-badge cs-badge--danger">Annullato</div></div>
+        </div>
+      </section>
+
+      <!-- FORM -->
+      <section id="moduli" class="demo-section">
+        <h2 class="cs-card__title">Modulo Atleta</h2>
+        <form class="cs-card">
+          <div class="cs-grid cs-grid--2">
+            <div class="cs-field"><label class="cs-label" for="nome">Nome</label><input id="nome" class="cs-input" placeholder="Mario Rossi" /></div>
+            <div class="cs-field"><label class="cs-label" for="squadra">Squadra</label><select id="squadra" class="cs-select"><option>U14</option><option>U16</option></select></div>
+          </div>
+          <div class="cs-field"><label class="cs-label" for="note">Note</label><textarea id="note" class="cs-textarea"></textarea></div>
+          <div class="cs-card__actions"><button class="cs-btn cs-btn--primary">Salva</button><button class="cs-btn cs-btn--outline">Annulla</button></div>
+        </form>
+      </section>
+
+      <!-- TABELLA -->
+      <section id="tabelle" class="demo-section">
+        <h2 class="cs-card__title">Tabelle</h2>
+        <div class="cs-card">
+          <table class="cs-table cs-table--compact">
+            <thead><tr><th>Atleta</th><th>Squadra</th><th>Presenze</th><th>Pagamenti</th></tr></thead>
+            <tbody>
+              <tr><td>Mario Rossi</td><td>U16</td><td>12/14</td><td><span class="cs-badge cs-badge--success">OK</span></td></tr>
+              <tr><td>Luca Bianchi</td><td>U14</td><td>9/14</td><td><span class="cs-badge cs-badge--warning">In ritardo</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ALERT & BADGE -->
+      <section id="alert-badge" class="demo-section">
+        <h2 class="cs-card__title">Alert & Badge</h2>
+        <div class="cs-grid cs-grid--3">
+          <div class="cs-alert cs-alert--info"><div>ℹ️</div><div>Informazione generale.</div></div>
+          <div class="cs-alert cs-alert--success"><div>✅</div><div>Azione completata.</div></div>
+          <div class="cs-alert cs-alert--danger"><div>⛔</div><div>Errore durante la registrazione.</div></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav class="cs-bottomnav">
+    <a class="cs-active" href="#dashboard">Home</a>
+    <a href="#calendario">Calendario</a>
+    <a href="#squadre">Squadra</a>
+    <a href="#moduli">Profilo</a>
+  </nav>
+
+  <!-- MODAL -->
+  <div class="cs-overlay" id="overlay" aria-hidden="true">
+    <div class="cs-modal">
+      <h3 class="cs-card__title">Conferma iscrizione</h3>
+      <p class="cs-card__meta">Completa per inviare la richiesta</p>
+      <div class="cs-card__actions">
+        <button class="cs-btn cs-btn--primary" id="closeModal">Conferma</button>
+        <button class="cs-btn cs-btn--outline" id="closeModal2">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DRAWER -->
+  <aside class="cs-drawer" id="drawer" aria-hidden="true">
+    <h3 class="cs-card__title">Filtri</h3>
+    <div class="cs-field"><label class="cs-label" for="teamFilter">Squadra</label><select id="teamFilter" class="cs-select"><option>U14</option><option>U16</option></select></div>
+    <div class="cs-card__actions"><button class="cs-btn cs-btn--primary" id="closeDrawer">Applica</button></div>
+  </aside>
+
+  <script>
+    // Theme toggler logic
+    const root = document.documentElement;
+    const btn = document.getElementById("themeToggle");
+    const key = "cs-theme";
+    function isDark(){return root.classList.contains("theme-dark");}
+    function setPressed(d){btn.setAttribute("aria-pressed",String(d));btn.classList.add("is-pulsing");setTimeout(()=>btn.classList.remove("is-pulsing"),300);}
+    function toggle(){const go=()=>{const next=!isDark();root.classList.toggle("theme-dark",next);localStorage.setItem(key,next?"dark":"light");setPressed(next);};if(document.startViewTransition){document.startViewTransition(go);}else{go();}}
+    btn.addEventListener("click",toggle);
+    btn.addEventListener("keydown",(e)=>{if(e.key===" "||e.key==="Enter"){e.preventDefault();toggle();}});
+    setPressed(isDark());
+
+    // Modal
+    document.getElementById("openModal")?.addEventListener("click",()=>document.getElementById("overlay").setAttribute("aria-hidden","false"));
+    document.getElementById("closeModal")?.addEventListener("click",()=>document.getElementById("overlay").setAttribute("aria-hidden","true"));
+    document.getElementById("closeModal2")?.addEventListener("click",()=>document.getElementById("overlay").setAttribute("aria-hidden","true"));
+
+    // Drawer
+    document.getElementById("openDrawer")?.addEventListener("click",()=>document.getElementById("drawer").setAttribute("aria-hidden","false"));
+    document.getElementById("closeDrawer")?.addEventListener("click",()=>document.getElementById("drawer").setAttribute("aria-hidden","true"));
+  </script>
+</body>
+</html>

@@ -1,26 +1,511 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--cs-bg);
+  --color-foreground: var(--cs-text);
+  --color-primary: var(--cs-primary);
+  --color-accent: var(--cs-accent);
+  --color-secondary: var(--cs-warm);
+  --color-muted: var(--cs-text-secondary);
+  --shadow-soft: var(--cs-shadow-sm);
+  --shadow-elevated: var(--cs-shadow);
+  --radius-sm: var(--cs-r-sm);
+  --radius-md: var(--cs-r-md);
+  --radius-lg: var(--cs-r-lg);
+  --font-sans: var(--cs-font-sans);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ==========================================================================
+   CSRoma WebApp – Design System CSS (v1.0)
+   Author: SPARKLE
+   Notes:
+   - Pure CSS (no frameworks). Component classes prefixed "cs-".
+   - Dark mode: add `.theme-dark` on <html> or <body>.
+   - Motion safe: respects `prefers-reduced-motion`.
+   - Mobile-first; breakpoints at 640px, 768px, 1024px.
+   ========================================================================== */
+
+/* ----------------------------
+   0) CSS Variables / Tokens
+   ---------------------------- */
+:root{
+  /* Palette */
+  --cs-primary: #d71920;
+  --cs-accent: #413c67;
+  --cs-warm: #f5eb00;
+  --cs-success: #16a34a;
+  --cs-warning: #f59e0b;
+  --cs-danger:  #dc2626;
+
+  /* Text & Surfaces */
+  --cs-bg: #f7f7fb;
+  --cs-surface: #ffffff;
+  --cs-surface-2: #f2f2f7;
+  --cs-text: #0f172a;
+  --cs-text-secondary: #475569;
+  --cs-border: #e5e7eb;
+
+  /* Radius */
+  --cs-r-sm: 8px;
+  --cs-r-md: 12px;
+  --cs-r-lg: 16px;
+  --cs-r-xl: 20px; /* ADD: usato dal Modal v2 */
+
+  /* Shadows */
+  --cs-shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --cs-shadow:    0 10px 20px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
+
+  /* Spacing */
+  --cs-sp-1: 4px;
+  --cs-sp-2: 8px;
+  --cs-sp-3: 12px;
+  --cs-sp-4: 16px;
+  --cs-sp-5: 20px;
+  --cs-sp-6: 24px;
+  --cs-sp-7: 28px;
+  --cs-sp-8: 32px;
+
+  /* Typography */
+  --cs-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+  --cs-fs-xs: 12px;
+  --cs-fs-sm: 14px;
+  --cs-fs-md: 16px;
+  --cs-fs-lg: 18px;
+  --cs-fs-xl: 20px;
+
+  /* Motion */
+  --cs-duration: .2s;
+  --cs-ease: cubic-bezier(.2,.7,.2,1);
+}
+
+/* Dark theme */
+.theme-dark{
+  --cs-bg: #0b1220;
+  --cs-surface: #0f172a;
+  --cs-surface-2: #0b1220;
+  --cs-text: #e5e7eb;
+  --cs-text-secondary: #9ca3af;
+  --cs-border: #1f2937;
+  --cs-shadow-sm: 0 1px 2px rgba(0,0,0,.5);
+  --cs-shadow:    0 20px 40px rgba(0,0,0,.5), 0 3px 10px rgba(0,0,0,.35);
+}
+
+/* ----------------------------
+   1) Reset & Base
+   ---------------------------- */
+*,*::before,*::after{ box-sizing:border-box }
+html,body{ height:100% }
+body{
+  margin:0; background:var(--cs-bg); color:var(--cs-text);
+  font-family: var(--cs-font-sans); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+}
+img,svg,video,canvas,audio,iframe,embed,object{ display:block; max-width:100% }
+button,input,select,textarea{ font:inherit; color:inherit }
+a{ color:inherit; text-decoration:none }
+:focus-visible{ outline:2px solid color-mix(in oklab, var(--cs-primary), white 65%); outline-offset:2px }
+
+/* Helpers */
+.container{ width:100%; max-width:1200px; margin:0 auto; padding-inline:16px }
+.cs-hidden{ display:none !important }
+.visually-hidden{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0 }
+
+/* ----------------------------
+   2) Buttons
+   ---------------------------- */
+.cs-btn{
+  --_bg: var(--cs-surface-2);
+  --_fg: var(--cs-text);
+  --_bd: var(--cs-border);
+  display:inline-flex; align-items:center; justify-content:center; gap:10px;
+  border:1px solid var(--_bd); background:var(--_bg); color:var(--_fg);
+  border-radius: var(--cs-r-md); padding:10px 14px; line-height:1; font-weight:600;
+  transition: transform var(--cs-duration) var(--cs-ease), box-shadow var(--cs-duration) var(--cs-ease), background var(--cs-duration) var(--cs-ease);
+  box-shadow: var(--cs-shadow-sm);
+}
+.cs-btn:hover{ transform: translateY(-1px); box-shadow: var(--cs-shadow) }
+.cs-btn:active{ transform: translateY(0) }
+.cs-btn:disabled{ opacity:.6; pointer-events:none }
+
+.cs-btn--primary{ --_bg: var(--cs-primary); --_fg:#fff; --_bd: color-mix(in oklab, var(--cs-primary), black 10%) }
+.cs-btn--accent{ --_bg: var(--cs-accent); --_fg:#fff; --_bd: color-mix(in oklab, var(--cs-accent), black 10%) }
+.cs-btn--outline{ --_bg: transparent; --_fg: var(--cs-text); --_bd: var(--cs-border) }
+.cs-btn--ghost{ --_bg: transparent; --_fg: var(--cs-text-secondary); --_bd: transparent }
+.cs-btn--danger{ --_bg: var(--cs-danger); --_fg:#fff; --_bd: color-mix(in oklab, var(--cs-danger), black 10%) }
+.cs-btn--success{ --_bg: var(--cs-success); --_fg:#fff; --_bd: color-mix(in oklab, var(--cs-success), black 10%) }
+.cs-btn--warning{ --_bg: var(--cs-warning); --_fg:#111; --_bd: color-mix(in oklab, var(--cs-warning), black 10%) }
+.cs-btn--warm   { --_bg: var(--cs-warm);    --_fg:#111; --_bd: color-mix(in oklab, var(--cs-warm),    black 10%) }
+
+
+.cs-btn--sm{ padding:8px 12px; border-radius: var(--cs-r-sm) }
+.cs-btn--lg{ padding:12px 16px; border-radius: var(--cs-r-lg) }
+.cs-btn--icon{ width:40px; height:40px; padding:0; border-radius:12px }
+.cs-btn--block{ display:flex; width:100% }
+
+/* ----------------------------
+   3) Badges & Alerts
+   ---------------------------- */
+.cs-badge{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:4px 10px; border-radius: 999px; border:1px solid var(--cs-border);
+  background: var(--cs-surface-2); color: var(--cs-text);
+  font-size: var(--cs-fs-xs); font-weight:600; line-height:1;
+}
+.cs-badge--success{ background: color-mix(in oklab, var(--cs-success), white 80%); color: var(--cs-success) }
+.cs-badge--neutral{ background: color-mix(in oklab, var(--cs-text-secondary), white 85%); color: var(--cs-text-secondary) }
+.cs-badge--warning{ background: color-mix(in oklab, var(--cs-warning), white 85%); color: var(--cs-warning) }
+.cs-badge--danger{ background: color-mix(in oklab, var(--cs-danger), white 85%); color: var(--cs-danger) }
+
+.cs-alert{
+  display:flex; gap:10px; align-items:flex-start;
+  padding:14px 16px; border-radius: var(--cs-r-lg);
+  border:1px solid var(--cs-border); background: var(--cs-surface);
+  box-shadow: var(--cs-shadow-sm);
+}
+.cs-alert__title{ font-weight:700 }
+.cs-alert__desc{ color: var(--cs-text-secondary) }
+.cs-alert--success { border-color: color-mix(in oklab, var(--cs-success), white 60%); }
+.cs-alert--warning { border-color: color-mix(in oklab, var(--cs-warning), white 55%); }
+.cs-alert--danger  { border-color: color-mix(in oklab, var(--cs-danger),  white 55%); }
+
+/* ----------------------------
+   4) Cards
+   ---------------------------- */
+.cs-card{
+  background: var(--cs-surface); border:1px solid var(--cs-border);
+  border-radius: var(--cs-r-lg); box-shadow: var(--cs-shadow-sm);
+  padding: 16px 16px;
+}
+.cs-card--hover:hover{ box-shadow: var(--cs-shadow) }
+.cs-card__title{ font-weight:700 }
+.cs-card__meta{ color: var(--cs-text-secondary); font-size: var(--cs-fs-sm) }
+.cs-card__actions{ display:flex; gap:8px; align-items:center }
+
+/* ----------------------------
+   5) Forms
+   ---------------------------- */
+.cs-field{ display:flex; flex-direction:column; gap:6px }
+.cs-field__label{ font-weight:600; font-size: var(--cs-fs-sm) }
+.cs-help{ font-size: var(--cs-fs-xs); color: var(--cs-text-secondary) }
+.cs-error{ font-size: var(--cs-fs-xs); color: var(--cs-danger) }
+
+.cs-input, .cs-select, .cs-textarea{
+  width:100%; border:1px solid var(--cs-border); background: var(--cs-surface);
+  color: var(--cs-text); padding:10px 12px; border-radius: var(--cs-r-md);
+  box-shadow: var(--cs-shadow-sm); transition: box-shadow var(--cs-duration) var(--cs-ease), border-color var(--cs-duration) var(--cs-ease);
+}
+.cs-input:focus, .cs-select:focus, .cs-textarea:focus{
+  outline: none; border-color: color-mix(in oklab, var(--cs-primary), white 40%); box-shadow: 0 0 0 3px color-mix(in oklab, var(--cs-primary), white 85%);
+}
+.cs-input--invalid{ border-color: color-mix(in oklab, var(--cs-danger), white 35%) }
+
+.cs-select{ appearance:none; background-image: linear-gradient(45deg,transparent 50%, currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%); background-position: calc(100% - 20px) 50%, calc(100% - 15px) 50%; background-size: 5px 5px, 5px 5px; background-repeat:no-repeat }
+.cs-textarea{ min-height: 100px; resize: vertical }
+
+/* ----------------------------
+   6) Tables
+   ---------------------------- */
+.cs-table{ width:100%; border-collapse:separate; border-spacing:0 }
+.cs-table thead th{
+  text-align:left; font-weight:700; font-size: var(--cs-fs-sm);
+  color: var(--cs-text-secondary); border-bottom:1px solid var(--cs-border); padding:12px;
+}
+.cs-table tbody td{ border-bottom:1px solid var(--cs-border); padding:12px }
+.cs-table tbody tr:hover{ background: var(--cs-surface-2) }
+.cs-table__actions{ display:flex; gap:6px; align-items:center; justify-content:flex-end }
+
+/* Responsive tables: enable horizontal scroll on small screens */
+@media (max-width: 768px){
+  /* If a card directly contains a table, allow x-scroll without affecting y */
+  .cs-card:has(> .cs-table){ overflow-x:auto; }
+  /* Ensure table can expand beyond container to trigger scroll */
+  .cs-table{ min-width: 640px; }
+}
+
+/* ----------------------------
+   7) Tabs
+   ---------------------------- */
+.cs-tabs{ display:flex; gap:8px; border-bottom:1px solid var(--cs-border); margin-bottom:12px }
+.cs-tab{
+  appearance:none; border:none; background:none; padding:10px 12px; border-radius: var(--cs-r-md) var(--cs-r-md) 0 0; cursor:pointer;
+  color: var(--cs-text-secondary); font-weight:600;
+}
+.cs-tab[aria-selected="true"]{ color: var(--cs-text); background: var(--cs-surface); border:1px solid var(--cs-border); border-bottom-color: var(--cs-surface) }
+
+/* ----------------------------
+   8) Modal & Drawer  (rimosso il legacy, sostituito da Modern Modal v2)
+   ---------------------------- */
+
+/* ----------------------------
+   9) Progress & Skeleton
+   ---------------------------- */
+.cs-progress{ height:10px; background: var(--cs-surface-2); border-radius:999px; overflow:hidden; border:1px solid var(--cs-border) }
+.cs-progress__bar{ height:100%; background: var(--cs-primary) }
+
+.cs-skeleton{
+  background: linear-gradient(90deg, rgba(0,0,0,0.06), rgba(0,0,0,0.09), rgba(0,0,0,0.06));
+  border-radius: var(--cs-r-md);
+  animation: cs-skel 1.2s infinite;
+}
+@keyframes cs-skel{ 0%{ background-position:-200px 0 } 100%{ background-position: calc(200px + 100%) 0 } }
+
+/* ----------------------------
+   10) Tooltip & Avatar
+   ---------------------------- */
+.cs-tooltip{ position:relative; display:inline-block }
+.cs-tooltip__popup{
+  position:absolute; z-index:20; transform:translateY(-6px);
+  background:var(--cs-surface); border:1px solid var(--cs-border);
+  padding:8px 10px; border-radius: var(--cs-r-md);
+  box-shadow: var(--cs-shadow);
+}
+.cs-avatar{
+  width:36px; height:36px; display:grid; place-items:center;
+  border-radius: 12px; border:1px solid var(--cs-border);
+  background: var(--cs-surface-2);
+}
+
+/* ----------------------------
+   11) Layout wrappers
+   ---------------------------- */
+.cs-page{ min-height:100dvh; display:flex; flex-direction:column }
+.cs-layout{ display:flex; min-height: calc(100dvh - 80px); }
+.cs-main{ flex:1; padding: 24px 16px }
+.cs-navbar, .cs-sidebar, .cs-bottomnav{
+  background: var(--cs-surface); border-bottom:1px solid var(--cs-border)
+}
+.cs-sidebar{ width: 280px; border-right:1px solid var(--cs-border); padding: 24px 16px }
+@media (max-width: 768px){ .cs-sidebar{ display:none } }
+
+/* Drawer (mobile sidebar) */
+.cs-drawer{ position: fixed; inset: 0 0 0 auto; width: 78vw; max-width: 320px; height: 100dvh; background: var(--cs-surface); border-left:1px solid var(--cs-border); padding: 24px 16px; z-index: 120; transform: translateX(0) }
+
+/* ----------------------------
+   12) Brand utilities / helpers
+   ---------------------------- */
+.cs-grid{ display:grid; gap:16px }
+.cs-grid--2{ grid-template-columns: repeat(2, minmax(0,1fr)) }
+@media (max-width: 640px){ .cs-grid--2{ grid-template-columns: 1fr } }
+.text-secondary{ color: var(--cs-text-secondary) }
+.focus-ring{ outline:2px solid color-mix(in oklab, var(--cs-primary), white 65%); outline-offset:2px }
+
+/* ========================================================================
+   ===== Modern Modal v2  (manteniamo questa sezione come richiesto) =====
+   ======================================================================== */
+:root{
+  --cs-modal-maxw-sm: 420px;
+  --cs-modal-maxw-md: 640px;
+  --cs-modal-maxw-lg: 840px;
+  --cs-modal-maxw-xl: 1040px;
+  --cs-modal-backdrop: rgba(3, 7, 18, 0.48);           /* slate-950/48 */
+  --cs-modal-blur: 10px;
+  --cs-modal-border: color-mix(in oklab, var(--cs-border), transparent 40%);
+  --cs-modal-shadow: 0 10px 30px -5px rgba(0,0,0,.35);
+}
+
+.cs-overlay {
+  position: fixed; z-index: 100; inset: 0; display: grid; place-items: center;
+  background: var(--cs-modal-backdrop); backdrop-filter: blur(var(--cs-modal-blur));
+  opacity: 0; transition: opacity .18s ease;
+  pointer-events: none; /* FIX: non intercetta click quando nascosto */
+}
+.cs-overlay[aria-hidden="false"] { opacity: 1; pointer-events: auto; }
+
+.cs-modal {
+  width: min(var(--cs-modal-maxw-md), 92vw);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-modal-border);
+  border-radius: var(--cs-r-xl);
+  box-shadow: var(--cs-modal-shadow);
+  padding: clamp(var(--cs-sp-5), 3vw, var(--cs-sp-7));
+  color: var(--cs-text);
+  transform: translateY(8px) scale(.985);
+  opacity: 0;
+  transition: transform .22s cubic-bezier(.2,.7,.2,1), opacity .22s ease;
+  position: relative;
+}
+.cs-overlay[aria-hidden="false"] .cs-modal {
+  transform: translateY(0) scale(1); opacity: 1;
+}
+
+.cs-modal--sm { width: min(var(--cs-modal-maxw-sm), 92vw); }
+.cs-modal--md { width: min(var(--cs-modal-maxw-md), 92vw); }
+.cs-modal--lg { width: min(var(--cs-modal-maxw-lg), 92vw); }
+.cs-modal--xl { width: min(var(--cs-modal-maxw-xl), 92vw); }
+
+/* Varianti leggere (es. destructive) */
+.cs-modal--danger { border-color: color-mix(in oklab, var(--cs-danger), white 80%); }
+
+/* Header / body / footer */
+.cs-modal__header { margin-bottom: var(--cs-sp-4); display:flex; align-items:start; gap: var(--cs-sp-3); }
+.cs-modal__icon { flex:0 0 auto; width: 32px; height: 32px; display:grid; place-items:center; border-radius: 10px;
+  background: color-mix(in oklab, var(--cs-primary), white 86%); color: var(--cs-primary);
+}
+.cs-modal__title { font-size: clamp(1.05rem, 2vw, 1.25rem); font-weight: 700; line-height: 1.2; }
+.cs-modal__description { color: var(--cs-text-secondary); font-size: .9rem; margin-top: 2px; }
+
+.cs-modal__footer { display:flex; gap: var(--cs-sp-3); justify-content:flex-end; margin-top: var(--cs-sp-6); }
+
+/* Close button */
+.cs-modal__close {
+  position:absolute; top: 12px; right: 12px;
+  width: 34px; height: 34px; display:grid; place-items:center;
+  border-radius: 12px; border: 1px solid var(--cs-modal-border);
+  background: color-mix(in oklab, var(--cs-surface), white 8%);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.cs-modal__close:hover { transform: translateY(-1px); box-shadow: var(--cs-shadow); }
+.cs-modal__close:active { transform: translateY(0); box-shadow: var(--cs-shadow-sm); }
+
+/* Mobile fullscreen opt-in */
+@media (max-width: 640px){
+  .cs-modal--fullscreen {
+    width: 100vw; height: 100vh; max-width: none; border-radius: 0;
+    display:flex; flex-direction:column; padding: var(--cs-sp-5);
   }
+  .cs-modal--fullscreen .cs-modal__footer { margin-top: auto; }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .cs-overlay, .cs-modal { transition: none; }
+}
+
+/* (Opzionale) Compat Radix Dialog: abilita le stesse animazioni con data-state */
+.cs-overlay[data-state="open"] { opacity: 1; pointer-events: auto; }
+.cs-modal[data-state="open"] { transform: translateY(0) scale(1); opacity: 1; }
+
+/* === Opzione 3: utility extra mirate per dashboard === */
+
+/* Layout grids */
+.cs-grid--3 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0,1fr));
+}
+@media (max-width: 1024px) {
+  .cs-grid--3 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 640px) {
+  .cs-grid--3 { grid-template-columns: 1fr; }
+}
+
+.cs-grid--2-1 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 2fr 1fr;
+}
+@media (max-width: 1024px) {
+  .cs-grid--2-1 { grid-template-columns: 1fr; }
+}
+
+/* Stat cards */
+.cs-stat {
+  padding: 16px;
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-r-lg);
+  background: var(--cs-surface);
+  box-shadow: var(--cs-shadow-sm);
+}
+.cs-stat__label {
+  font-size: var(--cs-fs-sm);
+  color: var(--cs-text-secondary);
+}
+.cs-stat__value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+  margin-top: 4px;
+}
+.cs-stat__description {
+  font-size: var(--cs-fs-sm);
+  color: var(--cs-text-secondary);
+  margin-top: 4px;
+}
+.cs-stat--primary {
+  border-color: color-mix(in oklab, var(--cs-primary), white 65%);
+}
+.cs-stat--accent {
+  border-color: color-mix(in oklab, var(--cs-accent), white 65%);
+}
+.cs-stat--neutral {
+  border-color: color-mix(in oklab, var(--cs-text-secondary), white 70%);
+}
+
+/* Liste semplici */
+.cs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cs-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-r-md);
+  background: var(--cs-surface);
+}
+.cs-list-item__title {
+  font-weight: 600;
+}
+.cs-list-item__description {
+  font-size: var(--cs-fs-sm);
+  color: var(--cs-text-secondary);
+}
+
+/* === Variant: modal centrato per i DETTAGLI (non impatta i modal standard) === */
+.cs-modal--centered {
+  position: fixed;              /* non dipende più dal layout dell'overlay */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(.985);
+  z-index: 120;                 /* sopra l'overlay */
+}
+
+/* Stato "aperto" con Radix */
+.cs-modal--centered[data-state="open"] {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* (opzionale) fullscreen mobile solo per questa variante */
+@media (max-width: 640px){
+  .cs-modal--centered.cs-modal--fullscreen {
+    top: 0; left: 0;
+    transform: none;
+    width: 100vw; height: 100vh; max-width: none; border-radius: 0;
+    display: flex; flex-direction: column; padding: var(--cs-sp-5);
+  }
+  .cs-modal--centered.cs-modal--fullscreen .cs-modal__footer { margin-top: auto; }
+}
+
+/* === Navbar container missing === */
+.cs-container { width:100%; max-width:1200px; margin:0 auto; padding-inline:16px; }
+.cs-navbar__inner{
+  height:64px;
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px;
+}
+
+/* === Theme toggle styles (dimensioni/hover/animazione) === */
+.cs-theme-toggle{
+  width:40px; height:40px;
+  display:grid; place-items:center;
+  border:1px solid var(--cs-border);
+  border-radius:12px;
+  background: var(--cs-surface-2);
+  box-shadow: var(--cs-shadow-sm);
+  transition: transform var(--cs-duration) var(--cs-ease), box-shadow var(--cs-duration) var(--cs-ease), background var(--cs-duration) var(--cs-ease);
+}
+.cs-theme-toggle:hover{ transform: translateY(-1px); box-shadow: var(--cs-shadow); }
+.cs-theme-toggle:active{ transform: translateY(0); box-shadow: var(--cs-shadow-sm); }
+
+/* Icona interna */
+.cs-theme-toggle__svg svg{ width:18px; height:18px; display:block; }
+
+/* Pulse opzionale quando si clicca */
+.cs-theme-toggle.is-pulsing{ animation: cs-tgl .3s ease; }
+@keyframes cs-tgl{
+  0%{ transform: scale(1); } 50%{ transform: scale(0.96); } 100%{ transform: scale(1); }
 }

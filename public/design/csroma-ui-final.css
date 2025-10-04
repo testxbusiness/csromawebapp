@@ -1,0 +1,588 @@
+/* ==========================================================================
+   CSRoma WebApp – Design System CSS (v1.0)
+   Author: SPARKLE
+   Notes:
+   - Pure CSS (no frameworks). Component classes prefixed "cs-".
+   - Dark mode: add `.theme-dark` on <html> or <body>.
+   - Motion safe: respects `prefers-reduced-motion`.
+   - Mobile-first; breakpoints at 640px, 768px, 1024px.
+   ========================================================================== */
+
+/* ----------------------------
+   0) CSS Variables / Tokens
+   ---------------------------- */
+:root {
+  /* Brand */
+  --cs-primary: #d71920; /* CSRoma Rosso (Logo) */
+  --cs-primary-contrast: #ffffff;
+  --cs-accent: #413c67;  /* Maglia Blu */
+  --cs-accent-contrast: #ffffff;
+  --cs-warm: #f5eb00;    /* Logo Giallo */
+  --cs-warm-contrast: #1a1a1a;
+  --cs-jersey: #f8df10;  /* Maglia Giallo */
+  --cs-jersey-contrast: #1a1a1a;
+
+  /* Neutrals */
+  --cs-bg: #f7f7f8;
+  --cs-surface: #ffffff;
+  --cs-surface-2: #f1f2f4;
+  --cs-text: #121417;
+  --cs-text-secondary: #3b3f45;
+  --cs-border: #e5e7eb;
+
+  /* Semantic */
+  --cs-success: #16a34a;
+  --cs-success-contrast: #ffffff;
+  --cs-warning: #f59e0b;
+  --cs-warning-contrast: #1a1a1a;
+  --cs-danger: #dc2626;
+  --cs-danger-contrast: #ffffff;
+  --cs-info: #0ea5e9;
+  --cs-info-contrast: #ffffff;
+
+  /* Typography */
+  --cs-font-sans: ui-sans-serif, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  --cs-fs-xxs: 12px;
+  --cs-fs-xs: 14px;
+  --cs-fs-sm: 16px;
+  --cs-fs-md: 18px;
+  --cs-fs-lg: 20px;
+  --cs-fs-xl: 24px;
+  --cs-fs-2xl: 30px;
+
+  /* Radius */
+  --cs-r-sm: 8px;
+  --cs-r-md: 12px;
+  --cs-r-lg: 16px;
+
+  /* Shadow */
+  --cs-shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  --cs-shadow: 0 4px 10px rgba(0,0,0,.08);
+  --cs-shadow-lg: 0 18px 40px rgba(0,0,0,.12);
+
+  /* Spacing scale */
+  --cs-sp-0: 0;
+  --cs-sp-1: 4px;
+  --cs-sp-2: 8px;
+  --cs-sp-3: 12px;
+  --cs-sp-4: 16px;
+  --cs-sp-5: 20px;
+  --cs-sp-6: 24px;
+  --cs-sp-8: 32px;
+  --cs-sp-10: 40px;
+  --cs-sp-12: 48px;
+
+  /* Transition */
+  --cs-ease: cubic-bezier(.2,.8,.2,1);
+  --cs-duration: 150ms;
+}
+
+.theme-dark {
+  --cs-bg: #0b0d10;
+  --cs-surface: #0f1217;
+  --cs-surface-2: #151922;
+  --cs-text: #eef1f5;
+  --cs-text-secondary: #b7c0cd;
+  --cs-border: #263040;
+  --cs-shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --cs-shadow: 0 6px 16px rgba(0,0,0,.5);
+  --cs-shadow-lg: 0 24px 60px rgba(0,0,0,.55);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ----------------------------
+   1) Base / Resets
+   ---------------------------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  font-family: var(--cs-font-sans);
+  font-size: var(--cs-fs-sm);
+  line-height: 1.45;
+}
+
+img, svg, video, canvas { max-width: 100%; height: auto; }
+
+a { color: var(--cs-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Accessible focus */
+.cs-focusable:focus-visible,
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--cs-primary), white 50%);
+  outline-offset: 2px;
+  border-radius: var(--cs-r-sm);
+}
+
+/* Container helper */
+.cs-container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: var(--cs-sp-4);
+  max-width: 1200px;
+}
+
+/* Utilities */
+.cs-hidden { display: none !important; }
+.cs-sr-only { position: absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+
+/* Breakpoints */
+@media (min-width: 640px) { .sm\\:cs-hidden { display: none !important; } }
+@media (min-width: 768px) { .md\\:cs-hidden { display: none !important; } }
+@media (min-width: 1024px) { .lg\\:cs-hidden { display: none !important; } }
+
+/* ----------------------------
+   2) Buttons
+   ---------------------------- */
+.cs-btn {
+  --_bg: var(--cs-surface-2);
+  --_fg: var(--cs-text);
+  --_bd: var(--cs-border);
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--_bd);
+  border-radius: var(--cs-r-md);
+  background: var(--_bg);
+  color: var(--_fg);
+  box-shadow: var(--cs-shadow-sm);
+  transition: transform var(--cs-duration) var(--cs-ease), box-shadow var(--cs-duration) var(--cs-ease), background var(--cs-duration);
+  cursor: pointer;
+  font-weight: 600;
+}
+.cs-btn:hover { transform: translateY(-1px); box-shadow: var(--cs-shadow); }
+.cs-btn:active { transform: translateY(0); box-shadow: var(--cs-shadow-sm); }
+.cs-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.cs-btn--primary {
+  --_bg: var(--cs-primary);
+  --_fg: var(--cs-primary-contrast);
+  --_bd: color-mix(in oklab, var(--cs-primary), black 20%);
+}
+.cs-btn--accent {
+  --_bg: var(--cs-accent);
+  --_fg: var(--cs-accent-contrast);
+  --_bd: color-mix(in oklab, var(--cs-accent), black 20%);
+}
+.cs-btn--outline {
+  --_bg: transparent;
+  --_fg: var(--cs-text);
+  --_bd: var(--cs-border);
+}
+.cs-btn--ghost {
+  --_bg: transparent;
+  --_fg: var(--cs-text);
+  --_bd: transparent;
+}
+.cs-btn--danger {
+  --_bg: var(--cs-danger);
+  --_fg: var(--cs-danger-contrast);
+  --_bd: color-mix(in oklab, var(--cs-danger), black 20%);
+}
+.cs-btn--sm { height: 32px; padding-inline: 12px; font-size: var(--cs-fs-xs); }
+.cs-btn--lg { height: 48px; padding-inline: 20px; font-size: var(--cs-fs-md); }
+.cs-btn--icon { width: 40px; padding: 0; }
+.cs-btn--block { display: flex; width: 100%; }
+
+/* ----------------------------
+   3) Cards
+   ---------------------------- */
+.cs-card {
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-r-lg);
+  box-shadow: var(--cs-shadow);
+  padding: var(--cs-sp-5);
+  transition: transform var(--cs-duration) var(--cs-ease), box-shadow var(--cs-duration) var(--cs-ease);
+}
+.cs-card--hover:hover { transform: translateY(-2px) scale(1.01); box-shadow: var(--cs-shadow-lg); }
+.cs-card__title { font-size: var(--cs-fs-lg); font-weight: 700; margin-bottom: var(--cs-sp-3); }
+.cs-card__meta { color: var(--cs-text-secondary); font-size: var(--cs-fs-xs); margin-bottom: var(--cs-sp-3); }
+.cs-card__actions { display: flex; gap: var(--cs-sp-3); margin-top: var(--cs-sp-4); }
+
+/* ----------------------------
+   4) Navbar / Sidebar / Bottom Nav
+   ---------------------------- */
+.cs-navbar {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--cs-surface);
+  border-bottom: 1px solid var(--cs-border);
+  box-shadow: var(--cs-shadow-sm);
+}
+.cs-navbar__inner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--cs-sp-4);
+  height: 64px;
+}
+
+.cs-sidebar {
+  background: var(--cs-surface);
+  border-right: 1px solid var(--cs-border);
+  width: 260px; padding: var(--cs-sp-4);
+}
+.cs-sidebar__section { margin-bottom: var(--cs-sp-6); }
+.cs-sidebar a {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: var(--cs-r-md); color: var(--cs-text);
+}
+.cs-sidebar a:hover { background: var(--cs-surface-2); }
+
+.cs-bottomnav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--cs-surface);
+  border-top: 1px solid var(--cs-border);
+  height: 60px;
+}
+.cs-bottomnav a {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: var(--cs-text-secondary); font-size: var(--cs-fs-xs);
+}
+.cs-bottomnav a.cs-active { color: var(--cs-primary); font-weight: 700; }
+
+/* ----------------------------
+   5) Forms
+   ---------------------------- */
+.cs-field { display: grid; gap: 6px; }
+.cs-label { font-weight: 600; font-size: var(--cs-fs-xs); }
+.cs-help { font-size: var(--cs-fs-xxs); color: var(--cs-text-secondary); }
+.cs-input, .cs-select, .cs-textarea {
+  width: 100%;
+  background: var(--cs-surface);
+  color: var(--cs-text);
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-r-md);
+  padding: 10px 12px;
+  transition: border-color var(--cs-duration), background var(--cs-duration);
+}
+.cs-input::placeholder, .cs-textarea::placeholder { color: color-mix(in oklab, var(--cs-text-secondary), white 20%); }
+.cs-input:focus, .cs-select:focus, .cs-textarea:focus { border-color: color-mix(in oklab, var(--cs-primary), white 30%); outline: none; }
+.cs-textarea { min-height: 120px; resize: vertical; }
+
+.cs-input--invalid, .cs-select--invalid, .cs-textarea--invalid { border-color: var(--cs-danger); }
+.cs-error { color: var(--cs-danger); font-size: var(--cs-fs-xxs); }
+
+/* Switch */
+.cs-switch {
+  --_w: 42px; --_h: 24px;
+  position: relative; width: var(--_w); height: var(--_h);
+  background: var(--cs-border); border-radius: 999px; cursor: pointer;
+  transition: background var(--cs-duration) var(--cs-ease);
+}
+.cs-switch__thumb {
+  position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+  background: var(--cs-surface); border-radius: 50%; box-shadow: var(--cs-shadow-sm);
+  transition: transform var(--cs-duration) var(--cs-ease);
+}
+.cs-switch[aria-checked="true"] { background: var(--cs-primary); }
+.cs-switch[aria-checked="true"] .cs-switch__thumb { transform: translateX(18px); }
+
+/* ----------------------------
+   6) Tables
+   ---------------------------- */
+.cs-table { width: 100%; border-collapse: separate; border-spacing: 0 6px; }
+.cs-table thead th {
+  text-align: left; font-size: var(--cs-fs-xs); font-weight: 700;
+  color: var(--cs-text-secondary); padding: 8px 12px; position: sticky; top: 0; background: var(--cs-bg);
+}
+.cs-table tbody tr {
+  background: var(--cs-surface); border: 1px solid var(--cs-border);
+}
+.cs-table tbody td { padding: 12px; border-top: 1px solid var(--cs-border); }
+.cs-table tbody tr:hover { background: var(--cs-surface-2); }
+.cs-table--compact tbody td { padding: 8px 10px; }
+
+.cs-table__actions { display: flex; gap: 8px; align-items: center; }
+
+/* ----------------------------
+   7) Badges & Alerts
+   ---------------------------- */
+.cs-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px; border-radius: 999px; font-size: var(--cs-fs-xxs);
+  border: 1px solid transparent;
+}
+.cs-badge--neutral { background: var(--cs-surface-2); color: var(--cs-text); border-color: var(--cs-border); }
+.cs-badge--success { background: color-mix(in oklab, var(--cs-success), white 80%); color: var(--cs-success); }
+.cs-badge--warning { background: color-mix(in oklab, var(--cs-warning), white 80%); color: var(--cs-warning-contrast); }
+.cs-badge--danger { background: color-mix(in oklab, var(--cs-danger), white 84%); color: var(--cs-danger); }
+
+.cs-alert {
+  display: grid; grid-template-columns: 24px 1fr auto; gap: 12px;
+  padding: 12px 14px; border-radius: var(--cs-r-md); border: 1px solid var(--cs-border);
+  background: var(--cs-surface);
+}
+.cs-alert--info { border-color: color-mix(in oklab, var(--cs-info), white 60%); }
+.cs-alert--success { border-color: color-mix(in oklab, var(--cs-success), white 60%); }
+.cs-alert--warning { border-color: color-mix(in oklab, var(--cs-warning), white 55%); }
+.cs-alert--danger { border-color: color-mix(in oklab, var(--cs-danger), white 55%); }
+
+/* ----------------------------
+   8) Modal & Drawer
+   ---------------------------- */
+.cs-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  display: none; place-items: center; z-index: 100;
+}
+.cs-overlay[aria-hidden="false"] { display: grid; }
+
+.cs-modal {
+  width: min(680px, 92vw);
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-r-lg);
+  box-shadow: var(--cs-shadow-lg);
+  padding: var(--cs-sp-5);
+  transform: translateY(12px);
+  opacity: 0;
+  transition: transform var(--cs-duration) var(--cs-ease), opacity var(--cs-duration) var(--cs-ease);
+}
+.cs-overlay[aria-hidden="false"] .cs-modal { transform: translateY(0); opacity: 1; }
+
+.cs-drawer {
+  position: fixed; inset: 0 auto 0 0; width: min(92vw, 420px); z-index: 110;
+  background: var(--cs-surface); border-right: 1px solid var(--cs-border);
+  transform: translateX(-100%);
+  transition: transform var(--cs-duration) var(--cs-ease);
+  padding: var(--cs-sp-5);
+}
+.cs-drawer[aria-hidden="false"] { transform: translateX(0); }
+
+/* ----------------------------
+   9) Tabs
+   ---------------------------- */
+.cs-tabs { display: flex; gap: 12px; border-bottom: 1px solid var(--cs-border); }
+.cs-tab {
+  padding: 10px 12px; font-weight: 600; color: var(--cs-text-secondary);
+  border-bottom: 2px solid transparent; cursor: pointer;
+}
+.cs-tab[aria-selected="true"] { color: var(--cs-text); border-bottom-color: var(--cs-primary); }
+
+/* ----------------------------
+   10) Progress, Skeleton
+   ---------------------------- */
+.cs-progress {
+  width: 100%; height: 8px; background: var(--cs-surface-2);
+  border-radius: 999px; overflow: hidden;
+}
+.cs-progress__bar {
+  height: 100%; width: 0%; background: var(--cs-primary);
+  transition: width var(--cs-duration) var(--cs-ease);
+}
+
+.cs-skeleton {
+  background: linear-gradient(90deg, var(--cs-surface-2), color-mix(in oklab, var(--cs-surface-2), white 6%), var(--cs-surface-2));
+  background-size: 200% 100%;
+  animation: cs-shimmer 1.2s var(--cs-ease) infinite;
+  border-radius: var(--cs-r-sm);
+}
+@keyframes cs-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ----------------------------
+   11) Tooltip & Avatar
+   ---------------------------- */
+.cs-tooltip {
+  position: relative; cursor: help;
+}
+.cs-tooltip:hover .cs-tooltip__bubble {
+  opacity: 1; transform: translateY(0); pointer-events: auto;
+}
+.cs-tooltip__bubble {
+  position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, 4px);
+  background: var(--cs-text); color: white; padding: 6px 8px;
+  font-size: var(--cs-fs-xxs); border-radius: var(--cs-r-sm);
+  opacity: 0; pointer-events: none; transition: all var(--cs-duration) var(--cs-ease);
+  white-space: nowrap;
+}
+
+.cs-avatar {
+  width: 40px; height: 40px; border-radius: 999px; overflow: hidden;
+  display: inline-grid; place-items: center; background: var(--cs-surface-2);
+  border: 1px solid var(--cs-border);
+  font-weight: 700; color: var(--cs-text-secondary);
+}
+.cs-avatar--sm { width: 32px; height: 32px; font-size: var(--cs-fs-xs); }
+.cs-avatar--lg { width: 56px; height: 56px; font-size: var(--cs-fs-md); }
+
+/* ----------------------------
+   12) Helper color accents (optional)
+   ---------------------------- */
+.cs-chip { padding: 6px 10px; border-radius: 999px; font-size: var(--cs-fs-xxs); border: 1px solid var(--cs-border); background: var(--cs-surface); }
+.cs-chip--primary { background: color-mix(in oklab, var(--cs-primary), white 88%); color: var(--cs-primary); }
+.cs-chip--accent  { background: color-mix(in oklab, var(--cs-accent), white 90%); color: var(--cs-accent); }
+.cs-chip--warm    { background: color-mix(in oklab, var(--cs-warm), white 88%); color: var(--cs-warm-contrast); }
+
+/* ----------------------------
+   13) Responsive layout helpers
+   ---------------------------- */
+.cs-grid {
+  display: grid; gap: var(--cs-sp-4);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 768px) {
+  .cs-grid--2 { grid-template-columns: repeat(2, 1fr); }
+  .cs-grid--3 { grid-template-columns: repeat(3, 1fr); }
+  .cs-grid--4 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* ----------------------------
+   14) Color utility classes (brand)
+   ---------------------------- */
+.cs-bg-primary { background: var(--cs-primary) !important; color: var(--cs-primary-contrast) !important; }
+.cs-bg-accent { background: var(--cs-accent) !important; color: var(--cs-accent-contrast) !important; }
+.cs-bg-warm { background: var(--cs-warm) !important; color: var(--cs-warm-contrast) !important; }
+.cs-bg-jersey { background: var(--cs-jersey) !important; color: var(--cs-jersey-contrast) !important; }
+
+.cs-border { border: 1px solid var(--cs-border); }
+
+/* ----------------------------
+   15) Example structural wrappers
+   ---------------------------- */
+.cs-page {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100dvh;
+}
+.cs-main {
+  padding: var(--cs-sp-6);
+  padding-bottom: calc(60px + var(--cs-sp-6)); /* room for bottom nav on mobile */
+}
+@media (min-width: 1024px) {
+  .cs-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: calc(100dvh - 64px);
+  }
+  .cs-main { padding-bottom: var(--cs-sp-6); }
+}
+
+
+/* ----------------------------
+   Animated Theme Toggler (added) 
+   ---------------------------- */
+.cs-theme-toggle {
+  --_size: 44px;
+  --_ring: 0 0 0 0 color-mix(in oklab, var(--cs-primary), transparent 100%);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--_size);
+  height: var(--_size);
+  border-radius: 999px;
+  border: 1px solid var(--cs-border);
+  background: var(--cs-surface);
+  color: var(--cs-text);
+  box-shadow: var(--cs-shadow-sm);
+  cursor: pointer;
+  transition: transform var(--cs-duration) var(--cs-ease), box-shadow var(--cs-duration) var(--cs-ease), background var(--cs-duration);
+}
+.cs-theme-toggle:hover { transform: translateY(-1px); box-shadow: var(--cs-shadow); }
+.cs-theme-toggle:active { transform: translateY(0); }
+.cs-theme-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: inherit;
+  box-shadow: var(--_ring);
+  transition: box-shadow 280ms var(--cs-ease);
+}
+.cs-theme-toggle__icon {
+  width: 22px; height: 22px; display: block;
+  transition: transform 280ms var(--cs-ease) 40ms;
+}
+html.theme-dark .cs-theme-toggle__icon { transform: rotate(180deg) scale(1.05); }
+.cs-theme-toggle__glyph {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--cs-jersey); /* giallo sole */
+  border: 2px solid var(--cs-border); /* bordino visibile in light mode */
+  box-shadow: inset -4px -4px 8px rgba(0,0,0,.08);
+  transition: background 200ms var(--cs-ease), box-shadow 200ms var(--cs-ease), border 200ms var(--cs-ease);
+}
+
+html.theme-dark .cs-theme-toggle__glyph {
+  background: var(--cs-accent); /* blu scuro */
+  border: 2px solid var(--cs-text-secondary); /* bordino chiaro in dark mode */
+  box-shadow: inset 4px 4px 10px rgba(0,0,0,.35);
+}
+.cs-theme-toggle__glyph::after {
+  content: ""; position: absolute; inset: -3px -3px auto auto;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--cs-surface);
+  transform: translate(2px,2px);
+  transition: transform 280ms var(--cs-ease), background 200ms var(--cs-ease);
+}
+html.theme-dark .cs-theme-toggle__glyph::after {
+  transform: translate(-3px,-3px);
+  background: var(--cs-surface);
+}
+.cs-theme-toggle.is-pulsing::after {
+  --_ring: 0 0 0 8px color-mix(in oklab, var(--cs-primary), transparent 75%);
+}
+.cs-theme-toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--cs-primary), white 50%);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+/* === SVG Icone sole/luna per Theme Toggler === */
+.cs-theme-toggle__svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  transition: transform 280ms var(--cs-ease) 40ms;
+}
+
+/* Stati di visibilità/animazione */
+.cs-theme-toggle .sun,
+.cs-theme-toggle .moon {
+  transform-origin: 50% 50%;
+  transition: opacity 240ms var(--cs-ease), transform 240ms var(--cs-ease);
+}
+
+.cs-theme-toggle .sun { opacity: 1; transform: scale(1) rotate(0deg); }
+.cs-theme-toggle .moon { opacity: 0; transform: scale(.85) rotate(-15deg); }
+
+/* In dark mode mostro la luna e nascondo il sole */
+html.theme-dark .cs-theme-toggle .sun { opacity: 0; transform: scale(.85) rotate(15deg); }
+html.theme-dark .cs-theme-toggle .moon { opacity: 1; transform: scale(1) rotate(0deg); }
+
+/* Colori brand + contrasto */
+.cs-theme-toggle .sun [fill] { fill: var(--cs-jersey); }          /* giallo CSRoma */
+.cs-theme-toggle .sun [stroke] { stroke: color-mix(in oklab, var(--cs-jersey), black 25%); stroke-width: 1.5; }
+
+.cs-theme-toggle .moon [fill] { fill: var(--cs-accent); }          /* blu maglia */
+.cs-theme-toggle .moon [stroke] { stroke: var(--cs-text-secondary); stroke-width: 1.5; }
+
+/* Ridotto movimento: niente morph evidente, solo switch */
+@media (prefers-reduced-motion: reduce) {
+  .cs-theme-toggle .sun, .cs-theme-toggle .moon {
+    transition: none;
+  }
+}
