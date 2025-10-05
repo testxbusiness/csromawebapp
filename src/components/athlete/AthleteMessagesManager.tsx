@@ -10,6 +10,7 @@ type Message = {
   created_at: string
   created_by?: string
   created_by_profile?: { first_name: string; last_name: string }
+  attachments?: { id: string; file_name: string; mime_type?: string; file_size?: number; download_url?: string | null }[]
   message_recipients?: {
     id: string
     is_read: boolean
@@ -69,6 +70,9 @@ export default function AthleteMessagesManager() {
                 <td>
                   <div className="font-medium">{m.subject}</div>
                   <div className="text-secondary text-sm line-clamp-2">{m.content}</div>
+                  {(m as any).attachments && (m as any).attachments.length > 0 && (
+                    <div className="mt-1 text-xs text-secondary">Allegati: {(m as any).attachments.length}</div>
+                  )}
                 </td>
                 <td>
                   <div>
@@ -157,6 +161,20 @@ export default function AthleteMessagesManager() {
               <div>
               <div className="text-xs text-secondary">Mittente</div>
                 <div>{selectedMessage.created_by_profile.first_name} {selectedMessage.created_by_profile.last_name}</div>
+              </div>
+            )}
+            {(selectedMessage as any).attachments && (selectedMessage as any).attachments.length > 0 && (
+              <div>
+                <div className="text-xs text-secondary">Allegati</div>
+                <div className="mt-1 space-y-1">
+                  {(selectedMessage as any).attachments.map((a: any) => (
+                    <div key={a.id}>
+                      <a href={a.download_url} target="_blank" rel="noopener noreferrer" className="underline">
+                        {a.file_name}
+                      </a>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {selectedMessage.message_recipients && selectedMessage.message_recipients.length > 0 && (

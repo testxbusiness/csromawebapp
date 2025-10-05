@@ -13,6 +13,7 @@ type Message = {
   subject: string
   content: string
   attachment_url?: string
+  attachments?: { file_path: string; file_name: string; mime_type?: string; file_size?: number }[]
   // NB: il backend del tuo form inline usa questi campi
   selected_teams?: string[]
   selected_users?: string[]
@@ -50,6 +51,8 @@ export default function MessageModal({
     selected_users: message?.selected_users ??
       (message?.['message_recipients'] as any)?.filter((mr: any) => mr.profiles).map((mr: any) => mr.profiles.id) ?? [],
   })
+  const [uploading, setUploading] = React.useState(false)
+  const [files, setFiles] = React.useState<{ file_path: string; file_name: string; mime_type?: string; file_size?: number }[]>([])
 
   React.useEffect(() => {
     setForm({
@@ -63,6 +66,9 @@ export default function MessageModal({
         ? (message as any).message_recipients.filter((mr: any) => mr.profiles).map((mr: any) => mr.profiles.id)
         : [],
     })
+    // Preload attachments if present on message
+    const atts = (message as any)?.attachments as any[] | undefined
+    setFiles(Array.isArray(atts) ? atts.map(a => ({ file_path: a.file_path || '', file_name: a.file_name, mime_type: a.mime_type, file_size: a.file_size })) : [])
   }, [message])
 
   const toggle = (list: 'selected_teams' | 'selected_users', id: string) => {
@@ -82,6 +88,7 @@ export default function MessageModal({
         subject: form.subject.trim(),
         content: form.content.trim(),
         attachment_url: form.attachment_url?.trim() || undefined,
+        attachments: files,
         selected_teams: form.selected_teams ?? [],
         selected_users: form.selected_users ?? [],
       }
@@ -90,6 +97,29 @@ export default function MessageModal({
       onClose()
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleFileChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const f = ev.target.files
+    if (!f || f.length === 0) return
+    const formData = new FormData()
+    Array.from(f).forEach(file => formData.append('files', file))
+    if (message?.id) formData.append('message_id', message.id)
+    setUploading(true)
+    try {
+      const res = await fetch('/api/messages/attachments/upload', { method: 'POST', body: formData })
+      const result = await res.json()
+      if (!res.ok) {
+        alert(result.error || 'Errore upload allegati')
+        return
+      }
+      const uploaded = result.files as any[]
+      setFiles(prev => [...prev, ...uploaded])
+      // reset input
+      ev.target.value = ''
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -127,14 +157,21 @@ export default function MessageModal({
           </div>
 
           <div>
-            <label className="cs-field__label">URL Allegato (opzionale)</label>
-            <input
-              className="cs-input"
-              type="url"
-              value={form.attachment_url ?? ''}
-              onChange={(e) => setForm({ ...form, attachment_url: e.target.value })}
-              placeholder="https://…/documento.pdf"
-            />
+            <label className="cs-field__label">Allegati</label>
+            <div className="flex items-center gap-3">
+              <input type="file" multiple onChange={handleFileChange} />
+              {uploading && <span className="text-xs text-secondary">Caricamento…</span>}
+            </div>
+            {files.length > 0 && (
+              <div className="mt-2 space-y-1 text-sm">
+                {files.map((f, idx) => (
+                  <div key={`${f.file_path}-${idx}`} className="flex items-center justify-between">
+                    <span className="truncate">{f.file_name}</span>
+                    <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setFiles(prev => prev.filter((x, i) => i !== idx))}>Rimuovi</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="cs-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>

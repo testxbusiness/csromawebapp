@@ -124,6 +124,28 @@ export async function GET(request: NextRequest) {
           em.message_recipients.push(item)
         }
       }
+      // Attachments: generate signed URLs for athlete
+      const { data: atts } = await adminClient
+        .from('message_attachments')
+        .select('id, file_path, file_name, mime_type, file_size')
+        .eq('message_id', m.id)
+      if (atts && atts.length > 0) {
+        const files = [] as any[]
+        for (const a of atts) {
+          const { data: signed } = await adminClient
+            // @ts-ignore
+            .storage.from('message-attachments').createSignedUrl(a.file_path, 3600)
+          files.push({
+            id: a.id,
+            file_name: a.file_name,
+            mime_type: a.mime_type,
+            file_size: a.file_size,
+            download_url: signed?.signedUrl || null,
+          })
+        }
+        em.attachments = files
+      }
+
       enriched.push(em)
     }
 

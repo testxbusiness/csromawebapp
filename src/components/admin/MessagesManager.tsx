@@ -10,6 +10,7 @@ interface Message {
   subject: string
   content: string
   attachment_url?: string
+  attachments?: { id: string; file_name: string; mime_type?: string; file_size?: number; download_url?: string | null }[]
   created_by?: string
   created_at?: string
   updated_at?: string
@@ -258,6 +259,9 @@ export default function MessagesManager() {
                   <div>
                     <div className="font-medium">{message.subject}</div>
                     <div className="text-secondary text-sm line-clamp-2">{message.content}</div>
+                    {(message as any).attachments && (message as any).attachments.length > 0 && (
+                      <div className="mt-1 text-xs text-secondary">Allegati: {(message as any).attachments.length}</div>
+                    )}
                   </div>
                 </td>
                 <td>
@@ -298,12 +302,16 @@ export default function MessagesManager() {
         </table>
         </div>
 
-        {/* Mobile cards */}
+        {/* Mobile cards */
+        }
         <div className="md:hidden p-4 space-y-3">
           {messages.map((message) => (
             <div key={message.id} className="cs-card">
               <div className="font-semibold">{message.subject}</div>
               <div className="text-sm text-secondary line-clamp-3">{message.content}</div>
+              {(message as any).attachments && (message as any).attachments.length > 0 && (
+                <div className="mt-1 text-xs text-secondary">Allegati: {(message as any).attachments.length}</div>
+              )}
               <div className="mt-2 grid gap-2 text-sm">
                 <div><strong>Mittente:</strong> {message.created_by_profile ? `${message.created_by_profile.first_name} ${message.created_by_profile.last_name}` : 'N/D'}</div>
                 <div>

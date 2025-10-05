@@ -51,6 +51,8 @@ export default function CoachMessageModal({
         ?.filter((mr) => mr.teams)
         .map((mr) => mr.teams!.id) || [],
   })
+  const [files, setFiles] = React.useState<{ file_path: string; file_name: string; mime_type?: string; file_size?: number }[]>([])
+  const [uploading, setUploading] = React.useState(false)
 
   React.useEffect(() => {
     setFormData({
@@ -75,7 +77,28 @@ export default function CoachMessageModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit(formData)
+    onSubmit({ ...formData, selected_teams: formData.selected_teams, attachment_url: formData.attachment_url || undefined, attachments: files } as any)
+  }
+
+  const handleFileChange = async (ev: React.ChangeEvent<HTMLInputElement>) => {
+    const f = ev.target.files
+    if (!f || f.length === 0) return
+    const fd = new FormData()
+    Array.from(f).forEach(file => fd.append('files', file))
+    if (message?.id) fd.append('message_id', message.id)
+    setUploading(true)
+    try {
+      const res = await fetch('/api/messages/attachments/upload', { method: 'POST', body: fd })
+      const result = await res.json()
+      if (!res.ok) {
+        alert(result.error || 'Errore upload allegati')
+        return
+      }
+      setFiles(prev => [...prev, ...result.files])
+      ev.target.value = ''
+    } finally {
+      setUploading(false)
+    }
   }
 
   return (
@@ -114,16 +137,23 @@ export default function CoachMessageModal({
               />
             </div>
 
-            <div className="cs-field">
-              <label className="cs-field__label">URL Allegato (opzionale)</label>
-              <input
-                type="url"
-                value={formData.attachment_url}
-                onChange={(e) => setFormData({ ...formData, attachment_url: e.target.value })}
-                className="cs-input"
-                placeholder="https://example.com/document.pdf"
-              />
+          <div className="cs-field">
+            <label className="cs-field__label">Allegati</label>
+            <div className="flex items-center gap-3">
+              <input type="file" multiple onChange={handleFileChange} />
+              {uploading && <span className="text-xs text-secondary">Caricamento…</span>}
             </div>
+            {files.length > 0 && (
+              <div className="mt-2 space-y-1 text-sm">
+                {files.map((f, idx) => (
+                  <div key={`${f.file_path}-${idx}`} className="flex items-center justify-between">
+                    <span className="truncate">{f.file_name}</span>
+                    <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setFiles(prev => prev.filter((x, i) => i !== idx))}>Rimuovi</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
             <div className="cs-field">
               <label className="cs-field__label">Destinatari Squadre</label>

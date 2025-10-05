@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
       subject,
       content,
       attachment_url,
+      attachments,
       selected_teams,
       selected_users
     } = body
@@ -41,6 +42,22 @@ export async function POST(request: NextRequest) {
     if (messageError || !message) {
       console.error('Errore creazione messaggio:', messageError)
       return NextResponse.json({ error: 'Errore creazione messaggio' }, { status: 400 })
+    }
+
+    // Allegati multipli
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      const rows = attachments.map((f: any) => ({
+        message_id: message.id,
+        file_path: f.file_path,
+        file_name: f.file_name,
+        mime_type: f.mime_type,
+        file_size: f.file_size,
+        created_by: user.id,
+      }))
+      const { error: attErr } = await adminClient.from('message_attachments').insert(rows)
+      if (attErr) {
+        console.error('Errore inserimento allegati:', attErr)
+      }
     }
 
     // Gestisci destinatari squadre
@@ -100,6 +117,7 @@ export async function PUT(request: NextRequest) {
       subject,
       content,
       attachment_url,
+      attachments,
       selected_teams,
       selected_users
     } = body
@@ -132,6 +150,48 @@ export async function PUT(request: NextRequest) {
     if (messageError) {
       console.error('Errore aggiornamento messaggio:', messageError)
       return NextResponse.json({ error: 'Errore aggiornamento messaggio' }, { status: 400 })
+    }
+
+    // Sincronizza allegati
+    if (attachments && Array.isArray(attachments)) {
+      const { data: existing } = await adminClient
+        .from('message_attachments')
+        .select('id, file_path')
+        .eq('message_id', id)
+
+      const keepPaths = new Set(attachments.map((a: any) => a.file_path))
+      const toDelete = (existing || []).filter((e: any) => !keepPaths.has(e.file_path))
+
+      if (toDelete.length > 0) {
+        // delete metadata
+        const { error: delMetaErr } = await adminClient
+          .from('message_attachments')
+          .delete()
+          .in('id', toDelete.map((d: any) => d.id))
+        if (delMetaErr) console.error('Errore delete metadata allegati:', delMetaErr)
+
+        // delete storage objects
+        const { error: delStorErr } = await adminClient
+          // @ts-ignore
+          .storage.from('message-attachments').remove(toDelete.map((d: any) => d.file_path))
+        if (delStorErr) console.error('Errore delete file storage:', delStorErr)
+      }
+
+      // insert new attachments
+      const existingPaths = new Set((existing || []).map((e: any) => e.file_path))
+      const toInsert = attachments.filter((a: any) => !existingPaths.has(a.file_path))
+      if (toInsert.length > 0) {
+        const rows = toInsert.map((f: any) => ({
+          message_id: id,
+          file_path: f.file_path,
+          file_name: f.file_name,
+          mime_type: f.mime_type,
+          file_size: f.file_size,
+          created_by: user.id,
+        }))
+        const { error: insErr } = await adminClient.from('message_attachments').insert(rows)
+        if (insErr) console.error('Errore inserimento nuovi allegati:', insErr)
+      }
     }
 
     // Rimuovi destinatari esistenti
@@ -273,6 +333,30 @@ export async function GET() {
           }
         }
 
+        // Allegati firmati
+        const { data: atts } = await adminClient
+          .from('message_attachments')
+          .select('id, file_path, file_name, mime_type, file_size')
+          .eq('message_id', message.id)
+
+        if (atts && atts.length > 0) {
+          const files = [] as any[]
+          for (const a of atts) {
+            const { data: signed } = await adminClient
+              // @ts-ignore
+              .storage.from('message-attachments').createSignedUrl(a.file_path, 3600)
+            files.push({
+              id: a.id,
+              file_path: a.file_path,
+              file_name: a.file_name,
+              mime_type: a.mime_type,
+              file_size: a.file_size,
+              download_url: signed?.signedUrl || null,
+            })
+          }
+          ;(enrichedMessage as any).attachments = files
+        }
+
         return enrichedMessage
       })
     )
@@ -314,7 +398,19 @@ export async function DELETE(request: NextRequest) {
       .delete()
       .eq('message_id', messageId)
 
-    // 2. Elimina il messaggio
+    // 2. Elimina file allegati
+    const { data: attToDelete } = await adminClient
+      .from('message_attachments')
+      .select('file_path')
+      .eq('message_id', messageId)
+    if (attToDelete && attToDelete.length > 0) {
+      const { error: storErr } = await adminClient
+        // @ts-ignore
+        .storage.from('message-attachments').remove(attToDelete.map((a: any) => a.file_path))
+      if (storErr) console.error('Errore rimozione allegati storage:', storErr)
+    }
+
+    // 3. Elimina il messaggio
     const { error: messageError } = await adminClient
       .from('messages')
       .delete()

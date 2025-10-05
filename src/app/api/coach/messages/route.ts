@@ -4,6 +4,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const adminClient = createAdminClient()
     const { searchParams } = new URL(request.url)
     const view = searchParams.get('view') // 'full' to return full list with enrichment
     const idFilter = searchParams.get('id') || undefined
@@ -134,6 +135,29 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      // Attachments: signed URLs for recipients
+      const { data: atts } = await adminClient
+        .from('message_attachments')
+        .select('id, file_path, file_name, mime_type, file_size')
+        .eq('message_id', msg.id)
+      if (atts && atts.length > 0) {
+        const files = [] as any[]
+        for (const a of atts) {
+          const { data: signed } = await adminClient
+            // @ts-ignore
+            .storage.from('message-attachments').createSignedUrl(a.file_path, 3600)
+          files.push({
+            id: a.id,
+            file_path: a.file_path,
+            file_name: a.file_name,
+            mime_type: a.mime_type,
+            file_size: a.file_size,
+            download_url: signed?.signedUrl || null,
+          })
+        }
+        enrichedMsg.attachments = files
+      }
+
       enriched.push(enrichedMsg)
     }
 
@@ -157,7 +181,7 @@ export async function POST(request: NextRequest) {
     const role = (user as any)?.user_metadata?.role
     if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const { subject, content, attachment_url, selected_teams } = body || {}
+    const { subject, content, attachment_url, attachments, selected_teams } = body || {}
     if (!subject || !content) {
       return NextResponse.json({ error: 'Dati messaggio incompleti' }, { status: 400 })
     }
@@ -181,6 +205,22 @@ export async function POST(request: NextRequest) {
     if (createErr || !created) {
       console.error('Coach create message error:', createErr)
       return NextResponse.json({ error: 'Errore creazione messaggio' }, { status: 400 })
+    }
+
+    // Insert attachments metadata if provided
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      const rows = attachments.map((f: any) => ({
+        message_id: created.id,
+        file_path: f.file_path,
+        file_name: f.file_name,
+        mime_type: f.mime_type,
+        file_size: f.file_size,
+        created_by: user.id,
+      }))
+      const { error: attErr } = await adminClient.from('message_attachments').insert(rows)
+      if (attErr) {
+        console.error('Coach insert attachments error:', attErr)
+      }
     }
 
     if (teamsToAssign.length > 0) {
@@ -211,7 +251,7 @@ export async function PUT(request: NextRequest) {
     const role = (user as any)?.user_metadata?.role
     if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const { id, subject, content, attachment_url, selected_teams } = body || {}
+    const { id, subject, content, attachment_url, attachments, selected_teams } = body || {}
     if (!id) return NextResponse.json({ error: 'ID messaggio richiesto' }, { status: 400 })
 
     // Ensure the message belongs to the coach
@@ -235,6 +275,44 @@ export async function PUT(request: NextRequest) {
     if (updErr) {
       console.error('Coach update message error:', updErr)
       return NextResponse.json({ error: 'Errore aggiornamento messaggio' }, { status: 400 })
+    }
+
+    // Sync attachments (after ownership check)
+    if (attachments && Array.isArray(attachments)) {
+      const { data: existing } = await adminClient
+        .from('message_attachments')
+        .select('id, file_path')
+        .eq('message_id', id)
+
+      const keepPaths = new Set(attachments.map((a: any) => a.file_path))
+      const toDelete = (existing || []).filter((e: any) => !keepPaths.has(e.file_path))
+      if (toDelete.length > 0) {
+        const { error: delMetaErr } = await adminClient
+          .from('message_attachments')
+          .delete()
+          .in('id', toDelete.map((d: any) => d.id))
+        if (delMetaErr) console.error('Coach delete att meta:', delMetaErr)
+
+        const { error: delStorErr } = await adminClient
+          // @ts-ignore
+          .storage.from('message-attachments').remove(toDelete.map((d: any) => d.file_path))
+        if (delStorErr) console.error('Coach delete att storage:', delStorErr)
+      }
+
+      const existingPaths = new Set((existing || []).map((e: any) => e.file_path))
+      const toInsert = attachments.filter((a: any) => !existingPaths.has(a.file_path))
+      if (toInsert.length > 0) {
+        const rows = toInsert.map((f: any) => ({
+          message_id: id,
+          file_path: f.file_path,
+          file_name: f.file_name,
+          mime_type: f.mime_type,
+          file_size: f.file_size,
+          created_by: user.id,
+        }))
+        const { error: insErr } = await adminClient.from('message_attachments').insert(rows)
+        if (insErr) console.error('Coach insert new attachments:', insErr)
+      }
     }
 
     // Replace recipients using admin client (after ownership check)

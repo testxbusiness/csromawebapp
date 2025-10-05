@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Athlete, Team, Activity, Season } from './athleteTypes'
 import BulkOperationsModal from './BulkOperationsModal'
 import TeamAssignmentModal from './TeamAssignmentModal'
+import DetailsDrawer from '@/components/shared/DetailsDrawer'
 
 interface AthleteWithDetails extends Athlete {
   teams: Array<{
@@ -26,6 +27,14 @@ export default function AthletesManager() {
   const [bulkLoading, setBulkLoading] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false)
+
+  const [showDetails, setShowDetails] = useState(false)
+  const [detailsAthlete, setDetailsAthlete] = useState<AthleteWithDetails | null>(null)
+
+  function openAthleteDetails(a: AthleteWithDetails) {
+  setDetailsAthlete(a)
+  setShowDetails(true)
+}
 
   const supabase = createClient()
 
@@ -271,6 +280,59 @@ export default function AthletesManager() {
         </div>
       </section>
 
+<DetailsDrawer
+  open={showDetails}
+  onClose={() => setShowDetails(false)}
+  title="Dettaglio Atleta"
+  size="lg"
+>
+  {detailsAthlete && (
+    <div className="cs-grid cs-grid--2-1" style={{ gap: 16 }}>
+      {/* Colonna sinistra: anagrafica */}
+      <div className="cs-card">
+        <h3 className="cs-card__title">
+          {detailsAthlete.first_name} {detailsAthlete.last_name}
+        </h3>
+        <div className="cs-card__meta" style={{ marginTop: 6 }}>
+          {detailsAthlete.email}
+        </div>
+
+        <div className="cs-grid" style={{ marginTop: 12, gap: 12 }}>
+          <div>
+            <div className="text-secondary text-sm">Tessera</div>
+            <div className="font-semibold">{detailsAthlete.membership_number || '—'}</div>
+          </div>
+
+          <div>
+            <div className="text-secondary text-sm">Certificato medico</div>
+            <div className="font-semibold">
+              {detailsAthlete.medical_certificate_expiry
+                ? new Date(detailsAthlete.medical_certificate_expiry).toLocaleDateString('it-IT')
+                : '—'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Colonna destra: squadre */}
+      <div className="cs-card">
+        <h4 className="font-semibold mb-2">Squadre</h4>
+        {detailsAthlete.teams?.length ? (
+          <div className="flex flex-wrap gap-2">
+            {detailsAthlete.teams.map(t => (
+              <span key={t.id} className="cs-badge cs-badge--neutral">
+                {t.name}{t.jersey_number ? ` #${t.jersey_number}` : ''}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="text-secondary text-sm">Nessuna squadra</div>
+        )}
+      </div>
+    </div>
+  )}
+</DetailsDrawer>
+
       {/* Filtri di contesto */}
       <section className="cs-card p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -409,7 +471,9 @@ export default function AthletesManager() {
                       : '-'}
                   </td>
                   <td className="p-4">
-                    <button className="cs-btn cs-btn--outline cs-btn--sm">
+                    <button className="cs-btn cs-btn--outline cs-btn--sm"
+                      onClick={() => openAthleteDetails(athlete)}
+                    >
                       Dettagli
                     </button>
                   </td>
@@ -448,7 +512,7 @@ export default function AthletesManager() {
                 </div>
               </div>
               <div className="mt-3">
-                <button className="cs-btn cs-btn--outline cs-btn--sm w-full">Dettagli</button>
+                <button className="cs-btn cs-btn--outline cs-btn--sm w-full" onClick={() => openAthleteDetails(athlete)}>Dettagli</button>
               </div>
             </div>
           ))}
