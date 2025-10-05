@@ -237,7 +237,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">
           {/* Profile Information */}
-          <div className="cs-card p-6">
+          <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Informazioni Personali</h2>
             
             {/* Avatar Section */}
@@ -347,7 +347,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
 
           {/* Team Memberships (Athletes only) */}
           {userRole === 'athlete' && (
-            <div className="cs-card p-6">
+            <div className="cs-card cs-card--primary p-6">
               <h2 className="text-xl font-semibold mb-4">Le Mie Squadre</h2>
               {teamMemberships.length === 0 ? (
                 <p className="text-secondary">Non sei iscritto a nessuna squadra</p>
@@ -374,7 +374,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
             </div>
           )}
           {userRole === 'athlete' && (
-            <div className="cs-card p-6">
+            <div className="cs-card cs-card--primary p-6">
               <h2 className="text-xl font-semibold mb-4">La tua maglia</h2>
             {/* Contenitore responsivo: centrato, dimensione controllata su desktop */}
               <div className="mx-auto w-full max-w-[420px]">
@@ -390,7 +390,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
 
           {/* Membership & Cert info (from profile) */}
           {userRole === 'athlete' && profile && (
-            <div className="cs-card p-6">
+            <div className="cs-card cs-card--primary p-6">
               <h2 className="text-xl font-semibold mb-4">Dati Tesseramento</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
@@ -412,7 +412,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
           )}
 
           {/* Password Change */}
-          <div className="cs-card p-6">
+          <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>
             <form onSubmit={handlePasswordChange} className="space-y-4">
               <div>

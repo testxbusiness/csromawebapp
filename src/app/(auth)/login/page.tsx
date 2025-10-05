@@ -46,7 +46,7 @@ export default function LoginPage() {
       <main className="relative z-10 flex min-h-screen items-center justify-center p-6 md:p-10">
         {/* Box a SINISTRA */}
         <div className="w-full max-w-lg md:max-w-xl"> {/* md ~ 480px → xl ~ 640px */}
-          <div className="cs-card" style={{ padding: 24 }}> {/* padding più generoso */}
+          <div className="cs-card cs-card--primary" style={{ padding: 24 }}> {/* padding più generoso */}
             {/* Logo centrato */}
             <div className="text-center" style={{ marginBottom: 16 }}>
               <img

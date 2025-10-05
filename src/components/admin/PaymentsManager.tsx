@@ -418,13 +418,13 @@ export default function PaymentsManager() {
 
       {/* Statistics */}
 <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
-  <div className="cs-card p-6">
+  <div className="cs-card cs-card--primary p-6">
     <div className="text-sm text-secondary">Totale Pagamenti</div>
     <div className="text-2xl font-bold">€{getTotalAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">{filteredPayments.length} pagamenti</div>
   </div>
 
-  <div className="cs-card p-6">
+  <div className="cs-card cs-card--primary p-6">
     <div className="text-sm text-secondary">Da Pagare</div>
     <div className="text-2xl font-bold">€{getPendingAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">
@@ -432,7 +432,7 @@ export default function PaymentsManager() {
     </div>
   </div>
 
-  <div className="cs-card p-6">
+  <div className="cs-card cs-card--primary p-6">
     <div className="text-sm text-secondary">Pagati</div>
     <div className="text-2xl font-bold">
       €{(getTotalAmount() - getPendingAmount()).toFixed(2)}
@@ -444,7 +444,7 @@ export default function PaymentsManager() {
 </div>
 
       {/* Filters */}
-      <div className="cs-card p-6">
+      <div className="cs-card cs-card--primary p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="cs-field__label">Tipo Pagamento</label>
@@ -486,7 +486,7 @@ export default function PaymentsManager() {
         />
 
 
-<section className="cs-card">
+<section className="cs-card cs-card--primary">
   <div className="p-6 border-b">
     <div className="flex items-center justify-between">
       <h2 className="text-lg font-semibold">Elenco Pagamenti</h2>

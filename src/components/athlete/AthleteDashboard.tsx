@@ -362,13 +362,13 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="cs-card">
+      <div className="cs-card cs-card--primary">
         <h2 className="text-xl font-semibold mb-4">
           Bentornato, {profile.first_name} {profile.last_name}
         </h2>
         
         {activeSeason && (
-          <div className="cs-card mb-4">
+          <div className="cs-card cs-card--primary mb-4">
             <h3 className="font-semibold">Stagione</h3>
             <p className="font-normal">{activeSeason.name}</p>
             <p className="text-secondary text-sm">
@@ -379,31 +379,28 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <div className="cs-card__meta">Squadre</div>
             <div className="text-3xl font-extrabold" style={{color:'var(--cs-accent)'}}>{teamMemberships.length}</div>
           </div>
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <div className="cs-card__meta">Prossimi Eventi</div>
             <div className="text-3xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
           </div>
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <div className="cs-card__meta">Messaggi Non Letti</div>
             <div className="text-3xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
           </div>
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <div className="cs-card__meta">Rate Attive</div>
             <div className="text-3xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
           </div>
         </div>
-        <div className="cs-card mt-4">
-    <h3 className="font-semibold mb-3">La tua maglia</h3>
-  </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Team Memberships */}
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <h3 className="font-semibold mb-4">Le Tue Squadre</h3>
           {teamMemberships.length === 0 ? (
             <p className="text-secondary text-sm">Non sei iscritto a nessuna squadra</p>
@@ -460,7 +457,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events */}
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <h3 className="font-semibold mb-4">Prossimi Eventi</h3>
           {upcomingEvents.length === 0 ? (
             <p className="text-secondary text-sm">Nessun evento programmato</p>
@@ -487,7 +484,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         {/* Messages & Fees */}
         <div className="space-y-6">
           {/* Unread Messages */}
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <h3 className="font-semibold mb-4">Messaggi Non Letti</h3>
             {unreadMessages.length === 0 ? (
               <p className="text-secondary text-sm">Nessun messaggio non letto</p>
@@ -511,7 +508,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           </div>
 
           {/* Fee Installments */}
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <h3 className="font-semibold mb-4">Quote Associative</h3>
             {feeInstallments.length === 0 ? (
               <p className="text-secondary text-sm">Nessuna quota associativa</p>

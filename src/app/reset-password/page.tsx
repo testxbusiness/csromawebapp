@@ -107,7 +107,7 @@ export default function ResetPasswordPage() {
       {/* Contenuto centrato */}
       <main className="relative z-10 flex min-h-screen items-center justify-center p-6 md:p-10">
         <div className="w-full max-w-lg md:max-w-xl">
-          <div className="cs-card" style={{ padding: 24 }}>
+          <div className="cs-card cs-card--primary" style={{ padding: 24 }}>
             {/* Header con logo (coerente con login) */}
             <div className="text-center" style={{ marginBottom: 16 }}>
               <img

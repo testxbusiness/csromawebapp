@@ -258,7 +258,7 @@ export default function AthletesManager() {
   return (
     <div className="space-y-6">
       {/* Header con statistiche */}
-      <section className="cs-card p-6">
+      <section className="cs-card cs-card--primary p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Atleti</h1>
@@ -334,7 +334,7 @@ export default function AthletesManager() {
 </DetailsDrawer>
 
       {/* Filtri di contesto */}
-      <section className="cs-card p-6">
+      <section className="cs-card cs-card--primary p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="cs-field__label">Stagione</label>
@@ -398,7 +398,7 @@ export default function AthletesManager() {
       </section>
 
       {/* Griglia atleti */}
-      <section className="cs-card">
+      <section className="cs-card cs-card--primary ">
         <div className="p-6 border-b">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Elenco Atleti</h2>

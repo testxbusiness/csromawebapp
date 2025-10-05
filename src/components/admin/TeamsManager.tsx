@@ -285,7 +285,7 @@ export default function TeamsManager() {
   onGenerateCode={generateTeamCode}
 />
 
-      <div className="cs-card overflow-hidden">
+      <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}
         <div className="hidden md:block">
         <table className="cs-table">

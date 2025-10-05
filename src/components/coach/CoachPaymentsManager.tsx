@@ -61,24 +61,24 @@ export default function CoachPaymentsManager() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <div className="cs-card__meta">Totale Pagamenti</div>
           <div className="text-2xl font-bold">€{totalAmount.toFixed(2)}</div>
           <div className="text-xs text-secondary">{filtered.length} pagamenti</div>
         </div>
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <div className="cs-card__meta">Da Pagare</div>
           <div className="text-2xl font-bold" style={{color:'var(--cs-warning)'}}>€{pendingAmount.toFixed(2)}</div>
           <div className="text-xs text-secondary">{filtered.filter(p => p.status === 'to_pay').length} in sospeso</div>
         </div>
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <div className="cs-card__meta">Pagati</div>
           <div className="text-2xl font-bold" style={{color:'var(--cs-success)'}}>€{paidAmount.toFixed(2)}</div>
           <div className="text-xs text-secondary">{filtered.filter(p => p.status === 'paid').length} completati</div>
         </div>
       </div>
 
-      <div className="cs-card p-4 flex gap-4 items-center">
+      <div className="cs-card cs-card--primary p-4 flex gap-4 items-center">
         <div>
           <label className="cs-field__label">Stato</label>
           <select
@@ -93,7 +93,7 @@ export default function CoachPaymentsManager() {
         </div>
       </div>
 
-      <div className="cs-card overflow-hidden">
+      <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}
         <div className="hidden md:block">
         <table className="cs-table">
@@ -105,7 +105,6 @@ export default function CoachPaymentsManager() {
               <th>Stato</th>
               <th>Scadenza</th>
               <th>Riferimento</th>
-              <th>Azioni</th>
             </tr>
           </thead>
           <tbody>
@@ -127,9 +126,6 @@ export default function CoachPaymentsManager() {
                 <td className="px-6 py-4 whitespace-nowrap">{p.due_date ? new Date(p.due_date).toLocaleDateString('it-IT') : 'N/D'}</td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   {p.coaches ? `Allenatore: ${p.coaches.first_name} ${p.coaches.last_name}` : '—'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary">
-                  —
                 </td>
               </tr>
             ))}

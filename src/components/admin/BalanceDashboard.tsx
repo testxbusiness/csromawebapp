@@ -149,7 +149,7 @@ export default function BalanceDashboard() {
   return (
     <div className="space-y-6">
       {/* Filters */}
-      <div className="cs-card p-6">
+      <div className="cs-card cs-card--primary p-6">
         <h3 className="text-lg font-semibold mb-4">Filtri</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
@@ -258,7 +258,7 @@ export default function BalanceDashboard() {
 
       {/* Balance Summary */}
       {balanceData && (
-        <div className="cs-card p-6">
+        <div className="cs-card cs-card--primary p-6">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
               Bilancio - {balanceData.season.name}

@@ -581,7 +581,7 @@ export default function DocumentsManager() {
               </Button>
             </Card>
           ) : (
-            <Card>
+            <Card variant='primary'>
               <Table>
                 <thead>
                   <tr>
@@ -678,7 +678,7 @@ export default function DocumentsManager() {
               <p className="text-sm text-[color:var(--cs-text-secondary)]">Seleziona un template per generare il primo documento</p>
             </Card>
           ) : (
-            <Card>
+            <Card variant='primary'>
               <Table>
                 <thead>
                   <tr>

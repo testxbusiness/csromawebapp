@@ -168,7 +168,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
   return (
     <div className="space-y-8">
       {/* Messaggio di benvenuto */}
-      <Card>
+      <Card variant='primary'>
         <CardTitle>Benvenuto in CSRoma</CardTitle>
         <CardMeta>
           Ciao {`${profile.first_name ?? ''}`.trim() || 'utente'}, gestisci la tua società con un colpo d&apos;occhio.
@@ -176,7 +176,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
       </Card>
 
       {/* Ruolo / Ultimo accesso */}
-      <Card>
+      <Card variant='primary'>
         <div className="cs-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
             <CardMeta>Ruolo</CardMeta>
@@ -192,16 +192,16 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
       {/* KPI primaria */}
       <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
         <Stat label="Stagioni attive" value={String(activeSeasons)} description="Configurate per attività e squadre" variant="primary" />
-        <Stat label="Le Attività" value={String(metrics.activities)} description={activeSeason ? `Attività stagione ${activeSeason.name}` : 'Nessuna stagione attiva'} variant="accent" />
-        <Stat label="Le Squadre" value={String(metrics.teams)} description="Squadre nella stagione attiva" />
+        <Stat label="Le Attività" value={String(metrics.activities)} description={activeSeason ? `Attività stagione ${activeSeason.name}` : 'Nessuna stagione attiva'} variant="primary" />
+        <Stat label="Le Squadre" value={String(metrics.teams)} description="Squadre nella stagione attiva" variant="primary" />
       </div>
       <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
-        <Stat label="Iscritti" value={String(metrics.athletes)} description="Atleti nella stagione attiva" />
-        <Stat label="Collaboratori" value={String(metrics.coaches)} description="Coach nella stagione attiva" />
+        <Stat label="Iscritti" value={String(metrics.athletes)} description="Atleti nella stagione attiva" variant="primary" />
+        <Stat label="Collaboratori" value={String(metrics.coaches)} description="Coach nella stagione attiva" variant="primary" />
       </div>
 
       <div className="cs-grid cs-grid--2-1">
-        <Card>
+        <Card variant='primary'>
           <div className="flex items-center justify-between gap-3" style={{ marginBottom: 12 }}>
             <div>
               <CardTitle>Stagioni recenti</CardTitle>
@@ -228,7 +228,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
           )}
         </Card>
 
-        <Card>
+        <Card variant='primary'>
           <CardTitle>Checklist rapida</CardTitle>
           <CardMeta>Aggiorna le aree principali prima di comunicare con i team.</CardMeta>
           <List>

@@ -108,7 +108,7 @@ export default function InstallmentsTable({
 
   if (loading) {
     return (
-      <div className="cs-card overflow-hidden">
+      <div className="cs-card cs-card--primary overflow-hidden">
         <div className="p-4 border-b">
           <div className="cs-skeleton" style={{ height: 24, width: 128 }} />
         </div>

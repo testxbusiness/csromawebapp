@@ -262,19 +262,19 @@ export default function AthleteFeesPage() {
           {/* Summary Cards */}
           {teamTotals.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="cs-card">
+              <div className="cs-card cs-card--primary">
                 <h3 className="font-semibold text-blue-900" style={{ color: 'var(--cs-warning)' }}>Totale da Pagare</h3>
                 <p className="text-3xl font-extrabold" style={{ color: 'var(--cs-warning)' }}>
                   €{teamTotals.reduce((sum, team) => sum + team.totalAmount, 0).toFixed(2)}
                 </p>
               </div>
-              <div className="cs-card">
+              <div className="cs-card cs-card--primary">
                 <h3 className="font-semibold text-green-900" style={{ color: 'var(--cs-success)' }}>Già Pagato</h3>
                 <p className="text-3xl font-extrabold" style={{ color: 'var(--cs-success)' }}>
                   €{teamTotals.reduce((sum, team) => sum + team.paidAmount, 0).toFixed(2)}
                 </p>
               </div>
-              <div className="cs-card">
+              <div className="cs-card cs-card--primary">
                 <h3 className="font-semibold text-orange-900" style={{ color: 'var(--cs-danger)' }}>Ancora da Pagare</h3>
                 <p className="text-3xl font-extrabold" style={{ color: 'var(--cs-danger)' }}>
                   €{teamTotals.reduce((sum, team) => sum + team.pendingAmount, 0).toFixed(2)}
@@ -284,7 +284,7 @@ export default function AthleteFeesPage() {
           )}
 
           {/* Filters */}
-<div className="cs-card">
+<div className="cs-card cs-card--primary">
   <div className="flex justify-between items-center mb-4">
     <h2 className="text-xl font-semibold">Dettaglio Rate</h2>
     <div className="flex space-x-2">

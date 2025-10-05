@@ -308,13 +308,13 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="cs-card">
+      <div className="cs-card cs-card--primary">
         <h2 className="text-xl font-semibold mb-4">
           Bentornato, {profile.first_name} {profile.last_name}
         </h2>
         
         {activeSeason && (
-          <div className="cs-card mb-4">
+          <div className="cs-card cs-card--primary mb-4">
             <h3 className="font-semibold">Stagione</h3>
             <p>{activeSeason.name}</p>
             <p className="text-secondary text-sm">
@@ -325,19 +325,19 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         )}
 
         <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
-  <div className="cs-card p-6">
+  <div className="cs-card cs-card--primary p-6">
     <div className="text-sm text-secondary">Squadre Assegnate</div>
     <div className="text-2xl font-bold">{teams.length}</div>
     <div className="text-xs text-secondary">in totale</div>
   </div>
 
-  <div className="cs-card p-6">
+  <div className="cs-card cs-card--primary p-6">
     <div className="text-sm text-secondary">Prossimi Eventi</div>
     <div className="text-2xl font-bold">{upcomingEvents.length}</div>
     <div className="text-xs text-secondary">in calendario</div>
   </div>
 
-  <div className="cs-card p-6">
+  <div className="cs-card cs-card--primary p-6">
     <div className="text-sm text-secondary">Messaggi Recenti</div>
     <div className="text-2xl font-bold">{recentMessages.length}</div>
     <div className="text-xs text-secondary">ricevuti</div>
@@ -347,7 +347,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Teams Section */}
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <h3 className="font-semibold mb-4">Le Tue Squadre</h3>
           {teams.length === 0 ? (
             <p className="text-secondary text-sm">Nessuna squadra assegnata</p>
@@ -374,7 +374,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events */}
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <h3 className="font-semibold mb-4">Prossimi Eventi</h3>
           {upcomingEvents.length === 0 ? (
             <p className="text-secondary text-sm">Nessun evento programmato</p>
@@ -414,7 +414,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         {/* Recent Messages & Payments */}
         <div className="space-y-6">
           {/* Recent Messages */}
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <h3 className="font-semibold mb-4">Messaggi Recenti</h3>
             {recentMessages.length === 0 ? (
               <p className="text-secondary text-sm">Nessun messaggio recente</p>
@@ -433,7 +433,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
           </div>
 
           {/* Payments Summary */}
-          <div className="cs-card">
+          <div className="cs-card cs-card--primary">
             <h3 className="font-semibold mb-4">Stato Pagamenti</h3>
             {payments.length === 0 ? (
               <p className="text-secondary text-sm">Nessun pagamento in sospeso</p>

@@ -178,6 +178,12 @@ a{ color:inherit; text-decoration:none }
 .cs-card__title{ font-weight:700 }
 .cs-card__meta{ color: var(--cs-text-secondary); font-size: var(--cs-fs-sm) }
 .cs-card__actions{ display:flex; gap:8px; align-items:center }
+.cs-card--primary {
+  border-color: color-mix(in oklab, var(--cs-primary), white 65%);
+  border-width: 0,5px;           /* se vuoi il bordo marcato */
+  /* opzionale: alone leggero */
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--cs-primary) 20%, transparent);
+}
 
 /* ----------------------------
    5) Forms

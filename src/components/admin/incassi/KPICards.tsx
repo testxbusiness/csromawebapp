@@ -90,15 +90,15 @@ export default function KPICards({ data, onCardClick, loading }: KPICardsProps) 
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <div className="text-sm text-secondary mb-1">Totale Rate</div>
           <div className="text-xl font-semibold">{totalInstallments.toLocaleString('it-IT')}</div>
         </div>
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <div className="text-sm text-secondary mb-1">Importo Totale</div>
           <div className="text-xl font-semibold">€{data.total_amount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
         </div>
-        <div className="cs-card">
+        <div className="cs-card cs-card--primary">
           <div className="text-sm text-secondary mb-1">Tasso Incasso</div>
           <div className="text-xl font-semibold">{collectionRate.toFixed(1)}%</div>
         </div>

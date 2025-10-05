@@ -299,7 +299,7 @@ export default function EventsManager() {
       </div>
 
       {/* Filtri */}
-      <div className="cs-card p-4">
+      <div className="cs-card cs-card--primary p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div>
             <label className="cs-field__label">Squadra</label>
@@ -352,7 +352,7 @@ export default function EventsManager() {
 
 
       {viewMode === 'calendar' ? (
-        <div className="cs-card p-4">
+        <div className="cs-card cs-card--primary p-4">
           <SimpleCalendar
             currentDate={currentDate}
             view={calView}
@@ -374,7 +374,7 @@ export default function EventsManager() {
           />
         </div>
       ) : (
-      <div className="cs-card overflow-hidden">
+      <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}
         <div className="hidden md:block">
         <table className="cs-table">

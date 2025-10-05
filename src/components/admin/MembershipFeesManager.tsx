@@ -489,7 +489,7 @@ export default function MembershipFeesManager() {
 />
 
       {tab==='fees' ? (
-      <div className="cs-card overflow-hidden">
+      <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}
         <div className="hidden md:block">
         <table className="cs-table">
@@ -608,26 +608,26 @@ export default function MembershipFeesManager() {
         )}
       </div>
       ) : (
-        <div className="cs-card p-4">
+        <div className="cs-card cs-card--primary p-4">
           {/* Filters */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Squadra</label>
-              <select value={filterTeamId} onChange={(e)=>setFilterTeamId(e.target.value)} className="w-full border rounded px-2 py-1">
+              <label className="cs-field__label">Squadra</label>
+              <select value={filterTeamId} onChange={(e)=>setFilterTeamId(e.target.value)} className="cs-select">
                 <option value="">Tutte</option>
                 {teams.map(t=> <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Atleta</label>
-              <select value={filterAthleteId} onChange={(e)=>setFilterAthleteId(e.target.value)} className="w-full border rounded px-2 py-1" disabled={!filterTeamId}>
+              <label className="cs-field__label">Atleta</label>
+              <select value={filterAthleteId} onChange={(e)=>setFilterAthleteId(e.target.value)} className="cs-select" disabled={!filterTeamId}>
                 <option value="">Tutti</option>
                 {teamAthletes.map(a=> <option key={a.id} value={a.id}>{a.first_name} {a.last_name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Stato</label>
-              <select value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)} className="w-full border rounded px-2 py-1">
+              <label className="cs-field__label">Stato</label>
+              <select value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)} className="cs-select">
                 <option value="all">Tutti</option>
                 <option value="not_due">Non scaduta</option>
                 <option value="due_soon">In scadenza</option>
@@ -636,12 +636,12 @@ export default function MembershipFeesManager() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">Da</label>
-              <input type="date" value={filterFrom} onChange={(e)=>setFilterFrom(e.target.value)} className="w-full border rounded px-2 py-1" />
+              <label className="cs-field__label">Da</label>
+              <input type="date" value={filterFrom} onChange={(e)=>setFilterFrom(e.target.value)} className="cs-select" />
             </div>
             <div>
-              <label className="block text-xs text-gray-600 mb-1">A</label>
-              <input type="date" value={filterTo} onChange={(e)=>setFilterTo(e.target.value)} className="w-full border rounded px-2 py-1" />
+              <label className="cs-field__label">A</label>
+              <input type="date" value={filterTo} onChange={(e)=>setFilterTo(e.target.value)} className="cs-select" />
             </div>
           </div>
           <div className="flex gap-2 mb-3">
