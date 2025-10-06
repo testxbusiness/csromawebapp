@@ -1,1096 +1,757 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { exportDocumentTemplates, exportDocuments } from '@/lib/utils/excelExport'
-import { generatePDF, replaceTemplateVariables, getTemplateVariables, generateBulkDocuments, downloadPDF } from '@/lib/utils/pdfGenerator'
-import { Button } from '@/components/ui/Button'
-import { Card, CardTitle, CardActions } from '@/components/ui/Card'
-import { Table, TableActions } from '@/components/ui/Table'
-import { Badge } from '@/components/ui/Badge'
-import { Input, Field } from '@/components/ui/Input'
+import { generatePDF, downloadPDF } from '@/lib/utils/pdfGenerator'
 
-interface DocumentTemplate {
+
+/** ================================================================
+ *  TIPI MINIMI (adatta se nel tuo progetto già esistono i types)
+ *  ================================================================ */
+type TargetType = 'user' | 'team'
+
+type DocumentTemplate = {
   id: string
   name: string
-  description?: string
-  type: 'medical_certificate_request' | 'enrollment_form' | 'attendance_certificate' | 'payment_receipt' | 'team_convocation'
-  target_type: 'user' | 'team'
+  description?: string | null
+  type?: 'medical_certificate_request' | 'enrollment_form' | 'attendance_certificate' | 'payment_receipt' | 'team_convocation'
+  target_type: TargetType
   content_html: string
-  styles_css?: string
-  has_logo: boolean
-  logo_position: 'top-left' | 'top-center' | 'top-right'
-  has_date: boolean
-  date_format: string
-  has_signature_area: boolean
-  footer_text?: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-  created_by: string
+  styles_css?: string | null
+  has_logo?: boolean | null
+  logo_position?: 'top-left' | 'top-center' | 'top-right' | null
+  created_at?: string
+  updated_at?: string
 }
 
-interface Document {
+type GeneratedDocument = {
   id: string
-  template_id?: string
+  template_id?: string | null
   title: string
-  description?: string
-  document_type: string
-  status: 'draft' | 'generated' | 'sent' | 'archived'
-  generated_content_html?: string
-  file_url?: string
-  file_name?: string
-  target_user_id?: string
-  target_team_id?: string
-  generation_date?: string
-  variables: Record<string, any>
-  created_at: string
-  updated_at: string
-  created_by: string
-
-  // Joined data
-  template?: {
-    name: string
-  }
-  target_user?: {
-    first_name: string
-    last_name: string
-  }
-  target_team?: {
-    name: string
-  }
+  generated_content_html?: string | null
+  target_user_id?: string | null
+  target_team_id?: string | null
+  created_at?: string
 }
 
-interface Team {
+type Team = { id: string; name: string; code?: string | null }
+type TeamMember = {
   id: string
-  name: string
-  code: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  jersey_number?: string | null
+  selected?: boolean
 }
 
-interface Profile {
-  id: string
-  first_name: string
-  last_name: string
-  role: string
+/** ================================================================
+ *  UTILS: PDF (usa dinamico per non rompere se non esiste la lib)
+ *  ================================================================ */
+async function generatePDFSafe(opts: any): Promise<Uint8Array | Blob | null> {
+  try { return await generatePDF(opts) } catch { alert('Errore generazione PDF'); return null }
+}
+async function downloadPDFSafe(pdf: Uint8Array | Blob | null, filename: string) {
+  if (!pdf) return
+  try { return downloadPDF(pdf) } catch { /* fallback non necessario: usa util ufficiale */ }
 }
 
+/** ================================================================
+ *  HELPER: Variabili → HTML
+ *  (Sostituisce {{first_name}} ecc. ; adatta alla tua sintassi)
+ *  ================================================================ */
+function replaceTemplateVariables(html: string, variables: Record<string, any>) {
+  let out = html
+  Object.entries(variables).forEach(([key, value]) => {
+    const re = new RegExp(`{{\\s*${key}\\s*}}`, 'g')
+    out = out.replace(re, value ?? '')
+  })
+  return out
+}
+
+/** ================================================================
+ *  HELPER: Logo opzionale inserito in alto
+ *  ================================================================ */
+function withOptionalLogo(baseHtml: string, t: DocumentTemplate) {
+  if (!t?.has_logo) return baseHtml
+  // Richiesta: il logo va sempre in alto al centro
+  const block = `
+    <div style="text-align:center; margin-bottom:16px">
+      <img src="/images/logo_CSRoma.png" alt="CSRoma" style="height:80px; object-fit:contain"/>
+    </div>
+  `
+  return `${block}${baseHtml}`
+}
+
+/** ================================================================
+ *  COMPONENTE PRINCIPALE
+ *  ================================================================ */
 export default function DocumentsManager() {
-  const [activeTab, setActiveTab] = useState<'templates' | 'documents'>('templates')
-  const [templates, setTemplates] = useState<DocumentTemplate[]>([])
-  const [documents, setDocuments] = useState<Document[]>([])
-  const [teams, setTeams] = useState<Team[]>([])
-  const [profiles, setProfiles] = useState<Profile[]>([])
-  const [loading, setLoading] = useState(true)
-  const [editingTemplate, setEditingTemplate] = useState<DocumentTemplate | null>(null)
-  const [editingDocument, setEditingDocument] = useState<Document | null>(null)
-  const [showTemplateForm, setShowTemplateForm] = useState(false)
-  const [showDocumentForm, setShowDocumentForm] = useState(false)
-  const [previewContent, setPreviewContent] = useState('')
-  const [showPreview, setShowPreview] = useState(false)
-  const [showBulkGeneration, setShowBulkGeneration] = useState(false)
-  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null)
-  const [bulkRecipients, setBulkRecipients] = useState<any[]>([])
-  const [generatingBulk, setGeneratingBulk] = useState(false)
-  const [showDocumentGeneration, setShowDocumentGeneration] = useState(false)
-  const [selectedGenerationTemplate, setSelectedGenerationTemplate] = useState<DocumentTemplate | null>(null)
-  const [selectedTargetId, setSelectedTargetId] = useState<string>('')
   const supabase = createClient()
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  // Stato dati
+  const [templates, setTemplates] = useState<DocumentTemplate[]>([])
+  const [documents, setDocuments] = useState<GeneratedDocument[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const loadData = async () => {
-    setLoading(true)
-    await Promise.all([
-      loadTemplates(),
-      loadDocuments(),
-      loadTeams(),
-      loadProfiles()
+  // Preview
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewContent, setPreviewContent] = useState<string>('')
+
+  // Modal bulk generation
+  const [showBulkModal, setShowBulkModal] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(null)
+  const [bulkRecipients, setBulkRecipients] = useState<any[]>([]) // utenti o squadre, caricati all’apertura
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set()) // per target user
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('') // per target team
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])          // membri di squadra selezionabili
+  // Modal nuovo template
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateForm, setTemplateForm] = useState<Partial<DocumentTemplate>>({
+    name: '',
+    description: '',
+    type: 'team_convocation',
+    target_type: 'team',
+    content_html: '<h1>{{team_name}}</h1><p>Convocazione per oggi alle 18:00.</p>',
+    has_logo: true,
+  })
+
+ // Caricamento iniziale
+const loadAll = useCallback(async () => {
+  setLoading(true)
+  try {
+    const [
+      { data: templates, error: tErr },
+      { data: documents, error: dErr }
+    ] = await Promise.all([
+      supabase
+        .from('document_templates')
+        .select('*')
+        .order('updated_at', { ascending: false }),
+      supabase
+        .from('documents') // <-- usa il nome della tua tabella
+        .select('id,title,template_id,generated_content_html,target_user_id,target_team_id,created_at')
+        .order('created_at', { ascending: false })
     ])
+
+    if (tErr) throw tErr
+    if (dErr) throw dErr
+
+    setTemplates(templates ?? [])
+    setDocuments(documents ?? [])
+  } catch (err) {
+    console.error('Errore caricamento documenti/templates:', err)
+    setTemplates([])
+    setDocuments([])
+  } finally {
     setLoading(false)
   }
+}, [supabase])
 
-  const loadTemplates = async () => {
-    const { data } = await supabase
-      .from('document_templates')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (data) setTemplates(data)
-  }
+  // Caricamento iniziale
+  useEffect(() => {
+    loadAll()
+  }, [loadAll])
 
-  const loadDocuments = async () => {
+  /** =======================
+   * Anteprima template (HTML)
+   * ======================= */
+  const previewTemplate = async (template: DocumentTemplate) => {
     try {
-      // Prima carica i documenti base
-      const { data: documentsData, error: documentsError } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (documentsError) {
-        console.error('Error loading documents:', documentsError)
-        return
+      // variabili di esempio per anteprima
+      const variables = {
+        first_name: 'Mario',
+        last_name: 'Rossi',
+        team_name: 'CSRoma U15',
+        today: new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium' }).format(new Date()),
       }
-
-      if (!documentsData) {
-        setDocuments([])
-        return
-      }
-
-      // Carica i template associati
-      const templateIds = documentsData.map(doc => doc.template_id).filter(Boolean)
-      let templatesMap: Record<string, { id: string; name: string }> = {}
-      if (templateIds.length > 0) {
-        const { data: templatesData } = await supabase
-          .from('document_templates')
-          .select('id, name')
-          .in('id', templateIds)
-
-        if (templatesData) {
-          templatesMap = templatesData.reduce((acc, template) => {
-            acc[template.id] = template
-            return acc
-          }, {} as Record<string, { id: string; name: string }>)
-        }
-      }
-
-      // Carica i profili utente target
-      const userIds = documentsData.map(doc => doc.target_user_id).filter(Boolean)
-      let usersMap: Record<string, { id: string; first_name: string; last_name: string }> = {}
-      if (userIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .in('id', userIds)
-
-        if (usersData) {
-          usersMap = usersData.reduce((acc, user) => {
-            acc[user.id] = user
-            return acc
-          }, {} as Record<string, { id: string; first_name: string; last_name: string }>)
-        }
-      }
-
-      // Carica le squadre target
-      const teamIds = documentsData.map(doc => doc.target_team_id).filter(Boolean)
-      let teamsMap: Record<string, { id: string; name: string }> = {}
-      if (teamIds.length > 0) {
-        const { data: teamsData } = await supabase
-          .from('teams')
-          .select('id, name')
-          .in('id', teamIds)
-
-        if (teamsData) {
-          teamsMap = teamsData.reduce((acc, team) => {
-            acc[team.id] = team
-            return acc
-          }, {} as Record<string, { id: string; name: string }>)
-        }
-      }
-
-      // Combina tutti i dati
-      const transformedData = documentsData.map(doc => ({
-        ...doc,
-        template: doc.template_id && templatesMap[doc.template_id] ? { name: templatesMap[doc.template_id].name } : null,
-        target_user: doc.target_user_id && usersMap[doc.target_user_id] ? {
-          first_name: usersMap[doc.target_user_id].first_name,
-          last_name: usersMap[doc.target_user_id].last_name
-        } : null,
-        target_team: doc.target_team_id && teamsMap[doc.target_team_id] ? { name: teamsMap[doc.target_team_id].name } : null
-      }))
-
-      setDocuments(transformedData)
-    } catch (error) {
-      console.error('Error loading documents:', error)
+      let html = replaceTemplateVariables(template.content_html, variables)
+      html = withOptionalLogo(html, template)
+      setPreviewContent(html)
+      setShowPreview(true)
+    } catch (e) {
+      console.error('Errore anteprima:', e)
+      alert('Impossibile generare anteprima')
     }
   }
 
-  const loadTeams = async () => {
-    const { data } = await supabase
-      .from('teams')
-      .select('id, name, code')
-      .order('name')
-    if (data) setTeams(data)
-  }
-
-  const loadProfiles = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, role')
-      .order('first_name')
-    if (data) setProfiles(data)
-  }
-
-  const saveTemplate = async (template: Partial<DocumentTemplate>) => {
-    try {
-      if (editingTemplate && editingTemplate.id) {
-        // UPDATE existing template
-        const { error } = await supabase
-          .from('document_templates')
-          .update(template)
-          .eq('id', editingTemplate.id)
-        if (error) throw error
-      } else {
-        // INSERT new template (remove id field for new templates)
-        const { id, ...templateWithoutId } = template
-        const { error } = await supabase
-          .from('document_templates')
-          .insert([templateWithoutId])
-        if (error) throw error
-      }
-
-      setEditingTemplate(null)
-      setShowTemplateForm(false)
-      loadTemplates()
-    } catch (error) {
-      console.error('Error saving template:', error)
-    }
-  }
-
-  const saveDocument = async (document: Partial<Document>) => {
-    try {
-      if (editingDocument) {
-        const { error } = await supabase
-          .from('documents')
-          .update(document)
-          .eq('id', editingDocument.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('documents')
-          .insert([document])
-        if (error) throw error
-      }
-      
-      setEditingDocument(null)
-      setShowDocumentForm(false)
-      loadDocuments()
-    } catch (error) {
-      console.error('Error saving document:', error)
-    }
-  }
-
+  /** =======================
+   * Eliminazione Template
+   * ======================= */
   const deleteTemplate = async (id: string) => {
-    if (confirm('Sei sicuro di voler eliminare questo template?')) {
-      const { error } = await supabase
-        .from('document_templates')
-        .delete()
-        .eq('id', id)
-      if (!error) loadTemplates()
-    }
+    if (!confirm('Eliminare il template?')) return
+    const { error } = await supabase.from('document_templates').delete().eq('id', id)
+    if (error) { alert('Errore eliminazione template'); return }
+    await loadAll()
   }
 
+  /** =======================
+   * Eliminazione Documento
+   * ======================= */
   const deleteDocument = async (id: string) => {
-    if (confirm('Sei sicuro di voler eliminare questo documento?')) {
-      const { error } = await supabase
-        .from('documents')
-        .delete()
-        .eq('id', id)
-      if (!error) loadDocuments()
-    }
+    if (!confirm('Eliminare il documento?')) return
+    const { error } = await supabase.from('documents').delete().eq('id', id)
+    if (error) { alert('Errore eliminazione documento'); return }
+    await loadAll()
   }
 
-  const generateDocument = async (templateId: string, targetId: string, targetType: 'user' | 'team') => {
-    try {
-      const template = templates.find(t => t.id === templateId)
-      if (!template) return
-
-      // Get template variables based on target type
-      let variables = {}
-      if (targetType === 'user') {
-        const user = profiles.find(p => p.id === targetId)
-        if (user) {
-          variables = {
-            user_first_name: user.first_name,
-            user_last_name: user.last_name,
-            user_full_name: `${user.first_name} ${user.last_name}`,
-            user_title: user.role === 'admin' ? 'Dott.' : 'Sig.'
-          }
-        }
-      } else {
-        const team = teams.find(t => t.id === targetId)
-        if (team) {
-          variables = {
-            team_name: team.name,
-            team_code: team.code
-          }
-        }
-      }
-
-      // Replace template variables
-      let generatedContent = template.content_html
-      Object.entries(variables).forEach(([key, value]) => {
-        generatedContent = generatedContent.replace(
-          new RegExp(`{{${key}}}`, 'g'),
-          String(value)
-        )
-      })
-
-      const newDocument = {
-        template_id: templateId,
-        title: `${template.name} - ${targetType === 'user' ? variables.user_full_name : variables.team_name}`,
-        document_type: template.type,
-        status: 'generated' as const,
-        generated_content_html: generatedContent,
-        target_user_id: targetType === 'user' ? targetId : null,
-        target_team_id: targetType === 'team' ? targetId : null,
-        generation_date: new Date().toISOString(),
-        variables
-      }
-
-      await saveDocument(newDocument)
-    } catch (error) {
-      console.error('Error generating document:', error)
-    }
-  }
-
-  const previewTemplate = (template: DocumentTemplate) => {
-    let preview = template.content_html
-    
-    // Replace common variables with placeholder values
-    const placeholders = {
-      user_first_name: 'Mario',
-      user_last_name: 'Rossi',
-      user_full_name: 'Mario Rossi',
-      user_title: 'Sig.',
-      team_name: 'Team Esempio',
-      team_code: 'TE01',
-      event_title: 'Allenamento',
-      event_date: '01/01/2024',
-      event_time: '18:00',
-      event_location: 'Palestra Centro',
-      coach_name: 'Allenatore Esempio'
-    }
-
-    Object.entries(placeholders).forEach(([key, value]) => {
-      preview = preview.replace(new RegExp(`{{${key}}}`, 'g'), value)
-    })
-
-    setPreviewContent(preview)
-    setShowPreview(true)
-  }
-
-  const generateSinglePDF = async (template: DocumentTemplate) => {
-    try {
-      const placeholders = {
-        user_first_name: 'Mario',
-        user_last_name: 'Rossi', 
-        user_full_name: 'Mario Rossi',
-        user_title: 'Sig.',
-        team_name: 'Team Esempio',
-        team_code: 'TE01',
-        current_date: new Date().toLocaleDateString('it-IT')
-      }
-
-      const content = replaceTemplateVariables(template.content_html, placeholders)
-      
-      const pdf = await generatePDF({
-        title: template.name,
-        content,
-        styles: template.styles_css,
-        hasLogo: template.has_logo,
-        logoPosition: template.logo_position,
-        hasDate: template.has_date,
-        hasSignatureArea: template.has_signature_area,
-        footerText: template.footer_text
-      })
-
-      downloadPDF(pdf)
-    } catch (error) {
-      console.error('Error generating PDF:', error)
-      alert('Errore nella generazione del PDF')
-    }
-  }
-
+  /** ============================================================
+   *  BULK GENERATION – apertura modal + caricamento recipients
+   * ============================================================ */
   const startBulkGeneration = async (template: DocumentTemplate) => {
     setSelectedTemplate(template)
+    setShowBulkModal(true)
+    setSelectedUsers(new Set())
+    setSelectedTeamId('')
+    setTeamMembers([])
 
-    // Load recipients based on template type
-    let recipients = []
-    if (template.target_type === 'user') {
-      const { data } = await supabase
-        .from('profiles')
-        .select(`
-          id, first_name, last_name, email, phone, date_of_birth,
-          athlete_profiles(membership_number, medical_certificate_expiry),
-          team_members(jersey_number, teams(name, code, activities(name)))
-        `)
-        .eq('role', 'athlete')
-
-      recipients = data || []
-    } else {
-      const { data } = await supabase
-        .from('teams')
-        .select(`
-          id, name, code,
-          activities(name),
-          team_coaches(profiles(first_name, last_name, email)),
-          team_members(profiles(first_name, last_name, email))
-        `)
-
-      recipients = data || []
-    }
-
-    setBulkRecipients(recipients)
-    setShowBulkGeneration(true)
-  }
-
-  const generateBulkPDFs = async (selectedRecipients: any[]) => {
-    if (!selectedTemplate) return
-    
-    setGeneratingBulk(true)
     try {
-      const getVariablesForRecipient = (recipient: any) => {
-        if (selectedTemplate.target_type === 'user') {
-          const teamInfo = recipient.team_members?.[0]
-          const athleteProfile = recipient.athlete_profiles?.[0] || recipient.athlete_profiles || recipient.athlete_profile
-          return {
-            user_first_name: recipient.first_name,
-            user_last_name: recipient.last_name,
-            user_full_name: `${recipient.first_name} ${recipient.last_name}`,
-            user_email: recipient.email,
-            user_phone: recipient.phone,
-            user_birth_date: recipient.date_of_birth,
-            user_title: 'Sig.',
-            jersey_number: teamInfo?.jersey_number,
-            membership_number: athleteProfile?.membership_number,
-            medical_certificate_expiry: athleteProfile?.medical_certificate_expiry,
-            team_name: teamInfo?.team?.name,
-            team_code: teamInfo?.team?.code,
-            activity_name: teamInfo?.team?.activity?.name,
-            current_date: new Date().toLocaleDateString('it-IT')
-          }
-        } else {
-          const coachProfile = recipient.team_coaches?.[0]?.profiles
-          return {
-            team_name: recipient.name,
-            team_code: recipient.code,
-            activity_name: recipient.activity?.name,
-            coach_name: coachProfile ? `${coachProfile.first_name} ${coachProfile.last_name}` : '',
-            coach_email: coachProfile?.email,
-            current_date: new Date().toLocaleDateString('it-IT')
-          }
-        }
+      if (template.target_type === 'user') {
+        // carica utenti (solo i necessari in elenco)
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email')
+          .order('last_name', { ascending: true })
+        setBulkRecipients(data || [])
+      } else {
+        // carica squadre
+        const { data } = await supabase
+          .from('teams')
+          .select('id, name, code')
+          .order('name', { ascending: true })
+        setBulkRecipients(data || [])
       }
-
-      const pdfs = await generateBulkDocuments(
-        selectedTemplate,
-        selectedRecipients,
-        getVariablesForRecipient
-      )
-
-      // Create documents in database
-      for (let i = 0; i < pdfs.length; i++) {
-        const pdf = pdfs[i]
-        const recipient = selectedRecipients[i]
-        const variables = getVariablesForRecipient(recipient)
-        
-        const newDocument = {
-          template_id: selectedTemplate.id,
-          title: `${selectedTemplate.name} - ${variables.user_full_name || variables.team_name}`,
-          document_type: selectedTemplate.type,
-          status: 'generated' as const,
-          generated_content_html: replaceTemplateVariables(selectedTemplate.content_html, variables),
-          target_user_id: selectedTemplate.target_type === 'user' ? recipient.id : null,
-          target_team_id: selectedTemplate.target_type === 'team' ? recipient.id : null,
-          generation_date: new Date().toISOString(),
-          variables
-        }
-
-        await saveDocument(newDocument)
-      }
-
-      // Download all PDFs as zip (simplified - in production you'd create a zip file)
-      pdfs.forEach((pdf, index) => {
-        setTimeout(() => downloadPDF(pdf), index * 500) // Stagger downloads
-      })
-
-      alert(`${pdfs.length} documenti generati con successo!`)
-      setShowBulkGeneration(false)
-      loadDocuments()
-    } catch (error) {
-      console.error('Error generating bulk PDFs:', error)
-      alert('Errore nella generazione dei documenti')
+    } catch (e) {
+      console.error('Errore carico destinatari bulk:', e)
+      setBulkRecipients([])
     }
-    setGeneratingBulk(false)
   }
 
+  /** ============================================================
+   *  BULK GENERATION – carica membri squadra
+   * ============================================================ */
+  const loadTeamMembers = useCallback(async (teamId: string) => {
+    if (!teamId) { setTeamMembers([]); return }
+    try {
+      const { data } = await supabase
+        .from('team_members')
+        .select('profiles(id, first_name, last_name, email), jersey_number')
+        .eq('team_id', teamId)
+
+      const mapped = (data || []).map((r: any) => ({
+        id: r.profiles?.id,
+        first_name: r.profiles?.first_name,
+        last_name: r.profiles?.last_name,
+        email: r.profiles?.email,
+        jersey_number: r.jersey_number ?? null,
+        selected: true, // default “selezionati tutti”
+      } as TeamMember)).filter(m => !!m.id)
+
+      setTeamMembers(mapped)
+    } catch (e) {
+      console.error('Errore carico membri squadra:', e)
+      setTeamMembers([])
+    }
+  }, [supabase])
+
+  /** ============================================================
+   *  BULK GENERATION – genera N documenti (utenti o membri squadra)
+   * ============================================================ */
+  const generateBulkPDFs = async (recipients: { id: string; first_name?: string; last_name?: string; email?: string }[]) => {
+    if (!selectedTemplate) return
+    try {
+      for (const r of recipients) {
+        const variables = {
+          first_name: r.first_name ?? '',
+          last_name: r.last_name ?? '',
+          email: r.email ?? '',
+          today: new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium' }).format(new Date()),
+        }
+        const baseHtml = replaceTemplateVariables(selectedTemplate.content_html, variables)
+        const finalHtml = withOptionalLogo(baseHtml, selectedTemplate)
+
+        const { error } = await supabase.from('documents').insert({
+          title: selectedTemplate.name,
+          template_id: selectedTemplate.id,
+          target_user_id: selectedTemplate.target_type === 'user' ? r.id : null,
+          target_team_id: selectedTemplate.target_type === 'team' ? selectedTeamId || null : null,
+          generated_content_html: finalHtml,
+          status: 'generated',
+          generation_date: new Date().toISOString(),
+          document_type: 'team_convocation',
+        } as any)
+        if (error) console.warn('Documento non salvato per', r.id)
+      }
+      alert(`Creati ${recipients.length} documenti`)
+      setShowBulkModal(false)
+      setSelectedTemplate(null)
+      await loadAll()
+    } catch (e) {
+      console.error('Errore bulk generation:', e)
+      alert('Errore nella generazione multipla')
+    }
+  }
+
+  /** ============================================================
+   *  DOCUMENT → Scarica PDF
+   * ============================================================ */
+  const downloadDocumentPDF = async (doc: GeneratedDocument) => {
+    if (!doc.generated_content_html) return alert('Documento non generato.')
+    const pdf = await generatePDF({
+      title: doc.title,
+      content: doc.generated_content_html,
+    })
+    downloadPDF(pdf)
+  }
+
+  /** ============================================================
+   *  DOCUMENT → invia come messaggio con allegato PDF
+   * ============================================================ */
+  const sendDocumentAsMessage = async (doc: GeneratedDocument) => {
+    try {
+      if (!doc.generated_content_html) return alert('Documento non generato.')
+
+      // 1) genera PDF (client) e crea File
+      const pdf = await generatePDF({ title: doc.title, content: doc.generated_content_html })
+      const blob = pdf.blob
+      const fileName = pdf.filename.endsWith('.pdf') ? pdf.filename : `${doc.title.replace(/\s+/g, '_')}.pdf`
+
+      // 2) upload allegato
+      const form = new FormData()
+      form.append('files', new File([blob], fileName, { type: blob.type || 'application/pdf' }))
+      const uploadRes = await fetch('/api/messages/attachments/upload', { method: 'POST', body: form })
+      if (!uploadRes.ok) throw new Error('Upload allegato fallito')
+      const uploadData = await uploadRes.json()
+      const attachments = (uploadData.files || []).map((f: any) => ({
+        file_path: f.file_path,
+        file_name: f.file_name,
+        mime_type: f.mime_type,
+        file_size: f.file_size,
+      }))
+
+      // 3) calcola destinatari
+      let selected_users: string[] = []
+      let selected_teams: string[] = []
+      if (doc.target_user_id) {
+        selected_users = [doc.target_user_id]
+      } else if (doc.target_team_id) {
+        const { data: members } = await supabase
+          .from('team_members')
+          .select('profile_id')
+          .eq('team_id', doc.target_team_id)
+        selected_users = (members || []).map((m: any) => m.profile_id)
+      }
+      if (selected_users.length === 0 && selected_teams.length === 0) return alert('Nessun destinatario trovato.')
+
+      // 4) crea messaggio admin con allegato
+      const res = await fetch('/api/admin/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: doc.title,
+          content: 'In allegato trovi il documento generato.',
+          selected_users,
+          selected_teams,
+          attachments,
+          channels: ['app'], // adatta se vuoi anche email
+        }),
+      })
+      if (!res.ok) throw new Error('Invio messaggio fallito')
+      alert('Messaggio inviato con successo!')
+    } catch (e) {
+      console.error(e)
+      alert('Errore durante l’invio del messaggio')
+    }
+  }
+
+  /** ============================================================
+   *  RENDER
+   * ============================================================ */
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="cs-skeleton cs-skeleton--circle w-8 h-8"></div>
+      <div className="cs-card p-6">
+        <div className="cs-skeleton h-8 w-1/3 mb-3"></div>
+        <div className="cs-skeleton h-5 w-1/2"></div>
       </div>
     )
   }
 
   return (
-    <div>
-
-      {/* Tabs */}
-      <div className="mb-6">
-        <div className="cs-tabs">
-          <button
-            onClick={() => setActiveTab('templates')}
-            className="cs-tab"
-            aria-selected={activeTab === 'templates'}
-          >
-            Template Documenti
-          </button>
-          <button
-            onClick={() => setActiveTab('documents')}
-            className="cs-tab"
-            aria-selected={activeTab === 'documents'}
-          >
-            Documenti Generati
-          </button>
-        </div>
-      </div>
-
-      {/* Templates Tab */}
-      {activeTab === 'templates' && (
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Template Documenti</h2>
-            <div className="flex space-x-2">
-              <Button
-                onClick={() => exportDocumentTemplates(templates)}
-                variant="accent"
-              >
-                Esporta Excel
-              </Button>
-              <Button
-                onClick={() => {
-                  setEditingTemplate(null)
-                  setShowTemplateForm(true)
-                }}
-                variant="primary"
-              >
-                Nuovo Template
-              </Button>
+    <div className="space-y-8">
+      {/* TEMPLATES */}
+      <section className="cs-card cs-card--primary">
+        <div className="p-6 border-b">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Template</h2>
+            <div className="flex gap-2">
+              <button className="cs-btn cs-btn--primary" onClick={() => setShowCreateTemplate(true)}>Nuovo Template</button>
             </div>
           </div>
-
-          {templates.length === 0 ? (
-            <Card className="text-center py-12">
-              <p className="text-[color:var(--cs-text-secondary)] mb-4">Nessun template creato</p>
-              <Button
-                onClick={() => setShowTemplateForm(true)}
-                variant="primary"
-              >
-                Crea il tuo primo template
-              </Button>
-            </Card>
-          ) : (
-            <Card variant='primary'>
-              <Table>
-                <thead>
-                  <tr>
-                    <th>Nome</th>
-                    <th>Tipo</th>
-                    <th>Target</th>
-                    <th>Stato</th>
-                    <th>Azioni</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {templates.map((template) => (
-                    <tr key={template.id}>
-                      <td>
-                        <div>
-                          <div className="text-sm font-medium text-[color:var(--cs-text)]">{template.name}</div>
-                          {template.description && (
-                            <div className="text-sm text-[color:var(--cs-text-secondary)]">{template.description}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        {template.type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </td>
-                      <td>
-                        {template.target_type === 'user' ? 'Utente' : 'Team'}
-                      </td>
-                      <td>
-                        <Badge variant={template.is_active ? 'success' : 'danger'}>
-                          {template.is_active ? 'Attivo' : 'Inattivo'}
-                        </Badge>
-                      </td>
-                      <td>
-                        <TableActions>
-  <button
-    onClick={() => previewTemplate(template)}
-    className="cs-btn cs-btn--outline cs-btn--sm"
-  >
-    Anteprima
-  </button>
-
-  <button
-    onClick={() => {
-      setEditingTemplate(template)
-      setShowTemplateForm(true)
-    }}
-    className="cs-btn cs-btn--outline cs-btn--sm"
-  >
-    Modifica
-  </button>
-
-  <button
-    onClick={() => deleteTemplate(template.id)}
-    className="cs-btn cs-btn--danger cs-btn--sm"
-  >
-    Elimina
-  </button>
-</TableActions>
-
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </Card>
-          )}
         </div>
-      )}
 
-      {/* Documents Tab */}
-      {activeTab === 'documents' && (
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Documenti Generati</h2>
-            <div className="flex space-x-2">
-              <Button
-                onClick={() => exportDocuments(documents)}
-                variant="accent"
-              >
-                Esporta Excel
-              </Button>
-              <Button
-                onClick={() => setShowDocumentGeneration(true)}
-                variant="primary"
-              >
-                Genera Documento
-              </Button>
-            </div>
-          </div>
-
-          {documents.length === 0 ? (
-            <Card className="text-center py-12">
-              <p className="text-[color:var(--cs-text-secondary)] mb-4">Nessun documento generato</p>
-              <p className="text-sm text-[color:var(--cs-text-secondary)]">Seleziona un template per generare il primo documento</p>
-            </Card>
-          ) : (
-            <Card variant='primary'>
-              <Table>
-                <thead>
-                  <tr>
-                    <th>Titolo</th>
-                    <th>Tipo</th>
-                    <th>Target</th>
-                    <th>Stato</th>
-                    <th>Data Generazione</th>
-                    <th>Azioni</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {documents.map((document) => (
-                    <tr key={document.id}>
-                      <td>
-                        <div className="text-sm font-medium text-[color:var(--cs-text)]">{document.title}</div>
-                        {document.description && (
-                          <div className="text-sm text-[color:var(--cs-text-secondary)]">{document.description}</div>
-                        )}
-                      </td>
-                      <td>
-                        {document.document_type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                      </td>
-                      <td>
-                        {document.target_user_id
-                          ? `${document.target_user?.first_name} ${document.target_user?.last_name}`
-                          : document.target_team?.name
-                        }
-                      </td>
-                      <td>
-                        <Badge variant={
-                          document.status === 'generated' ? 'success' :
-                          document.status === 'sent' ? 'info' :
-                          document.status === 'archived' ? 'neutral' : 'warning'
-                        }>
-                          {document.status === 'generated' ? 'Generato' :
-                           document.status === 'sent' ? 'Inviato' :
-                           document.status === 'archived' ? 'Archiviato' : 'Bozza'}
-                        </Badge>
-                      </td>
-                      <td>
-                        {document.generation_date
-                          ? new Date(document.generation_date).toLocaleDateString('it-IT')
-                          : '-'
-                        }
-                      </td>
-                      <td>
-                        <TableActions>
-  {document.generated_content_html && (
-    <button
-      onClick={() => {
-        setPreviewContent(document.generated_content_html!)
-        setShowPreview(true)
-      }}
-      className="cs-btn cs-btn--outline cs-btn--sm"
-    >
-      Visualizza
-    </button>
-  )}
-
-  <button
-    onClick={() => deleteDocument(document.id)}
-    className="cs-btn cs-btn--danger cs-btn--sm"
-  >
-    Elimina
-  </button>
-</TableActions>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </Card>
-          )}
+        <div className="overflow-x-auto">
+          <table className="cs-table">
+            <thead>
+              <tr>
+                <th className="p-4 text-left text-sm font-medium">Nome</th>
+                <th className="p-4 text-left text-sm font-medium">Target</th>
+                <th className="p-4 text-left text-sm font-medium">Azioni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {templates.map(t => (
+                <tr key={t.id}>
+                  <td className="p-4">
+                    <div className="font-medium">{t.name}</div>
+                    {t.description && <div className="text-sm text-secondary">{t.description}</div>}
+                  </td>
+                  <td className="p-4 text-sm">{t.target_type === 'team' ? 'Squadra' : 'Utente'}</td>
+                  <td className="p-4">
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className="cs-btn cs-btn--outline cs-btn--sm"
+                        onClick={() => previewTemplate(t)}
+                      >
+                        Anteprima
+                      </button>
+                      <a
+                        href={`/admin/documents/templates/${t.id}`}
+                        className="cs-btn cs-btn--outline cs-btn--sm"
+                      >
+                        Modifica
+                      </a>
+                      <button
+                        className="cs-btn cs-btn--outline cs-btn--sm"
+                        onClick={() => startBulkGeneration(t)}
+                      >
+                        Genera in serie
+                      </button>
+                      <button className="cs-btn cs-btn--danger cs-btn--sm" onClick={() => deleteTemplate(t.id)}>Elimina</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {templates.length === 0 && (
+                <tr><td className="p-6 text-secondary" colSpan={4}>Nessun template creato.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </section>
 
-      {/* Template Form Modal */}
-      {showTemplateForm && (
-        <div className="cs-overlay" aria-hidden="false">
-          <div className="cs-modal">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-[color:var(--cs-text)]">
-                {editingTemplate ? 'Modifica Template' : 'Nuovo Template'}
-              </h3>
-              <button
-                onClick={() => {
-                  setShowTemplateForm(false)
-                  setEditingTemplate(null)
-                }}
-                className="cs-btn cs-btn--ghost cs-btn--icon"
-              >
-                <span className="cs-sr-only">Chiudi</span>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      {/* MODAL: Nuovo Template */}
+      {showCreateTemplate && (
+        <div className="cs-overlay" aria-hidden="false" onClick={() => setShowCreateTemplate(false)}>
+          <div className="cs-modal cs-modal--lg" onClick={(e) => e.stopPropagation()}>
+            <div className="cs-modal__header">
+              <div className="cs-modal__icon">🧩</div>
+              <div>
+                <div className="cs-modal__title">Nuovo Template</div>
+                <div className="cs-modal__description">Crea un modello per utenti o squadre.</div>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <Field label="Nome Template *">
-                <Input
-                  type="text"
-                  placeholder="Inserisci nome template"
-                  value={editingTemplate?.name || ''}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, name: e.target.value })
-                    } else {
-                      setEditingTemplate({ name: e.target.value, type: 'medical_certificate_request', target_type: 'user', content_html: '', has_logo: false, logo_position: 'top-left', has_date: true, date_format: 'dd/mm/yyyy', has_signature_area: true, is_active: true } as DocumentTemplate)
-                    }
-                  }}
-                />
-              </Field>
+            <div className="cs-grid" style={{ gap: 12 }}>
+              <div className="cs-field">
+                <label className="cs-field__label">Nome *</label>
+                <input className="cs-input" value={templateForm.name || ''} onChange={(e)=>setTemplateForm(p=>({...p, name:e.target.value}))} />
+              </div>
 
-              <Field label="Descrizione">
-                <textarea
-                  className="cs-textarea"
-                  rows={2}
-                  placeholder="Descrizione del template"
-                  value={editingTemplate?.description || ''}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, description: e.target.value })
-                    }
-                  }}
-                />
-              </Field>
+              <div className="cs-field">
+                <label className="cs-field__label">Descrizione</label>
+                <textarea className="cs-textarea" rows={2} value={templateForm.description || ''} onChange={(e)=>setTemplateForm(p=>({...p, description:e.target.value}))} />
+              </div>
 
-              <div className="cs-grid cs-grid--2">
-                <Field label="Tipo Documento *">
-                  <select
-                    className="cs-select"
-                    value={editingTemplate?.type || 'medical_certificate_request'}
-                    onChange={(e) => {
-                      if (editingTemplate) {
-                        setEditingTemplate({ ...editingTemplate, type: e.target.value as any })
-                      }
-                    }}
-                  >
+              <div className="cs-grid cs-grid--2" style={{ gap: 12 }}>
+                <div className="cs-field">
+                  <label className="cs-field__label">Tipo *</label>
+                  <select className="cs-select" value={templateForm.type || 'team_convocation'} onChange={(e)=>setTemplateForm(p=>({...p, type: e.target.value as any}))}>
                     <option value="medical_certificate_request">Richiesta Certificato Medico</option>
                     <option value="enrollment_form">Modulo Iscrizione</option>
                     <option value="attendance_certificate">Attestato Frequenza</option>
                     <option value="payment_receipt">Ricevuta Pagamento</option>
                     <option value="team_convocation">Convocazione Squadra</option>
                   </select>
-                </Field>
-
-                <Field label="Target *">
-                  <select
-                    className="cs-select"
-                    value={editingTemplate?.target_type || 'user'}
-                    onChange={(e) => {
-                      if (editingTemplate) {
-                        setEditingTemplate({ ...editingTemplate, target_type: e.target.value as 'user' | 'team' })
-                      }
-                    }}
-                  >
-                    <option value="user">Utente Singolo</option>
+                </div>
+                <div className="cs-field">
+                  <label className="cs-field__label">Target *</label>
+                  <select className="cs-select" value={templateForm.target_type || 'team'} onChange={(e)=>setTemplateForm(p=>({...p, target_type: e.target.value as TargetType}))}>
+                    <option value="user">Utente</option>
                     <option value="team">Squadra</option>
                   </select>
-                </Field>
+                </div>
               </div>
 
-              <Field label="Contenuto HTML *">
-                <textarea
-                  className="cs-textarea font-mono text-sm"
-                  rows={8}
-                  placeholder="Inserisci il contenuto HTML del template. Usa {{variabile}} per le variabili dinamiche."
-                  value={editingTemplate?.content_html || ''}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, content_html: e.target.value })
-                    }
-                  }}
-                />
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={!!templateForm.has_logo} onChange={(e)=>setTemplateForm(p=>({...p, has_logo: e.target.checked}))} />
+                <span>Includi logo (centrato)</span>
+              </label>
+
+              <div className="cs-field">
+                <label className="cs-field__label">Contenuto HTML *</label>
+                <textarea className="cs-textarea font-mono text-sm" rows={8} value={templateForm.content_html || ''} onChange={(e)=>setTemplateForm(p=>({...p, content_html: e.target.value}))} />
                 <p className="cs-help">
-                  Variabili disponibili: user_first_name, user_last_name, user_full_name, user_title, team_name, team_code, event_title, event_date, event_time, event_location, coach_name
+                  Usa {'{{first_name}}'}, {'{{last_name}}'}, {'{{team_name}}'}, {'{{today}}'} come variabili esempio.
                 </p>
-              </Field>
-
-              <div className="cs-grid cs-grid--2">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-[color:var(--cs-border)] text-[color:var(--cs-primary)] focus:ring-[color:var(--cs-primary)]"
-                    checked={editingTemplate?.has_logo || false}
-                    onChange={(e) => {
-                      if (editingTemplate) {
-                        setEditingTemplate({ ...editingTemplate, has_logo: e.target.checked })
-                      }
-                    }}
-                  />
-                  <span className="ml-2 text-sm text-[color:var(--cs-text)]">Includi Logo</span>
-                </label>
-
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-[color:var(--cs-border)] text-[color:var(--cs-primary)] focus:ring-[color:var(--cs-primary)]"
-                    checked={editingTemplate?.has_date || true}
-                    onChange={(e) => {
-                      if (editingTemplate) {
-                        setEditingTemplate({ ...editingTemplate, has_date: e.target.checked })
-                      }
-                    }}
-                  />
-                  <span className="ml-2 text-sm text-[color:var(--cs-text)]">Includi Data</span>
-                </label>
-
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-[color:var(--cs-border)] text-[color:var(--cs-primary)] focus:ring-[color:var(--cs-primary)]"
-                    checked={editingTemplate?.has_signature_area || true}
-                    onChange={(e) => {
-                      if (editingTemplate) {
-                        setEditingTemplate({ ...editingTemplate, has_signature_area: e.target.checked })
-                      }
-                    }}
-                  />
-                  <span className="ml-2 text-sm text-[color:var(--cs-text)]">Area Firma</span>
-                </label>
-
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    className="rounded border-[color:var(--cs-border)] text-[color:var(--cs-primary)] focus:ring-[color:var(--cs-primary)]"
-                    checked={editingTemplate?.is_active || true}
-                    onChange={(e) => {
-                      if (editingTemplate) {
-                        setEditingTemplate({ ...editingTemplate, is_active: e.target.checked })
-                      }
-                    }}
-                  />
-                  <span className="ml-2 text-sm text-[color:var(--cs-text)]">Template Attivo</span>
-                </label>
               </div>
-
-              <Field label="Testo Footer">
-                <Input
-                  type="text"
-                  placeholder="Testo da mostrare nel footer"
-                  value={editingTemplate?.footer_text || ''}
-                  onChange={(e) => {
-                    if (editingTemplate) {
-                      setEditingTemplate({ ...editingTemplate, footer_text: e.target.value })
-                    }
-                  }}
-                />
-              </Field>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6">
-              <Button
-                onClick={() => {
-                  setShowTemplateForm(false)
-                  setEditingTemplate(null)
-                }}
-                variant="outline"
-              >
-                Annulla
-              </Button>
-              <Button
-                onClick={() => {
-                  const templateToSave = editingTemplate || { name: '', content_html: '' } as DocumentTemplate
-                  if (templateToSave.name && templateToSave.content_html) {
-                    saveTemplate(templateToSave)
-                  } else {
-                    alert('Compila tutti i campi obbligatori: Nome e Contenuto HTML')
+            <div className="cs-modal__footer">
+              <button className="cs-btn cs-btn--outline" onClick={()=>setShowCreateTemplate(false)}>Annulla</button>
+              <button
+                className="cs-btn cs-btn--primary"
+                disabled={savingTemplate || !templateForm.name || !templateForm.content_html || !templateForm.type}
+                onClick={async ()=>{
+                  setSavingTemplate(true)
+                  try{
+                    const { error } = await supabase.from('document_templates').insert({
+                      name: templateForm.name,
+                      description: templateForm.description || null,
+                      type: templateForm.type!,
+                      target_type: templateForm.target_type || 'team',
+                      content_html: templateForm.content_html!,
+                      styles_css: null,
+                      has_logo: !!templateForm.has_logo,
+                      logo_position: 'top-center',
+                      has_date: true,
+                      date_format: 'dd/mm/yyyy',
+                      has_signature_area: true,
+                      footer_text: null,
+                      is_active: true,
+                    } as any)
+                    if (error) { alert('Errore salvataggio template'); return }
+                    setShowCreateTemplate(false)
+                    await loadAll()
+                  } finally {
+                    setSavingTemplate(false)
                   }
                 }}
-                variant="primary"
               >
-                {editingTemplate ? 'Salva Modifiche' : 'Crea Template'}
-              </Button>
+                Salva Template
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Document Generation Modal */}
-      {showDocumentGeneration && (
-        <div className="cs-overlay" aria-hidden="false">
-          <div className="cs-modal">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-[color:var(--cs-text)]">Genera Documento</h3>
-              <button
-                onClick={() => {
-                  setShowDocumentGeneration(false)
-                  setSelectedGenerationTemplate(null)
-                  setSelectedTargetId('')
-                }}
-                className="cs-btn cs-btn--ghost cs-btn--icon"
-              >
-                <span className="cs-sr-only">Chiudi</span>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+      {/* DOCUMENTI GENERATI */}
+      <section className="cs-card cs-card--primary">
+        <div className="p-6 border-b">
+          <h2 className="text-lg font-semibold">Documenti generati</h2>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="cs-table">
+            <thead>
+              <tr>
+                <th className="p-4 text-left text-sm font-medium">Titolo</th>
+                <th className="p-4 text-left text-sm font-medium">Creato il</th>
+                <th className="p-4 text-left text-sm font-medium">Azioni</th>
+              </tr>
+            </thead>
+            <tbody>
+              {documents.map(doc => (
+                <tr key={doc.id}>
+                  <td className="p-4">
+                    <div className="font-medium">{doc.title}</div>
+                    {doc.template_id && (
+                      <div className="text-xs text-secondary">Template: {doc.template_id}</div>
+                    )}
+                  </td>
+                  <td className="p-4 text-sm">
+                    {doc.created_at
+                      ? new Date(doc.created_at).toLocaleDateString('it-IT')
+                      : '—'}
+                  </td>
+                  <td className="p-4">
+                    <div className="flex flex-wrap gap-2">
+                      {doc.generated_content_html && (
+                        <>
+                          <button
+                            className="cs-btn cs-btn--outline cs-btn--sm"
+                            onClick={() => {
+                              setPreviewContent(doc.generated_content_html!)
+                              setShowPreview(true)
+                            }}
+                          >
+                            Visualizza
+                          </button>
+                          <button
+                            className="cs-btn cs-btn--outline cs-btn--sm"
+                            onClick={() => downloadDocumentPDF(doc)}
+                          >
+                            Scarica PDF
+                          </button>
+                          <button
+                            className="cs-btn cs-btn--primary cs-btn--sm"
+                            onClick={() => sendDocumentAsMessage(doc)}
+                          >
+                            Invia come messaggio
+                          </button>
+                        </>
+                      )}
+                      <button
+                        className="cs-btn cs-btn--danger cs-btn--sm"
+                        onClick={() => deleteDocument(doc.id)}
+                      >
+                        Elimina
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {documents.length === 0 && (
+                <tr><td className="p-6 text-secondary" colSpan={3}>Nessun documento generato.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* MODAL: Anteprima HTML */}
+      {showPreview && (
+        <div className="cs-overlay" aria-hidden="false" onClick={() => setShowPreview(false)}>
+          <div className="cs-modal cs-modal--lg" onClick={(e) => e.stopPropagation()}>
+            <div className="cs-modal__header">
+              <div className="cs-modal__icon">📄</div>
+              <div>
+                <div className="cs-modal__title">Anteprima documento</div>
+                <div className="cs-modal__description">Questa è un’anteprima HTML.</div>
+              </div>
+            </div>
+            <div style={{ border: '1px solid var(--cs-border)', borderRadius: 12, padding: 12, maxHeight: '60vh', overflow: 'auto' }}
+                 dangerouslySetInnerHTML={{ __html: previewContent }} />
+            <div className="cs-modal__footer">
+              <button className="cs-btn cs-btn--outline" onClick={() => setShowPreview(false)}>Chiudi</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Generazione in serie */}
+      {showBulkModal && selectedTemplate && (
+        <div className="cs-overlay" aria-hidden="false" onClick={() => setShowBulkModal(false)}>
+          <div className="cs-modal cs-modal--lg" onClick={(e) => e.stopPropagation()}>
+            <div className="cs-modal__header">
+              <div className="cs-modal__icon">🧾</div>
+              <div>
+                <div className="cs-modal__title">Genera in serie: {selectedTemplate.name}</div>
+                <div className="cs-modal__description">
+                  {selectedTemplate.target_type === 'user'
+                    ? 'Seleziona gli utenti destinatari'
+                    : 'Seleziona squadra e membri convocati'}
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <Field label="Seleziona Template *">
-                <select
-                  className="cs-select"
-                  value={selectedGenerationTemplate?.id || ''}
-                  onChange={(e) => {
-                    const template = templates.find(t => t.id === e.target.value)
-                    setSelectedGenerationTemplate(template || null)
-                  }}
-                >
-                  <option value="" disabled>Seleziona un template...</option>
-                  {templates.filter(t => t.is_active).map(template => (
-                    <option key={template.id} value={template.id}>
-                      {template.name} ({template.target_type === 'user' ? 'Utente' : 'Team'})
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              {selectedGenerationTemplate && (
-                <Field label={`${selectedGenerationTemplate.target_type === 'user' ? 'Seleziona Utente' : 'Seleziona Squadra'} *`}>
+            {selectedTemplate.target_type === 'user' ? (
+              <div className="cs-card" style={{ maxHeight: '50vh', overflow: 'auto' }}>
+                {bulkRecipients.map((u: any) => (
+                  <label key={u.id} className="flex items-center gap-2 py-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.has(u.id)}
+                      onChange={(e) => {
+                        const n = new Set(selectedUsers)
+                        if (e.target.checked) n.add(u.id); else n.delete(u.id)
+                        setSelectedUsers(n)
+                      }}
+                    />
+                    <span className="text-sm">
+                      {u.first_name} {u.last_name} — <span className="text-secondary">{u.email}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="cs-field">
+                  <label className="cs-field__label">Seleziona Squadra</label>
                   <select
                     className="cs-select"
-                    value={selectedTargetId}
-                    onChange={(e) => setSelectedTargetId(e.target.value)}
+                    value={selectedTeamId}
+                    onChange={async (e) => {
+                      const v = e.target.value
+                      setSelectedTeamId(v)
+                      await loadTeamMembers(v)
+                    }}
                   >
-                    <option value="" disabled>Seleziona {selectedGenerationTemplate.target_type === 'user' ? 'utente' : 'squadra'}...</option>
-                    {selectedGenerationTemplate.target_type === 'user' ? (
-                      profiles
-                        .filter(p => p.role === 'athlete')
-                        .map(user => (
-                          <option key={user.id} value={user.id}>
-                            {user.first_name} {user.last_name}
-                          </option>
-                        ))
-                    ) : (
-                      teams.map(team => (
-                        <option key={team.id} value={team.id}>
-                          {team.name} ({team.code})
-                        </option>
-                      ))
-                    )}
+                    <option value="">—</option>
+                    {bulkRecipients.map((t: Team) => (
+                      <option key={t.id} value={t.id}>{t.name} {t.code ? `(${t.code})` : ''}</option>
+                    ))}
                   </select>
-                </Field>
+                </div>
+
+                {selectedTeamId && (
+                  <div className="cs-card" style={{ maxHeight: '45vh', overflow: 'auto' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-semibold">Membri squadra</div>
+                      <div className="flex gap-2">
+                        <button
+                          className="cs-btn cs-btn--ghost cs-btn--sm"
+                          onClick={() => setTeamMembers(prev => prev.map(m => ({ ...m, selected: true })))}
+                        >Seleziona tutti</button>
+                        <button
+                          className="cs-btn cs-btn--ghost cs-btn--sm"
+                          onClick={() => setTeamMembers(prev => prev.map(m => ({ ...m, selected: false })))}
+                        >Deseleziona tutti</button>
+                      </div>
+                    </div>
+                    <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12 }}>
+                      {teamMembers.map((m, idx) => (
+                        <label key={m.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!m.selected}
+                            onChange={(e) => {
+                              const next = [...teamMembers]
+                              next[idx] = { ...m, selected: e.target.checked }
+                              setTeamMembers(next)
+                            }}
+                          />
+                          <span className="text-sm">
+                            {m.first_name} {m.last_name}
+                            {m.jersey_number ? ` (#${m.jersey_number})` : ''}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="cs-modal__footer">
+              <button className="cs-btn cs-btn--outline" onClick={() => setShowBulkModal(false)}>Annulla</button>
+              {selectedTemplate.target_type === 'user' ? (
+                <button
+                  className="cs-btn cs-btn--primary"
+                  disabled={selectedUsers.size === 0}
+                  onClick={() => {
+                    const chosen = bulkRecipients.filter((u: any) => selectedUsers.has(u.id))
+                    generateBulkPDFs(chosen)
+                  }}
+                >
+                  Genera {selectedUsers.size} documenti
+                </button>
+              ) : (
+                <button
+                  className="cs-btn cs-btn--primary"
+                  disabled={!selectedTeamId || teamMembers.every(m => !m.selected)}
+                  onClick={() => {
+                    const chosen = teamMembers.filter(m => m.selected).map(m => ({
+                      id: m.id!,
+                      first_name: m.first_name,
+                      last_name: m.last_name,
+                      email: m.email,
+                    }))
+                    generateBulkPDFs(chosen)
+                  }}
+                >
+                  Genera {teamMembers.filter(m => m.selected).length} documenti
+                </button>
               )}
-            </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <Button
-                onClick={() => {
-                  setShowDocumentGeneration(false)
-                  setSelectedGenerationTemplate(null)
-                  setSelectedTargetId('')
-                }}
-                variant="outline"
-              >
-                Annulla
-              </Button>
-              <Button
-                onClick={() => {
-                  if (selectedGenerationTemplate && selectedTargetId) {
-                    generateDocument(
-                      selectedGenerationTemplate.id,
-                      selectedTargetId,
-                      selectedGenerationTemplate.target_type
-                    )
-                    setShowDocumentGeneration(false)
-                    setSelectedGenerationTemplate(null)
-                    setSelectedTargetId('')
-                  } else {
-                    alert('Seleziona un template e un target')
-                  }
-                }}
-                variant="primary"
-                disabled={!selectedGenerationTemplate || !selectedTargetId}
-              >
-                Genera Documento
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Preview Modal */}
-      {showPreview && (
-        <div className="cs-overlay" aria-hidden="false">
-          <div className="cs-modal cs-modal--lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-[color:var(--cs-text)]">Anteprima Documento</h3>
-              <button
-                onClick={() => setShowPreview(false)}
-                className="cs-btn cs-btn--ghost cs-btn--icon"
-              >
-                <span className="cs-sr-only">Chiudi</span>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div
-              className="cs-card max-h-96 overflow-y-auto"
-              dangerouslySetInnerHTML={{ __html: previewContent }}
-            />
-            <div className="flex justify-end mt-4">
-              <Button
-                onClick={() => setShowPreview(false)}
-                variant="outline"
-              >
-                Chiudi
-              </Button>
             </div>
           </div>
         </div>

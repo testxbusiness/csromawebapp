@@ -22,21 +22,76 @@ export interface GeneratedPDF {
 
 // Generate PDF from HTML content
 export async function generatePDF(options: PDFGenerationOptions): Promise<GeneratedPDF> {
-  // Since jsPDF is a large dependency, we'll simulate PDF generation
-  // In a real implementation, you would use jsPDF here
-  
-  const htmlContent = createHTMLDocument(options)
-  
-  // For now, create a simple text file as a placeholder
-  // In production, this would use jsPDF to create actual PDF
-  const blob = new Blob([htmlContent], { type: 'text/html' })
-  const url = URL.createObjectURL(blob)
-  const filename = `${options.title.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.html`
-  
-  return {
-    blob,
-    url,
-    filename
+  // Try dynamic, client-side generation using CDN jsPDF + html2canvas
+  async function loadScript(src: string) {
+    await new Promise<void>((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = src
+      s.async = true
+      s.onload = () => resolve()
+      s.onerror = () => reject(new Error('Failed to load ' + src))
+      document.body.appendChild(s)
+    })
+  }
+
+  try {
+    const hasHtml2Canvas = (window as any).html2canvas
+    const hasJsPDF = (window as any).jspdf?.jsPDF
+    if (!hasHtml2Canvas) {
+      await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js')
+    }
+    if (!hasJsPDF) {
+      await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')
+    }
+
+    const html2canvas = (window as any).html2canvas as (el: HTMLElement, opts?: any) => Promise<HTMLCanvasElement>
+    const { jsPDF } = (window as any).jspdf
+
+    const wrapper = document.createElement('div')
+    wrapper.style.position = 'fixed'
+    wrapper.style.left = '-10000px'
+    wrapper.style.top = '0'
+    wrapper.style.width = '794px' // ~A4 at 96dpi
+    wrapper.style.background = '#fff'
+    wrapper.innerHTML = createHTMLDocument(options)
+    document.body.appendChild(wrapper)
+
+    const canvas = await html2canvas(wrapper, { scale: 2, useCORS: true })
+    document.body.removeChild(wrapper)
+    const imgData = canvas.toDataURL('image/jpeg', 0.95)
+
+    const pdf = new jsPDF('p', 'pt', 'a4')
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+
+    const ratio = canvas.height / canvas.width
+    const imgWidth = pageWidth
+    let imgHeight = imgWidth * ratio
+    let y = 0
+    // If content spans multiple pages, add more pages slicing the image vertically
+    if (imgHeight <= pageHeight) {
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight)
+    } else {
+      let position = 0
+      const sliceHeight = pageHeight
+      while (position < imgHeight) {
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST')
+        position += sliceHeight
+        if (position < imgHeight) pdf.addPage()
+      }
+    }
+
+    const blob = pdf.output('blob') as Blob
+    const url = URL.createObjectURL(blob)
+    const filename = `${options.title.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.pdf`
+    return { blob, url, filename }
+  } catch (e) {
+    console.warn('Falling back to HTML document for PDF generation:', e)
+    const htmlContent = createHTMLDocument(options)
+    const blob = new Blob([htmlContent], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const filename = `${options.title.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.html`
+    return { blob, url, filename }
   }
 }
 
