@@ -8,6 +8,7 @@ import RoleSidebar from './RoleSidebar'
 import { useAuth } from '@/hooks/useAuth'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import Image from 'next/image'
+import { usePush } from '@/hooks/usePush'
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || ''
@@ -17,6 +18,8 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const { profile, signOut } = useAuth()
   const router = useRouter()
+  const { registerSW } = usePush()
+  useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
 
   const handleSignOut = async () => {
     try {

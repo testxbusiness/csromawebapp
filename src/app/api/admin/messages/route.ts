@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sendToUsers } from '@/lib/utils/push'
 
 export async function POST(request: NextRequest) {
   try {
@@ -92,6 +93,44 @@ export async function POST(request: NextRequest) {
       if (userError) {
         console.error('Errore assegnazione utenti messaggio:', userError)
       }
+    }
+
+    // Push notifications to recipients (athletes/coaches)
+    try {
+      const recipientIds = new Set<string>()
+      if (Array.isArray(selected_users)) selected_users.forEach((id: string) => id !== user.id && recipientIds.add(id))
+      if (Array.isArray(selected_teams) && selected_teams.length > 0) {
+        // team members
+        const { data: members } = await adminClient
+          .from('team_members')
+          .select('profile_id')
+          .in('team_id', selected_teams)
+        members?.forEach((m: any) => m.profile_id && m.profile_id !== user.id && recipientIds.add(m.profile_id))
+        // team coaches
+        const { data: coaches } = await adminClient
+          .from('team_coaches')
+          .select('coach_id')
+          .in('team_id', selected_teams)
+        coaches?.forEach((c: any) => c.coach_id && c.coach_id !== user.id && recipientIds.add(c.coach_id))
+      }
+      // Build role-based URLs
+      if (recipientIds.size > 0) {
+        const ids = Array.from(recipientIds)
+        const { data: profiles } = await adminClient.from('profiles').select('id, role').in('id', ids)
+        const byRole: Record<string, string[]> = { coach: [], athlete: [], admin: [] }
+        profiles?.forEach((p: any) => {
+          if (p.role === 'coach') byRole.coach.push(p.id)
+          else if (p.role === 'athlete') byRole.athlete.push(p.id)
+          else byRole.admin.push(p.id)
+        })
+        await Promise.all([
+          byRole.coach.length ? sendToUsers(byRole.coach, { title: 'Nuovo messaggio', body: subject, url: '/coach/messages', icon: '/images/logo_CSRoma.png', badge: '/favicon.ico' }) : Promise.resolve(),
+          byRole.athlete.length ? sendToUsers(byRole.athlete, { title: 'Nuovo messaggio', body: subject, url: '/athlete/messages', icon: '/images/logo_CSRoma.png', badge: '/favicon.ico' }) : Promise.resolve(),
+          byRole.admin.length ? sendToUsers(byRole.admin, { title: 'Nuovo messaggio', body: subject, url: '/admin/messages', icon: '/images/logo_CSRoma.png', badge: '/favicon.ico' }) : Promise.resolve(),
+        ])
+      }
+    } catch (e) {
+      console.error('push notify (admin messages) error:', e)
     }
 
     return NextResponse.json({ 

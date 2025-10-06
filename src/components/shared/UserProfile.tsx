@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { JerseyCard } from '@/components/athlete/JerseyCard'
+import { usePush } from '@/hooks/usePush'
 
 interface ProfileData {
   first_name: string
@@ -36,6 +37,10 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     confirmPassword: ''
   })
   const supabase = createClient()
+  const { subscribe, unsubscribe } = usePush()
+  const [pushSupported, setPushSupported] = useState<boolean>(false)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission>('default')
+  const [isSubscribed, setIsSubscribed] = useState<boolean>(false)
 
   useEffect(() => {
     if (profile) {
@@ -49,6 +54,18 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       loadUserData()
     }
   }, [profile])
+
+  // Push capability check
+  useEffect(() => {
+    const supported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+    setPushSupported(supported)
+    if (!supported) return
+    setPushPermission(Notification.permission)
+    navigator.serviceWorker.getRegistration().then(async (reg) => {
+      const sub = await reg?.pushManager.getSubscription()
+      setIsSubscribed(!!sub)
+    }).catch(() => setIsSubscribed(false))
+  }, [])
 
   const loadUserData = async () => {
     setLoading(true)
@@ -210,6 +227,29 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     } catch (error) {
       console.error('Error uploading avatar:', error)
       alert('Errore nel caricamento dell\'immagine')
+    }
+  }
+
+  const handleEnablePush = async () => {
+    try {
+      await subscribe('Dispositivo personale')
+      setPushPermission(Notification.permission)
+      setIsSubscribed(true)
+      alert('Notifiche push attivate su questo dispositivo')
+    } catch (e: any) {
+      console.error('Enable push error', e)
+      alert(e?.message || 'Impossibile attivare le notifiche push')
+    }
+  }
+
+  const handleDisablePush = async () => {
+    try {
+      await unsubscribe()
+      setIsSubscribed(false)
+      alert('Notifiche push disattivate su questo dispositivo')
+    } catch (e) {
+      console.error('Disable push error', e)
+      alert('Impossibile disattivare le notifiche push')
     }
   }
 
@@ -411,6 +451,33 @@ export default function UserProfile({ userRole }: UserProfileProps) {
             </div>
           )}
 
+          {/* Push Notifications */}
+          <div className="cs-card cs-card--primary p-6">
+            <h2 className="text-xl font-semibold mb-2">Notifiche Push</h2>
+            {!pushSupported ? (
+              <p className="text-sm text-secondary">Il tuo browser non supporta le notifiche push.</p>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-secondary">
+                  Stato: {isSubscribed ? 'attive' : 'non attive'}
+                  {pushPermission === 'denied' && (
+                    <>
+                      {' '}
+                      <span className="text-[color:var(--cs-danger)]">(permesso negato a livello browser)</span>
+                    </>
+                  )}
+                </div>
+                {isSubscribed ? (
+                  <button className="cs-btn cs-btn--outline" onClick={handleDisablePush}>Disattiva</button>
+                ) : (
+                  <button className="cs-btn cs-btn--primary" onClick={handleEnablePush} disabled={pushPermission === 'denied'}>
+                    Attiva
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+            
           {/* Password Change */}
           <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>

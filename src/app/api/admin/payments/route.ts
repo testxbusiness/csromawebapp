@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { sendToUser } from '@/lib/utils/push'
 
 export async function GET() {
   try {
@@ -110,6 +111,28 @@ export async function PATCH(request: NextRequest) {
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Push notification when a coach_payment becomes paid
+    try {
+      if (updateData?.status === 'paid') {
+        const { data: row } = await adminClient
+          .from('payments')
+          .select('id, type, coach_id, description')
+          .eq('id', id)
+          .single()
+        if (row && row.type === 'coach_payment' && row.coach_id) {
+          await sendToUser(row.coach_id, {
+            title: 'Pagamento registrato',
+            body: `Il pagamento “${row.description ?? ''}” risulta pagato`,
+            url: '/coach/payments',
+            icon: '/images/logo_CSRoma.png',
+            badge: '/favicon.ico',
+          })
+        }
+      }
+    } catch (e) {
+      console.error('push notify (payments) error:', e)
     }
 
     return NextResponse.json({ success: true })

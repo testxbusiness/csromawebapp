@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { sendToUsers } from '@/lib/utils/push'
 
 export async function GET(request: NextRequest) {
   try {
@@ -230,6 +231,35 @@ export async function POST(request: NextRequest) {
         console.error('Coach assign recipients error:', recErr)
         return NextResponse.json({ error: 'Errore assegnazione destinatari' }, { status: 400 })
       }
+    }
+
+    // Push notifications to team members (and coaches if needed)
+    try {
+      const recipientIds = new Set<string>()
+      if (Array.isArray(payload?.selected_teams) && payload.selected_teams.length > 0) {
+        const { data: members } = await adminClient
+          .from('team_members')
+          .select('profile_id')
+          .in('team_id', payload.selected_teams)
+        members?.forEach((m: any) => m.profile_id && m.profile_id !== user.id && recipientIds.add(m.profile_id))
+        const { data: coaches } = await adminClient
+          .from('team_coaches')
+          .select('coach_id')
+          .in('team_id', payload.selected_teams)
+        coaches?.forEach((c: any) => c.coach_id && c.coach_id !== user.id && recipientIds.add(c.coach_id))
+      }
+      const ids = Array.from(recipientIds)
+      if (ids.length) {
+        const { data: profiles } = await adminClient.from('profiles').select('id, role').in('id', ids)
+        const byRole: Record<string, string[]> = { coach: [], athlete: [], admin: [] }
+        profiles?.forEach((p: any) => { if (p.role === 'coach') byRole.coach.push(p.id); else if (p.role === 'athlete') byRole.athlete.push(p.id); else byRole.admin.push(p.id) })
+        await Promise.all([
+          byRole.coach.length ? sendToUsers(byRole.coach, { title: 'Nuovo messaggio', body: payload.subject, url: '/coach/messages', icon: '/images/logo_CSRoma.png', badge: '/favicon.ico' }) : Promise.resolve(),
+          byRole.athlete.length ? sendToUsers(byRole.athlete, { title: 'Nuovo messaggio', body: payload.subject, url: '/athlete/messages', icon: '/images/logo_CSRoma.png', badge: '/favicon.ico' }) : Promise.resolve(),
+        ])
+      }
+    } catch (e) {
+      console.error('push notify (coach messages) error:', e)
     }
 
     return NextResponse.json({ success: true, message_id: created.id })
