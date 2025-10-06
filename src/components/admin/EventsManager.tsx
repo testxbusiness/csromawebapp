@@ -523,9 +523,49 @@ export default function EventsManager() {
               <div className="text-xs text-secondary">Tipo</div>
               <div>{selectedEvent.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}</div>
             </div>
+            {selectedEvent && (selectedEvent as any).requires_confirmation && (
+              <EventAttendancePanel eventId={selectedEvent.id!} />
+            )}
           </div>
         </DetailsDrawer>
       )}
+    </div>
+  )
+}
+
+function EventAttendancePanel({ eventId }: { eventId: string }) {
+  const [loading, setLoading] = useState(true)
+  const [lists, setLists] = useState<any>({ going: [], maybe: [], declined: [], no_response: [], counts: { going: 0, maybe: 0, declined: 0, no_response: 0 } })
+  useEffect(() => { (async () => {
+    try {
+      const res = await fetch(`/api/admin/events/attendance?event_id=${eventId}`)
+      const j = await res.json()
+      if (res.ok) setLists(j)
+    } finally { setLoading(false) }
+  })() }, [eventId])
+
+  if (loading) return <div className="text-xs text-secondary mt-2">Caricamento conferme…</div>
+  return (
+    <div className="mt-3">
+      <div className="text-xs text-secondary mb-1">RSVP</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">✔️ Confermati ({lists.counts?.going||0})</div>
+          <div className="space-y-1 text-sm">{lists.going?.map((a:any,i:number)=> <div key={i}>{a.profiles.first_name} {a.profiles.last_name}</div>)}</div>
+        </div>
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">🤝 Forse ({lists.counts?.maybe||0})</div>
+          <div className="space-y-1 text-sm">{lists.maybe?.map((a:any,i:number)=> <div key={i}>{a.profiles.first_name} {a.profiles.last_name}</div>)}</div>
+        </div>
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">✖️ Non viene ({lists.counts?.declined||0})</div>
+          <div className="space-y-1 text-sm">{lists.declined?.map((a:any,i:number)=> <div key={i}>{a.profiles.first_name} {a.profiles.last_name}</div>)}</div>
+        </div>
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">⏳ Nessuna risposta ({lists.counts?.no_response||0})</div>
+          <div className="space-y-1 text-sm">{lists.no_response?.map((p:any,i:number)=> <div key={i}>{p.first_name} {p.last_name}</div>)}</div>
+        </div>
+      </div>
     </div>
   )
 }

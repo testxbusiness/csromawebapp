@@ -64,6 +64,8 @@ export default function EventModal({
     recurrence_rule: (event?.recurrence_rule ?? { frequency: 'weekly', interval: 1 }) as { frequency: 'daily'|'weekly'|'monthly'; interval?: number },
     recurrence_end_date: event?.recurrence_end_date ? new Date(event.recurrence_end_date).toISOString().slice(0,16) : '',
     selected_teams: (event as any)?.event_teams?.map((et: any) => et.teams.id) ?? [],
+    requires_confirmation: (event as any)?.requires_confirmation ?? false,
+    confirmation_deadline: (event as any)?.confirmation_deadline ? new Date((event as any).confirmation_deadline).toISOString().slice(0,16) : '',
   })
 
   React.useEffect(() => {
@@ -80,6 +82,8 @@ export default function EventModal({
       recurrence_rule: (event?.recurrence_rule ?? { frequency: 'weekly', interval: 1 }) as any,
       recurrence_end_date: event?.recurrence_end_date ? new Date(event.recurrence_end_date).toISOString().slice(0,16) : '',
       selected_teams: (event as any)?.event_teams?.map((et: any) => et.teams.id) ?? [],
+      requires_confirmation: (event as any)?.requires_confirmation ?? false,
+      confirmation_deadline: (event as any)?.confirmation_deadline ? new Date((event as any).confirmation_deadline).toISOString().slice(0,16) : '',
     })
   }, [event])
 
@@ -96,7 +100,7 @@ export default function EventModal({
     e.preventDefault()
     setSaving(true)
     try {
-      const payload: Omit<AdminEvent, 'id'> = {
+      const payload: any = {
         title: form.title.trim(),
         description: form.description.trim() || undefined,
         start_date: new Date(form.start_date).toISOString(),
@@ -111,6 +115,8 @@ export default function EventModal({
           ? new Date(form.recurrence_end_date).toISOString()
           : undefined,
         selected_teams: form.selected_teams,
+        requires_confirmation: !!form.requires_confirmation,
+        confirmation_deadline: form.requires_confirmation && form.confirmation_deadline ? new Date(form.confirmation_deadline).toISOString() : null,
       }
 
       if (event?.id) await onUpdate(event.id, payload)
@@ -299,6 +305,30 @@ export default function EventModal({
             </div>
             {teams.length === 0 && (
               <p className="text-xs text-secondary mt-1">Nessuna squadra disponibile.</p>
+            )}
+          </div>
+
+          <div className="cs-card p-4">
+            <label className="cs-field__label mb-2">Conferma partecipazione</label>
+            <label className="inline-flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!form.requires_confirmation}
+                onChange={(e) => setForm({ ...form, requires_confirmation: e.target.checked })}
+              />
+              <span>Vuoi chiedere conferma partecipazione (RSVP)?</span>
+            </label>
+            {form.requires_confirmation && (
+              <div className="mt-3">
+                <label className="cs-field__label">Scadenza conferma (opzionale)</label>
+                <input
+                  type="datetime-local"
+                  className="cs-input"
+                  value={form.confirmation_deadline}
+                  onChange={(e) => setForm({ ...form, confirmation_deadline: e.target.value })}
+                />
+                <p className="text-xs text-secondary mt-1">Se vuota, si può rispondere fino all’inizio dell’evento.</p>
+              </div>
             )}
           </div>
 

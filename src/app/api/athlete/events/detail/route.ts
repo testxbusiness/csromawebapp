@@ -51,6 +51,14 @@ export async function GET(request: NextRequest) {
       creator = data
     }
 
+    // Current user's attendance (if any)
+    const { data: myAtt } = await supabase
+      .from('event_attendances')
+      .select('status, responded_at')
+      .eq('event_id', id)
+      .eq('profile_id', user.id)
+      .maybeSingle()
+
     return NextResponse.json({
       id: ev.id,
       title: ev.title,
@@ -59,6 +67,9 @@ export async function GET(request: NextRequest) {
       end_date: ev.end_date,
       location: ev.location,
       event_type: ev.event_type,
+      requires_confirmation: ev.requires_confirmation,
+      confirmation_deadline: ev.confirmation_deadline,
+      my_attendance: myAtt || null,
       gym,
       teams,
       creator,
@@ -67,4 +78,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

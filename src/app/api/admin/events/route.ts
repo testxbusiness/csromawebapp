@@ -120,6 +120,8 @@ export async function POST(request: NextRequest) {
           activity_id: activity_id || null,
           event_type: event_type || 'one_time',
           event_kind: event_kind || 'training',
+          requires_confirmation: !!body.requires_confirmation,
+          confirmation_deadline: body.requires_confirmation && body.confirmation_deadline ? body.confirmation_deadline : null,
           created_by: user.id
         })
         .select('id')
@@ -426,6 +428,17 @@ export async function PUT(request: NextRequest) {
           console.error('Errore assegnazione squadre evento:', teamError)
         }
       }
+    }
+
+    // Allow update of RSVP flags too
+    if (typeof (body as any).requires_confirmation !== 'undefined' || typeof (body as any).confirmation_deadline !== 'undefined') {
+      await adminClient
+        .from('events')
+        .update({
+          requires_confirmation: !!(body as any).requires_confirmation,
+          confirmation_deadline: (body as any).requires_confirmation && (body as any).confirmation_deadline ? (body as any).confirmation_deadline : null,
+        })
+        .eq('id', id)
     }
 
     return NextResponse.json({ 
