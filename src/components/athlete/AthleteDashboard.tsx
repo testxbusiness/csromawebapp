@@ -388,7 +388,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
             <div className="text-3xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
           </div>
           <div className="cs-card cs-card--primary">
-            <div className="cs-card__meta">Messaggi Non Letti</div>
+            <div className="cs-card__meta">Ultimi Messaggi</div>
             <div className="text-3xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
           </div>
           <div className="cs-card cs-card--primary">
@@ -485,7 +485,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         <div className="space-y-6">
           {/* Unread Messages */}
           <div className="cs-card cs-card--primary">
-            <h3 className="font-semibold mb-4">Messaggi Non Letti</h3>
+            <h3 className="font-semibold mb-4">Ultimi Messaggi</h3>
             {unreadMessages.length === 0 ? (
               <p className="text-secondary text-sm">Nessun messaggio non letto</p>
             ) : (
@@ -493,11 +493,6 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                 {unreadMessages.slice(0, 3).map((message) => (
                   <div key={message.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedMessage(message)}>
                     <div className="font-medium text-sm">{message.subject}</div>
-                    <div className="text-xs text-secondary truncate">
-                      {message.content.length > 100 
-                        ? `${message.content.substring(0, 100)}...` 
-                        : message.content}
-                    </div>
                     <div className="text-xs text-secondary">
                       {new Date(message.created_at).toLocaleDateString('it-IT')}
                     </div>
