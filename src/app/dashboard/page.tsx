@@ -6,7 +6,8 @@ import CoachDashboard from '@/components/coach/CoachDashboard'
 import AthleteDashboard from '@/components/athlete/AthleteDashboard'
 
 export default function DashboardPage() {
-  const { user, profile, loading } = useAuth()
+  // 👇 il hook ora espone anche `role` già normalizzato
+  const { user, profile, role, loading } = useAuth()
 
   if (loading) {
     return (
@@ -16,18 +17,16 @@ export default function DashboardPage() {
     )
   }
 
-  if (!user) {
-    return null
-  }
+  if (!user) return null
 
   return (
     <div className="space-y-8">
       <section className="space-y-8">
-        {profile?.role === 'admin' ? (
+        {role === 'admin' ? (
           <AdminDashboard user={user} profile={profile} />
-        ) : profile?.role === 'coach' ? (
+        ) : role === 'coach' ? (
           <CoachDashboard user={user} profile={profile} />
-        ) : profile?.role === 'athlete' ? (
+        ) : role === 'athlete' ? (
           <AthleteDashboard user={user} profile={profile} />
         ) : (
           <div className="cs-card cs-card--lg">
@@ -35,6 +34,24 @@ export default function DashboardPage() {
             <p className="cs-card__description">
               Ruolo non riconosciuto. Contatta l&apos;amministratore per verificare le autorizzazioni associate al tuo profilo.
             </p>
+
+            {/* debug opzionale: abilita su Vercel con NEXT_PUBLIC_DEBUG_ROLE=1 */}
+            {process.env.NEXT_PUBLIC_DEBUG_ROLE && (
+              <pre className="mt-3 text-xs opacity-70">
+                {JSON.stringify(
+                  {
+                    roleFromProfile: profile?.role,
+                    // @ts-ignore
+                    roleFromAppMeta: user?.app_metadata?.role,
+                    // @ts-ignore
+                    roleFromUserMeta: user?.user_metadata?.role,
+                    resolvedRole: role,
+                  },
+                  null,
+                  2
+                )}
+              </pre>
+            )}
           </div>
         )}
       </section>
