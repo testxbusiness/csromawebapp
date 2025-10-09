@@ -1,0 +1,4 @@
+.next/
+node_modules/
+/supabase/
+src/components/admin/PaymentsManager.backup.tsx
