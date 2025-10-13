@@ -42,6 +42,28 @@ export async function middleware(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Enforce password change for logged-in users based on JWT user_metadata
+  if (user) {
+    // @ts-ignore – runtime field from Supabase JWT
+    const mustChange = user.user_metadata?.must_change_password === true
+
+    // Avoid interfering with API routes
+    const isApiRoute = pathname.startsWith('/api')
+
+    // If the user must change password, redirect to reset-password (except when already there)
+    if (mustChange && !isApiRoute && pathname !== '/reset-password') {
+      const to = new URL('/reset-password', req.url)
+      // Preserve original destination so we can return after reset
+      to.searchParams.set('next', pathname)
+      return NextResponse.redirect(to)
+    }
+
+    // If the user does not need to change password but is on reset-password, send to dashboard
+    if (!mustChange && pathname === '/reset-password') {
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
+  }
+
   // Se la rotta è admin-only, applica i controlli
   if (matchAny(pathname, ADMIN_ONLY)) {
     // non loggato -> manda a login
