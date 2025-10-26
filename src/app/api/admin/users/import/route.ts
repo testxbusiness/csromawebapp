@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     for (const u of users) {
       try {
         // Create auth user with fixed initial password
-        const { data: authData, error: createErr } = await supabase.auth.admin.createUser({
+        const { data: authData, error: createErr } = await adminClient.auth.admin.createUser({
           email: u.email,
           password: 'csroma2025!',
           email_confirm: true,

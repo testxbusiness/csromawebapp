@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       userId = existingUser.id
     } else {
       wasCreated = true
-      const { data: authCreate, error: createError } = await supabase.auth.admin.createUser({
+      const { data: authCreate, error: createError } = await adminClient.auth.admin.createUser({
         email,
         password: DEFAULT_TEMP_PASSWORD,
         email_confirm: true,
@@ -495,7 +495,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: deleteProfileError.message }, { status: 400 })
     }
 
-    const { error: deleteAuthError } = await supabase.auth.admin.deleteUser(userId)
+    const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId)
     if (deleteAuthError) {
       console.error('Errore eliminazione utente auth:', deleteAuthError)
     }
