@@ -61,11 +61,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Gestisci destinatari squadre
+    // Gestisci destinatari squadre (PATCH: aggiunto recipient_type e profile_id: null)
     if (selected_teams && selected_teams.length > 0) {
       const teamRecipients = selected_teams.map((team_id: string) => ({
         message_id: message.id,
+        recipient_type: 'team',
         team_id,
+        profile_id: null,
         is_read: false
       }))
 
@@ -78,10 +80,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Gestisci destinatari utenti
+    // Gestisci destinatari utenti (PATCH: recipient_type 'user' e team_id: null)
     if (selected_users && selected_users.length > 0) {
       const userRecipients = selected_users.map((user_id: string) => ({
         message_id: message.id,
+        recipient_type: 'user',
+        team_id: null,
         profile_id: user_id,
         is_read: false
       }))
@@ -239,11 +243,13 @@ export async function PUT(request: NextRequest) {
       .delete()
       .eq('message_id', id)
 
-    // Gestisci destinatari squadre
+    // Gestisci destinatari squadre (PATCH: aggiunto recipient_type e profile_id: null)
     if (selected_teams && selected_teams.length > 0) {
       const teamRecipients = selected_teams.map((team_id: string) => ({
         message_id: id,
+        recipient_type: 'team',
         team_id,
+        profile_id: null,
         is_read: false
       }))
 
@@ -256,10 +262,12 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Gestisci destinatari utenti
+    // Gestisci destinatari utenti (PATCH: recipient_type 'user' e team_id: null)
     if (selected_users && selected_users.length > 0) {
       const userRecipients = selected_users.map((user_id: string) => ({
         message_id: id,
+        recipient_type: 'user',
+        team_id: null,
         profile_id: user_id,
         is_read: false
       }))

@@ -1,8 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// Rotte protette (aggiungi qui le altre sezione se servono)
+// Rotte protette / pubbliche
 const ADMIN_ONLY = [/^\/admin(\/.*)?$/]
+const PUBLIC_ROUTES = [
+  /^\/$/,
+  /^\/login$/,
+  /^\/reset-password$/,
+  /^\/unauthorized$/
+]
 // esempio: const COACH_ONLY = [/^\/coach(\/.*)?$/]
 
 function matchAny(pathname: string, patterns: RegExp[]) {
@@ -41,6 +47,37 @@ export async function middleware(req: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  // Enforce password change for logged-in users based on JWT user_metadata
+  if (user) {
+    // @ts-ignore – runtime field from Supabase JWT
+    const mustChange = user.user_metadata?.must_change_password === true
+
+    // Avoid interfering with API routes
+    const isApiRoute = pathname.startsWith('/api')
+
+    // If the user must change password, redirect to reset-password (except when already there)
+    if (mustChange && !isApiRoute && pathname !== '/reset-password') {
+      const to = new URL('/reset-password', req.url)
+      // Preserve original destination so we can return after reset
+      to.searchParams.set('next', pathname)
+      return NextResponse.redirect(to)
+    }
+
+    // If the user does not need to change password but is on reset-password, send to dashboard
+    if (!mustChange && pathname === '/reset-password') {
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
+  }
+
+  // Richiedi autenticazione per tutte le route non pubbliche (escluso API)
+  const isPublic = PUBLIC_ROUTES.some((re) => re.test(pathname))
+  const isApiRoute = pathname.startsWith('/api')
+  if (!user && !isPublic && !isApiRoute) {
+    const loginUrl = new URL('/login', req.url)
+    loginUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(loginUrl)
+  }
 
   // Se la rotta è admin-only, applica i controlli
   if (matchAny(pathname, ADMIN_ONLY)) {

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Reset password via admin API
-    const { error: resetError } = await supabase.auth.admin.updateUserById(user_id, {
+    const { error: resetError } = await adminClient.auth.admin.updateUserById(user_id, {
       password: 'csroma2025!',
       user_metadata: {
         must_change_password: true,
