@@ -1,8 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// Rotte protette (aggiungi qui le altre sezione se servono)
+// Rotte protette / pubbliche
 const ADMIN_ONLY = [/^\/admin(\/.*)?$/]
+const PUBLIC_ROUTES = [
+  /^\/$/,
+  /^\/login$/,
+  /^\/reset-password$/,
+  /^\/unauthorized$/
+]
 // esempio: const COACH_ONLY = [/^\/coach(\/.*)?$/]
 
 function matchAny(pathname: string, patterns: RegExp[]) {
@@ -62,6 +68,15 @@ export async function middleware(req: NextRequest) {
     if (!mustChange && pathname === '/reset-password') {
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
+  }
+
+  // Richiedi autenticazione per tutte le route non pubbliche (escluso API)
+  const isPublic = PUBLIC_ROUTES.some((re) => re.test(pathname))
+  const isApiRoute = pathname.startsWith('/api')
+  if (!user && !isPublic && !isApiRoute) {
+    const loginUrl = new URL('/login', req.url)
+    loginUrl.searchParams.set('next', pathname)
+    return NextResponse.redirect(loginUrl)
   }
 
   // Se la rotta è admin-only, applica i controlli

@@ -19,9 +19,18 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) { setError(error.message); return }
-      if (data.user) router.push('/dashboard')
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        setError(j?.error || 'Credenziali non valide')
+        return
+      }
+      const j = await res.json()
+      if (j?.user) router.push('/dashboard')
     } catch {
       setError('Si è verificato un errore durante il login')
     } finally {
