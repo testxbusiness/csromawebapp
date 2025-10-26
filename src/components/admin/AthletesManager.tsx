@@ -219,7 +219,13 @@ export default function AthletesManager() {
     membershipFeeId?: string
   }) => {
     if (bulkOperation === 'assign_to_team') {
-      handleBulkOperation(bulkOperation, data)
+      // API expects a single teamId for athletes (not teamIds array)
+      const teamId = Array.isArray(data.teamIds) && data.teamIds.length > 0 ? data.teamIds[0] : ''
+      handleBulkOperation(bulkOperation, {
+        teamId,
+        jerseyNumber: data.jerseyNumber,
+        membershipFeeId: data.membershipFeeId,
+      })
     }
     setShowTeamAssignmentModal(false)
     setBulkOperation(null)
