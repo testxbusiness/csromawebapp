@@ -16,12 +16,16 @@ export default async function ResetPasswordPage({
 
   // opzionale: supporta ?next=/percorso
   const raw = params?.next
-  const nextPath =
-    typeof raw === 'string'
-      ? raw
-      : Array.isArray(raw)
-      ? raw[0] ?? '/dashboard'
-      : '/dashboard'
+  // Sanitize `next` to internal paths only
+  const pick = (val: string | undefined) => {
+    if (!val) return '/dashboard'
+    // allow only site-internal paths (start with single "/"), block //, http(s), _next, api
+    if (val.startsWith('/') && !val.startsWith('//') && !val.startsWith('/_next') && !val.startsWith('/api')) {
+      return val
+    }
+    return '/dashboard'
+  }
+  const nextPath = Array.isArray(raw) ? pick(raw[0]) : pick(typeof raw === 'string' ? raw : undefined)
 
   return <ResetPasswordForm nextPath={nextPath} />
 }
