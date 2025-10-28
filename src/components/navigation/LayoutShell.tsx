@@ -21,6 +21,17 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
 
+  // Client-side guard: force reset-password for users flagged to change password
+  useEffect(() => {
+    if (!profile) return
+    const mustChange = (profile as any)?.must_change_password === true
+    if (!mustChange) return
+    if (pathname === '/reset-password') return
+    // Redirect preserving current path to return after reset
+    const next = encodeURIComponent(pathname || '/dashboard')
+    router.replace(`/reset-password?next=${next}`)
+  }, [profile, pathname, router])
+
   const handleSignOut = async () => {
     try {
       await signOut()

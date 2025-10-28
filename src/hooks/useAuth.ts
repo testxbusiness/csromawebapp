@@ -114,8 +114,8 @@ export function useAuth(): UseAuthReturn {
       setUser(data.session?.user ?? null)
 
       if (data.session?.user?.id) {
-        // carica il profilo dell’utente corrente
-        loadProfile(data.session.user.id)
+        // carica il profilo dell’utente corrente e attendi prima di marcare loading=false
+        await loadProfile(data.session.user.id)
       } else {
         setProfile(null)
       }
