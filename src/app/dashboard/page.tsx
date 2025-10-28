@@ -17,7 +17,14 @@ export default function DashboardPage() {
     )
   }
 
-  if (!user) return null
+  // Evita render finché profilo non è disponibile (prevenzione crash)
+  if (!user || !profile) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="cs-skeleton w-8 h-8"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
