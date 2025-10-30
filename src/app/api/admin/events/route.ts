@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
     if (event_type === 'recurring' && recurrence_rule && recurrence_end_date) {
       const occ = buildOccurrences()
       let rows = occ.map(o => ({
+        // New schema fields
         title,
         description: description || null,
         start_date: o.start_date,
@@ -78,7 +79,12 @@ export async function POST(request: NextRequest) {
         event_kind: event_kind || 'training',
         recurrence_rule,
         recurrence_end_date,
-        created_by: user.id
+        created_by: user.id,
+        // Legacy required fields (DB requires NOT NULL)
+        name: title,
+        start_time: o.start_date,
+        end_time: o.end_date,
+        kind: (event_kind as any) || 'spot',
       }))
       let { data: inserted, error: bulkErr } = await adminClient
         .from('events')
@@ -111,6 +117,7 @@ export async function POST(request: NextRequest) {
       let { data: event, error: eventError } = await adminClient
         .from('events')
         .insert({
+          // New schema fields
           title,
           description: description || null,
           start_date,
@@ -122,7 +129,12 @@ export async function POST(request: NextRequest) {
           event_kind: event_kind || 'training',
           requires_confirmation: !!body.requires_confirmation,
           confirmation_deadline: body.requires_confirmation && body.confirmation_deadline ? body.confirmation_deadline : null,
-          created_by: user.id
+          created_by: user.id,
+          // Legacy required fields
+          name: title,
+          start_time: start_date,
+          end_time: end_date,
+          kind: (event_kind as any) || 'spot',
         })
         .select('id')
         .single()
@@ -131,6 +143,7 @@ export async function POST(request: NextRequest) {
         const retry = await adminClient
           .from('events')
           .insert({
+            // New schema fields (without event_kind)
             title,
             description: description || null,
             start_date,
@@ -139,7 +152,12 @@ export async function POST(request: NextRequest) {
             gym_id: gym_id || null,
             activity_id: activity_id || null,
             event_type: event_type || 'one_time',
-            created_by: user.id
+            created_by: user.id,
+            // Legacy required fields
+            name: title,
+            start_time: start_date,
+            end_time: end_date,
+            kind: (event_kind as any) || 'spot',
           })
           .select('id')
           .single()
@@ -372,6 +390,7 @@ export async function PUT(request: NextRequest) {
     let updateRes = await adminClient
       .from('events')
       .update({
+        // New schema fields
         title,
         description: description || null,
         start_date,
@@ -380,7 +399,12 @@ export async function PUT(request: NextRequest) {
         gym_id: gym_id || null,
         activity_id: activity_id || null,
         event_type,
-        event_kind: event_kind || 'training'
+        event_kind: event_kind || 'training',
+        // Legacy fields kept in sync
+        name: title,
+        start_time: start_date,
+        end_time: end_date,
+        kind: (event_kind as any) || 'spot',
       })
       .eq('id', id)
 
@@ -388,6 +412,7 @@ export async function PUT(request: NextRequest) {
       updateRes = await adminClient
         .from('events')
         .update({
+          // New schema fields (without event_kind)
           title,
           description: description || null,
           start_date,
@@ -395,7 +420,12 @@ export async function PUT(request: NextRequest) {
           location: location || null,
           gym_id: gym_id || null,
           activity_id: activity_id || null,
-          event_type
+          event_type,
+          // Legacy fields kept in sync
+          name: title,
+          start_time: start_date,
+          end_time: end_date,
+          kind: (event_kind as any) || 'spot',
         })
         .eq('id', id)
     }
