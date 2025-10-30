@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
         bulkErr = retry.error as any
       }
       if (bulkErr || !inserted) {
-        console.error('Errore creazione eventi ricorrenti:', bulkErr)
+        console.error('Errore creazione eventi ricorrenti:', JSON.stringify(bulkErr, null, 2))
         return NextResponse.json({ error: 'Errore creazione eventi ricorrenti' }, { status: 400 })
       }
       createdEventIds = inserted.map(r => r.id)
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
         eventError = retry.error as any
       }
       if (eventError || !event) {
-        console.error('Errore creazione evento:', eventError)
+        console.error('Errore creazione evento:', JSON.stringify(eventError, null, 2))
         return NextResponse.json({ error: 'Errore creazione evento' }, { status: 400 })
       }
       createdEventIds = [event.id]
@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
         .from('event_teams')
         .insert(eventTeams)
       if (teamError) {
-        console.error('Errore assegnazione squadre evento:', teamError)
+        console.error('Errore creazione event_teams:', JSON.stringify(teamError, null, 2))
       }
     }
 
