@@ -84,7 +84,8 @@ export async function POST(request: NextRequest) {
         name: title,
         start_time: o.start_date,
         end_time: o.end_date,
-        kind: (event_kind as any) || 'spot',
+        // Legacy column `kind` has a CHECK constraint; keep it to a valid legacy value
+        kind: 'spot',
       }))
       let { data: inserted, error: bulkErr } = await adminClient
         .from('events')
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
           name: title,
           start_time: start_date,
           end_time: end_date,
-          kind: (event_kind as any) || 'spot',
+          kind: 'spot',
         })
         .select('id')
         .single()
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
             name: title,
             start_time: start_date,
             end_time: end_date,
-            kind: (event_kind as any) || 'spot',
+            kind: 'spot',
           })
           .select('id')
           .single()
@@ -412,7 +413,7 @@ export async function PUT(request: NextRequest) {
         name: title,
         start_time: start_date,
         end_time: end_date,
-        kind: (event_kind as any) || 'spot',
+        kind: 'spot',
       })
       .eq('id', id)
 
@@ -433,7 +434,7 @@ export async function PUT(request: NextRequest) {
           name: title,
           start_time: start_date,
           end_time: end_date,
-          kind: (event_kind as any) || 'spot',
+          kind: 'spot',
         })
         .eq('id', id)
     }
