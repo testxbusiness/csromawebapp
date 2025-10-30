@@ -99,7 +99,11 @@ export async function POST(request: NextRequest) {
       }
       if (bulkErr || !inserted) {
         console.error('Errore creazione eventi ricorrenti:', JSON.stringify(bulkErr, null, 2))
-        return NextResponse.json({ error: 'Errore creazione eventi ricorrenti' }, { status: 400 })
+        const includeDebug = process.env.VERCEL_ENV !== 'production'
+        return NextResponse.json({ 
+          error: 'Errore creazione eventi ricorrenti',
+          ...(includeDebug ? { debug: { code: (bulkErr as any)?.code, message: (bulkErr as any)?.message, details: (bulkErr as any)?.details, hint: (bulkErr as any)?.hint } } : {})
+        }, { status: 400 })
       }
       createdEventIds = inserted.map(r => r.id)
       // Set parent_event_id to the first created id for all occurrences
@@ -166,7 +170,11 @@ export async function POST(request: NextRequest) {
       }
       if (eventError || !event) {
         console.error('Errore creazione evento:', JSON.stringify(eventError, null, 2))
-        return NextResponse.json({ error: 'Errore creazione evento' }, { status: 400 })
+        const includeDebug = process.env.VERCEL_ENV !== 'production'
+        return NextResponse.json({ 
+          error: 'Errore creazione evento',
+          ...(includeDebug ? { debug: { code: (eventError as any)?.code, message: (eventError as any)?.message, details: (eventError as any)?.details, hint: (eventError as any)?.hint } } : {})
+        }, { status: 400 })
       }
       createdEventIds = [event.id]
     }
@@ -431,8 +439,12 @@ export async function PUT(request: NextRequest) {
     }
 
     if ((updateRes as any)?.error) {
-      console.error('Errore aggiornamento evento:', (updateRes as any).error)
-      return NextResponse.json({ error: 'Errore aggiornamento evento' }, { status: 400 })
+      console.error('Errore aggiornamento evento:', JSON.stringify((updateRes as any).error, null, 2))
+      const includeDebug = process.env.VERCEL_ENV !== 'production'
+      return NextResponse.json({ 
+        error: 'Errore aggiornamento evento',
+        ...(includeDebug ? { debug: { code: (updateRes as any).error?.code, message: (updateRes as any).error?.message, details: (updateRes as any).error?.details, hint: (updateRes as any).error?.hint } } : {})
+      }, { status: 400 })
     }
 
     // Gestisci assegnazione squadre
