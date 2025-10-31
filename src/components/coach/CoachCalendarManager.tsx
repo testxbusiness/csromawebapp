@@ -119,7 +119,12 @@ export default function CoachCalendarManager() {
             location: eventData.location,
             start_date: eventData.start_time,
             end_date: eventData.end_time,
-            event_kind: (eventData as any).event_kind || 'training'
+            event_kind: (eventData as any).event_kind || 'training',
+            // Legacy columns required by DB schema
+            name: eventData.title,
+            start_time: eventData.start_time,
+            end_time: eventData.end_time,
+            kind: 'spot',
           })
           .eq('id', editingEvent.id)
         if (eventError) throw eventError
@@ -154,7 +159,13 @@ export default function CoachCalendarManager() {
             start_date: o.start_date,
             end_date: o.end_date,
             event_type: 'recurring',
-            created_by: user?.id
+            event_kind: (eventData as any).event_kind || 'training',
+            created_by: user?.id,
+            // Legacy columns required by DB schema
+            name: eventData.title,
+            start_time: o.start_date,
+            end_time: o.end_date,
+            kind: 'spot',
           }))
           const { data: inserted, error: bulkErr } = await supabase.from('events').insert(rows).select('id')
           if (bulkErr) throw bulkErr
@@ -179,7 +190,12 @@ export default function CoachCalendarManager() {
               end_date: eventData.end_time,
               event_type: 'one_time',
               event_kind: (eventData as any).event_kind || 'training',
-              created_by: user?.id
+              created_by: user?.id,
+              // Legacy columns required by DB schema
+              name: eventData.title,
+              start_time: eventData.start_time,
+              end_time: eventData.end_time,
+              kind: 'spot',
             }])
             .select()
             .single()
