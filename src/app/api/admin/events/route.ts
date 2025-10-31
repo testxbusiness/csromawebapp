@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
     if (event_type === 'recurring' && recurrence_rule && recurrence_end_date) {
       const occ = buildOccurrences()
       let rows = occ.map(o => ({
+        // New schema fields
         title,
         description: description || null,
         start_date: o.start_date,
@@ -78,7 +79,13 @@ export async function POST(request: NextRequest) {
         event_kind: event_kind || 'training',
         recurrence_rule,
         recurrence_end_date,
-        created_by: user.id
+        created_by: user.id,
+        // Legacy required fields (DB requires NOT NULL)
+        name: title,
+        start_time: o.start_date,
+        end_time: o.end_date,
+        // Legacy column `kind` has a CHECK constraint; keep it to a valid legacy value
+        kind: 'spot',
       }))
       let { data: inserted, error: bulkErr } = await adminClient
         .from('events')
@@ -92,8 +99,12 @@ export async function POST(request: NextRequest) {
         bulkErr = retry.error as any
       }
       if (bulkErr || !inserted) {
-        console.error('Errore creazione eventi ricorrenti:', bulkErr)
-        return NextResponse.json({ error: 'Errore creazione eventi ricorrenti' }, { status: 400 })
+        console.error('Errore creazione eventi ricorrenti:', JSON.stringify(bulkErr, null, 2))
+        const includeDebug = process.env.VERCEL_ENV !== 'production'
+        return NextResponse.json({ 
+          error: 'Errore creazione eventi ricorrenti',
+          ...(includeDebug ? { debug: { code: (bulkErr as any)?.code, message: (bulkErr as any)?.message, details: (bulkErr as any)?.details, hint: (bulkErr as any)?.hint } } : {})
+        }, { status: 400 })
       }
       createdEventIds = inserted.map(r => r.id)
       // Set parent_event_id to the first created id for all occurrences
@@ -111,6 +122,7 @@ export async function POST(request: NextRequest) {
       let { data: event, error: eventError } = await adminClient
         .from('events')
         .insert({
+          // New schema fields
           title,
           description: description || null,
           start_date,
@@ -122,7 +134,12 @@ export async function POST(request: NextRequest) {
           event_kind: event_kind || 'training',
           requires_confirmation: !!body.requires_confirmation,
           confirmation_deadline: body.requires_confirmation && body.confirmation_deadline ? body.confirmation_deadline : null,
-          created_by: user.id
+          created_by: user.id,
+          // Legacy required fields
+          name: title,
+          start_time: start_date,
+          end_time: end_date,
+          kind: 'spot',
         })
         .select('id')
         .single()
@@ -131,6 +148,7 @@ export async function POST(request: NextRequest) {
         const retry = await adminClient
           .from('events')
           .insert({
+            // New schema fields (without event_kind)
             title,
             description: description || null,
             start_date,
@@ -139,7 +157,12 @@ export async function POST(request: NextRequest) {
             gym_id: gym_id || null,
             activity_id: activity_id || null,
             event_type: event_type || 'one_time',
-            created_by: user.id
+            created_by: user.id,
+            // Legacy required fields
+            name: title,
+            start_time: start_date,
+            end_time: end_date,
+            kind: 'spot',
           })
           .select('id')
           .single()
@@ -147,8 +170,12 @@ export async function POST(request: NextRequest) {
         eventError = retry.error as any
       }
       if (eventError || !event) {
-        console.error('Errore creazione evento:', eventError)
-        return NextResponse.json({ error: 'Errore creazione evento' }, { status: 400 })
+        console.error('Errore creazione evento:', JSON.stringify(eventError, null, 2))
+        const includeDebug = process.env.VERCEL_ENV !== 'production'
+        return NextResponse.json({ 
+          error: 'Errore creazione evento',
+          ...(includeDebug ? { debug: { code: (eventError as any)?.code, message: (eventError as any)?.message, details: (eventError as any)?.details, hint: (eventError as any)?.hint } } : {})
+        }, { status: 400 })
       }
       createdEventIds = [event.id]
     }
@@ -162,7 +189,7 @@ export async function POST(request: NextRequest) {
         .from('event_teams')
         .insert(eventTeams)
       if (teamError) {
-        console.error('Errore assegnazione squadre evento:', teamError)
+        console.error('Errore creazione event_teams:', JSON.stringify(teamError, null, 2))
       }
     }
 
@@ -372,6 +399,7 @@ export async function PUT(request: NextRequest) {
     let updateRes = await adminClient
       .from('events')
       .update({
+        // New schema fields
         title,
         description: description || null,
         start_date,
@@ -380,7 +408,12 @@ export async function PUT(request: NextRequest) {
         gym_id: gym_id || null,
         activity_id: activity_id || null,
         event_type,
-        event_kind: event_kind || 'training'
+        event_kind: event_kind || 'training',
+        // Legacy fields kept in sync
+        name: title,
+        start_time: start_date,
+        end_time: end_date,
+        kind: 'spot',
       })
       .eq('id', id)
 
@@ -388,6 +421,7 @@ export async function PUT(request: NextRequest) {
       updateRes = await adminClient
         .from('events')
         .update({
+          // New schema fields (without event_kind)
           title,
           description: description || null,
           start_date,
@@ -395,14 +429,23 @@ export async function PUT(request: NextRequest) {
           location: location || null,
           gym_id: gym_id || null,
           activity_id: activity_id || null,
-          event_type
+          event_type,
+          // Legacy fields kept in sync
+          name: title,
+          start_time: start_date,
+          end_time: end_date,
+          kind: 'spot',
         })
         .eq('id', id)
     }
 
     if ((updateRes as any)?.error) {
-      console.error('Errore aggiornamento evento:', (updateRes as any).error)
-      return NextResponse.json({ error: 'Errore aggiornamento evento' }, { status: 400 })
+      console.error('Errore aggiornamento evento:', JSON.stringify((updateRes as any).error, null, 2))
+      const includeDebug = process.env.VERCEL_ENV !== 'production'
+      return NextResponse.json({ 
+        error: 'Errore aggiornamento evento',
+        ...(includeDebug ? { debug: { code: (updateRes as any).error?.code, message: (updateRes as any).error?.message, details: (updateRes as any).error?.details, hint: (updateRes as any).error?.hint } } : {})
+      }, { status: 400 })
     }
 
     // Gestisci assegnazione squadre

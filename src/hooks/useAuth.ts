@@ -123,15 +123,19 @@ export function useAuth(): UseAuthReturn {
       // 2) subscribe ai cambi di auth
       const { data: sub } = supabase.auth.onAuthStateChange((event, _session) => {
         if (!mounted.current) return
+        setLoading(true)
         setSession(_session ?? null)
         setUser(_session?.user ?? null)
 
         if (_session?.user?.id) {
           // resetta e ricarica il profilo quando cambia utente
           lastProfileFor.current = null
-          loadProfile(_session.user.id)
+          Promise.resolve(loadProfile(_session.user.id))
+            .catch(() => {})
+            .finally(() => { if (mounted.current) setLoading(false) })
         } else {
           setProfile(null)
+          setLoading(false)
         }
       })
       unsub = () => sub.subscription.unsubscribe()
