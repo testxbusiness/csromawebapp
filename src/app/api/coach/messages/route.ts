@@ -225,7 +225,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (teamsToAssign.length > 0) {
-      const recipients = teamsToAssign.map(team_id => ({ message_id: created.id, team_id, is_read: false }))
+      // Enforce CHECK constraints: recipient_type='team', team_id set, profile_id null
+      const recipients = teamsToAssign.map(team_id => ({
+        message_id: created.id,
+        recipient_type: 'team',
+        team_id,
+        profile_id: null,
+        is_read: false,
+      }))
       const { error: recErr } = await adminClient.from('message_recipients').insert(recipients)
       if (recErr) {
         console.error('Coach assign recipients error:', recErr)
@@ -349,7 +356,14 @@ export async function PUT(request: NextRequest) {
     await adminClient.from('message_recipients').delete().eq('message_id', id)
 
     if (selected_teams && selected_teams.length > 0) {
-      const recipients = (selected_teams as string[]).map(team_id => ({ message_id: id, team_id, is_read: false }))
+      // Enforce CHECK constraints for team recipients
+      const recipients = (selected_teams as string[]).map(team_id => ({
+        message_id: id,
+        recipient_type: 'team',
+        team_id,
+        profile_id: null,
+        is_read: false,
+      }))
       const { error: recErr } = await adminClient.from('message_recipients').insert(recipients)
       if (recErr) console.error('Coach reassign recipients error:', recErr)
     }
