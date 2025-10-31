@@ -16,7 +16,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, signOut } = useAuth()
+  const { profile, role, user, loading, signOut } = useAuth()
   const router = useRouter()
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
@@ -47,6 +47,8 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   if (!showAuthenticatedLayout) return <>{children}</>
 
+  const isAuthLoading = loading || (!!user && !profile)
+
   const initials = profile
     ? [profile.first_name, profile.last_name]
         .filter(Boolean)
@@ -55,7 +57,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         .slice(0, 2)
     : 'CS'
 
-  const roleLabel = profile?.role ? roleName(profile.role) : 'Ospite'
+  const roleLabel = role ? roleName(role) : ''
 
   return (
     <div className="cs-page">
@@ -119,17 +121,29 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             >
               Esci
             </button>
-            <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
-              <div className="cs-avatar cs-bg-primary">
-                <span className="text-sm font-semibold">{initials}</span>
+            {isAuthLoading ? (
+              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
+                <div className="cs-avatar cs-bg-primary animate-pulse" />
+                <div className="hidden sm:block min-w-[120px]">
+                  <div className="h-3 w-24 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
+                  <div className="h-2 w-16 bg-[color:var(--cs-border)] rounded animate-pulse" />
+                </div>
               </div>
-              <div className="hidden sm:block">
-                <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                  {profile ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Utente CSRoma' : 'Utente CSRoma'}
-                </p>
-                <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
+            ) : (
+              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
+                <div className="cs-avatar cs-bg-primary">
+                  <span className="text-sm font-semibold">{initials}</span>
+                </div>
+                <div className="hidden sm:block">
+                  <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+                    {profile ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Utente CSRoma' : 'Utente CSRoma'}
+                  </p>
+                  {!!roleLabel && (
+                    <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </header>
@@ -170,10 +184,21 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             <div className="mt-8 space-y-2">
               <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--cs-text-secondary)]">Account</p>
               <div className="cs-card">
-                <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                  {profile ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Utente CSRoma' : 'Utente CSRoma'}
-                </p>
-                <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
+                {isAuthLoading ? (
+                  <>
+                    <div className="h-3 w-28 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
+                    <div className="h-2 w-20 bg-[color:var(--cs-border)] rounded animate-pulse" />
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+                      {profile ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Utente CSRoma' : 'Utente CSRoma'}
+                    </p>
+                    {!!roleLabel && (
+                      <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
+                    )}
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={async () => {
