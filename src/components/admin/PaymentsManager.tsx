@@ -12,7 +12,7 @@ interface Payment {
   amount: number
   frequency: 'one_time' | 'recurring'
   recurrence_pattern?: string
-  status: 'to_pay' | 'paid'
+  status: 'pending' | 'paid'
   due_date?: string
   paid_at?: string
   
@@ -85,7 +85,7 @@ export default function PaymentsManager() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [filterType, setFilterType] = useState<'all' | 'general_cost' | 'coach_payment'>('all')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'to_pay' | 'paid'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid'>('all')
   const supabase = createClient()
 
   useEffect(() => {
@@ -209,7 +209,7 @@ export default function PaymentsManager() {
           const paymentToCreate = {
             ...paymentData,
             due_date: date,
-            status: 'to_pay' as const
+            status: 'pending' as const
           }
           
           const response = await fetch('/api/admin/payments', {

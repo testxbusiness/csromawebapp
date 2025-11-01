@@ -72,9 +72,16 @@ export async function POST(request: NextRequest) {
     }
     const adminClient = await createAdminClient()
 
+    // Normalize payload to DB vocabulary and add auditing fields
+    const normalized = {
+      ...paymentData,
+      status: paymentData?.status === 'to_pay' || !paymentData?.status ? 'pending' : paymentData.status,
+      created_by: user.id,
+    }
+
     const { data, error } = await adminClient
       .from('payments')
-      .insert([paymentData])
+      .insert([normalized])
       .select()
 
     if (error) {
