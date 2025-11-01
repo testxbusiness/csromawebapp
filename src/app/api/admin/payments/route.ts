@@ -73,10 +73,21 @@ export async function POST(request: NextRequest) {
     const adminClient = await createAdminClient()
 
     // Normalize payload to DB vocabulary and add auditing fields
-    const normalized = {
+    const normalized: any = {
       ...paymentData,
       status: paymentData?.status === 'to_pay' || !paymentData?.status ? 'pending' : paymentData.status,
       created_by: user.id,
+    }
+
+    // Enforce DB check constraints for type/coach_id
+    if (normalized?.type === 'general_cost') {
+      // General costs must not be tied to a coach
+      normalized.coach_id = null
+    } else if (normalized?.type === 'coach_payment') {
+      // Coach payments must have a coach_id
+      if (!normalized?.coach_id) {
+        return NextResponse.json({ error: 'coach_id richiesto per type=coach_payment' }, { status: 400 })
+      }
     }
 
     const { data, error } = await adminClient
