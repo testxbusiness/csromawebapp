@@ -382,7 +382,7 @@ export default function PaymentsManager() {
   }
 
   const getPendingAmount = () => {
-    const filtered = filterPayments().filter(p => p.status === 'to_pay')
+    const filtered = filterPayments().filter(p => p.status === 'pending')
     return filtered.reduce((total, payment) => total + payment.amount, 0)
   }
 
@@ -428,7 +428,7 @@ export default function PaymentsManager() {
     <div className="text-sm text-secondary">Da Pagare</div>
     <div className="text-2xl font-bold">€{getPendingAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">
-      {filteredPayments.filter(p => p.status === 'to_pay').length} in sospeso
+      {filteredPayments.filter(p => p.status === 'pending').length} in sospeso
     </div>
   </div>
 
@@ -462,7 +462,7 @@ export default function PaymentsManager() {
             <label className="cs-field__label">Stato</label>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'to_pay' | 'paid')}
+              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'paid')}
               className="cs-select"
             >
               <option value="all">Tutti gli stati</option>
@@ -554,7 +554,7 @@ export default function PaymentsManager() {
             </td>
 
             <td className="p-4 whitespace-nowrap text-sm font-medium align-top">
-              {payment.status === 'to_pay' ? (
+              {payment.status === 'pending' ? (
                 <button
                   onClick={() => markAsPaid(payment.id!)}
                   className="cs-btn cs-btn--ghost cs-btn--sm mr-2"
@@ -625,7 +625,7 @@ export default function PaymentsManager() {
         </div>
 
         <div className="mt-4 flex gap-2">
-          {payment.status === 'to_pay' ? (
+          {payment.status === 'pending' ? (
             <button
               onClick={() => markAsPaid(payment.id!)}
               className="cs-btn cs-btn--ghost cs-btn--sm flex-1"
