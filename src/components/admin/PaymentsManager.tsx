@@ -715,7 +715,7 @@ function PaymentForm({
     amount: payment?.amount || 0,
     frequency: payment?.frequency || 'one_time',
     recurrence_pattern: payment?.recurrence_pattern || '',
-    status: payment?.status || 'to_pay',
+    status: payment?.status || 'pending',
     due_date: payment?.due_date || '',
 
     // Foreign keys
