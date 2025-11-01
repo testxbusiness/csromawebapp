@@ -323,7 +323,7 @@ export default function PaymentsManager() {
         },
         body: JSON.stringify({ 
           id, 
-          status: 'to_pay'
+          status: 'pending'
         }),
       })
 
@@ -382,7 +382,8 @@ export default function PaymentsManager() {
   }
 
   const getPendingAmount = () => {
-    const filtered = filterPayments().filter(p => p.status === 'pending')
+    // Consider all non-paid as pending for totals (robust to legacy values)
+    const filtered = filterPayments().filter(p => p.status !== 'paid')
     return filtered.reduce((total, payment) => total + payment.amount, 0)
   }
 
@@ -428,7 +429,7 @@ export default function PaymentsManager() {
     <div className="text-sm text-secondary">Da Pagare</div>
     <div className="text-2xl font-bold">€{getPendingAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">
-      {filteredPayments.filter(p => p.status === 'pending').length} in sospeso
+      {filteredPayments.filter(p => p.status !== 'paid').length} in sospeso
     </div>
   </div>
 
@@ -466,7 +467,7 @@ export default function PaymentsManager() {
               className="cs-select"
             >
               <option value="all">Tutti gli stati</option>
-              <option value="to_pay">Da pagare</option>
+              <option value="pending">Da pagare</option>
               <option value="paid">Pagati</option>
             </select>
           </div>
