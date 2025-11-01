@@ -186,13 +186,27 @@ async function handleTeamAssignment(adminClient: ReturnType<typeof createAdminCl
 
       // Inserisci gli installments
       if (installments.length > 0) {
-        const { error: installmentsError } = await adminClient
+        const { error: installmentsError, data: inserted } = await adminClient
           .from('fee_installments')
           .insert(installments)
 
         if (installmentsError) {
           console.error('Errore creazione installments:', installmentsError)
-          // Non blocchiamo l'operazione principale, ma loggiamo l'errore
+          // In preview, includi dettagli per debug
+          if (process.env.VERCEL_ENV !== 'production') {
+            return NextResponse.json({
+              error: 'Errore creazione rate',
+              debug: {
+                code: (installmentsError as any)?.code,
+                message: (installmentsError as any)?.message,
+                details: (installmentsError as any)?.details,
+                hint: (installmentsError as any)?.hint,
+                attempting: installments.length,
+              }
+            }, { status: 400 })
+          }
+        } else {
+          console.log('Installments created:', inserted?.length ?? 0)
         }
       }
     } else {

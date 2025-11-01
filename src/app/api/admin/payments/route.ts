@@ -72,9 +72,27 @@ export async function POST(request: NextRequest) {
     }
     const adminClient = await createAdminClient()
 
+    // Normalize payload to DB vocabulary and add auditing fields
+    const normalized: any = {
+      ...paymentData,
+      status: paymentData?.status === 'to_pay' || !paymentData?.status ? 'pending' : paymentData.status,
+      created_by: user.id,
+    }
+
+    // Enforce DB check constraints for type/coach_id
+    if (normalized?.type === 'general_cost') {
+      // General costs must not be tied to a coach
+      normalized.coach_id = null
+    } else if (normalized?.type === 'coach_payment') {
+      // Coach payments must have a coach_id
+      if (!normalized?.coach_id) {
+        return NextResponse.json({ error: 'coach_id richiesto per type=coach_payment' }, { status: 400 })
+      }
+    }
+
     const { data, error } = await adminClient
       .from('payments')
-      .insert([paymentData])
+      .insert([normalized])
       .select()
 
     if (error) {
@@ -92,7 +110,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { id, ...updateData } = await request.json()
+    const { id, ...rawUpdate } = await request.json()
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -103,6 +121,26 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     const adminClient = await createAdminClient()
+
+    // Normalize incoming fields to satisfy DB constraints
+    const updateData: any = { ...rawUpdate }
+    if (typeof updateData.status === 'string') {
+      // Map any legacy value to DB vocabulary
+      if (updateData.status === 'to_pay') updateData.status = 'pending'
+      if (!['pending', 'paid'].includes(updateData.status)) {
+        // default to pending if unknown
+        updateData.status = 'pending'
+      }
+    }
+    if (typeof updateData.type === 'string') {
+      if (updateData.type === 'general_cost') {
+        updateData.coach_id = null
+      } else if (updateData.type === 'coach_payment') {
+        if (!updateData.coach_id) {
+          return NextResponse.json({ error: 'coach_id richiesto per type=coach_payment' }, { status: 400 })
+        }
+      }
+    }
 
     const { error } = await adminClient
       .from('payments')

@@ -12,7 +12,7 @@ interface Payment {
   amount: number
   frequency: 'one_time' | 'recurring'
   recurrence_pattern?: string
-  status: 'to_pay' | 'paid'
+  status: 'pending' | 'paid'
   due_date?: string
   paid_at?: string
   
@@ -85,7 +85,7 @@ export default function PaymentsManager() {
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [filterType, setFilterType] = useState<'all' | 'general_cost' | 'coach_payment'>('all')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'to_pay' | 'paid'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid'>('all')
   const supabase = createClient()
 
   useEffect(() => {
@@ -209,7 +209,7 @@ export default function PaymentsManager() {
           const paymentToCreate = {
             ...paymentData,
             due_date: date,
-            status: 'to_pay' as const
+            status: 'pending' as const
           }
           
           const response = await fetch('/api/admin/payments', {
@@ -323,7 +323,7 @@ export default function PaymentsManager() {
         },
         body: JSON.stringify({ 
           id, 
-          status: 'to_pay'
+          status: 'pending'
         }),
       })
 
@@ -382,7 +382,8 @@ export default function PaymentsManager() {
   }
 
   const getPendingAmount = () => {
-    const filtered = filterPayments().filter(p => p.status === 'to_pay')
+    // Consider all non-paid as pending for totals (robust to legacy values)
+    const filtered = filterPayments().filter(p => p.status !== 'paid')
     return filtered.reduce((total, payment) => total + payment.amount, 0)
   }
 
@@ -428,7 +429,7 @@ export default function PaymentsManager() {
     <div className="text-sm text-secondary">Da Pagare</div>
     <div className="text-2xl font-bold">€{getPendingAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">
-      {filteredPayments.filter(p => p.status === 'to_pay').length} in sospeso
+      {filteredPayments.filter(p => p.status !== 'paid').length} in sospeso
     </div>
   </div>
 
@@ -462,11 +463,11 @@ export default function PaymentsManager() {
             <label className="cs-field__label">Stato</label>
             <select
               value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'to_pay' | 'paid')}
+              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'pending' | 'paid')}
               className="cs-select"
             >
               <option value="all">Tutti gli stati</option>
-              <option value="to_pay">Da pagare</option>
+              <option value="pending">Da pagare</option>
               <option value="paid">Pagati</option>
             </select>
           </div>
@@ -554,7 +555,7 @@ export default function PaymentsManager() {
             </td>
 
             <td className="p-4 whitespace-nowrap text-sm font-medium align-top">
-              {payment.status === 'to_pay' ? (
+              {payment.status === 'pending' ? (
                 <button
                   onClick={() => markAsPaid(payment.id!)}
                   className="cs-btn cs-btn--ghost cs-btn--sm mr-2"
@@ -625,7 +626,7 @@ export default function PaymentsManager() {
         </div>
 
         <div className="mt-4 flex gap-2">
-          {payment.status === 'to_pay' ? (
+          {payment.status === 'pending' ? (
             <button
               onClick={() => markAsPaid(payment.id!)}
               className="cs-btn cs-btn--ghost cs-btn--sm flex-1"
@@ -714,7 +715,7 @@ function PaymentForm({
     amount: payment?.amount || 0,
     frequency: payment?.frequency || 'one_time',
     recurrence_pattern: payment?.recurrence_pattern || '',
-    status: payment?.status || 'to_pay',
+    status: payment?.status || 'pending',
     due_date: payment?.due_date || '',
 
     // Foreign keys
