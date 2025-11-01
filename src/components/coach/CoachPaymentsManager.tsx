@@ -8,7 +8,7 @@ type Payment = {
   description: string
   amount: number
   frequency: 'one_time' | 'recurring'
-  status: 'to_pay' | 'paid'
+  status: 'pending' | 'paid'
   due_date?: string
   paid_at?: string
   teams?: { id: string; name: string; code: string } | null
@@ -21,7 +21,7 @@ type Payment = {
 export default function CoachPaymentsManager() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
-  const [filterStatus, setFilterStatus] = useState<'all' | 'to_pay' | 'paid'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid'>('all')
 
   useEffect(() => {
     loadPayments()
@@ -47,7 +47,7 @@ export default function CoachPaymentsManager() {
   }, [payments, filterStatus])
 
   const totalAmount = useMemo(() => filtered.reduce((s, p) => s + (p.amount || 0), 0), [filtered])
-  const pendingAmount = useMemo(() => filtered.filter(p => p.status === 'to_pay').reduce((s, p) => s + (p.amount || 0), 0), [filtered])
+  const pendingAmount = useMemo(() => filtered.filter(p => p.status !== 'paid').reduce((s, p) => s + (p.amount || 0), 0), [filtered])
   const paidAmount = useMemo(() => filtered.filter(p => p.status === 'paid').reduce((s, p) => s + (p.amount || 0), 0), [filtered])
 
   const statusBadge = (status: Payment['status']) => status === 'paid' ? 'cs-badge cs-badge--success' : 'cs-badge cs-badge--warning'
@@ -69,7 +69,7 @@ export default function CoachPaymentsManager() {
         <div className="cs-card cs-card--primary">
           <div className="cs-card__meta">Da Pagare</div>
           <div className="text-2xl font-bold" style={{color:'var(--cs-warning)'}}>€{pendingAmount.toFixed(2)}</div>
-          <div className="text-xs text-secondary">{filtered.filter(p => p.status === 'to_pay').length} in sospeso</div>
+          <div className="text-xs text-secondary">{filtered.filter(p => p.status !== 'paid').length} in sospeso</div>
         </div>
         <div className="cs-card cs-card--primary">
           <div className="cs-card__meta">Pagati</div>
@@ -87,7 +87,7 @@ export default function CoachPaymentsManager() {
             className="cs-select"
           >
             <option value="all">Tutti gli stati</option>
-            <option value="to_pay">Da pagare</option>
+            <option value="pending">Da pagare</option>
             <option value="paid">Pagato</option>
           </select>
         </div>
