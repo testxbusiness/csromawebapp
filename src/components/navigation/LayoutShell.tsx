@@ -16,7 +16,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, role, user, loading, signOut } = useAuth()
+  const { profile, role, user, loading, signOut, refreshProfile } = useAuth()
   const router = useRouter()
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
@@ -47,10 +47,21 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   if (!showAuthenticatedLayout) return <>{children}</>
 
+  // Se abbiamo user ma non profile e non stiamo caricando, prova a rinfrescare
+  useEffect(() => {
+    if (user && !profile && !loading) {
+      refreshProfile().catch(() => {})
+    }
+  }, [user, profile, loading, refreshProfile])
+
   const isAuthLoading = loading || (!!user && !profile)
 
-  const initials = profile
-    ? [profile.first_name, profile.last_name]
+  const fallbackFirst = (user as any)?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0] : '')
+  const fallbackLast = (user as any)?.user_metadata?.last_name || ''
+  const first = profile?.first_name ?? fallbackFirst
+  const last = profile?.last_name ?? fallbackLast
+  const initials = (first || last)
+    ? [first, last]
         .filter(Boolean)
         .map((w: string) => w.at(0)?.toUpperCase())
         .join('')
@@ -136,7 +147,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 </div>
                 <div className="hidden sm:block">
                   <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                    {profile ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Utente CSRoma' : 'Utente CSRoma'}
+                    {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
                   </p>
                   {!!roleLabel && (
                     <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
@@ -192,7 +203,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 ) : (
                   <>
                     <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                      {profile ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Utente CSRoma' : 'Utente CSRoma'}
+                      {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
                     </p>
                     {!!roleLabel && (
                       <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
