@@ -193,6 +193,11 @@ export default function BulkGenerateModal({
       const chosen = members.filter(m => m.selected)
       if (chosen.length === 0) { alert('Seleziona almeno un atleta'); return }
 
+      // created_by richiesto dal DB
+      const { data: auth } = await supabase.auth.getUser()
+      const createdBy = auth?.user?.id
+      if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
+
       if (isTeamListTemplate) {
         // 1 solo documento per squadra con elenco atleti nel testo
         const asTable = (template.content_html || '').toLowerCase().includes('{{athletes_table}}')
@@ -215,10 +220,17 @@ export default function BulkGenerateModal({
         onPreview?.(html)
 
         const { error } = await supabase.from('documents').insert({
+          // campi richiesti
+          name: template.name,
           title: `${template.name} - ${team?.name || ''} - ${todayStr}`,
+          type: template.type || 'team_convocation',
+          created_by: createdBy,
+          // lookup / destinatari (duplicati per compatibilità con policy)
           template_id: template.id,
+          team_id: selectedTeamId,
           target_user_id: null,
           target_team_id: selectedTeamId,
+          // contenuto
           generated_content_html: html,
           status: 'generated',
           generation_date: new Date().toISOString(),
@@ -227,6 +239,9 @@ export default function BulkGenerateModal({
         if (error) { alert('Errore salvataggio documento'); return }
       } else {
         // N documenti, uno per ciascun atleta selezionato
+        const { data: auth } = await supabase.auth.getUser()
+        const createdBy = auth?.user?.id
+        if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
         for (const m of chosen) {
           const fullVars = {
             today: todayStr,
@@ -244,14 +259,21 @@ export default function BulkGenerateModal({
           const html = withOptionalLogo(replaceTemplateVariables(template.content_html, fullVars), template.include_logo)
           onPreview?.(html)
           await supabase.from('documents').insert({
+            name: template.name,
             title: template.name,
+            type: template.type || 'team_convocation',
+            created_by: createdBy,
             template_id: template.id,
+            // destinatari
+            profile_id: m.id,
+            team_id: selectedTeamId,
             target_user_id: m.id,           // documento personale
             target_team_id: selectedTeamId, // riferimento squadra
+            // contenuto
             generated_content_html: html,
             status: 'generated',
             generation_date: new Date().toISOString(),
-            document_type: template.type || 'member_doc',
+            document_type: template.type || 'team_convocation',
           } as any)
         }
       }
@@ -259,6 +281,9 @@ export default function BulkGenerateModal({
       // target user – N documenti per gli utenti selezionati
       const chosen = users.filter(u => u.selected)
       if (chosen.length === 0) { alert('Seleziona almeno un utente'); return }
+      const { data: auth } = await supabase.auth.getUser()
+      const createdBy = auth?.user?.id
+      if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
       for (const u of chosen) {
         const vars = {
           today: todayStr,
@@ -269,14 +294,18 @@ export default function BulkGenerateModal({
         const html = withOptionalLogo(replaceTemplateVariables(template.content_html, vars), template.include_logo)
         onPreview?.(html)
         await supabase.from('documents').insert({
+          name: template.name,
           title: template.name,
+          type: template.type || (template.target_type === 'team' ? 'team_convocation' : 'enrollment_form'),
+          created_by: createdBy,
           template_id: template.id,
+          profile_id: u.id,
           target_user_id: u.id,
           target_team_id: null,
           generated_content_html: html,
           status: 'generated',
           generation_date: new Date().toISOString(),
-          document_type: template.type || 'user_doc',
+          document_type: template.type || 'enrollment_form',
         } as any)
       }
     }
