@@ -126,6 +126,7 @@ export function useAuth(): UseAuthReturn {
 
       // 2) subscribe ai cambi di auth
       const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
+        console.log('[useAuth] onAuthStateChange:', event, _session?.user?.id)
         if (!mounted.current) return
         setLoading(true)
         setSession(_session ?? null)
@@ -138,6 +139,7 @@ export function useAuth(): UseAuthReturn {
         } else {
           setProfile(null)
         }
+        console.log('[useAuth] onAuthStateChange completed, setting loading=false')
         if (mounted.current) setLoading(false)
       })
       unsub = () => sub.subscription.unsubscribe()

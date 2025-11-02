@@ -21,6 +21,16 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
 
+  // Debug per identificare il problema
+  useEffect(() => {
+    console.log('[LayoutShell] Auth state:', {
+      loading,
+      user: user?.id,
+      profile: !!profile,
+      role
+    })
+  }, [loading, user, profile, role])
+
   // Client-side guard: force reset-password for users flagged to change password
   useEffect(() => {
     if (!profile) return
