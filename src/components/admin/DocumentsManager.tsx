@@ -85,7 +85,8 @@ export default function DocumentsManager() {
         id: row.id,
         name: row.name,
         target_type: row.target_type as TargetType,
-        content_html: row.content_html || '',
+        // Read content from either `content_html` or legacy/new `content`
+        content_html: row.content_html || row.content || '',
         include_logo: typeof row.has_logo === 'boolean' ? row.has_logo : !!row.include_logo,
         type: row.type ?? null,
         created_at: row.created_at ?? null,
@@ -178,8 +179,24 @@ export default function DocumentsManager() {
     }
   }
 
-  function handleDownloadPdf(doc: DocumentRow) {
+  async function handleDownloadPdf(doc: DocumentRow) {
+    // Preferisci URL firmato: il bucket potrebbe essere privato
+    if (doc.file_name) {
+      try {
+        const { data, error } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(`generated/${doc.file_name}`, 60) // valido 60s
+        if (!error && data?.signedUrl) {
+          window.open(data.signedUrl, '_blank')
+          return
+        }
+      } catch (e) {
+        console.error('Signed URL error:', e)
+      }
+    }
+    // Fallback a URL pubblico eventualmente salvato
     if (doc.file_url) window.open(doc.file_url, '_blank')
+    else alert('File non disponibile per il download')
   }
 
   function handlePreviewHtml(doc: DocumentRow) {

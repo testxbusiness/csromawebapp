@@ -36,6 +36,15 @@ export default function BulkGenerateModal({
 
   // User target (semplice): elenco profili
   const [users, setUsers] = useState<Member[]>([])
+  // Eventi (partite) + campi extra per convocazione
+  type EventRow = { id: string; title?: string|null; description?: string|null; start_date?: string|null; location?: string|null; gym_id?: string|null }
+  const [events, setEvents] = useState<EventRow[]>([])
+  const [selectedEventId, setSelectedEventId] = useState<string>('')
+  const [matchDatetime, setMatchDatetime] = useState<string>('')
+  const [venue, setVenue] = useState<string>('')
+  const [matchInfo, setMatchInfo] = useState<string>('')
+  const [coachName, setCoachName] = useState<string>('')
+  const [seasonName, setSeasonName] = useState<string>('')
 
   useEffect(() => { void bootstrap() }, [template.id])
 
@@ -73,6 +82,46 @@ export default function BulkGenerateModal({
       setMembers(mapped)
     })()
   }, [template.target_type, selectedTeamId])
+
+  // Carica eventi di tipo partita per la squadra selezionata
+  useEffect(() => {
+    if (template.target_type !== 'team' || !selectedTeamId) { setEvents([]); setSelectedEventId(''); return }
+    (async () => {
+      const { data: links } = await supabase.from('event_teams').select('event_id').eq('team_id', selectedTeamId)
+      const eventIds = Array.from(new Set((links || []).map(l => l.event_id).filter(Boolean)))
+      if (!eventIds.length) { setEvents([]); setSelectedEventId(''); return }
+      const { data: evs } = await supabase
+        .from('events')
+        .select('id, title, description, start_date, location, gym_id, event_kind')
+        .in('id', eventIds)
+        .eq('event_kind', 'match')
+        .order('start_date', { ascending: true })
+      setEvents(evs || [])
+      setSelectedEventId(''); setMatchDatetime(''); setVenue(''); setMatchInfo('')
+    })()
+  }, [template.target_type, selectedTeamId])
+
+  // Prefill al cambio evento
+  useEffect(() => {
+    if (!selectedEventId) return
+    const ev = events.find(e => e.id === selectedEventId)
+    if (!ev) return
+    if (ev.start_date) {
+      try {
+        const d = new Date(ev.start_date)
+        setMatchDatetime(new Intl.DateTimeFormat('it-IT', { dateStyle: 'full', timeStyle: 'short' }).format(d))
+      } catch { setMatchDatetime(ev.start_date) }
+    }
+    (async () => {
+      if (ev.location && ev.location.trim()) { setVenue(ev.location.trim()); return }
+      if (ev.gym_id) {
+        const { data: gym } = await supabase.from('gyms').select('name').eq('id', ev.gym_id).maybeSingle()
+        if (gym?.name) { setVenue(gym.name); return }
+      }
+      setVenue('')
+    })()
+    setMatchInfo(ev.description || '')
+  }, [selectedEventId, events, supabase])
 
   const todayStr = useMemo(
     () => new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium' }).format(new Date()),
@@ -144,6 +193,11 @@ export default function BulkGenerateModal({
       const chosen = members.filter(m => m.selected)
       if (chosen.length === 0) { alert('Seleziona almeno un atleta'); return }
 
+      // created_by richiesto dal DB
+      const { data: auth } = await supabase.auth.getUser()
+      const createdBy = auth?.user?.id
+      if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
+
       if (isTeamListTemplate) {
         // 1 solo documento per squadra con elenco atleti nel testo
         const asTable = (template.content_html || '').toLowerCase().includes('{{athletes_table}}')
@@ -151,6 +205,13 @@ export default function BulkGenerateModal({
         const vars = {
           team_name: team?.name || 'Squadra',
           today: todayStr,
+          // Campi evento / contesto
+          match_datetime: matchDatetime || '',
+          venue: venue || '',
+          match_info: matchInfo || '',
+          coach_name: coachName || '',
+          season_name: seasonName || '',
+          // Elenchi atleti
           athletes_list: asTable ? '' : listHtml,
           athletes_table: asTable ? listHtml : '',
           athletes_count: String(chosen.length),
@@ -159,10 +220,17 @@ export default function BulkGenerateModal({
         onPreview?.(html)
 
         const { error } = await supabase.from('documents').insert({
+          // campi richiesti
+          name: template.name,
           title: `${template.name} - ${team?.name || ''} - ${todayStr}`,
+          type: template.type || 'team_convocation',
+          created_by: createdBy,
+          // lookup / destinatari (duplicati per compatibilità con policy)
           template_id: template.id,
+          team_id: selectedTeamId,
           target_user_id: null,
           target_team_id: selectedTeamId,
+          // contenuto
           generated_content_html: html,
           status: 'generated',
           generation_date: new Date().toISOString(),
@@ -171,24 +239,41 @@ export default function BulkGenerateModal({
         if (error) { alert('Errore salvataggio documento'); return }
       } else {
         // N documenti, uno per ciascun atleta selezionato
+        const { data: auth } = await supabase.auth.getUser()
+        const createdBy = auth?.user?.id
+        if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
         for (const m of chosen) {
           const fullVars = {
             today: todayStr,
             first_name: m.first_name || '',
             last_name: m.last_name || '',
-            email: m.email || ''
+            email: m.email || '',
+            // Team + evento
+            team_name: team?.name || '',
+            match_datetime: matchDatetime || '',
+            venue: venue || '',
+            match_info: matchInfo || '',
+            coach_name: coachName || '',
+            season_name: seasonName || '',
           }
           const html = withOptionalLogo(replaceTemplateVariables(template.content_html, fullVars), template.include_logo)
           onPreview?.(html)
           await supabase.from('documents').insert({
+            name: template.name,
             title: template.name,
+            type: template.type || 'team_convocation',
+            created_by: createdBy,
             template_id: template.id,
+            // destinatari
+            profile_id: m.id,
+            team_id: selectedTeamId,
             target_user_id: m.id,           // documento personale
             target_team_id: selectedTeamId, // riferimento squadra
+            // contenuto
             generated_content_html: html,
             status: 'generated',
             generation_date: new Date().toISOString(),
-            document_type: template.type || 'member_doc',
+            document_type: template.type || 'team_convocation',
           } as any)
         }
       }
@@ -196,6 +281,9 @@ export default function BulkGenerateModal({
       // target user – N documenti per gli utenti selezionati
       const chosen = users.filter(u => u.selected)
       if (chosen.length === 0) { alert('Seleziona almeno un utente'); return }
+      const { data: auth } = await supabase.auth.getUser()
+      const createdBy = auth?.user?.id
+      if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
       for (const u of chosen) {
         const vars = {
           today: todayStr,
@@ -206,14 +294,18 @@ export default function BulkGenerateModal({
         const html = withOptionalLogo(replaceTemplateVariables(template.content_html, vars), template.include_logo)
         onPreview?.(html)
         await supabase.from('documents').insert({
+          name: template.name,
           title: template.name,
+          type: template.type || (template.target_type === 'team' ? 'team_convocation' : 'enrollment_form'),
+          created_by: createdBy,
           template_id: template.id,
+          profile_id: u.id,
           target_user_id: u.id,
           target_team_id: null,
           generated_content_html: html,
           status: 'generated',
           generation_date: new Date().toISOString(),
-          document_type: template.type || 'user_doc',
+          document_type: template.type || 'enrollment_form',
         } as any)
       }
     }
@@ -260,6 +352,43 @@ export default function BulkGenerateModal({
                   onToggleAll={(checked) => setMembers(prev => prev.map(m => ({ ...m, selected: checked })))}
                 />
 
+                {/* Evento partita + info gara */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="cs-field__label">Evento (partita)</label>
+                    <select className="cs-select" value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)}>
+                      <option value="">Seleziona…</option>
+                      {events.map(ev => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.start_date ? new Date(ev.start_date).toLocaleString('it-IT') : '—'}{ev.location ? ` • ${ev.location}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="cs-field__label">Data/Ora</label>
+                    <input className="cs-input" value={matchDatetime} onChange={e => setMatchDatetime(e.target.value)} placeholder="venerdì 14 marzo 2025, 20:30" />
+                  </div>
+                  <div>
+                    <label className="cs-field__label">Luogo</label>
+                    <input className="cs-input" value={venue} onChange={e => setVenue(e.target.value)} placeholder="Palestra / indirizzo" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="cs-field__label">Allenatore</label>
+                    <input className="cs-input" value={coachName} onChange={e => setCoachName(e.target.value)} placeholder="Nome Allenatore" />
+                  </div>
+                  <div>
+                    <label className="cs-field__label">Stagione</label>
+                    <input className="cs-input" value={seasonName} onChange={e => setSeasonName(e.target.value)} placeholder="2024/2025" />
+                  </div>
+                </div>
+                <div>
+                  <label className="cs-field__label">Info Gara</label>
+                  <textarea className="cs-textarea" rows={3} value={matchInfo} onChange={e => setMatchInfo(e.target.value)} placeholder="Descrizione dalla scheda evento…" />
+                </div>
+
                 {isTeamListTemplate ? (
                   <p className="text-xs text-secondary">
                     Il template contiene <code>&#123;&#123;athletes_list&#125;&#125;</code> o <code>&#123;&#123;athletes_table&#125;&#125;</code>: verrà creato <b>un solo documento</b> per la squadra con elenco atleti selezionati.
@@ -298,12 +427,25 @@ export default function BulkGenerateModal({
             // anteprima veloce dell’HTML con placeholder minimi
             if (template.target_type === 'team') {
               const demo = withOptionalLogo(replaceTemplateVariables(template.content_html, {
-                team_name: 'Team Demo', today: todayStr, athletes_list: '<ul><li>ROSSI MARIO</li><li>BIANCHI LUCA</li></ul>', athletes_table: ''
+                team_name: teams.find(t => t.id === selectedTeamId)?.name || 'Team Demo',
+                today: todayStr,
+                match_datetime: matchDatetime || 'lunedì 3 novembre 2025 alle ore 20:14',
+                venue: venue || 'Palestra Demo',
+                match_info: matchInfo || 'Info gara demo',
+                coach_name: coachName || 'Nome Allenatore',
+                season_name: seasonName || '2024/2025',
+                athletes_list: '<ul><li>ROSSI MARIO</li><li>BIANCHI LUCA</li></ul>',
+                athletes_table: ''
               }), template.include_logo)
               onPreview?.(demo)
             } else {
               const demo = withOptionalLogo(replaceTemplateVariables(template.content_html, {
-                first_name: 'Mario', last_name: 'Rossi', email: 'mario.rossi@example.com', today: todayStr
+                first_name: 'Mario', last_name: 'Rossi', email: 'mario.rossi@example.com', today: todayStr,
+                match_datetime: matchDatetime || 'lunedì 3 novembre 2025 alle ore 20:14',
+                venue: venue || 'Palestra Demo',
+                match_info: matchInfo || 'Info gara demo',
+                coach_name: coachName || 'Nome Allenatore',
+                season_name: seasonName || '2024/2025'
               }), template.include_logo)
               onPreview?.(demo)
             }
