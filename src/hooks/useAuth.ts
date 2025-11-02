@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 
@@ -69,11 +69,14 @@ export function useAuth(): UseAuthReturn {
     })
   }, [profile?.role, user, role])
 
-  const loadProfile = async (uid: string) => {
+  const loadProfile = useCallback(async (uid: string) => {
     if (!uid) return
-    // evita richieste duplicate
+    // Cache solo per richieste identiche consecutive
     if (lastProfileFor.current === uid) return
     lastProfileFor.current = uid
+
+    // Debug timing
+    console.log('[useAuth] loadProfile started for:', uid)
 
     const { data, error } = await supabase
       .from('profiles')
@@ -83,21 +86,22 @@ export function useAuth(): UseAuthReturn {
 
     if (!mounted.current) return
     if (error) {
-      // eslint-disable-next-line no-console
       console.warn('[useAuth] profiles select error', error)
       setProfile(null)
       return
     }
-    setProfile(data as ProfileRow)
-  }
 
-  const refreshProfile = async () => {
+    console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
+    setProfile(data as ProfileRow)
+  }, [supabase])
+
+  const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      // consenti refetch forzando l’ID “ultimo”
+      // consenti refetch forzando l'ID "ultimo"
       lastProfileFor.current = null
       await loadProfile(user.id)
     }
-  }
+  }, [user?.id, loadProfile])
 
   useEffect(() => {
     let unsub: (() => void) | null = null
@@ -121,7 +125,8 @@ export function useAuth(): UseAuthReturn {
       }
 
       // 2) subscribe ai cambi di auth
-      const { data: sub } = supabase.auth.onAuthStateChange((event, _session) => {
+      const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
+        console.log('[useAuth] onAuthStateChange:', event, _session?.user?.id)
         if (!mounted.current) return
         setLoading(true)
         setSession(_session ?? null)
@@ -130,13 +135,12 @@ export function useAuth(): UseAuthReturn {
         if (_session?.user?.id) {
           // resetta e ricarica il profilo quando cambia utente
           lastProfileFor.current = null
-          Promise.resolve(loadProfile(_session.user.id))
-            .catch(() => {})
-            .finally(() => { if (mounted.current) setLoading(false) })
+          await loadProfile(_session.user.id)
         } else {
           setProfile(null)
-          setLoading(false)
         }
+        console.log('[useAuth] onAuthStateChange completed, setting loading=false')
+        if (mounted.current) setLoading(false)
       })
       unsub = () => sub.subscription.unsubscribe()
 
@@ -153,7 +157,7 @@ export function useAuth(): UseAuthReturn {
     return () => {
       unsub?.()
     }
-  }, [supabase])
+  }, [supabase, loadProfile])
 
   const signOut = async () => {
     await supabase.auth.signOut()
