@@ -200,6 +200,13 @@ export default function BulkGenerateModal({
         const vars = {
           team_name: team?.name || 'Squadra',
           today: todayStr,
+          // Campi evento / contesto
+          match_datetime: matchDatetime || '',
+          venue: venue || '',
+          match_info: matchInfo || '',
+          coach_name: coachName || '',
+          season_name: seasonName || '',
+          // Elenchi atleti
           athletes_list: asTable ? '' : listHtml,
           athletes_table: asTable ? listHtml : '',
           athletes_count: String(chosen.length),
@@ -225,7 +232,14 @@ export default function BulkGenerateModal({
             today: todayStr,
             first_name: m.first_name || '',
             last_name: m.last_name || '',
-            email: m.email || ''
+            email: m.email || '',
+            // Team + evento
+            team_name: team?.name || '',
+            match_datetime: matchDatetime || '',
+            venue: venue || '',
+            match_info: matchInfo || '',
+            coach_name: coachName || '',
+            season_name: seasonName || '',
           }
           const html = withOptionalLogo(replaceTemplateVariables(template.content_html, fullVars), template.include_logo)
           onPreview?.(html)
@@ -384,12 +398,25 @@ export default function BulkGenerateModal({
             // anteprima veloce dell’HTML con placeholder minimi
             if (template.target_type === 'team') {
               const demo = withOptionalLogo(replaceTemplateVariables(template.content_html, {
-                team_name: 'Team Demo', today: todayStr, athletes_list: '<ul><li>ROSSI MARIO</li><li>BIANCHI LUCA</li></ul>', athletes_table: ''
+                team_name: teams.find(t => t.id === selectedTeamId)?.name || 'Team Demo',
+                today: todayStr,
+                match_datetime: matchDatetime || 'lunedì 3 novembre 2025 alle ore 20:14',
+                venue: venue || 'Palestra Demo',
+                match_info: matchInfo || 'Info gara demo',
+                coach_name: coachName || 'Nome Allenatore',
+                season_name: seasonName || '2024/2025',
+                athletes_list: '<ul><li>ROSSI MARIO</li><li>BIANCHI LUCA</li></ul>',
+                athletes_table: ''
               }), template.include_logo)
               onPreview?.(demo)
             } else {
               const demo = withOptionalLogo(replaceTemplateVariables(template.content_html, {
-                first_name: 'Mario', last_name: 'Rossi', email: 'mario.rossi@example.com', today: todayStr
+                first_name: 'Mario', last_name: 'Rossi', email: 'mario.rossi@example.com', today: todayStr,
+                match_datetime: matchDatetime || 'lunedì 3 novembre 2025 alle ore 20:14',
+                venue: venue || 'Palestra Demo',
+                match_info: matchInfo || 'Info gara demo',
+                coach_name: coachName || 'Nome Allenatore',
+                season_name: seasonName || '2024/2025'
               }), template.include_logo)
               onPreview?.(demo)
             }
