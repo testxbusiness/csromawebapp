@@ -50,19 +50,19 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     }
   }
 
-  // (Opzionale) se non loggato e su rotta protetta, rimbalza al login
-  // useEffect(() => {
-  //   if (!profile && showAuthenticatedLayout) router.replace('/login')
-  // }, [profile, showAuthenticatedLayout, router])
-
-  if (!showAuthenticatedLayout) return <>{children}</>
-
   // Se abbiamo user ma non profile e non stiamo caricando, prova a rinfrescare
   useEffect(() => {
     if (user && !profile && !loading) {
       refreshProfile().catch(() => {})
     }
   }, [user, profile, loading, refreshProfile])
+
+  // (Opzionale) se non loggato e su rotta protetta, rimbalza al login
+  // useEffect(() => {
+  //   if (!profile && showAuthenticatedLayout) router.replace('/login')
+  // }, [profile, showAuthenticatedLayout, router])
+
+  if (!showAuthenticatedLayout) return <>{children}</>
 
   const isAuthLoading = loading || (!!user && !profile)
 
