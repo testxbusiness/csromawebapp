@@ -19,6 +19,7 @@ export default function TemplateModal({
   const [name, setName] = useState('')
   const [targetType, setTargetType] = useState<'user'|'team'>('team')
   const [includeLogo, setIncludeLogo] = useState<boolean>(true)
+  const [docType, setDocType] = useState<string>('team_convocation')
   const [contentHtml, setContentHtml] = useState<string>('')
 
   useEffect(() => {
@@ -27,9 +28,15 @@ export default function TemplateModal({
       setTargetType(initialTemplate.target_type)
       // Il DB usa la colonna has_logo; lato UI manteniamo "include_logo"
       setIncludeLogo(!!initialTemplate.include_logo)
+      setDocType(initialTemplate.type || (initialTemplate.target_type === 'team' ? 'team_convocation' : 'user_doc'))
       setContentHtml(initialTemplate.content_html || '')
     }
   }, [initialTemplate])
+
+  // Mantieni un default sensato quando cambia il target
+  useEffect(() => {
+    setDocType(prev => prev || (targetType === 'team' ? 'team_convocation' : 'user_doc'))
+  }, [targetType])
 
   async function handleSubmit() {
     if (!name.trim()) { alert('Inserisci un nome'); return }
@@ -41,6 +48,7 @@ export default function TemplateModal({
         target_type: targetType,
         // Mapping corretto: la colonna è has_logo
         has_logo: includeLogo,
+        type: docType,
         content_html: contentHtml,
       })
       if (error) { alert('Errore creazione template'); return }
@@ -52,6 +60,7 @@ export default function TemplateModal({
           target_type: targetType,
           // Mapping corretto: la colonna è has_logo
           has_logo: includeLogo,
+          type: docType,
           content_html: contentHtml,
         })
         .eq('id', initialTemplate!.id)
@@ -79,6 +88,16 @@ export default function TemplateModal({
                 <option value="team">Team</option>
                 <option value="user">Utente</option>
               </select>
+            </div>
+            <div>
+              <label className="cs-field__label">Tipo Template *</label>
+              <select className="cs-select" value={docType} onChange={e => setDocType(e.target.value)}>
+                <option value="team_convocation">Convocazione Squadra</option>
+                <option value="team_doc">Documento Squadra</option>
+                <option value="user_doc">Documento Utente</option>
+                <option value="medical_certificate_request">Richiesta Certificato Medico</option>
+              </select>
+              <p className="text-xs text-secondary mt-1">Obbligatorio (DB richiede "type"). Usa “Convocazione Squadra” per il tuo template.</p>
             </div>
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" checked={includeLogo} onChange={e => setIncludeLogo(e.target.checked)} />
