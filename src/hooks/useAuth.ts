@@ -71,9 +71,12 @@ export function useAuth(): UseAuthReturn {
 
   const loadProfile = async (uid: string) => {
     if (!uid) return
-    // evita richieste duplicate
-    if (lastProfileFor.current === uid) return
+    // Cache solo per richieste identiche consecutive, non per login
+    if (lastProfileFor.current === uid && profile !== null) return
     lastProfileFor.current = uid
+
+    // Debug timing
+    console.log('[useAuth] loadProfile started for:', uid)
 
     const { data, error } = await supabase
       .from('profiles')
@@ -83,11 +86,12 @@ export function useAuth(): UseAuthReturn {
 
     if (!mounted.current) return
     if (error) {
-      // eslint-disable-next-line no-console
       console.warn('[useAuth] profiles select error', error)
       setProfile(null)
       return
     }
+
+    console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
     setProfile(data as ProfileRow)
   }
 
@@ -142,9 +146,7 @@ export function useAuth(): UseAuthReturn {
     }
 
     init().catch((e) => {
-    if (!mounted.current) return
-    // evita di applicare una risposta obsoleta se l'UID è cambiato durante la fetch
-    if (lastProfileFor.current !== uid) return
+      if (!mounted.current) return
       // eslint-disable-next-line no-console
       console.error('[useAuth] init unexpected error', e)
       setLoading(false)
