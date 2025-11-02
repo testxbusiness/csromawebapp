@@ -49,6 +49,8 @@ export default function TemplateModal({
         // Mapping corretto: la colonna è has_logo
         has_logo: includeLogo,
         type: docType,
+        // Satisfy schemas that use either `content` or `content_html`
+        content: contentHtml,
         content_html: contentHtml,
       })
       if (error) { alert('Errore creazione template'); return }
@@ -61,6 +63,8 @@ export default function TemplateModal({
           // Mapping corretto: la colonna è has_logo
           has_logo: includeLogo,
           type: docType,
+          // Satisfy schemas that use either `content` or `content_html`
+          content: contentHtml,
           content_html: contentHtml,
         })
         .eq('id', initialTemplate!.id)

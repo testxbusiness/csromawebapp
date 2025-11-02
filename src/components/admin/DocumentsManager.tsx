@@ -85,7 +85,8 @@ export default function DocumentsManager() {
         id: row.id,
         name: row.name,
         target_type: row.target_type as TargetType,
-        content_html: row.content_html || '',
+        // Read content from either `content_html` or legacy/new `content`
+        content_html: row.content_html || row.content || '',
         include_logo: typeof row.has_logo === 'boolean' ? row.has_logo : !!row.include_logo,
         type: row.type ?? null,
         created_at: row.created_at ?? null,
