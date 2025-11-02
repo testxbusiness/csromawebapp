@@ -42,6 +42,11 @@ export default function TemplateModal({
     if (!name.trim()) { alert('Inserisci un nome'); return }
     if (!contentHtml.trim()) { alert('Inserisci il contenuto HTML'); return }
 
+    // Necessario per la policy: created_by = auth.uid() AND is_admin()
+    const { data: auth } = await supabase.auth.getUser()
+    const createdBy = auth?.user?.id
+    if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
+
     if (mode === 'create') {
       const { error } = await supabase.from('document_templates').insert({
         name,
@@ -52,6 +57,7 @@ export default function TemplateModal({
         // Satisfy schemas that use either `content` or `content_html`
         content: contentHtml,
         content_html: contentHtml,
+        created_by: createdBy,
       })
       if (error) { alert('Errore creazione template'); return }
     } else {
