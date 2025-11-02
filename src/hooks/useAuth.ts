@@ -121,7 +121,7 @@ export function useAuth(): UseAuthReturn {
       }
 
       // 2) subscribe ai cambi di auth
-      const { data: sub } = supabase.auth.onAuthStateChange((event, _session) => {
+      const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
         if (!mounted.current) return
         setLoading(true)
         setSession(_session ?? null)
@@ -130,13 +130,11 @@ export function useAuth(): UseAuthReturn {
         if (_session?.user?.id) {
           // resetta e ricarica il profilo quando cambia utente
           lastProfileFor.current = null
-          Promise.resolve(loadProfile(_session.user.id))
-            .catch(() => {})
-            .finally(() => { if (mounted.current) setLoading(false) })
+          await loadProfile(_session.user.id)
         } else {
           setProfile(null)
-          setLoading(false)
         }
+        if (mounted.current) setLoading(false)
       })
       unsub = () => sub.subscription.unsubscribe()
 
@@ -144,7 +142,9 @@ export function useAuth(): UseAuthReturn {
     }
 
     init().catch((e) => {
-      if (!mounted.current) return
+    if (!mounted.current) return
+    // evita di applicare una risposta obsoleta se l'UID è cambiato durante la fetch
+    if (lastProfileFor.current !== uid) return
       // eslint-disable-next-line no-console
       console.error('[useAuth] init unexpected error', e)
       setLoading(false)
