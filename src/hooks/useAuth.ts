@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 
@@ -69,10 +69,10 @@ export function useAuth(): UseAuthReturn {
     })
   }, [profile?.role, user, role])
 
-  const loadProfile = async (uid: string) => {
+  const loadProfile = useCallback(async (uid: string) => {
     if (!uid) return
-    // Cache solo per richieste identiche consecutive, non per login
-    if (lastProfileFor.current === uid && profile !== null) return
+    // Cache solo per richieste identiche consecutive
+    if (lastProfileFor.current === uid) return
     lastProfileFor.current = uid
 
     // Debug timing
@@ -93,15 +93,15 @@ export function useAuth(): UseAuthReturn {
 
     console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
     setProfile(data as ProfileRow)
-  }
+  }, [supabase])
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      // consenti refetch forzando l’ID “ultimo”
+      // consenti refetch forzando l'ID "ultimo"
       lastProfileFor.current = null
       await loadProfile(user.id)
     }
-  }
+  }, [user?.id, loadProfile])
 
   useEffect(() => {
     let unsub: (() => void) | null = null
@@ -155,7 +155,7 @@ export function useAuth(): UseAuthReturn {
     return () => {
       unsub?.()
     }
-  }, [supabase])
+  }, [supabase, loadProfile])
 
   const signOut = async () => {
     await supabase.auth.signOut()
