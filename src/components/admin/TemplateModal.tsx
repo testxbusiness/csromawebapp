@@ -19,6 +19,7 @@ export default function TemplateModal({
   const [name, setName] = useState('')
   const [targetType, setTargetType] = useState<'user'|'team'>('team')
   const [includeLogo, setIncludeLogo] = useState<boolean>(true)
+  const [logoPosition, setLogoPosition] = useState<'top-left'|'top-center'|'top-right'>('top-left')
   const [docType, setDocType] = useState<string>('team_convocation')
   const [contentHtml, setContentHtml] = useState<string>('')
 
@@ -30,6 +31,12 @@ export default function TemplateModal({
       setIncludeLogo(!!initialTemplate.include_logo)
       setDocType(initialTemplate.type || (initialTemplate.target_type === 'team' ? 'team_convocation' : 'user_doc'))
       setContentHtml(initialTemplate.content_html || '')
+      // prova a leggere logo_position se presente
+      const anyT = initialTemplate as any
+      const lp = anyT?.logo_position as string | undefined
+      if (lp === 'top-left' || lp === 'top-center' || lp === 'top-right') {
+        setLogoPosition(lp)
+      }
     }
   }, [initialTemplate])
 
@@ -53,6 +60,7 @@ export default function TemplateModal({
         target_type: targetType,
         // Mapping corretto: la colonna è has_logo
         has_logo: includeLogo,
+        logo_position: logoPosition,
         type: docType,
         // Satisfy schemas that use either `content` or `content_html`
         content: contentHtml,
@@ -68,6 +76,7 @@ export default function TemplateModal({
           target_type: targetType,
           // Mapping corretto: la colonna è has_logo
           has_logo: includeLogo,
+          logo_position: logoPosition,
           type: docType,
           // Satisfy schemas that use either `content` or `content_html`
           content: contentHtml,
@@ -103,11 +112,20 @@ export default function TemplateModal({
               <label className="cs-field__label">Tipo Template *</label>
               <select className="cs-select" value={docType} onChange={e => setDocType(e.target.value)}>
                 <option value="team_convocation">Convocazione Squadra</option>
-                <option value="team_doc">Documento Squadra</option>
-                <option value="user_doc">Documento Utente</option>
-                <option value="medical_certificate_request">Richiesta Certificato Medico</option>
+                <option value="medical_request">Richiesta Certificato Medico</option>
+                <option value="enrollment_form">Modulo Iscrizione</option>
+                <option value="attendance_certificate">Attestato Presenza</option>
+                <option value="payment_receipt">Ricevuta Pagamento</option>
               </select>
               <p className="text-xs text-secondary mt-1">Obbligatorio (DB richiede "type"). Usa “Convocazione Squadra” per il tuo template.</p>
+            </div>
+            <div>
+              <label className="cs-field__label">Posizione Logo</label>
+              <select className="cs-select" value={logoPosition} onChange={e => setLogoPosition(e.target.value as any)}>
+                <option value="top-left">In alto a sinistra</option>
+                <option value="top-center">In alto al centro</option>
+                <option value="top-right">In alto a destra</option>
+              </select>
             </div>
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" checked={includeLogo} onChange={e => setIncludeLogo(e.target.checked)} />
