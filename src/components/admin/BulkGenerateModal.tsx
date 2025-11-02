@@ -36,6 +36,15 @@ export default function BulkGenerateModal({
 
   // User target (semplice): elenco profili
   const [users, setUsers] = useState<Member[]>([])
+  // Eventi (partite) + campi extra per convocazione
+  type EventRow = { id: string; title?: string|null; description?: string|null; start_date?: string|null; location?: string|null; gym_id?: string|null }
+  const [events, setEvents] = useState<EventRow[]>([])
+  const [selectedEventId, setSelectedEventId] = useState<string>('')
+  const [matchDatetime, setMatchDatetime] = useState<string>('')
+  const [venue, setVenue] = useState<string>('')
+  const [matchInfo, setMatchInfo] = useState<string>('')
+  const [coachName, setCoachName] = useState<string>('')
+  const [seasonName, setSeasonName] = useState<string>('')
 
   useEffect(() => { void bootstrap() }, [template.id])
 
@@ -73,6 +82,46 @@ export default function BulkGenerateModal({
       setMembers(mapped)
     })()
   }, [template.target_type, selectedTeamId])
+
+  // Carica eventi di tipo partita per la squadra selezionata
+  useEffect(() => {
+    if (template.target_type !== 'team' || !selectedTeamId) { setEvents([]); setSelectedEventId(''); return }
+    (async () => {
+      const { data: links } = await supabase.from('event_teams').select('event_id').eq('team_id', selectedTeamId)
+      const eventIds = Array.from(new Set((links || []).map(l => l.event_id).filter(Boolean)))
+      if (!eventIds.length) { setEvents([]); setSelectedEventId(''); return }
+      const { data: evs } = await supabase
+        .from('events')
+        .select('id, title, description, start_date, location, gym_id, event_kind')
+        .in('id', eventIds)
+        .eq('event_kind', 'match')
+        .order('start_date', { ascending: true })
+      setEvents(evs || [])
+      setSelectedEventId(''); setMatchDatetime(''); setVenue(''); setMatchInfo('')
+    })()
+  }, [template.target_type, selectedTeamId])
+
+  // Prefill al cambio evento
+  useEffect(() => {
+    if (!selectedEventId) return
+    const ev = events.find(e => e.id === selectedEventId)
+    if (!ev) return
+    if (ev.start_date) {
+      try {
+        const d = new Date(ev.start_date)
+        setMatchDatetime(new Intl.DateTimeFormat('it-IT', { dateStyle: 'full', timeStyle: 'short' }).format(d))
+      } catch { setMatchDatetime(ev.start_date) }
+    }
+    (async () => {
+      if (ev.location && ev.location.trim()) { setVenue(ev.location.trim()); return }
+      if (ev.gym_id) {
+        const { data: gym } = await supabase.from('gyms').select('name').eq('id', ev.gym_id).maybeSingle()
+        if (gym?.name) { setVenue(gym.name); return }
+      }
+      setVenue('')
+    })()
+    setMatchInfo(ev.description || '')
+  }, [selectedEventId, events, supabase])
 
   const todayStr = useMemo(
     () => new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium' }).format(new Date()),
@@ -259,6 +308,43 @@ export default function BulkGenerateModal({
                   onToggle={(id, checked) => setMembers(prev => prev.map(m => m.id === id ? { ...m, selected: checked } : m))}
                   onToggleAll={(checked) => setMembers(prev => prev.map(m => ({ ...m, selected: checked })))}
                 />
+
+                {/* Evento partita + info gara */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="cs-field__label">Evento (partita)</label>
+                    <select className="cs-select" value={selectedEventId} onChange={e => setSelectedEventId(e.target.value)}>
+                      <option value="">Seleziona…</option>
+                      {events.map(ev => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.start_date ? new Date(ev.start_date).toLocaleString('it-IT') : '—'}{ev.location ? ` • ${ev.location}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="cs-field__label">Data/Ora</label>
+                    <input className="cs-input" value={matchDatetime} onChange={e => setMatchDatetime(e.target.value)} placeholder="venerdì 14 marzo 2025, 20:30" />
+                  </div>
+                  <div>
+                    <label className="cs-field__label">Luogo</label>
+                    <input className="cs-input" value={venue} onChange={e => setVenue(e.target.value)} placeholder="Palestra / indirizzo" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="cs-field__label">Allenatore</label>
+                    <input className="cs-input" value={coachName} onChange={e => setCoachName(e.target.value)} placeholder="Nome Allenatore" />
+                  </div>
+                  <div>
+                    <label className="cs-field__label">Stagione</label>
+                    <input className="cs-input" value={seasonName} onChange={e => setSeasonName(e.target.value)} placeholder="2024/2025" />
+                  </div>
+                </div>
+                <div>
+                  <label className="cs-field__label">Info Gara</label>
+                  <textarea className="cs-textarea" rows={3} value={matchInfo} onChange={e => setMatchInfo(e.target.value)} placeholder="Descrizione dalla scheda evento…" />
+                </div>
 
                 {isTeamListTemplate ? (
                   <p className="text-xs text-secondary">
