@@ -37,6 +37,7 @@ export function useAuth(): UseAuthReturn {
   // Evita refetch multipli dello stesso profilo
   const lastProfileFor = useRef<string | null>(null)
   const mounted = useRef(true)
+  const currentUserIdRef = useRef<string | null>(null)
   const loadingWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -117,6 +118,7 @@ export function useAuth(): UseAuthReturn {
       }
       setSession(data.session ?? null)
       setUser(data.session?.user ?? null)
+      currentUserIdRef.current = data.session?.user?.id ?? null
 
       if (data.session?.user?.id) {
         // carica il profilo dell’utente corrente e attendi prima di marcare loading=false
@@ -128,18 +130,21 @@ export function useAuth(): UseAuthReturn {
       // 2) subscribe ai cambi di auth
       const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
         if (!mounted.current) return
-        const sameUser = !!(user?.id && _session?.user?.id === user.id)
+        const prevUserId = currentUserIdRef.current
+        const nextUserId = _session?.user?.id ?? null
+        const sameUser = !!(prevUserId && nextUserId && prevUserId === nextUserId)
         const isRefresh = event === 'TOKEN_REFRESHED' || event === 'TOKEN_REFRESH'
 
-        // Aggiorna sempre sessione/utente
+        // Aggiorna sempre sessione/utente e traccia user corrente
         setSession(_session ?? null)
         setUser(_session?.user ?? null)
+        currentUserIdRef.current = nextUserId
 
         // Gestione silenziosa dei token refresh per lo stesso utente
         if (isRefresh && sameUser) {
-          if (_session?.user?.id && !profile) {
+          if (nextUserId && !profile) {
             // Solo se manca il profilo fai un refetch silenzioso
-            await loadProfile(_session.user.id)
+            await loadProfile(nextUserId)
           }
           return
         }
@@ -152,9 +157,9 @@ export function useAuth(): UseAuthReturn {
         }, 5000)
 
         try {
-          if (_session?.user?.id) {
+          if (nextUserId) {
             lastProfileFor.current = null
-            await loadProfile(_session.user.id)
+            await loadProfile(nextUserId)
           } else {
             setProfile(null)
           }
