@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Bell, Menu, Search, X } from 'lucide-react'
@@ -16,20 +16,23 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, role, user, loading, signOut, refreshProfile } = useAuth()
+  const { profile, role, user, loading, signOut, refreshProfile, silentRefresh } = useAuth()
   const router = useRouter()
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
 
-  // Debug per identificare il problema
+  // Smart refresh: quando si torna su /dashboard o su pagine profilo
+  const prevPathRef = useRef(pathname)
   useEffect(() => {
-    console.log('[LayoutShell] Auth state:', {
-      loading,
-      user: user?.id,
-      profile: !!profile,
-      role
-    })
-  }, [loading, user, profile, role])
+    const prev = prevPathRef.current
+    prevPathRef.current = pathname
+    const isDashboard = pathname === '/dashboard'
+    const wasOtherPage = prev !== pathname && prev !== '/dashboard'
+    const isProfilePage = /^\/(admin\/profile|coach\/profile|athlete\/profile)(\/|$)/.test(pathname)
+    if ((isDashboard && wasOtherPage) || isProfilePage) {
+      if (user) silentRefresh().catch(() => {})
+    }
+  }, [pathname, user, silentRefresh])
 
   // Client-side guard: force reset-password for users flagged to change password
   useEffect(() => {

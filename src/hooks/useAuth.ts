@@ -110,6 +110,52 @@ export function useAuth(): UseAuthReturn {
     await loadProfile(uid)
   }, [loadProfile])
 
+  // Aggiorna forzando sessione e profilo con loading esplicito
+  const forceRefresh = useCallback(async () => {
+    setLoading(true)
+    if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+    loadingWatchdog.current = setTimeout(() => {
+      if (mounted.current) setLoading(false)
+    }, 5000)
+    try {
+      const { data } = await supabase.auth.getSession()
+      if (!mounted.current) return
+      setSession(data.session ?? null)
+      setUser(data.session?.user ?? null)
+      const uid = data.session?.user?.id
+      if (uid) {
+        lastProfileFor.current = null
+        await loadProfile(uid)
+      }
+    } finally {
+      if (loadingWatchdog.current) { clearTimeout(loadingWatchdog.current); loadingWatchdog.current = null }
+      if (mounted.current) setLoading(false)
+    }
+  }, [loadProfile])
+
+  // Aggiorna silenziosamente in background senza toccare loading
+  const silentRefresh = useCallback(async () => {
+    try {
+      const { data } = await supabase.auth.getSession()
+      if (!mounted.current) return
+      setSession(data.session ?? null)
+      setUser(data.session?.user ?? null)
+      const uid = data.session?.user?.id
+      if (uid) {
+        // ricarica direttamente il profilo senza passare da loadProfile per non alterare lastProfileFor
+        const { data: p } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', uid)
+          .single()
+        if (mounted.current && p) setProfile(p as ProfileRow)
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[useAuth] silentRefresh error', e)
+    }
+  }, [])
+
   useEffect(() => {
     let unsub: (() => void) | null = null
 
@@ -235,5 +281,5 @@ export function useAuth(): UseAuthReturn {
     currentUserIdRef.current = null
   }, [])
 
-  return { user, session, profile, role, loading, refreshProfile, signOut }
+  return { user, session, profile, role, loading, refreshProfile, signOut, forceRefresh, silentRefresh }
 }
