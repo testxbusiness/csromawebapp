@@ -372,7 +372,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Teams Section */}
         <div className="cs-card cs-card--primary">
-          <h3 className="font-semibold mb-4">Le Tue Squadre</h3>
+          <h3 id="coach-teams" className="font-semibold mb-4">Le Tue Squadre</h3>
           {teams.length === 0 ? (
             <p className="text-secondary text-sm">Nessuna squadra assegnata</p>
           ) : (
