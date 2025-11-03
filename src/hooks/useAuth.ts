@@ -74,8 +74,8 @@ export function useAuth(): UseAuthReturn {
 
   const loadProfile = useCallback(async (uid: string) => {
     if (!uid) return
-    // Evita richieste duplicate usando lastProfileFor senza dipendere da profile
-    if (lastProfileFor.current === uid) return
+    // Evita richieste duplicate, ma consenti il refetch se il profilo non è ancora valorizzato
+    if (lastProfileFor.current === uid && profile !== null) return
     lastProfileFor.current = uid
 
     // Debug timing
@@ -96,7 +96,7 @@ export function useAuth(): UseAuthReturn {
 
     console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
     setProfile(data as ProfileRow)
-  }, [supabase])
+  }, [supabase, profile])
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
