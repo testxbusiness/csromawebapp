@@ -65,25 +65,32 @@ export default function ResetPasswordForm({ nextPath }: Props) {
       }
 
       if (isMandatoryChange) {
-        await supabase.auth.updateUser({
+        // Aggiorna i metadati dell'utente (JWT) per disattivare il flag
+        const { error: metaErr } = await supabase.auth.updateUser({
           data: {
             must_change_password: false,
             temp_password_set_at: null,
             temp_password_expires_at: null,
           },
         })
+        if (metaErr) {
+          console.warn('Errore aggiornamento metadati utente:', metaErr)
+        }
+        // Sincronizza anche il profilo applicativo
         // opzionale: sincronizza profilo via API interna, se esiste
         fetch('/api/user/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ must_change_password: false }),
         }).catch(() => {})
+
+        // Forza un refresh della sessione per aggiornare il JWT usato dal middleware
+        try { await supabase.auth.refreshSession() } catch {}
       }
 
       setMessage('Password aggiornata con successo! Reindirizzamento…')
-      setTimeout(() => {
-        router.push(isMandatoryChange ? nextPath : '/login')
-      }, 1000)
+      // Reindirizza subito (la sessione è stata refreshata sopra)
+      router.replace(isMandatoryChange ? nextPath : '/login')
     } catch {
       setError('Errore durante il reset della password')
     } finally {
