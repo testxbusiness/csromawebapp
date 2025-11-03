@@ -27,8 +27,9 @@ interface UseAuthReturn {
 }
 
 export function useAuth(): UseAuthReturn {
-  // Stabilizza il client tra i render
-  const supabase = useMemo(() => createClient(), [])
+  // Client Supabase stabile con useRef
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -74,8 +75,12 @@ export function useAuth(): UseAuthReturn {
 
   const loadProfile = useCallback(async (uid: string) => {
     if (!uid) return
-    // Evita richieste duplicate, ma consenti il refetch se il profilo non è ancora valorizzato
-    if (lastProfileFor.current === uid && profile !== null) return
+    // Evita richieste duplicate; lasciamo che chi forza il reload azzeri il marker
+    if (lastProfileFor.current === uid) {
+      // eslint-disable-next-line no-console
+      console.log('[useAuth] loadProfile: skipping duplicate for', uid)
+      return
+    }
     lastProfileFor.current = uid
 
     // Debug timing
@@ -96,15 +101,14 @@ export function useAuth(): UseAuthReturn {
 
     console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
     setProfile(data as ProfileRow)
-  }, [supabase, profile])
+  }, [])
 
   const refreshProfile = useCallback(async () => {
-    if (user?.id) {
-      // consenti refetch forzando l'ID "ultimo"
-      lastProfileFor.current = null
-      await loadProfile(user.id)
-    }
-  }, [user?.id, loadProfile])
+    const uid = currentUserIdRef.current
+    if (!uid) return
+    lastProfileFor.current = null
+    await loadProfile(uid)
+  }, [loadProfile])
 
   useEffect(() => {
     let unsub: (() => void) | null = null
@@ -185,7 +189,7 @@ export function useAuth(): UseAuthReturn {
       unsub?.()
       if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
     }
-  }, [supabase, loadProfile])
+  }, [loadProfile])
 
   // Refresh session/profile quando la tab torna visibile (debounced e sicuro)
   useEffect(() => {
@@ -202,7 +206,7 @@ export function useAuth(): UseAuthReturn {
           setSession(data.session ?? null)
           setUser(data.session?.user ?? null)
           const uid = data.session?.user?.id
-          if (uid && !profile) {
+          if (uid) {
             lastProfileFor.current = null
             await loadProfile(uid)
           }
@@ -220,16 +224,16 @@ export function useAuth(): UseAuthReturn {
       window.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-  }, [supabase, loadProfile, profile])
+  }, [loadProfile])
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut()
-    // pulizia locale
     setUser(null)
     setSession(null)
     setProfile(null)
     lastProfileFor.current = null
-  }
+    currentUserIdRef.current = null
+  }, [])
 
   return { user, session, profile, role, loading, refreshProfile, signOut }
 }
