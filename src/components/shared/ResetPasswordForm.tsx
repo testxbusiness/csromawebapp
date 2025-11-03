@@ -89,6 +89,8 @@ export default function ResetPasswordForm({ nextPath }: Props) {
       }
 
       setMessage('Password aggiornata con successo! Reindirizzamento…')
+      // Imposta cookie bypass per consentire 1 navigazione al di fuori di /reset-password
+      try { document.cookie = 'csr_pw_reset=1; path=/; max-age=60' } catch {}
       // Reindirizza subito (la sessione è stata refreshata sopra)
       router.replace(isMandatoryChange ? nextPath : '/login')
     } catch {

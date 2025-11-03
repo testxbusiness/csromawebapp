@@ -55,13 +55,19 @@ export async function middleware(req: NextRequest) {
 
     // Avoid interfering with API routes
     const isApiRoute = pathname.startsWith('/api')
+    // Client-side one-shot bypass cookie set after successful reset
+    const resetBypass = req.cookies.get('csr_pw_reset')?.value === '1'
 
     // If the user must change password, redirect to reset-password (except when already there)
-    if (mustChange && !isApiRoute && pathname !== '/reset-password') {
+    if (mustChange && !isApiRoute && pathname !== '/reset-password' && !resetBypass) {
       const to = new URL('/reset-password', req.url)
       // Preserve original destination so we can return after reset
       to.searchParams.set('next', pathname)
       return NextResponse.redirect(to)
+    }
+    // If bypass cookie present, consume it (allow one navigation)
+    if (resetBypass) {
+      res.cookies.set('csr_pw_reset', '', { path: '/', maxAge: 0 })
     }
 
     // If the user does not need to change password but is on reset-password, send to dashboard
