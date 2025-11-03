@@ -107,6 +107,19 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     loadAthleteData()
   }, [])
 
+  // Ricarica quando la tab torna visibile
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadAthleteData()
+    }
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [])
+
   const loadAthleteData = async () => {
     setLoading(true)
     try {

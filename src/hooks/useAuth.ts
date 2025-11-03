@@ -37,6 +37,7 @@ export function useAuth(): UseAuthReturn {
   // Evita refetch multipli dello stesso profilo
   const lastProfileFor = useRef<string | null>(null)
   const mounted = useRef(true)
+  const loadingWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     mounted.current = true
@@ -129,18 +130,27 @@ export function useAuth(): UseAuthReturn {
         console.log('[useAuth] onAuthStateChange:', event, _session?.user?.id)
         if (!mounted.current) return
         setLoading(true)
+        if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+        loadingWatchdog.current = setTimeout(() => {
+          console.warn('[useAuth] watchdog: forcing loading=false')
+          if (mounted.current) setLoading(false)
+        }, 5000)
         setSession(_session ?? null)
         setUser(_session?.user ?? null)
 
-        if (_session?.user?.id) {
-          // resetta e ricarica il profilo quando cambia utente
-          lastProfileFor.current = null
-          await loadProfile(_session.user.id)
-        } else {
-          setProfile(null)
+        try {
+          if (_session?.user?.id) {
+            // resetta e ricarica il profilo quando cambia utente
+            lastProfileFor.current = null
+            await loadProfile(_session.user.id)
+          } else {
+            setProfile(null)
+          }
+        } finally {
+          console.log('[useAuth] onAuthStateChange completed, setting loading=false')
+          if (loadingWatchdog.current) { clearTimeout(loadingWatchdog.current); loadingWatchdog.current = null }
+          if (mounted.current) setLoading(false)
         }
-        console.log('[useAuth] onAuthStateChange completed, setting loading=false')
-        if (mounted.current) setLoading(false)
       })
       unsub = () => sub.subscription.unsubscribe()
 
@@ -156,8 +166,35 @@ export function useAuth(): UseAuthReturn {
 
     return () => {
       unsub?.()
+      if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
     }
   }, [supabase, loadProfile])
+
+  // Refresh session/profile when the tab is focused or becomes visible
+  useEffect(() => {
+    const onVisible = async () => {
+      if (!mounted.current) return
+      if (document.visibilityState !== 'visible') return
+      const { data } = await supabase.auth.getSession()
+      if (!mounted.current) return
+      setSession(data.session ?? null)
+      setUser(data.session?.user ?? null)
+      if (data.session?.user?.id && !profile) {
+        setLoading(true)
+        try {
+          await loadProfile(data.session.user.id)
+        } finally {
+          if (mounted.current) setLoading(false)
+        }
+      }
+    }
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [supabase, profile, loadProfile])
 
   const signOut = async () => {
     await supabase.auth.signOut()

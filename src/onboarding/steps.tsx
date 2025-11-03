@@ -16,6 +16,15 @@ export const onboardingTours: Tour[] = [
         showControls: true,
         showSkip: true,
       },
+            {
+        icon: <>👥</>,
+        title: 'Le tue squadre',
+        content: <>Visualizza le squadre a cui sei associato.</>,
+        selector: '#coach-teams',
+        side: 'top',
+        showControls: true,
+        showSkip: true,        
+      },
       {
         icon: <>📅</>,
         title: 'Prossimi eventi',

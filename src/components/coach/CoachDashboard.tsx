@@ -75,6 +75,19 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     loadCoachData()
   }, [])
 
+  // Ricarica quando si torna alla tab / finestra
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadCoachData()
+    }
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [])
+
   // Enrich selected message on open
   useEffect(() => {
     const loadDetail = async () => {
