@@ -127,27 +127,38 @@ export function useAuth(): UseAuthReturn {
 
       // 2) subscribe ai cambi di auth
       const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
-        console.log('[useAuth] onAuthStateChange:', event, _session?.user?.id)
         if (!mounted.current) return
-        setLoading(true)
-        if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
-        loadingWatchdog.current = setTimeout(() => {
-          console.warn('[useAuth] watchdog: forcing loading=false')
-          if (mounted.current) setLoading(false)
-        }, 5000)
+        const sameUser = !!(user?.id && _session?.user?.id === user.id)
+        const isRefresh = event === 'TOKEN_REFRESHED' || event === 'TOKEN_REFRESH'
+
+        // Aggiorna sempre sessione/utente
         setSession(_session ?? null)
         setUser(_session?.user ?? null)
 
+        // Gestione silenziosa dei token refresh per lo stesso utente
+        if (isRefresh && sameUser) {
+          if (_session?.user?.id && !profile) {
+            // Solo se manca il profilo fai un refetch silenzioso
+            await loadProfile(_session.user.id)
+          }
+          return
+        }
+
+        // Per cambi utente o SIGNED_IN/USER_UPDATED, gestisci loading esplicito
+        setLoading(true)
+        if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+        loadingWatchdog.current = setTimeout(() => {
+          if (mounted.current) setLoading(false)
+        }, 5000)
+
         try {
           if (_session?.user?.id) {
-            // resetta e ricarica il profilo quando cambia utente
             lastProfileFor.current = null
             await loadProfile(_session.user.id)
           } else {
             setProfile(null)
           }
         } finally {
-          console.log('[useAuth] onAuthStateChange completed, setting loading=false')
           if (loadingWatchdog.current) { clearTimeout(loadingWatchdog.current); loadingWatchdog.current = null }
           if (mounted.current) setLoading(false)
         }
@@ -170,31 +181,31 @@ export function useAuth(): UseAuthReturn {
     }
   }, [supabase, loadProfile])
 
-  // Refresh session/profile when the tab is focused or becomes visible
+  // Refresh session/profile when the tab is focused or becomes visible (debounced)
   useEffect(() => {
-    const onVisible = async () => {
-      if (!mounted.current) return
-      if (document.visibilityState !== 'visible') return
-      const { data } = await supabase.auth.getSession()
-      if (!mounted.current) return
-      setSession(data.session ?? null)
-      setUser(data.session?.user ?? null)
-      if (data.session?.user?.id && !profile) {
-        setLoading(true)
-        try {
+    let t: ReturnType<typeof setTimeout> | null = null
+    const onVisible = () => {
+      if (t) clearTimeout(t)
+      t = setTimeout(async () => {
+        if (!mounted.current) return
+        if (document.visibilityState !== 'visible') return
+        const { data } = await supabase.auth.getSession()
+        if (!mounted.current) return
+        setSession(data.session ?? null)
+        setUser(data.session?.user ?? null)
+        if (data.session?.user?.id && !profile) {
           await loadProfile(data.session.user.id)
-        } finally {
-          if (mounted.current) setLoading(false)
         }
-      }
+      }, 200)
     }
     window.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', onVisible)
     return () => {
+      if (t) clearTimeout(t)
       window.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-  }, [supabase, profile, loadProfile])
+  }, [supabase, profile, loadProfile, user?.id])
 
   const signOut = async () => {
     await supabase.auth.signOut()
