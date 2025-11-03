@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 
@@ -58,6 +59,7 @@ interface CoachDashboardProps {
 }
 
 export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
+  const { startNextStep } = useNextStep()
   const [teams, setTeams] = useState<Team[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [recentMessages, setRecentMessages] = useState<Message[]>([])
@@ -71,6 +73,19 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
   useEffect(() => {
     loadCoachData()
+  }, [])
+
+  // Ricarica quando si torna alla tab / finestra
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadCoachData()
+    }
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
   }, [])
 
   // Enrich selected message on open
@@ -309,9 +324,18 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="cs-card cs-card--primary">
-        <h2 className="text-xl font-semibold mb-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="coach-welcome" className="text-xl font-semibold">
           Bentornato, {profile.first_name} {profile.last_name}
-        </h2>
+          </h2>
+          <button
+            id="coach-start-tour"
+            className="cs-btn cs-btn--ghost"
+            onClick={() => startNextStep('coach')}
+          >
+            Guida
+          </button>
+        </div>
         
         {activeSeason && (
           <div className="cs-card cs-card--primary mb-4">
@@ -348,7 +372,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Teams Section */}
         <div className="cs-card cs-card--primary">
-          <h3 className="font-semibold mb-4">Le Tue Squadre</h3>
+          <h3 id="coach-teams" className="font-semibold mb-4">Le Tue Squadre</h3>
           {teams.length === 0 ? (
             <p className="text-secondary text-sm">Nessuna squadra assegnata</p>
           ) : (
@@ -375,7 +399,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events */}
         <div className="cs-card cs-card--primary">
-          <h3 className="font-semibold mb-4">Prossimi Eventi</h3>
+          <h3 id="coach-events" className="font-semibold mb-4">Prossimi Eventi</h3>
           {upcomingEvents.length === 0 ? (
             <p className="text-secondary text-sm">Nessun evento programmato</p>
           ) : (
@@ -415,7 +439,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         <div className="space-y-6">
           {/* Recent Messages */}
           <div className="cs-card cs-card--primary">
-            <h3 className="font-semibold mb-4">Messaggi Recenti</h3>
+            <h3 id="coach-messages" className="font-semibold mb-4">Messaggi Recenti</h3>
             {recentMessages.length === 0 ? (
               <p className="text-secondary text-sm">Nessun messaggio recente</p>
             ) : (
@@ -434,7 +458,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
           {/* Payments Summary */}
           <div className="cs-card cs-card--primary">
-            <h3 className="font-semibold mb-4">Stato Pagamenti</h3>
+            <h3 id="coach-payments" className="font-semibold mb-4">Stato Pagamenti</h3>
             {payments.length === 0 ? (
               <p className="text-secondary text-sm">Nessun pagamento in sospeso</p>
             ) : (

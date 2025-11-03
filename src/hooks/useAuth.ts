@@ -37,6 +37,8 @@ export function useAuth(): UseAuthReturn {
   // Evita refetch multipli dello stesso profilo
   const lastProfileFor = useRef<string | null>(null)
   const mounted = useRef(true)
+  const currentUserIdRef = useRef<string | null>(null)
+  const loadingWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     mounted.current = true
@@ -71,7 +73,7 @@ export function useAuth(): UseAuthReturn {
 
   const loadProfile = useCallback(async (uid: string) => {
     if (!uid) return
-    // Cache solo per richieste identiche consecutive
+    // Evita richieste duplicate usando lastProfileFor senza dipendere da profile
     if (lastProfileFor.current === uid) return
     lastProfileFor.current = uid
 
@@ -116,6 +118,7 @@ export function useAuth(): UseAuthReturn {
       }
       setSession(data.session ?? null)
       setUser(data.session?.user ?? null)
+      currentUserIdRef.current = data.session?.user?.id ?? null
 
       if (data.session?.user?.id) {
         // carica il profilo dell’utente corrente e attendi prima di marcare loading=false
@@ -126,21 +129,44 @@ export function useAuth(): UseAuthReturn {
 
       // 2) subscribe ai cambi di auth
       const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
-        console.log('[useAuth] onAuthStateChange:', event, _session?.user?.id)
         if (!mounted.current) return
-        setLoading(true)
+        const prevUserId = currentUserIdRef.current
+        const nextUserId = _session?.user?.id ?? null
+        const sameUser = !!(prevUserId && nextUserId && prevUserId === nextUserId)
+        const isRefresh = event === 'TOKEN_REFRESHED' || event === 'TOKEN_REFRESH'
+
+        // Aggiorna sempre sessione/utente e traccia user corrente
         setSession(_session ?? null)
         setUser(_session?.user ?? null)
+        currentUserIdRef.current = nextUserId
 
-        if (_session?.user?.id) {
-          // resetta e ricarica il profilo quando cambia utente
-          lastProfileFor.current = null
-          await loadProfile(_session.user.id)
-        } else {
-          setProfile(null)
+        // Gestione silenziosa dei token refresh per lo stesso utente
+        if (isRefresh && sameUser) {
+          if (nextUserId && !profile) {
+            // Solo se manca il profilo fai un refetch silenzioso
+            await loadProfile(nextUserId)
+          }
+          return
         }
-        console.log('[useAuth] onAuthStateChange completed, setting loading=false')
-        if (mounted.current) setLoading(false)
+
+        // Per cambi utente o SIGNED_IN/USER_UPDATED, gestisci loading esplicito
+        setLoading(true)
+        if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+        loadingWatchdog.current = setTimeout(() => {
+          if (mounted.current) setLoading(false)
+        }, 5000)
+
+        try {
+          if (nextUserId) {
+            lastProfileFor.current = null
+            await loadProfile(nextUserId)
+          } else {
+            setProfile(null)
+          }
+        } finally {
+          if (loadingWatchdog.current) { clearTimeout(loadingWatchdog.current); loadingWatchdog.current = null }
+          if (mounted.current) setLoading(false)
+        }
       })
       unsub = () => sub.subscription.unsubscribe()
 
@@ -156,6 +182,39 @@ export function useAuth(): UseAuthReturn {
 
     return () => {
       unsub?.()
+      if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+    }
+  }, [supabase, loadProfile])
+
+  // Refresh session/profile when the tab is focused or becomes visible (debounced)
+  const profileRef = useRef<ProfileRow | null>(null)
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
+
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null
+    const onVisible = () => {
+      if (t) clearTimeout(t)
+      t = setTimeout(async () => {
+        if (!mounted.current) return
+        if (document.visibilityState !== 'visible') return
+        const { data } = await supabase.auth.getSession()
+        if (!mounted.current) return
+        setSession(data.session ?? null)
+        setUser(data.session?.user ?? null)
+        // Only load profile if user exists and we don't already have a profile
+        if (data.session?.user?.id && !profileRef.current) {
+          await loadProfile(data.session.user.id)
+        }
+      }, 200)
+    }
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      if (t) clearTimeout(t)
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
     }
   }, [supabase, loadProfile])
 

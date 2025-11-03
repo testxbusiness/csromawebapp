@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 
@@ -75,6 +76,7 @@ interface AthleteDashboardProps {
 }
 
 export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
+  const { startNextStep } = useNextStep()
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
@@ -103,6 +105,19 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
   useEffect(() => {
     loadAthleteData()
+  }, [])
+
+  // Ricarica quando la tab torna visibile
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadAthleteData()
+    }
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
   }, [])
 
   const loadAthleteData = async () => {
@@ -363,9 +378,18 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     <div className="space-y-6">
       {/* Header */}
       <div className="cs-card cs-card--primary">
-        <h2 className="text-xl font-semibold mb-4">
-          Bentornato, {profile.first_name} {profile.last_name}
-        </h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 id="athlete-welcome" className="text-xl font-semibold">
+            Bentornato, {profile.first_name} {profile.last_name}
+          </h2>
+          <button
+            id="athlete-start-tour"
+            className="cs-btn cs-btn--ghost"
+            onClick={() => startNextStep('athlete')}
+          >
+            Guida
+          </button>
+        </div>
         
         {activeSeason && (
           <div className="cs-card cs-card--primary mb-4">
@@ -401,7 +425,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Team Memberships */}
         <div className="cs-card cs-card--primary">
-          <h3 className="font-semibold mb-4">Le Tue Squadre</h3>
+          <h3 id="athlete-teams" className="font-semibold mb-4">Le Tue Squadre</h3>
           {teamMemberships.length === 0 ? (
             <p className="text-secondary text-sm">Non sei iscritto a nessuna squadra</p>
           ) : (
@@ -458,7 +482,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events */}
         <div className="cs-card cs-card--primary">
-          <h3 className="font-semibold mb-4">Prossimi Eventi</h3>
+          <h3 id="athlete-events" className="font-semibold mb-4">Prossimi Eventi</h3>
           {upcomingEvents.length === 0 ? (
             <p className="text-secondary text-sm">Nessun evento programmato</p>
           ) : (
@@ -485,7 +509,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         <div className="space-y-6">
           {/* Unread Messages */}
           <div className="cs-card cs-card--primary">
-            <h3 className="font-semibold mb-4">Ultimi Messaggi</h3>
+            <h3 id="athlete-messages" className="font-semibold mb-4">Ultimi Messaggi</h3>
             {unreadMessages.length === 0 ? (
               <p className="text-secondary text-sm">Nessun messaggio non letto</p>
             ) : (
@@ -504,7 +528,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
           {/* Fee Installments */}
           <div className="cs-card cs-card--primary">
-            <h3 className="font-semibold mb-4">Quote Associative</h3>
+            <h3 id="athlete-fees" className="font-semibold mb-4">Quote Associative</h3>
             {feeInstallments.length === 0 ? (
               <p className="text-secondary text-sm">Nessuna quota associativa</p>
             ) : (

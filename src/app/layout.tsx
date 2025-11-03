@@ -3,6 +3,7 @@ import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import LayoutShell from "@/components/navigation/LayoutShell";
+import OnboardingProvider from "@/components/OnboardingProvider";
 
 const inter = Inter({
   variable: "--cs-font-sans",
@@ -40,11 +41,12 @@ export default function RootLayout({
         className={`${inter.variable} ${poppins.variable} antialiased min-h-screen`}
       >
         <ThemeProvider>
-          <LayoutShell>{children}</LayoutShell>
+          <OnboardingProvider>
+            <LayoutShell>{children}</LayoutShell>
+          </OnboardingProvider>
         </ThemeProvider>
       </body>
     </html>
   );
 }
-
 
