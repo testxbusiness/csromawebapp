@@ -23,6 +23,7 @@ export const onboardingTours: Tour[] = [
         selector: '#coach-events',
         side: 'top',
         showControls: true,
+        showSkip: true,
       },
       {
         icon: <>✉️</>,
@@ -30,6 +31,8 @@ export const onboardingTours: Tour[] = [
         content: <>Qui vedi gli ultimi messaggi per le tue squadre.</>,
         selector: '#coach-messages',
         side: 'top',
+        showControls: true,
+        showSkip: true,
       },
       {
         icon: <>💳</>,
@@ -37,6 +40,8 @@ export const onboardingTours: Tour[] = [
         content: <>Riepilogo dei rimborsi/compensi a te associati.</>,
         selector: '#coach-payments',
         side: 'top',
+        showControls: true,
+        showSkip: true,
       },
     ],
   },
@@ -58,6 +63,8 @@ export const onboardingTours: Tour[] = [
         content: <>Visualizza le squadre a cui sei iscritto e lo stato certificato.</>,
         selector: '#athlete-teams',
         side: 'top',
+        showControls: true,
+        showSkip: true,        
       },
       {
         icon: <>📅</>,
@@ -65,6 +72,8 @@ export const onboardingTours: Tour[] = [
         content: <>Allenamenti e partite in programma nelle prossime settimane.</>,
         selector: '#athlete-events',
         side: 'top',
+        showControls: true,
+        showSkip: true,
       },
       {
         icon: <>✉️</>,
@@ -72,6 +81,8 @@ export const onboardingTours: Tour[] = [
         content: <>Qui trovi i messaggi ricevuti da società e coach.</>,
         selector: '#athlete-messages',
         side: 'top',
+        showControls: true,
+        showSkip: true,
       },
       {
         icon: <>💶</>,
@@ -79,6 +90,8 @@ export const onboardingTours: Tour[] = [
         content: <>Controlla le rate e lo stato dei pagamenti.</>,
         selector: '#athlete-fees',
         side: 'top',
+        showControls: true,
+        showSkip: true,
       },
     ],
   },
