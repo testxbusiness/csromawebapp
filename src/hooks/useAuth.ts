@@ -203,8 +203,10 @@ export function useAuth(): UseAuthReturn {
         if (!mounted.current) return
         setSession(data.session ?? null)
         setUser(data.session?.user ?? null)
-        // Only load profile if user exists and we don't already have a profile
-        if (data.session?.user?.id && !profileRef.current) {
+        // Always reload profile when page becomes visible to ensure fresh data
+        if (data.session?.user?.id) {
+          // Force profile reload by clearing the cache
+          lastProfileFor.current = null
           await loadProfile(data.session.user.id)
         }
       }, 200)
