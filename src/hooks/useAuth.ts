@@ -73,8 +73,8 @@ export function useAuth(): UseAuthReturn {
 
   const loadProfile = useCallback(async (uid: string) => {
     if (!uid) return
-    // Evita richieste duplicate solo se abbiamo già un profilo valido in memoria
-    if (lastProfileFor.current === uid && profile !== null) return
+    // Evita richieste duplicate usando lastProfileFor senza dipendere da profile
+    if (lastProfileFor.current === uid) return
     lastProfileFor.current = uid
 
     // Debug timing
@@ -95,7 +95,7 @@ export function useAuth(): UseAuthReturn {
 
     console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
     setProfile(data as ProfileRow)
-  }, [supabase, profile])
+  }, [supabase])
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
@@ -187,6 +187,11 @@ export function useAuth(): UseAuthReturn {
   }, [supabase, loadProfile])
 
   // Refresh session/profile when the tab is focused or becomes visible (debounced)
+  const profileRef = useRef<ProfileRow | null>(null)
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
+
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null
     const onVisible = () => {
@@ -198,7 +203,8 @@ export function useAuth(): UseAuthReturn {
         if (!mounted.current) return
         setSession(data.session ?? null)
         setUser(data.session?.user ?? null)
-        if (data.session?.user?.id && !profile) {
+        // Only load profile if user exists and we don't already have a profile
+        if (data.session?.user?.id && !profileRef.current) {
           await loadProfile(data.session.user.id)
         }
       }, 200)
@@ -210,7 +216,7 @@ export function useAuth(): UseAuthReturn {
       window.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-  }, [supabase, profile, loadProfile, user?.id])
+  }, [supabase, loadProfile])
 
   const signOut = async () => {
     await supabase.auth.signOut()

@@ -54,6 +54,9 @@ cookies.txt
 .vscode/
 .idea/
 
+# Local AI assistant config (do not commit)
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db

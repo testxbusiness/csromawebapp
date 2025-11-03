@@ -51,11 +51,12 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   }
 
   // Se abbiamo user ma non profile e non stiamo caricando, prova a rinfrescare
-  useEffect(() => {
-    if (user && !profile && !loading) {
-      refreshProfile().catch(() => {})
-    }
-  }, [user, profile, loading, refreshProfile])
+  // (Disabilitato per evitare conflitti con il hook useAuth principale)
+  // useEffect(() => {
+  //   if (user && !profile && !loading) {
+  //     refreshProfile().catch(() => {})
+  //   }
+  // }, [user, profile, loading, refreshProfile])
 
   // (Opzionale) se non loggato e su rotta protetta, rimbalza al login
   // useEffect(() => {
