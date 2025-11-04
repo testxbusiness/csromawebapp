@@ -1,18 +1,11 @@
-/* Enhanced Service Worker for CSRoma WebApp */
+// public/push-sw.js — SAFE: solo Push, nessuna intercept di fetch
 
-// Precaching delle risorse critiche
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open('static-cache-v1').then(cache => {
-      return cache.addAll([
-        '/',
-        '/dashboard',
-        '/images/logo_CSRoma.svg',
-        '/images/logo_CSRoma.png',
-        '/favicon.ico'
-      ])
-    })
-  )
+  // niente precache di HTML/pagine: riduce rischio di stale
+  event.waitUntil(self.skipWaiting())
+})
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
 })
 
 self.addEventListener('push', (event) => {
@@ -26,8 +19,7 @@ self.addEventListener('push', (event) => {
       data: { url: data.url || '/' },
     }
     event.waitUntil(self.registration.showNotification(title, options))
-  } catch (e) {
-    // fallback minimal
+  } catch {
     event.waitUntil(self.registration.showNotification('CSRoma', { body: 'Hai una nuova notifica' }))
   }
 })
@@ -35,90 +27,14 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const targetUrl = event.notification?.data?.url || '/'
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // focus if already open
-      for (const client of clientList) {
-        if ('focus' in client) {
-          client.focus()
-          if (targetUrl) client.postMessage({ type: 'navigate', url: targetUrl })
-          return
-        }
-      }
-      if (self.clients.openWindow) return self.clients.openWindow(targetUrl)
-    })
-  )
+  event.waitUntil((async () => {
+    const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const c of clientsList) {
+      try { await c.focus(); c.postMessage({ type: 'navigate', url: targetUrl }) } catch {}
+      return
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(targetUrl)
+  })())
 })
 
-// Fetch handler per cache intelligente
-self.addEventListener('fetch', (event) => {
-  const { request } = event
-  const url = new URL(request.url)
-
-  // Escludi le richieste di autenticazione Supabase - devono sempre andare al network
-  if (url.pathname.includes('/auth/v1/')) {
-    // Non intercettare le richieste di auth - lasciale passare direttamente
-    return
-  }
-
-  // Cache per API calls (cache-first con fallback a network)
-  if (url.pathname.startsWith('/api/') && request.method === 'GET') {
-    event.respondWith(
-      caches.open('api-cache-v1').then(cache => {
-        return cache.match(request).then(cachedResponse => {
-          // Se abbiamo una risposta cache valida (meno di 5 minuti), usala
-          if (cachedResponse) {
-            const cachedTime = new Date(cachedResponse.headers.get('date')).getTime()
-            const now = Date.now()
-            if (now - cachedTime < 300000) { // 5 minuti
-              return cachedResponse
-            }
-          }
-
-          // Altrimenti fetch e cache
-          return fetch(request).then(networkResponse => {
-            if (networkResponse.ok) {
-              const responseToCache = networkResponse.clone()
-              cache.put(request, responseToCache)
-            }
-            return networkResponse
-          }).catch(() => {
-            // Fallback alla cache anche se vecchia
-            return cachedResponse || new Response(JSON.stringify({ error: 'Offline' }), {
-              status: 503,
-              headers: { 'Content-Type': 'application/json' }
-            })
-          })
-        })
-      })
-    )
-    return
-  }
-
-  // Cache per risorse statiche (cache-first)
-  if (request.destination === 'style' ||
-      request.destination === 'script' ||
-      request.destination === 'image') {
-    event.respondWith(
-      caches.open('static-cache-v1').then(cache => {
-        return cache.match(request).then(cachedResponse => {
-          return cachedResponse || fetch(request).then(networkResponse => {
-            cache.put(request, networkResponse.clone())
-            return networkResponse
-          })
-        })
-      })
-    )
-    return
-  }
-
-  // Per altre richieste, network-first
-  event.respondWith(
-    fetch(request).catch(() => {
-      return caches.open('fallback-cache-v1').then(cache => {
-        return cache.match(request) || new Response('Offline', { status: 503 })
-      })
-    })
-  )
-})
-
+// ⛔️ NIENTE self.addEventListener('fetch', ...) qui.
