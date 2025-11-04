@@ -56,7 +56,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
 
   // Cache per API calls (cache-first con fallback a network)
-  if (url.pathname.startsWith('/api/')) {
+  if (url.pathname.startsWith('/api/') && request.method === 'GET') {
     event.respondWith(
       caches.open('api-cache-v1').then(cache => {
         return cache.match(request).then(cachedResponse => {
