@@ -23,14 +23,18 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   // Smart refresh: quando si torna su /dashboard o su pagine profilo
   const prevPathRef = useRef(pathname)
+  const lastRefreshedPathRef = useRef<string | null>(null)
   useEffect(() => {
     const prev = prevPathRef.current
     prevPathRef.current = pathname
+    const changed = prev !== pathname
     const isDashboard = pathname === '/dashboard'
-    const wasOtherPage = prev !== pathname && prev !== '/dashboard'
     const isProfilePage = /^\/(admin\/profile|coach\/profile|athlete\/profile)(\/|$)/.test(pathname)
-    if ((isDashboard && wasOtherPage) || isProfilePage) {
-      if (user) silentRefresh().catch(() => {})
+    const cameFromOther = changed && prev !== '/dashboard'
+    const shouldRefresh = (isDashboard && cameFromOther) || (isProfilePage && cameFromOther)
+    if (shouldRefresh && user && lastRefreshedPathRef.current !== pathname) {
+      lastRefreshedPathRef.current = pathname
+      silentRefresh().catch(() => {})
     }
   }, [pathname, user, silentRefresh])
 
