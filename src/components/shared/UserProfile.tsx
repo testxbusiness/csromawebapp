@@ -161,8 +161,12 @@ export default function UserProfile({ userRole }: UserProfileProps) {
 
   const handlePasswordChange = async (e?: React.FormEvent) => {
     e?.preventDefault()
+
+    // Previeni operazioni multiple simultanee
+    if (passwordChanging) return
+
     setPasswordMsg(null)
-    
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       alert('Le password non coincidono')
       return
@@ -173,9 +177,10 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       return
     }
 
+    const opId = ++passwordOpRef.current
+    setPasswordChanging(true)
+
     try {
-      const opId = ++passwordOpRef.current
-      setPasswordChanging(true)
       const { error } = await supabase.auth.updateUser({ password: passwordData.newPassword })
       if (error) throw error
 
@@ -185,6 +190,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       // Pulisci i campi e mostra messaggio inline
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
       setPasswordMsg({ kind: 'success', text: 'Password cambiata con successo.' })
+
       // Auto-hide il messaggio dopo qualche secondo
       setTimeout(() => {
         if (passwordOpRef.current === opId) setPasswordMsg(null)
@@ -193,18 +199,19 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       console.error('Error changing password:', error)
       setPasswordMsg({ kind: 'error', text: 'Errore nel cambio password. Riprova.' })
     } finally {
-      setPasswordChanging(false)
-      // Safeguard: nel raro caso di state non aggiornato, forza reset al prossimo tick
-      setTimeout(() => setPasswordChanging(false), 0)
-      // E ulteriore watchdog
-      setTimeout(() => setPasswordChanging(false), 5000)
+      // Solo se siamo ancora nella stessa operazione
+      if (passwordOpRef.current === opId) {
+        setPasswordChanging(false)
+      }
     }
   }
 
-          const jerseyNumber =
-            (teamMemberships.find(m => !!m.jersey_number)?.jersey_number ??
-            (profile as any)?.athlete_profile?.jersey_number ??
-          null);
+  // Calcola jersey number per atleti
+  const jerseyNumber = userRole === 'athlete'
+    ? (teamMemberships.find(m => !!m.jersey_number)?.jersey_number ??
+       (profile as any)?.athlete_profile?.jersey_number ??
+       null)
+    : null;
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
