@@ -156,8 +156,8 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     setSaving(false)
   }
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handlePasswordChange = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       alert('Le password non coincidono')
@@ -481,7 +481,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
           {/* Password Change */}
           <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>
-            <form onSubmit={handlePasswordChange} className="space-y-4">
+            <form className="space-y-4">
               <div>
                 <label className="cs-field__label">
                   Nuova Password *
@@ -510,7 +510,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
                 />
               </div>
 
-              <button type="submit" className="cs-btn cs-btn--danger">
+              <button type="button" className="cs-btn cs-btn--danger" onClick={() => handlePasswordChange()}>
                 Cambia Password
               </button>
             </form>
