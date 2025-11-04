@@ -34,23 +34,6 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     }
   }, [pathname])
 
-  // Smart refresh: se torni su dashboard o pagina profilo dall’esterno, riallinea session/profile in silenzio
-  const prevPathRef = useRef(pathname)
-  const lastRefreshedPathRef = useRef<string | null>(null)
-  useEffect(() => {
-    const prev = prevPathRef.current
-    prevPathRef.current = pathname
-    const changed = prev !== pathname
-    const isDashboard = pathname === '/dashboard'
-    const isProfilePage = /^\/(admin\/profile|coach\/profile|athlete\/profile)(\/|$)/.test(pathname)
-    const cameFromOther = changed && prev !== '/dashboard'
-    const shouldRefresh = (isDashboard && cameFromOther) || (isProfilePage && cameFromOther)
-    if (shouldRefresh && user && lastRefreshedPathRef.current !== pathname) {
-      lastRefreshedPathRef.current = pathname
-      silentRefresh().catch(() => {})
-    }
-  }, [pathname, user, silentRefresh])
-
   // Forza reset-password solo se il profilo lo richiede (fonte di verità = DB)
   useEffect(() => {
     const mustChange = profile?.must_change_password === true
