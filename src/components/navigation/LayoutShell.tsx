@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Bell, Menu, Search, X } from 'lucide-react'
@@ -16,20 +16,27 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, role, user, loading, signOut, refreshProfile } = useAuth()
+  const { profile, role, user, loading, signOut, refreshProfile, silentRefresh } = useAuth()
   const router = useRouter()
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
 
-  // Debug per identificare il problema
+  // Smart refresh: quando si torna su /dashboard o su pagine profilo
+  const prevPathRef = useRef(pathname)
+  const lastRefreshedPathRef = useRef<string | null>(null)
   useEffect(() => {
-    console.log('[LayoutShell] Auth state:', {
-      loading,
-      user: user?.id,
-      profile: !!profile,
-      role
-    })
-  }, [loading, user, profile, role])
+    const prev = prevPathRef.current
+    prevPathRef.current = pathname
+    const changed = prev !== pathname
+    const isDashboard = pathname === '/dashboard'
+    const isProfilePage = /^\/(admin\/profile|coach\/profile|athlete\/profile)(\/|$)/.test(pathname)
+    const cameFromOther = changed && prev !== '/dashboard'
+    const shouldRefresh = (isDashboard && cameFromOther) || (isProfilePage && cameFromOther)
+    if (shouldRefresh && user && lastRefreshedPathRef.current !== pathname) {
+      lastRefreshedPathRef.current = pathname
+      silentRefresh().catch(() => {})
+    }
+  }, [pathname, user, silentRefresh])
 
   // Client-side guard: force reset-password for users flagged to change password
   useEffect(() => {
@@ -152,6 +159,18 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                   <div className="h-2 w-16 bg-[color:var(--cs-border)] rounded animate-pulse" />
                 </div>
               </div>
+            ) : isProfileLoading ? (
+              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
+                <div className="cs-avatar cs-bg-primary">
+                  <span className="text-sm font-semibold">{user?.email?.charAt(0)?.toUpperCase() || 'U'}</span>
+                </div>
+                <div className="hidden sm:block">
+                  <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+                    {user?.email || 'Utente CSRoma'}
+                  </p>
+                  <p className="text-xs text-[color:var(--cs-text-secondary)]">Caricamento profilo...</p>
+                </div>
+              </div>
             ) : (
               <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
                 <div className="cs-avatar cs-bg-primary">
@@ -211,6 +230,13 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                   <>
                     <div className="h-3 w-28 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
                     <div className="h-2 w-20 bg-[color:var(--cs-border)] rounded animate-pulse" />
+                  </>
+                ) : isProfileLoading ? (
+                  <>
+                    <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+                      {user?.email || 'Utente CSRoma'}
+                    </p>
+                    <p className="text-xs text-[color:var(--cs-text-secondary)]">Caricamento profilo...</p>
                   </>
                 ) : (
                   <>

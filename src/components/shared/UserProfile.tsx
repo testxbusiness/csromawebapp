@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { JerseyCard } from '@/components/athlete/JerseyCard'
@@ -36,6 +36,9 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     newPassword: '',
     confirmPassword: ''
   })
+  const [passwordChanging, setPasswordChanging] = useState(false)
+  const [passwordMsg, setPasswordMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const passwordOpRef = useRef(0)
   const supabase = createClient()
   const { subscribe, unsubscribe } = usePush()
   const [pushSupported, setPushSupported] = useState<boolean>(false)
@@ -156,9 +159,11 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     setSaving(false)
   }
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
+  const handlePasswordChange = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+
+    setPasswordMsg(null)
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       alert('Le password non coincidono')
       return
@@ -169,29 +174,41 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       return
     }
 
-    try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      })
+    const opId = ++passwordOpRef.current
+    setPasswordChanging(true)
 
+    try {
+      const { error } = await supabase.auth.updateUser({ password: passwordData.newPassword })
       if (error) throw error
 
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      })
-      alert('Password cambiata con successo!')
+      // Aggiorna la sessione in background per coerenza
+      try { await supabase.auth.refreshSession() } catch {}
+
+      // Pulisci i campi e mostra messaggio inline
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      setPasswordMsg({ kind: 'success', text: 'Password cambiata con successo.' })
+
+      // Auto-hide il messaggio dopo qualche secondo
+      setTimeout(() => {
+        if (passwordOpRef.current === opId) setPasswordMsg(null)
+      }, 4000)
     } catch (error) {
       console.error('Error changing password:', error)
-      alert('Errore nel cambio password')
+      setPasswordMsg({ kind: 'error', text: 'Errore nel cambio password. Riprova.' })
+    } finally {
+      // Solo se siamo ancora nella stessa operazione
+      if (passwordOpRef.current === opId) {
+        setPasswordChanging(false)
+      }
     }
   }
 
-          const jerseyNumber =
-            (teamMemberships.find(m => !!m.jersey_number)?.jersey_number ??
-            (profile as any)?.athlete_profile?.jersey_number ??
-          null);
+  // Calcola jersey number per atleti
+  const jerseyNumber = userRole === 'athlete'
+    ? (teamMemberships.find(m => !!m.jersey_number)?.jersey_number ??
+       (profile as any)?.athlete_profile?.jersey_number ??
+       null)
+    : null;
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -481,7 +498,12 @@ export default function UserProfile({ userRole }: UserProfileProps) {
           {/* Password Change */}
           <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>
-            <form onSubmit={handlePasswordChange} className="space-y-4">
+            <form
+              className="space-y-4"
+              aria-live="polite"
+              aria-busy={passwordChanging}
+              onSubmit={handlePasswordChange}
+            >
               <div>
                 <label className="cs-field__label">
                   Nuova Password *
@@ -493,6 +515,8 @@ export default function UserProfile({ userRole }: UserProfileProps) {
                   required
                   minLength={6}
                   className="cs-input"
+                  autoComplete="new-password"
+                  name="new-password"
                 />
               </div>
 
@@ -507,11 +531,23 @@ export default function UserProfile({ userRole }: UserProfileProps) {
                   required
                   minLength={6}
                   className="cs-input"
+                  autoComplete="new-password"
+                  name="confirm-new-password"
                 />
               </div>
 
-              <button type="submit" className="cs-btn cs-btn--danger">
-                Cambia Password
+              {passwordMsg && (
+                <div className={`cs-alert ${passwordMsg.kind === 'success' ? 'cs-alert--success' : 'cs-alert--danger'}`}>
+                  {passwordMsg.text}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="cs-btn cs-btn--danger"
+                disabled={passwordChanging}
+              >
+                {passwordChanging ? 'Aggiornamento…' : 'Cambia Password'}
               </button>
             </form>
           </div>

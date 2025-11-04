@@ -51,19 +51,26 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
     setLoading(false)
   }, [supabase])
 
+  // Carica tutti i dati iniziali in un unico effetto
   useEffect(() => {
-    checkFirstAccess()
-    loadSeasons()
-    // Ultimo accesso dall'utente corrente
-    supabase.auth.getUser().then(({ data }) => {
+    const loadInitialData = async () => {
+      await Promise.all([
+        checkFirstAccess(),
+        loadSeasons()
+      ])
+
+      // Ultimo accesso dall'utente corrente
+      const { data } = await supabase.auth.getUser()
       const iso = (data.user as any)?.last_sign_in_at
       if (!iso) { setLastSignIn('Oggi'); return }
       try {
         const d = new Date(iso)
         setLastSignIn(new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' }).format(d))
       } catch { setLastSignIn('Oggi') }
-    })
-  }, [checkFirstAccess, loadSeasons])
+    }
+
+    loadInitialData()
+  }, []) // Dipendenze vuote - carica solo al mount
 
   // Carica stagione attiva e calcola metriche dipendenti
   useEffect(() => {

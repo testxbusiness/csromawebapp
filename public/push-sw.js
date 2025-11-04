@@ -1,4 +1,13 @@
-/* Basic Service Worker for Web Push Notifications */
+// public/push-sw.js — SAFE: solo Push, nessuna intercept di fetch
+
+self.addEventListener('install', (event) => {
+  // niente precache di HTML/pagine: riduce rischio di stale
+  event.waitUntil(self.skipWaiting())
+})
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
+})
+
 self.addEventListener('push', (event) => {
   try {
     const data = event.data ? event.data.json() : {}
@@ -10,8 +19,7 @@ self.addEventListener('push', (event) => {
       data: { url: data.url || '/' },
     }
     event.waitUntil(self.registration.showNotification(title, options))
-  } catch (e) {
-    // fallback minimal
+  } catch {
     event.waitUntil(self.registration.showNotification('CSRoma', { body: 'Hai una nuova notifica' }))
   }
 })
@@ -19,18 +27,14 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const targetUrl = event.notification?.data?.url || '/'
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // focus if already open
-      for (const client of clientList) {
-        if ('focus' in client) {
-          client.focus()
-          if (targetUrl) client.postMessage({ type: 'navigate', url: targetUrl })
-          return
-        }
-      }
-      if (self.clients.openWindow) return self.clients.openWindow(targetUrl)
-    })
-  )
+  event.waitUntil((async () => {
+    const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    for (const c of clientsList) {
+      try { await c.focus(); c.postMessage({ type: 'navigate', url: targetUrl }) } catch {}
+      return
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(targetUrl)
+  })())
 })
 
+// ⛔️ NIENTE self.addEventListener('fetch', ...) qui.
