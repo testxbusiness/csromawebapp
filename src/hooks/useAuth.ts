@@ -13,7 +13,6 @@ type ProfileRow = {
   must_change_password: boolean | null
   created_at: string | null
   updated_at: string | null
-  // aggiungi qui altri campi se servono
 }
 
 interface UseAuthReturn {
@@ -27,14 +26,9 @@ interface UseAuthReturn {
 }
 
 export function useAuth(): UseAuthReturn {
-<<<<<<< HEAD
-  // Stabilizza il client tra i render
-  const supabase = useMemo(() => createClient(), [])
-=======
   // Client Supabase stabile con useRef
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
->>>>>>> fix
 
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -240,7 +234,6 @@ export function useAuth(): UseAuthReturn {
       unsub?.()
       if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
     }
-<<<<<<< HEAD
   }, [loadProfile])
 
   // Refresh session/profile quando la tab torna visibile (debounced e intelligente)
@@ -248,16 +241,6 @@ export function useAuth(): UseAuthReturn {
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null
     let isSubscribed = true
-=======
-  }, [loadProfile])
-
-  // Refresh session/profile quando la tab torna visibile (debounced e intelligente)
-  const lastRefreshTimeRef = useRef<number>(0)
-  useEffect(() => {
-    let t: ReturnType<typeof setTimeout> | null = null
-    let isSubscribed = true
-
->>>>>>> fix
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
       if (t) clearTimeout(t)
@@ -297,11 +280,7 @@ export function useAuth(): UseAuthReturn {
       window.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-<<<<<<< HEAD
   }, [loadProfile, profile])
-=======
-  }, [loadProfile, profile])
->>>>>>> fix
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
