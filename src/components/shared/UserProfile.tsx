@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { JerseyCard } from '@/components/athlete/JerseyCard'
@@ -38,6 +38,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
   })
   const [passwordChanging, setPasswordChanging] = useState(false)
   const [passwordMsg, setPasswordMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
+  const passwordOpRef = useRef(0)
   const supabase = createClient()
   const { subscribe, unsubscribe } = usePush()
   const [pushSupported, setPushSupported] = useState<boolean>(false)
@@ -173,6 +174,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     }
 
     try {
+      const opId = ++passwordOpRef.current
       setPasswordChanging(true)
       const { error } = await supabase.auth.updateUser({ password: passwordData.newPassword })
       if (error) throw error
@@ -183,11 +185,19 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       // Pulisci i campi e mostra messaggio inline
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
       setPasswordMsg({ kind: 'success', text: 'Password cambiata con successo.' })
+      // Auto-hide il messaggio dopo qualche secondo
+      setTimeout(() => {
+        if (passwordOpRef.current === opId) setPasswordMsg(null)
+      }, 4000)
     } catch (error) {
       console.error('Error changing password:', error)
       setPasswordMsg({ kind: 'error', text: 'Errore nel cambio password. Riprova.' })
     } finally {
       setPasswordChanging(false)
+      // Safeguard: nel raro caso di state non aggiornato, forza reset al prossimo tick
+      setTimeout(() => setPasswordChanging(false), 0)
+      // E ulteriore watchdog
+      setTimeout(() => setPasswordChanging(false), 5000)
     }
   }
 
@@ -484,7 +494,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
           {/* Password Change */}
           <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>
-            <form className="space-y-4" aria-live="polite">
+            <form className="space-y-4" aria-live="polite" aria-busy={passwordChanging}>
               <div>
                 <label className="cs-field__label">
                   Nuova Password *
