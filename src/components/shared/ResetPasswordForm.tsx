@@ -76,29 +76,55 @@ export default function ResetPasswordForm({ nextPath }: Props) {
         if (metaErr) {
           console.warn('Errore aggiornamento metadati utente:', metaErr)
         }
-        // Sincronizza anche il profilo applicativo
-        // opzionale: sincronizza profilo via API interna, se esiste
-        fetch('/api/user/profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ must_change_password: false }),
-        }).catch(() => {})
+
+        // Aggiorna anche il profilo nel database
+        try {
+          const { error: profileErr } = await supabase
+            .from('profiles')
+            .update({ must_change_password: false })
+            .eq('id', (await supabase.auth.getUser()).data.user?.id)
+
+          if (profileErr) {
+            console.warn('Errore aggiornamento profilo:', profileErr)
+          }
+        } catch (profileError) {
+          console.warn('Errore nell\'aggiornamento del profilo:', profileError)
+        }
 
         // Forza un refresh della sessione per aggiornare il JWT usato dal middleware
-        try { await supabase.auth.refreshSession() } catch {}
+        try {
+          await supabase.auth.refreshSession()
+        } catch (refreshError) {
+          console.warn('Errore refresh sessione:', refreshError)
+        }
       }
 
       setMessage('Password aggiornata con successo! Reindirizzamento…')
       // Imposta cookie bypass per consentire 1 navigazione al di fuori di /reset-password
       try { document.cookie = 'csr_pw_reset=1; path=/; max-age=60' } catch {}
 
-      // Reindirizza dopo un breve delay per mostrare il messaggio di successo
-      setTimeout(() => {
-        router.replace(isMandatoryChange ? nextPath : '/login')
-      }, 1500)
-    } catch {
+      console.log('Password aggiornata, redirecting to:', isMandatoryChange ? nextPath : '/login')
+
+      // Per cambi password obbligatori, usa window.location per evitare conflitti con middleware
+      if (isMandatoryChange) {
+        console.log('Mandatory change detected, using window.location.replace')
+        window.location.replace(isMandatoryChange ? nextPath : '/login')
+        return // Non continuare con React state updates dopo il redirect
+      }
+
+      // Per reset password normale, usa router.replace
+      try {
+        router.replace('/login')
+        console.log('Router redirect chiamato con successo')
+      } catch (redirectError) {
+        console.error('Errore nel redirect:', redirectError)
+        setLoading(false)
+        setError('Errore nel reindirizzamento. Ricarica la pagina.')
+      }
+
+    } catch (error) {
+      console.error('Errore durante il reset della password:', error)
       setError('Errore durante il reset della password')
-    } finally {
       setLoading(false)
     }
   }
