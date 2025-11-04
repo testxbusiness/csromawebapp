@@ -55,6 +55,12 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
+  // Escludi le richieste di autenticazione Supabase - devono sempre andare al network
+  if (url.pathname.includes('/auth/v1/')) {
+    // Non intercettare le richieste di auth - lasciale passare direttamente
+    return
+  }
+
   // Cache per API calls (cache-first con fallback a network)
   if (url.pathname.startsWith('/api/') && request.method === 'GET') {
     event.respondWith(
