@@ -19,6 +19,11 @@ export async function middleware(req: NextRequest) {
   const url = req.nextUrl
   const { pathname } = url
 
+  // Bypass non-GET methods like OPTIONS/HEAD to avoid preflight issues
+  if (req.method === 'OPTIONS' || req.method === 'HEAD') {
+    return NextResponse.next()
+  }
+
   // lascia passare asset/static
   if (
     pathname.startsWith('/_next') ||
