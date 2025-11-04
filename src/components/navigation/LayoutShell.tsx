@@ -3,25 +3,38 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, Menu, Search, X } from 'lucide-react'
-import RoleSidebar from './RoleSidebar'
-import { useAuth } from '@/hooks/useAuth'
-import ThemeToggle from '@/components/ui/ThemeToggle'
+import { Bell, Menu, X } from 'lucide-react'
 import Image from 'next/image'
+
+import RoleSidebar from './RoleSidebar'
+import ThemeToggle from '@/components/ui/ThemeToggle'
+import { useAuth } from '@/hooks/useAuth'
 import { usePush } from '@/hooks/usePush'
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || ''
-  const showAuthenticatedLayout = /^\/(admin|coach|athlete|dashboard)(\/|$)/.test(pathname)
+  const isProtected = /^\/(admin|coach|athlete|dashboard)(\/|$)/.test(pathname)
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, role, user, loading, signOut, refreshProfile, silentRefresh } = useAuth()
+  // ⬇️ usa anche authReady dal nuovo useAuth
+  const { profile, role, user, authReady, signOut, silentRefresh } = useAuth()
   const router = useRouter()
+
+  // SW (non blocca mai la UI)
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
 
-  // Smart refresh: quando si torna su /dashboard o su pagine profilo
+  // Chiudi il drawer quando cambia rotta (evita stati appesi in mobile)
+  const lastPathRef = useRef(pathname)
+  useEffect(() => {
+    if (lastPathRef.current !== pathname) {
+      setMobileMenuOpen(false)
+      lastPathRef.current = pathname
+    }
+  }, [pathname])
+
+  // Smart refresh: se torni su dashboard o pagina profilo dall’esterno, riallinea session/profile in silenzio
   const prevPathRef = useRef(pathname)
   const lastRefreshedPathRef = useRef<string | null>(null)
   useEffect(() => {
@@ -38,54 +51,76 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     }
   }, [pathname, user, silentRefresh])
 
-  // Client-side guard: force reset-password for users flagged to change password
+  // Forza reset-password solo se il profilo lo richiede (fonte di verità = DB)
   useEffect(() => {
-    if (!profile) return
-    const mustChange = (profile as any)?.must_change_password === true
+    const mustChange = profile?.must_change_password === true
     if (!mustChange) return
     if (pathname === '/reset-password') return
-    // Redirect preserving current path to return after reset
     const next = encodeURIComponent(pathname || '/dashboard')
     router.replace(`/reset-password?next=${next}`)
-  }, [profile, pathname, router])
+  }, [profile?.must_change_password, pathname, router])
 
   const handleSignOut = async () => {
     try {
       await signOut()
     } finally {
-      router.replace('/login') // oppure router.push('/login')
+      router.replace('/login')
     }
   }
 
-  // Se abbiamo user ma non profile e non stiamo caricando, prova a rinfrescare
-  // (Disabilitato per evitare conflitti con il hook useAuth principale)
-  // useEffect(() => {
-  //   if (user && !profile && !loading) {
-  //     refreshProfile().catch(() => {})
-  //   }
-  // }, [user, profile, loading, refreshProfile])
+  // Se non è una rotta protetta, non impongo auth layout
+  if (!isProtected) return <>{children}</>
 
-  // (Opzionale) se non loggato e su rotta protetta, rimbalza al login
-  // useEffect(() => {
-  //   if (!profile && showAuthenticatedLayout) router.replace('/login')
-  // }, [profile, showAuthenticatedLayout, router])
+  // ⬇️ Skeleton solo finché l’auth non è pronta (niente combinazioni user/profile)
+  if (!authReady) {
+    return (
+      <div className="cs-page">
+        <header className="cs-navbar">
+          <div className="cs-navbar__inner cs-container">
+            <div className="flex items-center gap-4">
+              <div className="h-5 w-5 rounded bg-[color:var(--cs-border)] animate-pulse" />
+              <div className="relative h-8 w-8 bg-[color:var(--cs-border)] rounded animate-pulse" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5">
+                <div className="cs-avatar cs-bg-primary animate-pulse" />
+                <div className="hidden sm:block min-w-[120px]">
+                  <div className="h-3 w-24 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
+                  <div className="h-2 w-16 bg-[color:var(--cs-border)] rounded animate-pulse" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div className="cs-layout">
+          <aside className="cs-sidebar">
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="cs-list-item">
+                  <div className="cs-skeleton" style={{ width: '140px', height: '12px' }} />
+                  <div className="cs-skeleton" style={{ width: '24px', height: '12px' }} />
+                </div>
+              ))}
+            </div>
+          </aside>
+          <main className="cs-main">
+            <div className="cs-skeleton h-8 w-40 mb-4" />
+            <div className="cs-card h-[300px]" />
+          </main>
+        </div>
+      </div>
+    )
+  }
 
-  if (!showAuthenticatedLayout) return <>{children}</>
-
-  // Mostra skeleton solo quando lo stato auth è in caricamento
-  const isAuthLoading = loading
-
+  // Dati utente per la testata
   const fallbackFirst = (user as any)?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0] : '')
   const fallbackLast = (user as any)?.user_metadata?.last_name || ''
   const first = profile?.first_name ?? fallbackFirst
   const last = profile?.last_name ?? fallbackLast
-  const initials = (first || last)
-    ? [first, last]
-        .filter(Boolean)
-        .map((w: string) => w.at(0)?.toUpperCase())
-        .join('')
-        .slice(0, 2)
-    : 'CS'
+  const initials =
+    (first || last)
+      ? [first, last].filter(Boolean).map((w: string) => w.at(0)?.toUpperCase()).join('').slice(0, 2)
+      : 'CS'
 
   const roleLabel = role ? roleName(role) : ''
 
@@ -102,78 +137,44 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             >
               <Menu className="h-5 w-5" />
             </button>
-             <Link href="/dashboard" className="flex items-center gap-2 lg:hidden" aria-label="CSRoma – Dashboard">
-    <div className="relative h-8 w-8">
-      <Image
-        src="/images/logo_CSRoma.png"
-        alt="CSRoma"
-        fill
-        className="object-contain select-none"
-        sizes="32px"
-        priority
-      />
-    </div>
-  </Link>
 
-  {/* LOGO DESKTOP (grande, a sinistra della topbar) */}
-  <Link href="/dashboard" className="hidden lg:flex items-center gap-3" aria-label="CSRoma – Dashboard">
-    <div className="relative h-16 w-16 xl:h-20 xl:w-20">
-      <Image
-        src="/images/logo_CSRoma.svg"
-        alt="CSRoma"
-        fill
-        className="object-contain select-none"
-        sizes="(max-width: 1280px) 40px, 48px"
-        priority
-      />
-    </div>
-    {/* opzionale: testo brand accanto al logo su desktop */}
-    <div className="hidden xl:block">
-      <p className="text-sm font-semibold text-[color:var(--cs-text-secondary)] leading-none">CSRoma</p>
-      <p className="text-lg font-semibold text-[color:var(--cs-primary)] leading-none">Control Center</p>
-    </div>
-  </Link>
-</div>
+            {/* LOGO MOBILE */}
+            <Link href="/dashboard" className="flex items-center gap-2 lg:hidden" aria-label="CSRoma – Dashboard">
+              <div className="relative h-8 w-8">
+                <Image src="/images/logo_CSRoma.png" alt="CSRoma" fill className="object-contain select-none" sizes="32px" priority />
+              </div>
+            </Link>
+
+            {/* LOGO DESKTOP */}
+            <Link href="/dashboard" className="hidden lg:flex items-center gap-3" aria-label="CSRoma – Dashboard">
+              <div className="relative h-16 w-16 xl:h-20 xl:w-20">
+                <Image src="/images/logo_CSRoma.svg" alt="CSRoma" fill className="object-contain select-none" sizes="(max-width: 1280px) 40px, 48px" priority />
+              </div>
+              <div className="hidden xl:block">
+                <p className="text-sm font-semibold text-[color:var(--cs-text-secondary)] leading-none">CSRoma</p>
+                <p className="text-lg font-semibold text-[color:var(--cs-primary)] leading-none">Control Center</p>
+              </div>
+            </Link>
+          </div>
 
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <button
-              type="button"
-              className="cs-btn cs-btn--ghost cs-btn--icon"
-              aria-label="Notifiche"
-            >
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--icon" aria-label="Notifiche">
               <Bell className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="cs-btn cs-btn--primary"
-            >
-              Esci
-            </button>
-            {isAuthLoading ? (
-              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
-                <div className="cs-avatar cs-bg-primary animate-pulse" />
-                <div className="hidden sm:block min-w-[120px]">
-                  <div className="h-3 w-24 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
-                  <div className="h-2 w-16 bg-[color:var(--cs-border)] rounded animate-pulse" />
-                </div>
+            <button type="button" onClick={handleSignOut} className="cs-btn cs-btn--primary">Esci</button>
+
+            <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
+              <div className="cs-avatar cs-bg-primary">
+                <span className="text-sm font-semibold">{initials}</span>
               </div>
-            ) : (
-              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
-                <div className="cs-avatar cs-bg-primary">
-                  <span className="text-sm font-semibold">{initials}</span>
-                </div>
-                <div className="hidden sm:block">
-                  <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                    {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
-                  </p>
-                  {!!roleLabel && (
-                    <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
-                  )}
-                </div>
+              <div className="hidden sm:block">
+                <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+                  {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
+                </p>
+                {!!roleLabel && <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>}
               </div>
-            )}
+            </div>
           </div>
         </div>
       </header>
@@ -182,19 +183,12 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         <aside className="cs-sidebar">
           <RoleSidebar />
         </aside>
-
-        <main className="cs-main">
-          {children}
-        </main>
+        <main className="cs-main">{children}</main>
       </div>
 
       {mobileMenuOpen && (
         <div className="lg:hidden">
-          <div
-            className="cs-overlay"
-            aria-hidden="false"
-            onClick={() => setMobileMenuOpen(false)} // chiude il drawer, NON fa logout
-          />
+          <div className="cs-overlay" aria-hidden="false" onClick={() => setMobileMenuOpen(false)} />
           <div className="cs-drawer" aria-hidden="false">
             <div className="mb-6 flex items-center justify-between">
               <div>
@@ -210,33 +204,17 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 <X className="h-5 w-5" />
               </button>
             </div>
+
             <RoleSidebar variant="mobile" onNavigate={() => setMobileMenuOpen(false)} />
+
             <div className="mt-8 space-y-2">
               <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--cs-text-secondary)]">Account</p>
               <div className="cs-card">
-                {isAuthLoading ? (
-                  <>
-                    <div className="h-3 w-28 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
-                    <div className="h-2 w-20 bg-[color:var(--cs-border)] rounded animate-pulse" />
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                      {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
-                    </p>
-                    {!!roleLabel && (
-                      <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
-                    )}
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setMobileMenuOpen(false)
-                    await handleSignOut()
-                  }}
-                  className="cs-btn cs-btn--primary cs-btn--block mt-3"
-                >
+                <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+                  {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
+                </p>
+                {!!roleLabel && <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>}
+                <button type="button" onClick={async () => { setMobileMenuOpen(false); await handleSignOut() }} className="cs-btn cs-btn--primary cs-btn--block mt-3">
                   Esci
                 </button>
               </div>
@@ -250,13 +228,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
 function roleName(role: string): string {
   switch (role) {
-    case 'admin':
-      return 'Amministratore'
-    case 'coach':
-      return 'Allenatore'
-    case 'athlete':
-      return 'Atleta'
-    default:
-      return 'Utente CSRoma'
+    case 'admin': return 'Amministratore'
+    case 'coach': return 'Allenatore'
+    case 'athlete': return 'Atleta'
+    default: return 'Utente CSRoma'
   }
 }
