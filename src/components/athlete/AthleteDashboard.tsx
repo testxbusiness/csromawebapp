@@ -107,16 +107,22 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     loadAthleteData()
   }, [])
 
-  // Ricarica quando la tab torna visibile
+  // Ricarica intelligente quando la tab torna visibile (solo se necessario)
+  const lastLoadTimeRef = useRef<number>(0)
   useEffect(() => {
     const onVisible = () => {
-      if (document.visibilityState === 'visible') loadAthleteData()
+      if (document.visibilityState !== 'visible') return
+
+      // Solo se i dati sono vecchi (> 2 minuti)
+      const now = Date.now()
+      const timeSinceLastLoad = now - lastLoadTimeRef.current
+      if (timeSinceLastLoad > 120000) { // 2 minuti
+        loadAthleteData()
+      }
     }
     window.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onVisible)
     return () => {
       window.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onVisible)
     }
   }, [])
 
@@ -131,6 +137,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         loadUnreadMessages(teamIds),
         loadFeeInstallments()
       ])
+      lastLoadTimeRef.current = Date.now()
     } catch (e) {
       console.error('Error loading athlete data:', e)
     } finally {
