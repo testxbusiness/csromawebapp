@@ -162,9 +162,6 @@ export default function UserProfile({ userRole }: UserProfileProps) {
   const handlePasswordChange = async (e?: React.FormEvent) => {
     e?.preventDefault()
 
-    // Previeni operazioni multiple simultanee
-    if (passwordChanging) return
-
     setPasswordMsg(null)
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
@@ -501,7 +498,12 @@ export default function UserProfile({ userRole }: UserProfileProps) {
           {/* Password Change */}
           <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>
-            <form className="space-y-4" aria-live="polite" aria-busy={passwordChanging}>
+            <form
+              className="space-y-4"
+              aria-live="polite"
+              aria-busy={passwordChanging}
+              onSubmit={handlePasswordChange}
+            >
               <div>
                 <label className="cs-field__label">
                   Nuova Password *
@@ -541,9 +543,8 @@ export default function UserProfile({ userRole }: UserProfileProps) {
               )}
 
               <button
-                type="button"
+                type="submit"
                 className="cs-btn cs-btn--danger"
-                onClick={() => handlePasswordChange()}
                 disabled={passwordChanging}
               >
                 {passwordChanging ? 'Aggiornamento…' : 'Cambia Password'}
