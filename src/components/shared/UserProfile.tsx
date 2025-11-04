@@ -36,6 +36,8 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     newPassword: '',
     confirmPassword: ''
   })
+  const [passwordChanging, setPasswordChanging] = useState(false)
+  const [passwordMsg, setPasswordMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const supabase = createClient()
   const { subscribe, unsubscribe } = usePush()
   const [pushSupported, setPushSupported] = useState<boolean>(false)
@@ -158,6 +160,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
 
   const handlePasswordChange = async (e?: React.FormEvent) => {
     e?.preventDefault()
+    setPasswordMsg(null)
     
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       alert('Le password non coincidono')
@@ -170,21 +173,21 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwordData.newPassword
-      })
-
+      setPasswordChanging(true)
+      const { error } = await supabase.auth.updateUser({ password: passwordData.newPassword })
       if (error) throw error
 
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-      })
-      alert('Password cambiata con successo!')
+      // Aggiorna la sessione in background per coerenza
+      try { await supabase.auth.refreshSession() } catch {}
+
+      // Pulisci i campi e mostra messaggio inline
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      setPasswordMsg({ kind: 'success', text: 'Password cambiata con successo.' })
     } catch (error) {
       console.error('Error changing password:', error)
-      alert('Errore nel cambio password')
+      setPasswordMsg({ kind: 'error', text: 'Errore nel cambio password. Riprova.' })
+    } finally {
+      setPasswordChanging(false)
     }
   }
 
@@ -481,7 +484,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
           {/* Password Change */}
           <div className="cs-card cs-card--primary p-6">
             <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>
-            <form className="space-y-4">
+            <form className="space-y-4" aria-live="polite">
               <div>
                 <label className="cs-field__label">
                   Nuova Password *
@@ -493,6 +496,8 @@ export default function UserProfile({ userRole }: UserProfileProps) {
                   required
                   minLength={6}
                   className="cs-input"
+                  autoComplete="new-password"
+                  name="new-password"
                 />
               </div>
 
@@ -507,11 +512,24 @@ export default function UserProfile({ userRole }: UserProfileProps) {
                   required
                   minLength={6}
                   className="cs-input"
+                  autoComplete="new-password"
+                  name="confirm-new-password"
                 />
               </div>
 
-              <button type="button" className="cs-btn cs-btn--danger" onClick={() => handlePasswordChange()}>
-                Cambia Password
+              {passwordMsg && (
+                <div className={`cs-alert ${passwordMsg.kind === 'success' ? 'cs-alert--success' : 'cs-alert--danger'}`}>
+                  {passwordMsg.text}
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="cs-btn cs-btn--danger"
+                onClick={() => handlePasswordChange()}
+                disabled={passwordChanging}
+              >
+                {passwordChanging ? 'Aggiornamento…' : 'Cambia Password'}
               </button>
             </form>
           </div>
