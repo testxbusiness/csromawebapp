@@ -26,6 +26,7 @@ export async function middleware(req: NextRequest) {
 
   // lascia passare asset/static
   if (
+    pathname === '/push-sw.js' ||
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
     pathname.startsWith('/images') ||
@@ -128,5 +129,5 @@ export async function middleware(req: NextRequest) {
 
 // Esegui su tutte le route app (esclude asset/static)
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|images/.*|fonts/.*).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|push-sw.js|images/.*|fonts/.*).*)'],
 }
