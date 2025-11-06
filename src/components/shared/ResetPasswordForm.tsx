@@ -65,7 +65,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
       }
 
       if (isMandatoryChange) {
-        // Aggiorna i metadati dell'utente (JWT) per disattivare il flag
+        // Aggiorna i metadati dell'utente (JWT) per disattivare il flag - questo è il più importante
         const { error: metaErr } = await supabase.auth.updateUser({
           data: {
             must_change_password: false,
@@ -75,17 +75,28 @@ export default function ResetPasswordForm({ nextPath }: Props) {
         })
         if (metaErr) {
           console.warn('Errore aggiornamento metadati utente:', metaErr)
+        } else {
+          console.log('Metadati utente aggiornati con successo')
         }
 
-        // Aggiorna anche il profilo nel database
+        // Aggiorna anche il profilo nel database (fallback per coerenza)
         try {
-          const { error: profileErr } = await supabase
-            .from('profiles')
-            .update({ must_change_password: false })
-            .eq('id', (await supabase.auth.getUser()).data.user?.id)
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) {
+            console.warn('Nessun utente autenticato per aggiornare il profilo')
+          } else {
+            const { error: profileErr } = await supabase
+              .from('profiles')
+              .update({ must_change_password: false })
+              .eq('id', user.id)
 
-          if (profileErr) {
-            console.warn('Errore aggiornamento profilo:', profileErr)
+            if (profileErr) {
+              console.warn('Errore aggiornamento profilo:', profileErr)
+              console.warn('Dettagli errore:', profileErr.details, profileErr.hint)
+              console.warn('Il fallback del profilo è fallito, ma i metadati dovrebbero essere sufficienti')
+            } else {
+              console.log('Profilo aggiornato con successo, must_change_password impostato a false')
+            }
           }
         } catch (profileError) {
           console.warn('Errore nell\'aggiornamento del profilo:', profileError)
@@ -94,14 +105,22 @@ export default function ResetPasswordForm({ nextPath }: Props) {
         // Forza un refresh della sessione per aggiornare il JWT usato dal middleware
         try {
           await supabase.auth.refreshSession()
+          console.log('Sessione refreshata con successo')
         } catch (refreshError) {
           console.warn('Errore refresh sessione:', refreshError)
         }
       }
 
       setMessage('Password aggiornata con successo! Reindirizzamento…')
+
       // Imposta cookie bypass per consentire 1 navigazione al di fuori di /reset-password
-      try { document.cookie = 'csr_pw_reset=1; path=/; max-age=60' } catch {}
+      try {
+        document.cookie = 'csr_pw_reset=1; path=/; max-age=60'
+        console.log('Cookie csr_pw_reset impostato')
+      } catch (cookieError) {
+        console.warn('Errore impostazione cookie:', cookieError)
+      }
+
       // Piccola attesa per assicurare che il cookie sia inviato nella prossima navigazione
       await new Promise((r) => setTimeout(r, 50))
 
