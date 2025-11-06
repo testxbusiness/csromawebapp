@@ -44,6 +44,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
     setLoading(true)
     setError('')
     setMessage('')
+    try { console.warn('[ResetPassword] handleResetPassword: start') } catch {}
 
     if (password !== confirmPassword) {
       setError('Le password non coincidono')
@@ -128,8 +129,18 @@ export default function ResetPasswordForm({ nextPath }: Props) {
 
       // Per cambi password obbligatori, usa window.location per evitare conflitti con middleware
       if (isMandatoryChange) {
-        console.log('Mandatory change detected, using window.location.replace')
+        console.warn('[ResetPassword] mandatory-change: navigating with window.location.replace')
         window.location.replace(isMandatoryChange ? nextPath : '/login')
+        // Safety: se per qualsiasi motivo la navigazione non avviene, ferma loading dopo 3s e mostra link
+        setTimeout(() => {
+          try {
+            if (window.location.pathname === '/reset-password') {
+              console.warn('[ResetPassword] fallback: replace did not navigate within 3s')
+              setLoading(false)
+              setError('Reindirizzamento non riuscito. Usa il link qui sotto per continuare.')
+            }
+          } catch {}
+        }, 3000)
         return // Non continuare con React state updates dopo il redirect
       }
 
