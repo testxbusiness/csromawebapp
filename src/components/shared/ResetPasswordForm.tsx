@@ -60,9 +60,23 @@ export default function ResetPasswordForm({ nextPath }: Props) {
     }
 
     try {
+      // Verifica sessione prima di procedere
+      const { data: pre } = await supabase.auth.getSession()
+      if (!pre.session) {
+        console.warn('[ResetPassword] no active session before updateUser')
+        setError('Sessione scaduta. Effettua di nuovo l\'accesso.')
+        setLoading(false)
+        return
+      }
+
       try { console.warn('[ResetPassword] updateUser(password): calling') } catch {}
       const t0 = performance.now()
-      const { error: updateError } = await supabase.auth.updateUser({ password })
+      // Timeout di sicurezza: evita stalli se la rete blocca la richiesta
+      const updateUserCall = supabase.auth.updateUser({ password })
+      const timeout = new Promise<{ error: any }>((resolve) =>
+        setTimeout(() => resolve({ error: new Error('timeout') }), 10000)
+      )
+      const { error: updateError } = await Promise.race([updateUserCall as any, timeout])
       const dt = Math.round(performance.now() - t0)
       if (updateError) {
         try { console.warn('[ResetPassword] updateUser(password): error after', dt, 'ms ->', updateError?.message) } catch {}
