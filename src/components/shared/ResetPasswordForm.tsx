@@ -163,6 +163,9 @@ export default function ResetPasswordForm({ nextPath }: Props) {
                   ? 'Benvenuto! Per continuare, imposta una nuova password per il tuo account.'
                   : 'Inserisci e conferma la nuova password.'}
               </p>
+              <p className="text-secondary text-xs mt-1">
+                Dopo il cambio password verrai reindirizzato alla pagina di login e dovrai effettuare nuovamente l’accesso.
+              </p>
             </div>
 
             {/* Messaggi */}
