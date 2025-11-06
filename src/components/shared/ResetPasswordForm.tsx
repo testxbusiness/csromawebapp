@@ -60,81 +60,23 @@ export default function ResetPasswordForm({ nextPath }: Props) {
     }
 
     try {
-      // Verifica sessione prima di procedere
-      const { data: pre } = await supabase.auth.getSession()
-      if (!pre.session) {
-        console.warn('[ResetPassword] no active session before updateUser')
-        setError('Sessione scaduta. Effettua di nuovo l\'accesso.')
+      // Chiamiamo una route server-side che usa l'Admin API per aggiornare password + metadati
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        const msg = j?.error || 'Errore nel reset della password'
+        console.warn('[ResetPassword] api reset-password failed:', msg)
+        setError(msg)
         setLoading(false)
         return
       }
 
-      try { console.warn('[ResetPassword] updateUser(password): calling') } catch {}
-      const t0 = performance.now()
-      // Timeout di sicurezza: evita stalli se la rete blocca la richiesta
-      const updateUserCall = supabase.auth.updateUser({ password })
-      const timeout = new Promise<{ error: any }>((resolve) =>
-        setTimeout(() => resolve({ error: new Error('timeout') }), 10000)
-      )
-      const { error: updateError } = await Promise.race([updateUserCall as any, timeout])
-      const dt = Math.round(performance.now() - t0)
-      if (updateError) {
-        try { console.warn('[ResetPassword] updateUser(password): error after', dt, 'ms ->', updateError?.message) } catch {}
-        setError(updateError.message)
-        setLoading(false)
-        return
-      }
-      try { console.warn('[ResetPassword] updateUser(password): success in', dt, 'ms') } catch {}
-
-      if (isMandatoryChange) {
-        // Aggiorna i metadati dell'utente (JWT) per disattivare il flag - questo è il più importante
-        try { console.warn('[ResetPassword] updateUser(metadata): calling') } catch {}
-        const { error: metaErr } = await supabase.auth.updateUser({
-          data: {
-            must_change_password: false,
-            temp_password_set_at: null,
-            temp_password_expires_at: null,
-          },
-        })
-        if (metaErr) {
-          console.warn('Errore aggiornamento metadati utente:', metaErr)
-        } else {
-          console.log('Metadati utente aggiornati con successo')
-        }
-
-        // Aggiorna anche il profilo nel database (fallback per coerenza)
-        try {
-          const { data: { user } } = await supabase.auth.getUser()
-          if (!user) {
-            console.warn('Nessun utente autenticato per aggiornare il profilo')
-          } else {
-            try { console.warn('[ResetPassword] profiles.update must_change_password=false for', user.id) } catch {}
-            const { error: profileErr } = await supabase
-              .from('profiles')
-              .update({ must_change_password: false })
-              .eq('id', user.id)
-
-            if (profileErr) {
-              console.warn('Errore aggiornamento profilo:', profileErr)
-              console.warn('Dettagli errore:', profileErr.details, profileErr.hint)
-              console.warn('Il fallback del profilo è fallito, ma i metadati dovrebbero essere sufficienti')
-            } else {
-              console.log('Profilo aggiornato con successo, must_change_password impostato a false')
-            }
-          }
-        } catch (profileError) {
-          console.warn('Errore nell\'aggiornamento del profilo:', profileError)
-        }
-
-        // Forza un refresh della sessione per aggiornare il JWT usato dal middleware
-        try {
-          console.warn('[ResetPassword] refreshSession: calling')
-          await supabase.auth.refreshSession()
-          console.log('Sessione refreshata con successo')
-        } catch (refreshError) {
-          console.warn('Errore refresh sessione:', refreshError)
-        }
-      }
+      // Best-effort: refresh della sessione per aggiornare localmente il JWT
+      try { await supabase.auth.refreshSession() } catch {}
 
       setMessage('Password aggiornata con successo! Reindirizzamento…')
 
