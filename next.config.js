@@ -43,8 +43,13 @@ const nextConfig = {
     return config
   },
 
+  // In produzione rimuovi i console.* ma conserva warn/error per il debug
+  // Questo evita che i log importanti (es. ResetPasswordForm) vengano soppressi nei deploy
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production',
+    removeConsole:
+      process.env.NODE_ENV === 'production'
+        ? { exclude: ['error', 'warn'] }
+        : false,
   },
   poweredByHeader: false,
   compress: true,
