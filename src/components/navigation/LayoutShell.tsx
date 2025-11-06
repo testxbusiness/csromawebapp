@@ -44,6 +44,17 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     const mustChange = (profile as any)?.must_change_password === true
     if (!mustChange) return
     if (pathname === '/reset-password') return
+
+    // Respect one-shot bypass cookie set after successful reset
+    // This mirrors the middleware behavior to avoid client-side loops
+    try {
+      const hasBypass = typeof document !== 'undefined' && document.cookie.includes('csr_pw_reset=1')
+      if (hasBypass) {
+        // Consume the cookie client-side as well
+        document.cookie = 'csr_pw_reset=; path=/; max-age=0'
+        return
+      }
+    } catch {}
     // Redirect preserving current path to return after reset
     const next = encodeURIComponent(pathname || '/dashboard')
     router.replace(`/reset-password?next=${next}`)

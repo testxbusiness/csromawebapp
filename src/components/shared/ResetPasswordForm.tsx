@@ -6,6 +6,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client' // se nel tuo client.ts esporti "supabase" di default, cambia in: import supabase from '@/lib/supabase/client'
 
+const DEBUG = process.env.NEXT_PUBLIC_DEBUG_RESET === '1'
+const dbg = (...args: any[]) => { if (DEBUG) { try { console.warn(...args) } catch {} } }
+
 type Props = { nextPath: string }
 
 export default function ResetPasswordForm({ nextPath }: Props) {
@@ -21,6 +24,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
 
   useEffect(() => {
     const checkMandatoryChange = async () => {
+      dbg('[ResetPassword] checkMandatoryChange: start')
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
@@ -35,6 +39,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
         profile?.must_change_password === true
 
       setIsMandatoryChange(mustChange)
+      dbg('[ResetPassword] checkMandatoryChange: mustChange =', mustChange)
     }
     checkMandatoryChange()
   }, [supabase])
@@ -44,6 +49,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
     setLoading(true)
     setError('')
     setMessage('')
+    dbg('[ResetPassword] handleResetPassword: start')
 
     if (password !== confirmPassword) {
       setError('Le password non coincidono')
@@ -57,58 +63,53 @@ export default function ResetPasswordForm({ nextPath }: Props) {
     }
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password })
-      if (updateError) {
-        setError(updateError.message)
+      // Chiamiamo una route server-side che usa l'Admin API per aggiornare password + metadati
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        const msg = j?.error || 'Errore nel reset della password'
+        dbg('[ResetPassword] api reset-password failed:', msg)
+        setError(msg)
         setLoading(false)
         return
       }
 
-      if (isMandatoryChange) {
-        // Aggiorna i metadati dell'utente (JWT) per disattivare il flag
-        const { error: metaErr } = await supabase.auth.updateUser({
-          data: {
-            must_change_password: false,
-            temp_password_set_at: null,
-            temp_password_expires_at: null,
-          },
-        })
-        if (metaErr) {
-          console.warn('Errore aggiornamento metadati utente:', metaErr)
-        }
-
-        // Aggiorna anche il profilo nel database
-        try {
-          const { error: profileErr } = await supabase
-            .from('profiles')
-            .update({ must_change_password: false })
-            .eq('id', (await supabase.auth.getUser()).data.user?.id)
-
-          if (profileErr) {
-            console.warn('Errore aggiornamento profilo:', profileErr)
-          }
-        } catch (profileError) {
-          console.warn('Errore nell\'aggiornamento del profilo:', profileError)
-        }
-
-        // Forza un refresh della sessione per aggiornare il JWT usato dal middleware
-        try {
-          await supabase.auth.refreshSession()
-        } catch (refreshError) {
-          console.warn('Errore refresh sessione:', refreshError)
-        }
-      }
+      // Best-effort: refresh della sessione per aggiornare localmente il JWT
+      try { await supabase.auth.refreshSession() } catch {}
 
       setMessage('Password aggiornata con successo! Reindirizzamento…')
-      // Imposta cookie bypass per consentire 1 navigazione al di fuori di /reset-password
-      try { document.cookie = 'csr_pw_reset=1; path=/; max-age=60' } catch {}
 
-      console.log('Password aggiornata, redirecting to:', isMandatoryChange ? nextPath : '/login')
+      // Imposta cookie bypass per consentire 1 navigazione al di fuori di /reset-password
+      try {
+        document.cookie = 'csr_pw_reset=1; path=/; max-age=60'
+        dbg('Cookie csr_pw_reset impostato')
+      } catch (cookieError) {
+        dbg('Errore impostazione cookie:', cookieError)
+      }
+
+      // Piccola attesa per assicurare che il cookie sia inviato nella prossima navigazione
+      await new Promise((r) => setTimeout(r, 50))
+
+      dbg('[ResetPassword] redirect: target =', isMandatoryChange ? nextPath : '/login')
 
       // Per cambi password obbligatori, usa window.location per evitare conflitti con middleware
       if (isMandatoryChange) {
-        console.log('Mandatory change detected, using window.location.replace')
+        dbg('[ResetPassword] mandatory-change: navigating with window.location.replace')
         window.location.replace(isMandatoryChange ? nextPath : '/login')
+        // Safety: se per qualsiasi motivo la navigazione non avviene, ferma loading dopo 3s e mostra link
+        setTimeout(() => {
+          try {
+            if (window.location.pathname === '/reset-password') {
+              dbg('[ResetPassword] fallback: replace did not navigate within 3s')
+              setLoading(false)
+              setError('Reindirizzamento non riuscito. Usa il link qui sotto per continuare.')
+            }
+          } catch {}
+        }, 3000)
         return // Non continuare con React state updates dopo il redirect
       }
 
