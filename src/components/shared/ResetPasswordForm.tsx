@@ -21,6 +21,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
 
   useEffect(() => {
     const checkMandatoryChange = async () => {
+      try { console.warn('[ResetPassword] checkMandatoryChange: start') } catch {}
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
@@ -35,6 +36,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
         profile?.must_change_password === true
 
       setIsMandatoryChange(mustChange)
+      try { console.warn('[ResetPassword] checkMandatoryChange: mustChange =', mustChange) } catch {}
     }
     checkMandatoryChange()
   }, [supabase])
@@ -58,15 +60,21 @@ export default function ResetPasswordForm({ nextPath }: Props) {
     }
 
     try {
+      try { console.warn('[ResetPassword] updateUser(password): calling') } catch {}
+      const t0 = performance.now()
       const { error: updateError } = await supabase.auth.updateUser({ password })
+      const dt = Math.round(performance.now() - t0)
       if (updateError) {
+        try { console.warn('[ResetPassword] updateUser(password): error after', dt, 'ms ->', updateError?.message) } catch {}
         setError(updateError.message)
         setLoading(false)
         return
       }
+      try { console.warn('[ResetPassword] updateUser(password): success in', dt, 'ms') } catch {}
 
       if (isMandatoryChange) {
         // Aggiorna i metadati dell'utente (JWT) per disattivare il flag - questo è il più importante
+        try { console.warn('[ResetPassword] updateUser(metadata): calling') } catch {}
         const { error: metaErr } = await supabase.auth.updateUser({
           data: {
             must_change_password: false,
@@ -86,6 +94,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
           if (!user) {
             console.warn('Nessun utente autenticato per aggiornare il profilo')
           } else {
+            try { console.warn('[ResetPassword] profiles.update must_change_password=false for', user.id) } catch {}
             const { error: profileErr } = await supabase
               .from('profiles')
               .update({ must_change_password: false })
@@ -105,6 +114,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
 
         // Forza un refresh della sessione per aggiornare il JWT usato dal middleware
         try {
+          console.warn('[ResetPassword] refreshSession: calling')
           await supabase.auth.refreshSession()
           console.log('Sessione refreshata con successo')
         } catch (refreshError) {
@@ -125,7 +135,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
       // Piccola attesa per assicurare che il cookie sia inviato nella prossima navigazione
       await new Promise((r) => setTimeout(r, 50))
 
-      console.log('Password aggiornata, redirecting to:', isMandatoryChange ? nextPath : '/login')
+      console.warn('[ResetPassword] redirect: target =', isMandatoryChange ? nextPath : '/login')
 
       // Per cambi password obbligatori, usa window.location per evitare conflitti con middleware
       if (isMandatoryChange) {
