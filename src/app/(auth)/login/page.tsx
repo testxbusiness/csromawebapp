@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useMemo } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -13,6 +13,16 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const router = useRouter()
   const supabase = createClient()
+  const searchParams = useSearchParams()
+
+  const nextPath = useMemo(() => {
+    const raw = searchParams?.get('next') || '/dashboard'
+    // allow only internal paths starting with single '/'
+    if (raw && raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/_next') && !raw.startsWith('/api')) {
+      return raw
+    }
+    return '/dashboard'
+  }, [searchParams])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,7 +40,7 @@ export default function LoginPage() {
         return
       }
       const j = await res.json()
-      if (j?.user) router.push('/dashboard')
+      if (j?.user) router.push(nextPath)
     } catch {
       setError('Si è verificato un errore durante il login')
     } finally {
