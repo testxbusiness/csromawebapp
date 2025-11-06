@@ -6,6 +6,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client' // se nel tuo client.ts esporti "supabase" di default, cambia in: import supabase from '@/lib/supabase/client'
 
+const DEBUG = process.env.NEXT_PUBLIC_DEBUG_RESET === '1'
+const dbg = (...args: any[]) => { if (DEBUG) { try { console.warn(...args) } catch {} } }
+
 type Props = { nextPath: string }
 
 export default function ResetPasswordForm({ nextPath }: Props) {
@@ -21,7 +24,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
 
   useEffect(() => {
     const checkMandatoryChange = async () => {
-      try { console.warn('[ResetPassword] checkMandatoryChange: start') } catch {}
+      dbg('[ResetPassword] checkMandatoryChange: start')
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
@@ -36,7 +39,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
         profile?.must_change_password === true
 
       setIsMandatoryChange(mustChange)
-      try { console.warn('[ResetPassword] checkMandatoryChange: mustChange =', mustChange) } catch {}
+      dbg('[ResetPassword] checkMandatoryChange: mustChange =', mustChange)
     }
     checkMandatoryChange()
   }, [supabase])
@@ -46,7 +49,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
     setLoading(true)
     setError('')
     setMessage('')
-    try { console.warn('[ResetPassword] handleResetPassword: start') } catch {}
+    dbg('[ResetPassword] handleResetPassword: start')
 
     if (password !== confirmPassword) {
       setError('Le password non coincidono')
@@ -69,7 +72,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         const msg = j?.error || 'Errore nel reset della password'
-        console.warn('[ResetPassword] api reset-password failed:', msg)
+        dbg('[ResetPassword] api reset-password failed:', msg)
         setError(msg)
         setLoading(false)
         return
@@ -83,25 +86,25 @@ export default function ResetPasswordForm({ nextPath }: Props) {
       // Imposta cookie bypass per consentire 1 navigazione al di fuori di /reset-password
       try {
         document.cookie = 'csr_pw_reset=1; path=/; max-age=60'
-        console.log('Cookie csr_pw_reset impostato')
+        dbg('Cookie csr_pw_reset impostato')
       } catch (cookieError) {
-        console.warn('Errore impostazione cookie:', cookieError)
+        dbg('Errore impostazione cookie:', cookieError)
       }
 
       // Piccola attesa per assicurare che il cookie sia inviato nella prossima navigazione
       await new Promise((r) => setTimeout(r, 50))
 
-      console.warn('[ResetPassword] redirect: target =', isMandatoryChange ? nextPath : '/login')
+      dbg('[ResetPassword] redirect: target =', isMandatoryChange ? nextPath : '/login')
 
       // Per cambi password obbligatori, usa window.location per evitare conflitti con middleware
       if (isMandatoryChange) {
-        console.warn('[ResetPassword] mandatory-change: navigating with window.location.replace')
+        dbg('[ResetPassword] mandatory-change: navigating with window.location.replace')
         window.location.replace(isMandatoryChange ? nextPath : '/login')
         // Safety: se per qualsiasi motivo la navigazione non avviene, ferma loading dopo 3s e mostra link
         setTimeout(() => {
           try {
             if (window.location.pathname === '/reset-password') {
-              console.warn('[ResetPassword] fallback: replace did not navigate within 3s')
+              dbg('[ResetPassword] fallback: replace did not navigate within 3s')
               setLoading(false)
               setError('Reindirizzamento non riuscito. Usa il link qui sotto per continuare.')
             }
