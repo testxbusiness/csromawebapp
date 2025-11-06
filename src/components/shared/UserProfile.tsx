@@ -178,10 +178,20 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     setPasswordChanging(true)
 
     try {
-      const { error } = await supabase.auth.updateUser({ password: passwordData.newPassword })
-      if (error) throw error
+      // Usa l'endpoint server che aggiorna password via Admin API
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordData.newPassword })
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        const msg = j?.error || 'Errore nel cambio password. Riprova.'
+        setPasswordMsg({ kind: 'error', text: msg })
+        return
+      }
 
-      // Aggiorna la sessione in background per coerenza
+      // Best-effort: refresh session per allineare il token localmente
       try { await supabase.auth.refreshSession() } catch {}
 
       // Pulisci i campi e mostra messaggio inline
