@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/components/ui'
 
 interface Installment {
   id: string
@@ -53,7 +54,7 @@ export default function PaymentModal({
     e.preventDefault()
 
     if (!paymentDate) {
-      alert('Seleziona una data di pagamento')
+      toast.error('Seleziona una data di pagamento')
       return
     }
 

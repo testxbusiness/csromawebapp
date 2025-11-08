@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MembershipFeeModal from '@/components/admin/MembershipFeeModal'
@@ -190,17 +191,17 @@ export default function MembershipFeesManager() {
 
       if (!response.ok) {
         console.error('Errore creazione quota:', result.error)
-        alert(`Errore: ${result.error}`)
+        import('@/components/ui/Toast').then(({ toast }) => toast.error(`Errore: ${result.error}`)).catch(()=>{})
         return
       }
 
       setShowModal(false)
       setEditingFee(null)
       loadFees()
-      alert(result.message || 'Quota creata con successo!')
+      import('@/components/ui/Toast').then(({ toast }) => toast.success(result.message || 'Quota creata con successo!')).catch(()=>{})
     } catch (error) {
       console.error('Errore creazione quota:', error)
-      alert('Errore di rete durante la creazione della quota')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Errore di rete durante la creazione della quota')).catch(()=>{})
     }
   }
 
@@ -228,17 +229,17 @@ export default function MembershipFeesManager() {
 
       if (!response.ok) {
         console.error('Errore aggiornamento quota:', result.error)
-        alert(`Errore: ${result.error}`)
+        import('@/components/ui/Toast').then(({ toast }) => toast.error(`Errore: ${result.error}`)).catch(()=>{})
         return
       }
 
       setShowModal(false)
       setEditingFee(null)
       loadFees()
-      alert(result.message || 'Quota aggiornata con successo!')
+      import('@/components/ui/Toast').then(({ toast }) => toast.success(result.message || 'Quota aggiornata con successo!')).catch(()=>{})
     } catch (error) {
       console.error('Errore aggiornamento quota:', error)
-      alert('Errore di rete durante l\'aggiornamento della quota')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Errore di rete durante l\'aggiornamento della quota')).catch(()=>{})
     }
   }
 
@@ -273,16 +274,16 @@ export default function MembershipFeesManager() {
 
       if (!response.ok) {
         console.error('Errore aggiornamento stato rata:', result.error)
-        alert(`Errore: ${result.error}`)
+        import('@/components/ui/Toast').then(({ toast }) => toast.error(`Errore: ${result.error}`)).catch(()=>{})
         return false
       }
 
-      alert(result.message || 'Stato rata aggiornato con successo!')
+      import('@/components/ui/Toast').then(({ toast }) => toast.success(result.message || 'Stato rata aggiornato con successo!')).catch(()=>{})
       loadFees()
       return true
     } catch (error) {
       console.error('Errore aggiornamento stato rata:', error)
-      alert('Errore di rete durante l\'aggiornamento dello stato rata')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Errore di rete durante l\'aggiornamento dello stato rata')).catch(()=>{})
       return false
     }
   }
@@ -295,9 +296,9 @@ export default function MembershipFeesManager() {
       body: JSON.stringify({ action: 'bulk_update_installments', installment_ids: Array.from(selectedInstallments), status: 'paid' })
     })
     const json = await res.json()
-    if (!res.ok) { alert(json.error || 'Errore bulk update'); return }
+    if (!res.ok) { toast.error(json.error || 'Errore bulk update'); return }
     await loadFlatInstallments()
-    alert('Rate selezionate segnate come pagate')
+    toast.success('Rate selezionate segnate come pagate')
   }
 
   const updateInstallmentDetails = async (installmentId: string, dueDate: string, amount: number) => {
@@ -324,16 +325,16 @@ export default function MembershipFeesManager() {
 
       if (!response.ok) {
         console.error('Errore aggiornamento dettagli rata:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return false
       }
 
-      alert(result.message || 'Dettagli rata aggiornati con successo!')
+      toast.success(result.message || 'Dettagli rata aggiornati con successo!')
       loadFees()
       return true
     } catch (error) {
       console.error('Errore aggiornamento dettagli rata:', error)
-      alert('Errore di rete durante l\'aggiornamento dei dettagli rata')
+      toast.error('Errore di rete durante l\'aggiornamento dei dettagli rata')
       return false
     }
   }
@@ -347,14 +348,14 @@ export default function MembershipFeesManager() {
       })
       const json = await res.json()
       if (!res.ok) {
-        if (!silent) alert(json.error || 'Errore durante il ricalcolo degli stati')
+        if (!silent) toast.error(json.error || 'Errore durante il ricalcolo degli stati')
         return false
       }
-      if (!silent) alert('Stati delle rate ricalcolati correttamente')
+      if (!silent) toast.success('Stati delle rate ricalcolati correttamente')
       return true
     } catch (e) {
       console.error(e)
-      if (!silent) alert('Errore di rete durante il ricalcolo')
+      if (!silent) toast.error('Errore di rete durante il ricalcolo')
       return false
     }
   }
@@ -380,14 +381,14 @@ export default function MembershipFeesManager() {
       })
       const json = await res.json()
       if (!res.ok) {
-        alert(json.error || 'Errore generazione rate')
+        toast.error(json.error || 'Errore generazione rate')
         return false
       }
       await loadFees()
       return true
     } catch (e) {
       console.error('Errore generazione rate:', e)
-      alert('Errore di rete durante la generazione rate')
+      toast.error('Errore di rete durante la generazione rate')
       return false
     }
   }

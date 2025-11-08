@@ -1,5 +1,6 @@
 'use client'
 
+import * as React from 'react'
 import { useMemo, useState, useCallback } from 'react'
 
 export type CalEvent = {
@@ -21,6 +22,7 @@ export default function SimpleCalendar({
   onEventClick,
   onDayClick,         // (opz.) click su giorno
   timezone = 'Europe/Rome', // (opz.) per toLocale*
+  onSelectSlot,       // (opz.) drag per selezione slot nella vista settimana
 }: {
   currentDate: Date
   view: View
@@ -30,6 +32,7 @@ export default function SimpleCalendar({
   onEventClick?: (id: string) => void
   onDayClick?: (date: Date) => void
   timezone?: string
+  onSelectSlot?: (start: Date, end: Date) => void
 }) {
   // ===== Utils
   const startOfWeek = (d: Date) => {
@@ -248,6 +251,7 @@ export default function SimpleCalendar({
           events={events}
           onEventClick={onEventClick}
           timezone={timezone}
+          onSelectSlot={onSelectSlot}
         />
       )}
     </div>
@@ -260,11 +264,13 @@ function WeekTimeGrid({
   events,
   onEventClick,
   timezone,
+  onSelectSlot,
 }: {
   weekDays: Date[]
   events: CalEvent[]
   onEventClick?: (id: string) => void
   timezone: string
+  onSelectSlot?: (start: Date, end: Date) => void
 }) {
   // fascia oraria visibile
   const startHour = 8
@@ -310,13 +316,67 @@ function WeekTimeGrid({
       </div>
 
       {/* 7 colonne giornaliere */}
-      {weekDays.map((d) => {
+      {weekDays.map((d, dayIdx) => {
         const key = d.toDateString()
         const dayLabel = d.toLocaleDateString('it-IT',{ weekday:'short', day:'numeric', timeZone: timezone })
         const todays = data[key] || []
+        const colRef = React.useRef<HTMLDivElement | null>(null)
+        const [drag, setDrag] = React.useState<{ active: boolean; startMin: number; endMin: number } | null>(null)
+
+        const clampMin = (mins: number) => Math.max(0, Math.min((endHour - startHour) * 60, mins))
+        const posToMinutes = (clientY: number) => {
+          const rect = colRef.current?.getBoundingClientRect()
+          if (!rect) return 0
+          const y = clientY - rect.top
+          const pct = y / rect.height
+          const mins = Math.round(pct * ((endHour - startHour) * 60))
+          // snap a 15 minuti
+          const snapped = Math.round(mins / 15) * 15
+          return clampMin(snapped)
+        }
+
+        const onMouseDown = (e: React.MouseEvent) => {
+          if (!onSelectSlot) return
+          if ((e.target as HTMLElement).closest('button')) return // non interferire con click eventi
+          const m = posToMinutes(e.clientY)
+          setDrag({ active: true, startMin: m, endMin: m })
+        }
+
+        React.useEffect(() => {
+          if (!drag?.active) return
+          const onMove = (ev: MouseEvent) => {
+            setDrag(prev => prev ? { ...prev, endMin: posToMinutes(ev.clientY) } : prev)
+          }
+          const onUp = () => {
+            setDrag(prev => {
+              if (!prev) return prev
+              const s = Math.min(prev.startMin, prev.endMin)
+              const e = Math.max(prev.startMin, prev.endMin)
+              const start = new Date(weekDays[dayIdx])
+              start.setHours(startHour, 0, 0, 0)
+              start.setMinutes(start.getMinutes() + s)
+              const end = new Date(weekDays[dayIdx])
+              end.setHours(startHour, 0, 0, 0)
+              end.setMinutes(end.getMinutes() + Math.max(e, s + 30)) // minimo 30 minuti
+              onSelectSlot?.(start, end)
+              return null
+            })
+          }
+          window.addEventListener('mousemove', onMove)
+          window.addEventListener('mouseup', onUp, { once: true })
+          return () => {
+            window.removeEventListener('mousemove', onMove)
+            window.removeEventListener('mouseup', onUp)
+          }
+        }, [drag?.active, dayIdx, onSelectSlot])
 
         return (
-          <div key={key} className="relative border rounded overflow-hidden bg-[color:var(--cs-surface-1)]">
+          <div
+            key={key}
+            ref={colRef}
+            className="relative border rounded overflow-hidden bg-[color:var(--cs-surface-1)] cursor-crosshair"
+            onMouseDown={onMouseDown}
+          >
             {/* Righe orarie */}
             {[...Array(endHour - startHour)].map((_,i) => (
               <div key={i} className="h-16 border-b border-dashed/50" />
@@ -325,6 +385,17 @@ function WeekTimeGrid({
             <div className="absolute top-0 left-0 right-0 text-[11px] font-medium px-2 py-1 bg-[color:var(--cs-surface-1)]/90 backdrop-blur">
               {dayLabel}
             </div>
+
+            {/* Selezione drag */}
+            {drag?.active && (
+              <div
+                className="absolute left-1 right-1 rounded bg-[color:var(--cs-primary)]/20 border border-[color:var(--cs-primary)]"
+                style={{
+                  top: `${(Math.min(drag.startMin, drag.endMin) / ((endHour - startHour) * 60)) * 100}%`,
+                  height: `${(Math.max(drag.startMin, drag.endMin) - Math.min(drag.startMin, drag.endMin)) / ((endHour - startHour) * 60) * 100}%`
+                }}
+              />
+            )}
 
             {/* Eventi posizionati */}
             {todays.map(ev => {

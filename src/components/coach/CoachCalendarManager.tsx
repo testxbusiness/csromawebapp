@@ -6,6 +6,7 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
+import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 
 interface Event {
   id?: string
@@ -39,7 +40,7 @@ export default function CoachCalendarManager() {
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [viewMode, setViewMode] = useState<'list'|'calendar'>('list')
+  const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
 
@@ -280,10 +281,21 @@ export default function CoachCalendarManager() {
         </div>
 
         {viewMode === 'calendar' ? (
-          <CalendarBlock
+          <FullCalendarWidget
+            initialDate={currentDate}
             view={calView}
-            events={events}
-            currentDate={currentDate}
+            events={(events||[]).map((e:any)=>({
+              id: e.id!, title: e.title,
+              start: new Date(e.start_time), end: new Date(e.end_time),
+              color: (function(){
+                switch (e.event_kind) {
+                  case 'training': return '#16a34a'
+                  case 'match': return '#dc2626'
+                  case 'meeting': return '#2563eb'
+                  default: return '#6b7280'
+                }
+              })()
+            }))}
             onNavigate={(act) => {
               const d = new Date(currentDate)
               if (act === 'today') setCurrentDate(new Date())
@@ -294,6 +306,19 @@ export default function CoachCalendarManager() {
             onEventClick={(id) => {
               const ev = events.find(e => e.id === id)
               if (ev) setSelectedEvent(ev)
+            }}
+            onSelectSlot={(start, end) => {
+              setEditingEvent({
+                title: '', description: '',
+                location: '',
+                start_time: start.toISOString(),
+                end_time: end.toISOString(),
+                is_recurring: false,
+                selected_teams: teams.map(t => t.id),
+                event_type: 'one_time',
+                event_kind: 'training'
+              } as any)
+              setShowForm(true)
             }}
           />
         ) : teams.length === 0 ? (

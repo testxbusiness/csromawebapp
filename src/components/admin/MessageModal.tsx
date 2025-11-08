@@ -111,7 +111,7 @@ export default function MessageModal({
       const res = await fetch('/api/messages/attachments/upload', { method: 'POST', body: formData })
       const result = await res.json()
       if (!res.ok) {
-        alert(result.error || 'Errore upload allegati')
+        toast.error(result.error || 'Errore upload allegati')
         return
       }
       const uploaded = result.files as any[]

@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { toast } from '@/components/ui'
 import {
   Dialog,
   DialogContent,
@@ -91,7 +92,7 @@ export default function CoachMessageModal({
       const res = await fetch('/api/messages/attachments/upload', { method: 'POST', body: fd })
       const result = await res.json()
       if (!res.ok) {
-        alert(result.error || 'Errore upload allegati')
+        toast.error(result.error || 'Errore upload allegati')
         return
       }
       setFiles(prev => [...prev, ...result.files])

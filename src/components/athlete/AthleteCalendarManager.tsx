@@ -4,7 +4,9 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import { toast } from '@/components/ui'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
+import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
 
@@ -43,7 +45,7 @@ export default function AthleteCalendarManager() {
   const [teamMemberships, setTeamMemberships] = useState<TeamLite[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
 
-  const [viewMode, setViewMode] = useState<'list'|'calendar'>('list')
+  const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
 
@@ -184,8 +186,8 @@ export default function AthleteCalendarManager() {
         </div>
 
         {viewMode === 'calendar' ? (
-          <SimpleCalendar
-            currentDate={currentDate}
+          <FullCalendarWidget
+            initialDate={currentDate}
             view={calView}
             events={calEvents}
             onNavigate={(act) => {
@@ -267,10 +269,10 @@ function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
         body: JSON.stringify({ event_id: id, status })
       })
       const j = await res.json()
-      if (!res.ok) { alert(j.error || 'Errore invio conferma'); return }
+      if (!res.ok) { toast.error(j.error || 'Errore invio conferma'); return }
       setData((prev: any) => ({ ...prev, my_attendance: { status, responded_at: new Date().toISOString() } }))
-      alert('Risposta inviata ✅')
-    } catch { alert('Errore di rete') }
+      toast.success('Risposta inviata ✅')
+    } catch { toast.error('Errore di rete') }
   }
 
   return (

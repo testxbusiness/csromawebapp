@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import type { DocumentTemplate } from './DocumentsManager'
 import TeamMemberPicker from './TeamMemberPicker'
@@ -187,16 +188,16 @@ export default function BulkGenerateModal({
 
   async function handleGenerate() {
     if (template.target_type === 'team') {
-      if (!selectedTeamId) { alert('Seleziona una squadra'); return }
+      if (!selectedTeamId) { toast.error('Seleziona una squadra'); return }
 
       const team = teams.find(t => t.id === selectedTeamId)
       const chosen = members.filter(m => m.selected)
-      if (chosen.length === 0) { alert('Seleziona almeno un atleta'); return }
+      if (chosen.length === 0) { toast.error('Seleziona almeno un atleta'); return }
 
       // created_by richiesto dal DB
       const { data: auth } = await supabase.auth.getUser()
       const createdBy = auth?.user?.id
-      if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
+      if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
 
       if (isTeamListTemplate) {
         // 1 solo documento per squadra con elenco atleti nel testo
@@ -236,12 +237,12 @@ export default function BulkGenerateModal({
           generation_date: new Date().toISOString(),
           document_type: template.type || 'team_convocation',
         } as any)
-        if (error) { alert('Errore salvataggio documento'); return }
+        if (error) { toast.error('Errore salvataggio documento'); return }
       } else {
         // N documenti, uno per ciascun atleta selezionato
         const { data: auth } = await supabase.auth.getUser()
         const createdBy = auth?.user?.id
-        if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
+        if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
         for (const m of chosen) {
           const fullVars = {
             today: todayStr,
@@ -280,10 +281,10 @@ export default function BulkGenerateModal({
     } else {
       // target user – N documenti per gli utenti selezionati
       const chosen = users.filter(u => u.selected)
-      if (chosen.length === 0) { alert('Seleziona almeno un utente'); return }
+      if (chosen.length === 0) { toast.error('Seleziona almeno un utente'); return }
       const { data: auth } = await supabase.auth.getUser()
       const createdBy = auth?.user?.id
-      if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
+      if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
       for (const u of chosen) {
         const vars = {
           today: todayStr,

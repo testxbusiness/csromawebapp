@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportUsers } from '@/lib/utils/excelExport'
 import ImportManager from './ImportManager'
@@ -66,15 +67,15 @@ export default function UsersManager() {
 
       if (!response.ok) {
         console.error('Errore toggle attivo:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
-      alert(result.message)
+      toast.success(result.message)
       loadUsers()
     } catch (error) {
       console.error('Errore toggle attivo:', error)
-      alert('Errore di rete')
+      toast.error('Errore di rete')
     }
   }
 
@@ -90,15 +91,15 @@ export default function UsersManager() {
 
       if (!response.ok) {
         console.error('Errore aggiornamento ruoli:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
-      alert(result.message)
+      toast.success(result.message)
       loadUsers()
     } catch (error) {
       console.error('Errore aggiornamento ruoli:', error)
-      alert('Errore di rete')
+      toast.error('Errore di rete')
     }
   }
 
@@ -115,17 +116,17 @@ export default function UsersManager() {
 
       if (!response.ok) {
         console.error('Errore creazione utente:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
-      alert(result.message)
+      toast.success(result.message)
       setShowForm(false)
       setEditingUser(null)
       loadUsers()
     } catch (error) {
       console.error('Errore creazione utente:', error)
-      alert('Errore di rete')
+      toast.error('Errore di rete')
     } finally {
       setFormSubmitting(false)
     }
@@ -147,17 +148,17 @@ export default function UsersManager() {
 
       if (!response.ok) {
         console.error('Errore aggiornamento utente:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
-      alert(result.message)
+      toast.success(result.message)
       setShowForm(false)
       setEditingUser(null)
       loadUsers()
     } catch (error) {
       console.error('Errore aggiornamento utente:', error)
-      alert('Errore di rete')
+      toast.error('Errore di rete')
     } finally {
       setFormSubmitting(false)
     }
@@ -174,15 +175,15 @@ export default function UsersManager() {
 
         if (!response.ok) {
           console.error('Errore eliminazione utente:', result.error)
-          alert(`Errore: ${result.error}`)
+          toast.error(`Errore: ${result.error}`)
           return
         }
 
-        alert('Account eliminato con successo')
+        toast.success('Account eliminato con successo')
         loadUsers()
       } catch (error) {
         console.error('Errore eliminazione utente:', error)
-        alert('Errore di rete')
+        toast.error('Errore di rete')
       }
     }
   }
@@ -201,14 +202,14 @@ export default function UsersManager() {
 
       if (!response.ok) {
         console.error('Errore reset password:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
-      alert('Password resettata. L\'utente dovrà cambiare la password al prossimo accesso.')
+      toast.success('Password resettata. L\'utente dovrà cambiare la password al prossimo accesso.')
     } catch (error) {
       console.error('Errore reset password:', error)
-      alert('Errore di rete')
+      toast.error('Errore di rete')
     }
   }
 

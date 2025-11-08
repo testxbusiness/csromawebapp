@@ -1,4 +1,5 @@
 'use client'
+// NB: questo file è legacy/old; usiamo import dinamico per i toast
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -398,7 +399,7 @@ export default function DocumentsManager() {
       downloadPDF(pdf)
     } catch (error) {
       console.error('Error generating PDF:', error)
-      alert('Errore nella generazione del PDF')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Errore nella generazione del PDF')).catch(()=>{})
     }
   }
 
@@ -505,12 +506,12 @@ export default function DocumentsManager() {
         setTimeout(() => downloadPDF(pdf), index * 500) // Stagger downloads
       })
 
-      alert(`${pdfs.length} documenti generati con successo!`)
+      import('@/components/ui/Toast').then(({ toast }) => toast.success(`${pdfs.length} documenti generati con successo!`)).catch(()=>{})
       setShowBulkGeneration(false)
       loadDocuments()
     } catch (error) {
       console.error('Error generating bulk PDFs:', error)
-      alert('Errore nella generazione dei documenti')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Errore nella generazione dei documenti')).catch(()=>{})
     }
     setGeneratingBulk(false)
   }
@@ -948,7 +949,7 @@ export default function DocumentsManager() {
                   if (templateToSave.name && templateToSave.content_html) {
                     saveTemplate(templateToSave)
                   } else {
-                    alert('Compila tutti i campi obbligatori: Nome e Contenuto HTML')
+                    import('@/components/ui/Toast').then(({ toast }) => toast.error('Compila tutti i campi obbligatori: Nome e Contenuto HTML')).catch(()=>{})
                   }
                 }}
                 variant="primary"
@@ -1051,7 +1052,7 @@ export default function DocumentsManager() {
                     setSelectedGenerationTemplate(null)
                     setSelectedTargetId('')
                   } else {
-                    alert('Seleziona un template e un target')
+                    import('@/components/ui/Toast').then(({ toast }) => toast.error('Seleziona un template e un target')).catch(()=>{})
                   }
                 }}
                 variant="primary"
