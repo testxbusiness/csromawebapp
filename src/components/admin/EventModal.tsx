@@ -131,11 +131,18 @@ export default function EventModal({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent className="cs-modal--centered cs-modal--lg">
-        <DialogHeader>
-          <DialogTitle>{event ? 'Modifica Evento' : 'Nuovo Evento'}</DialogTitle>
-        </DialogHeader>
+        <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
+          <div className="cs-modal__icon" aria-hidden>📅</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 className="cs-modal__title">{event ? 'Modifica Evento' : 'Nuovo Evento'}</h2>
+            <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <span className="cs-badge cs-badge--neutral">{form.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}</span>
+              <span className="cs-badge cs-badge--accent">{({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[form.event_kind]}</span>
+            </div>
+          </div>
+        </div>
 
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} className="space-y-5">
           <div>
             <label className="cs-field__label">Titolo Evento *</label>
             <input
@@ -248,22 +255,22 @@ export default function EventModal({
           </div>
 
           {form.event_type === 'recurring' && (
-            <div className="cs-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
-              <div>
-                <label className="cs-field__label">Frequenza</label>
-                <select
-                  className="cs-select"
-                  value={form.recurrence_rule.frequency}
-                  onChange={(e) => setForm({
-                    ...form,
-                    recurrence_rule: { ...form.recurrence_rule, frequency: e.target.value as any }
-                  })}
-                >
-                  <option value="daily">Giornaliera</option>
-                  <option value="weekly">Settimanale</option>
-                  <option value="monthly">Mensile</option>
-                </select>
-              </div>
+          <div className="cs-card p-4 cs-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <div>
+              <label className="cs-field__label">Frequenza</label>
+              <select
+                className="cs-select"
+                value={form.recurrence_rule.frequency}
+                onChange={(e) => setForm({
+                  ...form,
+                  recurrence_rule: { ...form.recurrence_rule, frequency: e.target.value as any }
+                })}
+              >
+                <option value="daily">Giornaliera</option>
+                <option value="weekly">Settimanale</option>
+                <option value="monthly">Mensile</option>
+              </select>
+            </div>
               <div>
                 <label className="cs-field__label">Intervallo</label>
                 <input
