@@ -40,7 +40,7 @@ export default function CoachCalendarManager() {
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [viewMode, setViewMode] = useState<'list'|'calendar'>('list')
+  const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
 

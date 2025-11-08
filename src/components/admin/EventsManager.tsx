@@ -85,7 +85,7 @@ export default function EventsManager() {
   const [loading, setLoading] = useState(true)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const [viewMode, setViewMode] = useState<'list'|'calendar'>('list')
+  const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const supabase = createClient()
