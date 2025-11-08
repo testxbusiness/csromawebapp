@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import { toast } from '@/components/ui'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
+import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
 
@@ -185,8 +186,8 @@ export default function AthleteCalendarManager() {
         </div>
 
         {viewMode === 'calendar' ? (
-          <SimpleCalendar
-            currentDate={currentDate}
+          <FullCalendarWidget
+            initialDate={currentDate}
             view={calView}
             events={calEvents}
             onNavigate={(act) => {
