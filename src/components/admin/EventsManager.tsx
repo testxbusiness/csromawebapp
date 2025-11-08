@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
+import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
+import { toast } from '@/components/ui'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventModal from '@/components/admin/EventModal'
 
@@ -172,18 +174,18 @@ export default function EventsManager() {
 
       if (!response.ok) {
         console.error('Errore creazione evento:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error || 'Impossibile creare l\'evento'}`)
         return
       }
 
-      console.log('Evento creato con successo:', result.message)
+      toast.success('Evento creato con successo')
       setShowModal(false)
       setEditingEvent(null)
       loadEvents()
 
     } catch (error) {
       console.error('Errore creazione evento:', error)
-      alert('Errore di rete durante la creazione dell\'evento')
+      toast.error('Errore di rete durante la creazione dell\'evento')
     }
   }
 
@@ -204,18 +206,18 @@ export default function EventsManager() {
 
       if (!response.ok) {
         console.error('Errore aggiornamento evento:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error || 'Aggiornamento non riuscito'}`)
         return
       }
 
-      console.log('Evento aggiornato con successo:', result.message)
+      toast.success('Evento aggiornato con successo')
       setShowModal(false)
       setEditingEvent(null)
       loadEvents()
 
     } catch (error) {
       console.error('Errore aggiornamento evento:', error)
-      alert('Errore di rete durante l\'aggiornamento dell\'evento')
+      toast.error('Errore di rete durante l\'aggiornamento dell\'evento')
     }
   }
 
@@ -243,16 +245,16 @@ export default function EventsManager() {
 
         if (!response.ok) {
           console.error('Errore eliminazione evento:', result.error)
-          alert(`Errore: ${result.error}`)
+          toast.error(`Errore: ${result.error || 'Eliminazione non riuscita'}`)
           return
         }
 
-        console.log('Evento eliminato con successo:', result.message)
+        toast.success('Evento eliminato con successo')
         loadEvents()
 
       } catch (error) {
         console.error('Errore eliminazione evento:', error)
-        alert('Errore di rete durante l\'eliminazione dell\'evento')
+        toast.error('Errore di rete durante l\'eliminazione dell\'evento')
       }
     
   }
@@ -352,27 +354,42 @@ export default function EventsManager() {
 
 
       {viewMode === 'calendar' ? (
-        <div className="cs-card cs-card--primary p-4">
-          <SimpleCalendar
-            currentDate={currentDate}
-            view={calView}
-            events={(events||[]).map((e:any)=>({ 
-              id: e.id!, 
-              title: e.title, 
-              start: new Date(e.start_date), 
-              end: new Date(e.end_date), 
-              color: KIND_COLORS[(e.event_kind ?? 'other') as 'training'|'match'|'meeting'|'other'],
-            }))}
-            onNavigate={(act)=>{
-              const d = new Date(currentDate)
-              if (act==='today') setCurrentDate(new Date())
-              else if (act==='prev') { if (calView==='month') d.setMonth(d.getMonth()-1); else d.setDate(d.getDate()-7); setCurrentDate(new Date(d)) }
-              else { if (calView==='month') d.setMonth(d.getMonth()+1); else d.setDate(d.getDate()+7); setCurrentDate(new Date(d)) }
-            }}
-            onViewChange={(v)=>setCalView(v)}
-            onEventClick={(id)=>{ const ev = events.find(e=>e.id===id); if (ev) setSelectedEvent(ev) }}
-          />
-        </div>
+        <FullCalendarWidget
+          initialDate={currentDate}
+          view={calView}
+          events={(events||[]).map((e:any)=>({
+            id: e.id!,
+            title: e.title,
+            start: new Date(e.start_date),
+            end: new Date(e.end_date),
+            color: KIND_COLORS[(e.event_kind ?? 'other') as 'training'|'match'|'meeting'|'other'],
+          }))}
+          onNavigate={(act)=>{
+            const d = new Date(currentDate)
+            if (act==='today') setCurrentDate(new Date())
+            else if (act==='prev') { if (calView==='month') d.setMonth(d.getMonth()-1); else d.setDate(d.getDate()-7); setCurrentDate(new Date(d)) }
+            else { if (calView==='month') d.setMonth(d.getMonth()+1); else d.setDate(d.getDate()+7); setCurrentDate(new Date(d)) }
+          }}
+          onViewChange={(v)=>setCalView(v)}
+          onEventClick={(id)=>{ const ev = events.find(e=>e.id===id); if (ev) setSelectedEvent(ev) }}
+          onSelectSlot={(start, end)=>{
+            setEditingEvent({
+              title: '',
+              description: '',
+              start_date: start.toISOString(),
+              end_date: end.toISOString(),
+              location: '',
+              gym_id: '',
+              activity_id: '',
+              event_type: 'one_time',
+              event_kind: 'training',
+              recurrence_rule: { frequency: 'weekly', interval: 1 },
+              recurrence_end_date: '',
+              selected_teams: [] as any,
+            } as any)
+            setShowModal(true)
+          }}
+        />
       ) : (
       <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}

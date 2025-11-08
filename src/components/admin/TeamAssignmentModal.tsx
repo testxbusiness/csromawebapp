@@ -114,13 +114,13 @@ export default function TeamAssignmentModal({
     e.preventDefault()
 
     if (selectedTeamIds.size === 0) {
-      alert('Seleziona almeno una squadra')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Seleziona almeno una squadra')).catch(()=>{})
       return
     }
 
     // Per gli atleti, se è selezionato un piano di pagamento, verifica che sia selezionata una sola squadra
     if (userType === 'athletes' && selectedMembershipFeeId && selectedTeamIds.size > 1) {
-      alert('Per assegnare un piano di pagamento, seleziona una sola squadra')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Per assegnare un piano di pagamento, seleziona una sola squadra')).catch(()=>{})
       return
     }
 

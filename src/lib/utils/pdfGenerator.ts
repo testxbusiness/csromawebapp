@@ -1,3 +1,4 @@
+"use client"
 // PDF generation utility using jsPDF
 // Note: You'll need to install jsPDF and html2canvas
 // npm install jspdf html2canvas
@@ -336,7 +337,13 @@ export function downloadPDF(pdf: GeneratedPDF) {
 export function previewPDF(pdf: GeneratedPDF) {
   const newWindow = window.open(pdf.url, '_blank')
   if (!newWindow) {
-    alert('Popup bloccato! Abilita i popup per visualizzare l\'anteprima.')
+    // Lazy import to avoid server-side coupling
+    import('@/components/ui/Toast').then(({ toast }) => {
+      toast.info('Popup bloccato! Abilita i popup per visualizzare l\'anteprima.')
+    }).catch(() => {
+      // Fallback silenzioso
+      console.warn('Popup bloccato!')
+    })
   }
 }
 

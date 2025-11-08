@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import TemplateModal from './TemplateModal'
 import BulkGenerateModal from './BulkGenerateModal'
@@ -155,7 +156,7 @@ export default function DocumentsManager() {
   }
 
   async function handleCreatePdf(doc: DocumentRow) {
-    if (!doc.generated_content_html) { alert('Contenuto non disponibile'); return }
+    if (!doc.generated_content_html) { toast.error('Contenuto non disponibile'); return }
     try {
       // Genera PDF lato client evitando header duplicati
       const pdf = await generatePDF({
@@ -166,16 +167,16 @@ export default function DocumentsManager() {
         hasSignatureArea: false,
       })
       const url = await savePDFToStorage(supabase, pdf, 'documents')
-      if (!url) { alert('Errore salvataggio PDF'); return }
+      if (!url) { toast.error('Errore salvataggio PDF'); return }
       const { error } = await supabase
         .from('documents')
         .update({ file_url: url, file_name: pdf.filename })
         .eq('id', doc.id)
-      if (error) { console.error(error); alert('Errore aggiornamento documento'); return }
+      if (error) { console.error(error); toast.error('Errore aggiornamento documento'); return }
       await loadDocuments()
     } catch (e) {
       console.error('PDF gen error:', e)
-      alert('Errore nella generazione del PDF')
+      toast.error('Errore nella generazione del PDF')
     }
   }
 
@@ -196,7 +197,7 @@ export default function DocumentsManager() {
     }
     // Fallback a URL pubblico eventualmente salvato
     if (doc.file_url) window.open(doc.file_url, '_blank')
-    else alert('File non disponibile per il download')
+    else toast.error('File non disponibile per il download')
   }
 
   function handlePreviewHtml(doc: DocumentRow) {
@@ -204,7 +205,7 @@ export default function DocumentsManager() {
   }
 
   function handleAttachToMessage(doc: DocumentRow) {
-    if (!doc.file_url) { alert('Genera il PDF prima di allegarlo'); return }
+    if (!doc.file_url) { toast.error('Genera il PDF prima di allegarlo'); return }
     // Precompila bozza con allegato URL
     setMessageDraft({ subject: doc.title, content: '', attachment_url: doc.file_url })
     setShowMessageModal(true)
@@ -218,13 +219,13 @@ export default function DocumentsManager() {
         body: JSON.stringify(payload),
       })
       const json = await res.json()
-      if (!res.ok) { alert(json.error || 'Errore invio messaggio'); return }
-      alert('Messaggio creato con successo')
+      if (!res.ok) { toast.error(json.error || 'Errore invio messaggio'); return }
+      toast.success('Messaggio creato con successo')
       setShowMessageModal(false)
       setMessageDraft(null)
     } catch (e) {
       console.error(e)
-      alert('Errore di rete durante l\'invio messaggio')
+      toast.error('Errore di rete durante l\'invio messaggio')
     }
   }
 
@@ -236,13 +237,13 @@ export default function DocumentsManager() {
         body: JSON.stringify({ id, ...payload }),
       })
       const json = await res.json()
-      if (!res.ok) { alert(json.error || 'Errore aggiornamento messaggio'); return }
-      alert('Messaggio aggiornato con successo')
+      if (!res.ok) { toast.error(json.error || 'Errore aggiornamento messaggio'); return }
+      toast.success('Messaggio aggiornato con successo')
       setShowMessageModal(false)
       setMessageDraft(null)
     } catch (e) {
       console.error(e)
-      alert('Errore di rete durante l\'aggiornamento messaggio')
+      toast.error('Errore di rete durante l\'aggiornamento messaggio')
     }
   }
 

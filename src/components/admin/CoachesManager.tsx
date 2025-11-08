@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import type { Coach, Team, Activity, Season } from './coachTypes'
 import BulkOperationsModal from './BulkOperationsModal'
@@ -173,11 +174,11 @@ export default function CoachesManager() {
 
       if (!response.ok) {
         console.error('Errore operazione massiva:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
-      alert(result.message)
+      toast.success(result.message)
 
       // Ricarica i dati per aggiornare la UI
       await loadCoaches()
@@ -187,7 +188,7 @@ export default function CoachesManager() {
 
     } catch (error) {
       console.error('Errore operazione massiva:', error)
-      alert('Errore durante l\'operazione massiva')
+      toast.error('Errore durante l\'operazione massiva')
     } finally {
       setBulkLoading(false)
     }
@@ -218,7 +219,7 @@ export default function CoachesManager() {
 
   const handleOpenBulkModal = () => {
     if (selectedCoaches.size === 0) {
-      alert('Seleziona almeno un collaboratore per eseguire operazioni massive')
+      toast.error('Seleziona almeno un collaboratore per eseguire operazioni massive')
       return
     }
     setShowBulkModal(true)

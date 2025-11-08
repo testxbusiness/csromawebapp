@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
@@ -106,14 +107,14 @@ export default function CoachMessagesManager() {
       })
       const result = await res.json()
       if (!res.ok) {
-        alert(result.error || 'Errore creazione messaggio')
+        toast.error(result.error || 'Errore creazione messaggio')
         return
       }
       setShowModal(false)
       setEditingMessage(null)
       await loadMessages()
     } catch {
-      alert('Errore di rete durante la creazione')
+      toast.error('Errore di rete durante la creazione')
     } finally {
       setSubmitting(false)
     }
@@ -132,14 +133,14 @@ export default function CoachMessagesManager() {
       })
       const result = await res.json()
       if (!res.ok) {
-        alert(result.error || 'Errore aggiornamento messaggio')
+        toast.error(result.error || 'Errore aggiornamento messaggio')
         return
       }
       setShowModal(false)
       setEditingMessage(null)
       await loadMessages()
     } catch {
-      alert('Errore di rete durante l\'aggiornamento')
+      toast.error('Errore di rete durante l\'aggiornamento')
     } finally {
       setSubmitting(false)
     }
@@ -151,12 +152,12 @@ export default function CoachMessagesManager() {
       const res = await fetch(`/api/coach/messages?id=${id}`, { method: 'DELETE' })
       const result = await res.json()
       if (!res.ok) {
-        alert(result.error || 'Errore eliminazione messaggio')
+        toast.error(result.error || 'Errore eliminazione messaggio')
         return
       }
       await loadMessages()
     } catch {
-      alert('Errore di rete durante l\'eliminazione')
+      toast.error('Errore di rete durante l\'eliminazione')
     }
   }
 

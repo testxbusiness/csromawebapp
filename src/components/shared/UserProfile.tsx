@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { JerseyCard } from '@/components/athlete/JerseyCard'
@@ -150,10 +151,10 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       if (error) throw error
 
       await refreshProfile()
-      alert('Profilo aggiornato con successo!')
+      toast.success('Profilo aggiornato con successo!')
     } catch (error) {
       console.error('Error updating profile:', error)
-      alert('Errore nell\'aggiornamento del profilo')
+      toast.error('Errore nell\'aggiornamento del profilo')
     }
 
     setSaving(false)
@@ -165,12 +166,12 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     setPasswordMsg(null)
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      alert('Le password non coincidono')
+      toast.error('Le password non coincidono')
       return
     }
 
     if (passwordData.newPassword.length < 6) {
-      alert('La password deve essere di almeno 6 caratteri')
+      toast.error('La password deve essere di almeno 6 caratteri')
       return
     }
 
@@ -253,7 +254,7 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       await refreshProfile()
     } catch (error) {
       console.error('Error uploading avatar:', error)
-      alert('Errore nel caricamento dell\'immagine')
+      toast.error('Errore nel caricamento dell\'immagine')
     }
   }
 
@@ -262,10 +263,10 @@ export default function UserProfile({ userRole }: UserProfileProps) {
       await subscribe('Dispositivo personale')
       setPushPermission(Notification.permission)
       setIsSubscribed(true)
-      alert('Notifiche push attivate su questo dispositivo')
+      toast.success('Notifiche push attivate su questo dispositivo')
     } catch (e: any) {
       console.error('Enable push error', e)
-      alert(e?.message || 'Impossibile attivare le notifiche push')
+      toast.error(e?.message || 'Impossibile attivare le notifiche push')
     }
   }
 
@@ -273,10 +274,10 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     try {
       await unsubscribe()
       setIsSubscribed(false)
-      alert('Notifiche push disattivate su questo dispositivo')
+      toast.info('Notifiche push disattivate su questo dispositivo')
     } catch (e) {
       console.error('Disable push error', e)
-      alert('Impossibile disattivare le notifiche push')
+      toast.error('Impossibile disattivare le notifiche push')
     }
   }
 

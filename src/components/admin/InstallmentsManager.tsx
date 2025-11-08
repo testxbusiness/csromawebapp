@@ -7,6 +7,7 @@ import FilterBar from './incassi/FilterBar'
 import InstallmentsTable from './incassi/InstallmentsTable'
 import BulkActionsBar from './incassi/BulkActionsBar'
 import PaymentModal from './incassi/PaymentModal'
+import { toast } from '@/components/ui'
 import AthleteDetailDrawer from './incassi/AthleteDetailDrawer'
 
 interface Installment {
@@ -239,13 +240,13 @@ export default function InstallmentsManager() {
         setSelectedInstallments(new Set())
         await loadKPIData()
         await loadInstallments()
-        alert(result.message)
+        import('@/components/ui/Toast').then(({ toast }) => toast.success(result.message)).catch(()=>{})
       } else {
-        alert(`Errore: ${result.error}`)
+        import('@/components/ui/Toast').then(({ toast }) => toast.error(`Errore: ${result.error}`)).catch(()=>{})
       }
     } catch (error) {
       console.error('Errore durante il pagamento:', error)
-      alert('Errore di rete durante il pagamento')
+      import('@/components/ui/Toast').then(({ toast }) => toast.error('Errore di rete durante il pagamento')).catch(()=>{})
     }
   }
 

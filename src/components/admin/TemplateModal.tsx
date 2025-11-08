@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import type { DocumentTemplate } from './DocumentsManager'
 
@@ -46,13 +47,13 @@ export default function TemplateModal({
   }, [targetType])
 
   async function handleSubmit() {
-    if (!name.trim()) { alert('Inserisci un nome'); return }
-    if (!contentHtml.trim()) { alert('Inserisci il contenuto HTML'); return }
+    if (!name.trim()) { toast.error('Inserisci un nome'); return }
+    if (!contentHtml.trim()) { toast.error('Inserisci il contenuto HTML'); return }
 
     // Necessario per la policy: created_by = auth.uid() AND is_admin()
     const { data: auth } = await supabase.auth.getUser()
     const createdBy = auth?.user?.id
-    if (!createdBy) { alert('Sessione non valida: utente non autenticato'); return }
+    if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
 
     if (mode === 'create') {
       const { error } = await supabase.from('document_templates').insert({
@@ -67,7 +68,7 @@ export default function TemplateModal({
         content_html: contentHtml,
         created_by: createdBy,
       })
-      if (error) { alert('Errore creazione template'); return }
+      if (error) { toast.error('Errore creazione template'); return }
     } else {
       const { error } = await supabase
         .from('document_templates')
@@ -83,7 +84,7 @@ export default function TemplateModal({
           content_html: contentHtml,
         })
         .eq('id', initialTemplate!.id)
-      if (error) { alert('Errore salvataggio template'); return }
+      if (error) { toast.error('Errore salvataggio template'); return }
     }
     await onSaved()
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MessageModal from '@/components/admin/MessageModal'
@@ -119,7 +120,7 @@ export default function MessagesManager() {
 
       if (!response.ok) {
         console.error('Errore creazione messaggio:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
@@ -130,7 +131,7 @@ export default function MessagesManager() {
 
     } catch (error) {
       console.error('Errore creazione messaggio:', error)
-      alert('Errore di rete durante la creazione del messaggio')
+      toast.error('Errore di rete durante la creazione del messaggio')
     }
   }
 
@@ -151,7 +152,7 @@ export default function MessagesManager() {
 
       if (!response.ok) {
         console.error('Errore aggiornamento messaggio:', result.error)
-        alert(`Errore: ${result.error}`)
+        toast.error(`Errore: ${result.error}`)
         return
       }
 
@@ -162,7 +163,7 @@ export default function MessagesManager() {
 
     } catch (error) {
       console.error('Errore aggiornamento messaggio:', error)
-      alert('Errore di rete durante l\'aggiornamento del messaggio')
+      toast.error('Errore di rete durante l\'aggiornamento del messaggio')
     }
   }
 
@@ -177,7 +178,7 @@ export default function MessagesManager() {
 
         if (!response.ok) {
           console.error('Errore eliminazione messaggio:', result.error)
-          alert(`Errore: ${result.error}`)
+          toast.error(`Errore: ${result.error}`)
           return
         }
 
@@ -186,7 +187,7 @@ export default function MessagesManager() {
 
       } catch (error) {
         console.error('Errore eliminazione messaggio:', error)
-        alert('Errore di rete durante l\'eliminazione del messaggio')
+        toast.error('Errore di rete durante l\'eliminazione del messaggio')
       }
     }
   }

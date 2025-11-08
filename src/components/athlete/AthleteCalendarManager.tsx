@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import { toast } from '@/components/ui'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
@@ -267,10 +268,10 @@ function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
         body: JSON.stringify({ event_id: id, status })
       })
       const j = await res.json()
-      if (!res.ok) { alert(j.error || 'Errore invio conferma'); return }
+      if (!res.ok) { toast.error(j.error || 'Errore invio conferma'); return }
       setData((prev: any) => ({ ...prev, my_attendance: { status, responded_at: new Date().toISOString() } }))
-      alert('Risposta inviata ✅')
-    } catch { alert('Errore di rete') }
+      toast.success('Risposta inviata ✅')
+    } catch { toast.error('Errore di rete') }
   }
 
   return (

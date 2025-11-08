@@ -19,3 +19,4 @@ export {
   DialogDescription,
  } from './Dialog'
 export { default as ThemeToggle } from './ThemeToggle'
+export { ToastProvider, useToast, toast } from './Toast'
