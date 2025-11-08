@@ -19,6 +19,7 @@ type ToastContextValue = {
 const ToastContext = createContext<ToastContextValue | null>(null)
 
 let externalPush: ((t: Omit<ToastItem, 'id'>) => void) | null = null
+const pendingQueue: Omit<ToastItem, 'id'>[] = []
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
@@ -43,6 +44,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     externalPush = push
+    // Flush pending queued toasts (if any were sent before provider mounted)
+    if (pendingQueue.length) {
+      const items = pendingQueue.splice(0, pendingQueue.length)
+      items.forEach(item => push(item))
+    }
     return () => { externalPush = null }
   }, [push])
 
@@ -68,13 +74,16 @@ export function useToast() {
 
 export const toast = {
   success(message: string, opts?: Partial<Omit<ToastItem, 'id' | 'type' | 'message'>>) {
-    externalPush?.({ type: 'success', message, ...opts }) || window.alert(message)
+    if (externalPush) externalPush({ type: 'success', message, ...opts })
+    else pendingQueue.push({ type: 'success', message, ...(opts || {}) })
   },
   error(message: string, opts?: Partial<Omit<ToastItem, 'id' | 'type' | 'message'>>) {
-    externalPush?.({ type: 'error', message, ...opts }) || window.alert(message)
+    if (externalPush) externalPush({ type: 'error', message, ...opts })
+    else pendingQueue.push({ type: 'error', message, ...(opts || {}) })
   },
   info(message: string, opts?: Partial<Omit<ToastItem, 'id' | 'type' | 'message'>>) {
-    externalPush?.({ type: 'info', message, ...opts }) || window.alert(message)
+    if (externalPush) externalPush({ type: 'info', message, ...opts })
+    else pendingQueue.push({ type: 'info', message, ...(opts || {}) })
   },
 }
 
@@ -106,4 +115,3 @@ function ToastCard({ item, onClose }: { item: ToastItem; onClose: () => void }) 
     </div>
   )
 }
-
