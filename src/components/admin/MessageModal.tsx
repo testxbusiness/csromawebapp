@@ -1,14 +1,12 @@
 'use client'
 
 import * as React from 'react'
-import { toast } from '@/components/ui'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
-import { toast } from '@/components/ui'
 
 type Message = {
   id?: string
