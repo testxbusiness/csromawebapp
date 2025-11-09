@@ -88,7 +88,9 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
               <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Mittente</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <IconUser />
-                <div>{data.created_by_profile ? `${data.created_by_profile.first_name} ${data.created_by_profile.last_name}` : '—'}</div>
+                <div>{data.created_by_profile && (data.created_by_profile.first_name || data.created_by_profile.last_name)
+                  ? `${data.created_by_profile.first_name || ''} ${data.created_by_profile.last_name || ''}`.trim()
+                  : '—'}</div>
               </div>
             </div>
 
