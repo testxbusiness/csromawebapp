@@ -127,9 +127,13 @@ export default function MessageModal({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       {/* centrato e coerente con il DS */}
       <DialogContent className="cs-modal--centered cs-modal--md">
-        <DialogHeader>
-          <DialogTitle>{message ? 'Modifica Messaggio' : 'Nuovo Messaggio'}</DialogTitle>
-        </DialogHeader>
+        <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
+          <div className="cs-modal__icon" aria-hidden>✉️</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 className="cs-modal__title">{message ? 'Modifica Messaggio' : 'Nuovo Messaggio'}</h2>
+            <div className="text-secondary" style={{ fontSize: 12, marginTop: 4 }}>Compila i campi e seleziona i destinatari</div>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -156,7 +160,7 @@ export default function MessageModal({
             />
           </div>
 
-          <div>
+          <div className="cs-card p-4">
             <label className="cs-field__label">Allegati</label>
             <div className="flex items-center gap-3">
               <input type="file" multiple onChange={handleFileChange} />

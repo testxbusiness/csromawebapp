@@ -80,7 +80,23 @@ export async function GET(request: NextRequest) {
     }
 
     if (!view || view !== 'full') {
-      return NextResponse.json({ messages: msgs || [] })
+      const minimal = [] as any[]
+      for (const m of msgs || []) {
+        const minimalMsg: any = { ...m }
+        if (m.created_by) {
+          const { data: creator } = await adminClient
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', m.created_by as any)
+            .maybeSingle()
+          if (creator) {
+            minimalMsg.created_by_profile = creator
+            minimalMsg.from = `${creator.first_name || ''} ${creator.last_name || ''}`.trim()
+          }
+        }
+        minimal.push(minimalMsg)
+      }
+      return NextResponse.json({ messages: minimal })
     }
 
     // Enrich with creator and visible recipients

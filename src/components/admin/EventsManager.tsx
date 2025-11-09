@@ -7,6 +7,7 @@ import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { toast } from '@/components/ui'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import EventDetailModal from '@/components/shared/EventDetailModal'
 import EventModal from '@/components/admin/EventModal'
 
 const KIND_COLORS: Record<'training'|'match'|'meeting'|'other', string> = {
@@ -498,53 +499,21 @@ export default function EventsManager() {
       )}
 
       {selectedEvent && (
-        <DetailsDrawer open={true} title="Dettaglio Evento" onClose={() => setSelectedEvent(null)}>
-          <div className="space-y-3 text-sm">
-            <div>
-              <div className="text-xs text-secondary">Titolo</div>
-              <div className="font-medium">{selectedEvent.title}</div>
-            </div>
-            {selectedEvent.description && (
-              <div>
-                <div className="text-xs text-secondary">Descrizione</div>
-                <div>{selectedEvent.description}</div>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="text-xs text-secondary">Inizio</div>
-                <div>{new Date(selectedEvent.start_date).toLocaleString('it-IT')}</div>
-              </div>
-              <div>
-                <div className="text-xs text-secondary">Fine</div>
-                <div>{new Date(selectedEvent.end_date).toLocaleString('it-IT')}</div>
-              </div>
-            </div>
-            {selectedEvent.location && (
-              <div>
-                <div className="text-xs text-secondary">Luogo</div>
-                <div>{selectedEvent.location}</div>
-              </div>
-            )}
-            <div>
-              <div className="text-xs text-secondary">Squadre</div>
-              <div>{(selectedEvent.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}</div>
-            </div>
-            {selectedEvent.created_by_profile && (
-              <div>
-                <div className="text-xs text-secondary">Creato da</div>
-                <div>{selectedEvent.created_by_profile.first_name} {selectedEvent.created_by_profile.last_name}</div>
-              </div>
-            )}
-            <div>
-              <div className="text-xs text-secondary">Tipo</div>
-              <div>{selectedEvent.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}</div>
-            </div>
-            {selectedEvent && (selectedEvent as any).requires_confirmation && (
-              <EventAttendancePanel eventId={selectedEvent.id!} />
-            )}
-          </div>
-        </DetailsDrawer>
+        <EventDetailModal
+          open={true}
+          onClose={() => setSelectedEvent(null)}
+          data={{
+            title: selectedEvent.title,
+            event_kind: (selectedEvent as any).event_kind,
+            start_date: selectedEvent.start_date,
+            end_date: selectedEvent.end_date,
+            location: selectedEvent.location,
+            gym: selectedEvent.gyms ? { name: selectedEvent.gyms.name, city: (selectedEvent.gyms as any).city } : null,
+            teams: (selectedEvent.event_teams || []).map(et => ({ name: et.teams?.name || '' })).filter(t => !!t.name),
+            creator: selectedEvent.created_by_profile ? { first_name: selectedEvent.created_by_profile.first_name, last_name: selectedEvent.created_by_profile.last_name } : null,
+            description: selectedEvent.description || ''
+          }}
+        />
       )}
     </div>
   )

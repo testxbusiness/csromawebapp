@@ -5,6 +5,7 @@ import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MessageModal from '@/components/admin/MessageModal'
+import MessageDetailModal from '@/components/shared/MessageDetailModal'
 
 interface Message {
   id?: string
@@ -58,6 +59,7 @@ export default function MessagesManager() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [showModal, setShowModal] = useState(false)
   const supabase = createClient()
 
@@ -240,6 +242,21 @@ export default function MessagesManager() {
   onUpdate={handleUpdateMessage}
 />
 
+      {selectedMessage && (
+        <MessageDetailModal
+          open={true}
+          onClose={() => setSelectedMessage(null)}
+          data={{
+            subject: selectedMessage.subject,
+            content: selectedMessage.content,
+            created_at: selectedMessage.created_at || undefined,
+            created_by_profile: selectedMessage.created_by_profile || null,
+            message_recipients: (selectedMessage.message_recipients as any) || [],
+            attachments: (selectedMessage.attachments as any)?.map((a:any)=>({ file_name: a.file_name, download_url: a.download_url })) || []
+          }}
+        />
+      )}
+
       <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}
         <div className="hidden md:block">
@@ -255,7 +272,7 @@ export default function MessagesManager() {
           </thead>
           <tbody>
             {messages.map((message) => (
-              <tr key={message.id}>
+              <tr key={message.id} className="cursor-pointer" onClick={() => setSelectedMessage(message)}>
                 <td>
                   <div>
                     <div className="font-medium">{message.subject}</div>
@@ -293,7 +310,7 @@ export default function MessagesManager() {
                     )}
                   </div>
                 </td>
-                <td className="cs-table__actions">
+                <td className="cs-table__actions" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => { setEditingMessage(message); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
                   <button onClick={() => handleDeleteMessage(message.id!)} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
                 </td>
@@ -307,7 +324,7 @@ export default function MessagesManager() {
         }
         <div className="md:hidden p-4 space-y-3">
           {messages.map((message) => (
-            <div key={message.id} className="cs-card">
+            <div key={message.id} className="cs-card" onClick={() => setSelectedMessage(message)}>
               <div className="font-semibold">{message.subject}</div>
               <div className="text-sm text-secondary line-clamp-3">{message.content}</div>
               {(message as any).attachments && (message as any).attachments.length > 0 && (
@@ -334,7 +351,7 @@ export default function MessagesManager() {
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
                 <button onClick={() => { setEditingMessage(message); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
                 <button onClick={() => handleDeleteMessage(message.id!)} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
               </div>

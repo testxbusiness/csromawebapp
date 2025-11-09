@@ -85,10 +85,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error loading messages' }, { status: 400 })
     }
 
-    // If not full view, return minimal payload
+    // If not full view, return minimal payload with creator names
     if (!view || view !== 'full') {
-      return NextResponse.json({ 
-        messages: messages || [],
+      const minimal = [] as any[]
+      for (const msg of messages || []) {
+        const minimalMsg: any = { ...msg }
+        if (msg.created_by) {
+          const { data: creator } = await supabase
+            .from('profiles')
+            .select('first_name, last_name')
+            .eq('id', msg.created_by as any)
+            .maybeSingle()
+          if (creator) {
+            minimalMsg.created_by_profile = creator
+            minimalMsg.from = `${creator.first_name || ''} ${creator.last_name || ''}`.trim()
+          }
+        }
+        minimal.push(minimalMsg)
+      }
+      return NextResponse.json({
+        messages: minimal,
         team_count: teamIds.length
       })
     }

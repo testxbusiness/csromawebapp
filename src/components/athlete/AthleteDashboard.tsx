@@ -4,6 +4,10 @@ import { useState, useEffect, useRef } from 'react'
 import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import EventDetailModal from '@/components/shared/EventDetailModal'
+import MessageDetailModal from '@/components/shared/MessageDetailModal'
+import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
+import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
 interface User {
   id: string
@@ -281,7 +285,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           id,
           subject,
           content,
-          created_at
+          created_at,
+          created_by,
+          created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
         )
       `)
       .eq('is_read', false)
@@ -298,10 +304,17 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     if (data) {
       const mapped = data
         .filter((mr:any) => mr.message) // safeguard
-        .map((mr:any) => ({
-          ...mr.message,
-          is_read: mr.is_read
-        }))
+        .map((mr:any) => {
+          const msg = mr.message
+          const from = msg.created_by_profile
+            ? `${msg.created_by_profile.first_name || ''} ${msg.created_by_profile.last_name || ''}`.trim()
+            : undefined
+          return {
+            ...msg,
+            is_read: mr.is_read,
+            from
+          }
+        })
       // Deduplicate by message id (avoid double counting when both team and personal recipients exist)
       const uniq = Array.from(new Map(mapped.map((m:any) => [m.id, m])).values())
       setUnreadMessages(uniq)
@@ -487,51 +500,35 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Events */}
-        <div className="cs-card cs-card--primary">
-          <h3 id="athlete-events" className="font-semibold mb-4">Prossimi Eventi</h3>
-          {upcomingEvents.length === 0 ? (
-            <p className="text-secondary text-sm">Nessun evento programmato</p>
-          ) : (
-            <div className="cs-list max-h-80 overflow-y-auto">
-              {upcomingEvents.map((event) => (
-                <div key={event.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedEvent(event)}>
-                  <div className="font-medium">{event.title}</div>
-                  <div className="text-sm">
-                    {new Date(event.start_time).toLocaleDateString('it-IT')} alle{' '}
-                    {new Date(event.start_time).toLocaleTimeString('it-IT', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
-                  </div>
-                  {event.location && (<div className="text-sm text-secondary">📍 {event.location}</div>)}
-                  {event.description && (<div className="text-xs text-secondary mt-1 line-clamp-2">{event.description}</div>)}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Upcoming Events clean */}
+        <UpcomingEventsPanel
+          items={upcomingEvents.map(ev => ({
+            id: ev.id,
+            title: ev.title,
+            start: new Date(ev.start_time),
+            end: new Date(ev.end_time),
+            location: ev.location || null,
+            kind: ev.event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
+            subtitle: ev.description || null,
+          }))}
+          viewAllHref="/athlete/calendar"
+          onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
+        />
 
         {/* Messages & Fees */}
         <div className="space-y-6">
-          {/* Unread Messages */}
-          <div className="cs-card cs-card--primary">
-            <h3 id="athlete-messages" className="font-semibold mb-4">Ultimi Messaggi</h3>
-            {unreadMessages.length === 0 ? (
-              <p className="text-secondary text-sm">Nessun messaggio non letto</p>
-            ) : (
-              <div className="cs-list">
-                {unreadMessages.slice(0, 3).map((message) => (
-                  <div key={message.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedMessage(message)}>
-                    <div className="font-medium text-sm">{message.subject}</div>
-                    <div className="text-xs text-secondary">
-                      {new Date(message.created_at).toLocaleDateString('it-IT')}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Unread Messages clean */}
+          <LatestMessagesPanel
+            items={unreadMessages.slice(0,3).map(m => ({
+              id: m.id,
+              subject: m.subject,
+              preview: m.content,
+              created_at: m.created_at ? new Date(m.created_at) : undefined,
+              from: (m as any).from || (m.created_by_profile ? `${m.created_by_profile.first_name || ''} ${m.created_by_profile.last_name || ''}`.trim() : undefined),
+            }))}
+            viewAllHref="/athlete/messages"
+            onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
+          />
 
           {/* Fee Installments */}
           <div className="cs-card cs-card--primary">
@@ -564,40 +561,34 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           </div>
         </div>
       </div>
-      {/* Drawers */}
+      {/* Modals dettagli */}
       {selectedEvent && (
-        <DetailsDrawer open={true} title="Dettaglio Evento" onClose={() => setSelectedEvent(null)}>
-          <div className="space-y-3 text-sm">
-            <div className="font-medium">{selectedEvent.title}</div>
-            <div>📅 {new Date(selectedEvent.start_time).toLocaleString('it-IT')}</div>
-            {selectedEvent.location && <div>📍 {selectedEvent.location}</div>}
-            {selectedEvent.description && <div className="text-secondary">{selectedEvent.description}</div>}
-          </div>
-        </DetailsDrawer>
+        <EventDetailModal
+          open={true}
+          onClose={() => setSelectedEvent(null)}
+          data={{
+            title: selectedEvent.title,
+            event_kind: (selectedEvent as any).event_kind,
+            start_date: (selectedEvent as any).start_time,
+            end_date: (selectedEvent as any).end_time,
+            location: selectedEvent.location || undefined,
+            description: selectedEvent.description || undefined,
+          }}
+        />
       )}
       {selectedMessage && (
-        <DetailsDrawer open={true} title="Dettaglio Messaggio" onClose={() => setSelectedMessage(null)}>
-          <div className="space-y-3 text-sm">
-            <div className="font-medium">{(messageDetail?.subject) || selectedMessage.subject}</div>
-            <div className="text-xs text-secondary">{new Date(selectedMessage.created_at).toLocaleString('it-IT')}</div>
-            <div className="whitespace-pre-wrap">{(messageDetail?.content) || selectedMessage.content}</div>
-            {messageDetail?.created_by_profile && (
-              <div>✍️ {messageDetail.created_by_profile.first_name} {messageDetail.created_by_profile.last_name}</div>
-            )}
-            {messageDetail?.message_recipients && messageDetail.message_recipients.length > 0 && (
-              <div>
-                <div className="text-xs text-secondary mb-1">Destinatari</div>
-                <div className="flex flex-wrap gap-1">
-                  {messageDetail.message_recipients.map((mr: any) => (
-                    <span key={mr.id} className="cs-badge cs-badge--neutral">
-                      {mr.teams ? `🏀 ${mr.teams.name}` : mr.profiles ? `👤 ${mr.profiles.first_name} ${mr.profiles.last_name}` : '—'}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </DetailsDrawer>
+        <MessageDetailModal
+          open={true}
+          onClose={() => setSelectedMessage(null)}
+          data={{
+            subject: messageDetail?.subject || selectedMessage.subject,
+            content: messageDetail?.content || selectedMessage.content,
+            created_at: messageDetail?.created_at || selectedMessage.created_at,
+            created_by_profile: messageDetail?.created_by_profile || (selectedMessage as any).created_by_profile || null,
+            message_recipients: (messageDetail?.message_recipients as any) || (selectedMessage as any).message_recipients || [],
+            attachments: (messageDetail?.attachments || (selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
+          }}
+        />
       )}
     </div>
   )
