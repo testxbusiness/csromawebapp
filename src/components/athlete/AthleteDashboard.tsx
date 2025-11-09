@@ -285,7 +285,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           id,
           subject,
           content,
-          created_at
+          created_at,
+          created_by,
+          created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
         )
       `)
       .eq('is_read', false)
@@ -302,10 +304,17 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     if (data) {
       const mapped = data
         .filter((mr:any) => mr.message) // safeguard
-        .map((mr:any) => ({
-          ...mr.message,
-          is_read: mr.is_read
-        }))
+        .map((mr:any) => {
+          const msg = mr.message
+          const from = msg.created_by_profile
+            ? `${msg.created_by_profile.first_name || ''} ${msg.created_by_profile.last_name || ''}`.trim()
+            : undefined
+          return {
+            ...msg,
+            is_read: mr.is_read,
+            from
+          }
+        })
       // Deduplicate by message id (avoid double counting when both team and personal recipients exist)
       const uniq = Array.from(new Map(mapped.map((m:any) => [m.id, m])).values())
       setUnreadMessages(uniq)
