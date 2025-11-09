@@ -24,8 +24,9 @@ export default function LatestMessagesPanel({
   viewAllHref: string
   onDetail: (id: string) => void
 }) {
-  const initials = (name?: string, subject?: string) => {
-    const src = (name && name.trim()) || (subject && subject.trim()) || 'CS'
+  const initials = (name?: string) => {
+    const src = (name && name.trim()) || '?'
+    if (src === '?') return '?'
     return src.split(' ').filter(Boolean).slice(0,2).map(s=>s[0]!.toUpperCase()).join('')
   }
 
@@ -43,7 +44,7 @@ export default function LatestMessagesPanel({
           {items.map((m) => (
             <div key={m.id} className="cs-card p-3 flex items-start gap-3">
               <div className="cs-avatar" aria-hidden style={{ width: 32, height: 32 }}>
-                <span style={{ fontSize: 12, fontWeight: 700 }}>{initials(m.from, m.subject)}</span>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{initials(m.from)}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
