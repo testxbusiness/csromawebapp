@@ -60,13 +60,14 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
     <div
       className="cs-overlay"
       aria-hidden={open ? 'false' : 'true'}
-      style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16 }}
+      style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 100 }}
     >
       <section
         role="dialog"
         aria-modal="true"
-        className="cs-modal cs-modal--md cs-modal--centered"
+        className="cs-modal cs-modal--md"
         data-state={open ? 'open' : 'closed'}
+        style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
       >
         <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
 
