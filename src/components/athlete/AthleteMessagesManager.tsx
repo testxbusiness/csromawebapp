@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import MessageDetailModal from '@/components/shared/MessageDetailModal'
 
 type Message = {
   id: string
@@ -143,54 +144,18 @@ export default function AthleteMessagesManager() {
       </div>
 
       {selectedMessage && (
-        <DetailsDrawer open={true} title="Dettaglio Messaggio" onClose={() => setSelectedMessage(null)}>
-          <div className="space-y-3 text-sm">
-            <div>
-              <div className="text-xs text-secondary">Oggetto</div>
-              <div className="font-medium">{selectedMessage.subject}</div>
-            </div>
-            <div>
-              <div className="text-xs text-secondary">Data</div>
-              <div>{new Date(selectedMessage.created_at || '').toLocaleString('it-IT')}</div>
-            </div>
-            <div>
-              <div className="text-xs text-secondary">Contenuto</div>
-              <div className="whitespace-pre-wrap">{selectedMessage.content}</div>
-            </div>
-            {selectedMessage.created_by_profile && (
-              <div>
-              <div className="text-xs text-secondary">Mittente</div>
-                <div>{selectedMessage.created_by_profile.first_name} {selectedMessage.created_by_profile.last_name}</div>
-              </div>
-            )}
-            {(selectedMessage as any).attachments && (selectedMessage as any).attachments.length > 0 && (
-              <div>
-                <div className="text-xs text-secondary">Allegati</div>
-                <div className="mt-1 space-y-1">
-                  {(selectedMessage as any).attachments.map((a: any) => (
-                    <div key={a.id}>
-                      <a href={a.download_url} target="_blank" rel="noopener noreferrer" className="underline">
-                        {a.file_name}
-                      </a>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {selectedMessage.message_recipients && selectedMessage.message_recipients.length > 0 && (
-              <div>
-                <div className="text-xs text-secondary mb-1">Destinatari</div>
-                <div className="flex flex-wrap gap-1">
-                  {selectedMessage.message_recipients.map((mr) => (
-                    <span key={mr.id} className="cs-badge cs-badge--neutral">
-                      {mr.teams ? `🏀 ${mr.teams.name}` : mr.profiles ? `👤 ${mr.profiles.first_name} ${mr.profiles.last_name}` : '—'}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </DetailsDrawer>
+        <MessageDetailModal
+          open={true}
+          onClose={() => setSelectedMessage(null)}
+          data={{
+            subject: selectedMessage.subject,
+            content: selectedMessage.content,
+            created_at: selectedMessage.created_at,
+            created_by_profile: selectedMessage.created_by_profile || null,
+            message_recipients: (selectedMessage.message_recipients as any) || [],
+            attachments: (selectedMessage.attachments as any)?.map((a:any)=>({ file_name: a.file_name, download_url: a.download_url })) || []
+          }}
+        />
       )}
     </div>
   )
