@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import EventDetailModal from '@/components/shared/EventDetailModal'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
@@ -536,21 +537,7 @@ function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
     run()
   }, [id])
   return (
-    <DetailsDrawer open={true} title="Dettaglio Evento" onClose={onClose}>
-      {!data ? (
-        <div className="text-sm text-gray-600">Caricamento...</div>
-      ) : (
-        <div className="space-y-3 text-sm">
-          <div className="font-medium">{data.title}</div>
-          <div>📅 {new Date(data.start_date).toLocaleString('it-IT')} - {new Date(data.end_date).toLocaleString('it-IT')}</div>
-          {data.location && <div>📍 {data.location}</div>}
-          {data.gym && <div>🏟️ {data.gym.name} {data.gym.city ? `- ${data.gym.city}` : ''}</div>}
-          {data.teams?.length > 0 && (<div>👥 {data.teams.map((t: any) => t.name).join(', ')}</div>)}
-          {data.creator && (<div>✍️ {data.creator.first_name} {data.creator.last_name}</div>)}
-          {data.description && <div className="text-gray-700 whitespace-pre-wrap">{data.description}</div>}
-        </div>
-      )}
-    </DetailsDrawer>
+    <EventDetailModal open={true} onClose={onClose} data={data} />
   )
 }
 

@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import EventDetailModal from '@/components/shared/EventDetailModal'
 import { toast } from '@/components/ui'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
@@ -250,8 +251,6 @@ export default function AthleteCalendarManager() {
 
 function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
   const [data, setData] = useState<any>(null)
-  const supabase = createClient()
-  const { user } = useAuth()
   useEffect(() => {
     (async () => {
       try {
@@ -261,55 +260,7 @@ function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
       } catch {}
     })()
   }, [id])
-
-  async function rsvp(status: 'going'|'maybe'|'declined') {
-    try {
-      const res = await fetch('/api/athlete/events/attendance', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_id: id, status })
-      })
-      const j = await res.json()
-      if (!res.ok) { toast.error(j.error || 'Errore invio conferma'); return }
-      setData((prev: any) => ({ ...prev, my_attendance: { status, responded_at: new Date().toISOString() } }))
-      toast.success('Risposta inviata ✅')
-    } catch { toast.error('Errore di rete') }
-  }
-
   return (
-    <DetailsDrawer open title="Dettaglio Evento" onClose={onClose}>
-      {!data ? (
-        <div className="text-sm text-gray-600">Caricamento...</div>
-      ) : (
-        <div className="space-y-3 text-sm">
-          <div className="font-medium">{data.title}</div>
-          <div>📅 {new Date(data.start_date).toLocaleString('it-IT')} - {new Date(data.end_date).toLocaleString('it-IT')}</div>
-          {data.location && <div>📍 {data.location}</div>}
-          {data.gym && <div>🏟️ {data.gym.name}{data.gym.city ? ` - ${data.gym.city}` : ''}</div>}
-          {!!(data.teams?.length) && <div>👥 {data.teams.map((t: any) => t.name).join(', ')}</div>}
-          {data.creator && <div>✍️ {data.creator.first_name} {data.creator.last_name}</div>}
-          {data.description && <div className="text-gray-700 whitespace-pre-wrap">{data.description}</div>}
-
-          {data.requires_confirmation ? (
-            <div className="mt-3">
-              <div className="text-xs text-secondary">Conferma partecipazione</div>
-              {data.my_attendance ? (
-                <div className="mt-1">
-                  Stato: {data.my_attendance.status === 'going' ? '✔️ Partecipo' : data.my_attendance.status === 'maybe' ? '🤝 Forse' : '✖️ Non posso'}
-                </div>
-              ) : (
-                <div className="mt-2 flex gap-2">
-                  <button className="cs-btn cs-btn--success cs-btn--sm" onClick={() => rsvp('going')}>Partecipo</button>
-                  <button className="cs-btn cs-btn--accent cs-btn--sm" onClick={() => rsvp('maybe')}>Forse</button>
-                  <button className="cs-btn cs-btn--danger cs-btn--sm" onClick={() => rsvp('declined')}>Non posso</button>
-                </div>
-              )}
-              {data.confirmation_deadline && (
-                <div className="text-xs text-secondary mt-1">Scadenza: {new Date(data.confirmation_deadline).toLocaleString('it-IT')}</div>
-              )}
-            </div>
-          ) : null}
-        </div>
-      )}
-    </DetailsDrawer>
+    <EventDetailModal open={true} onClose={onClose} data={data} />
   )
 }
