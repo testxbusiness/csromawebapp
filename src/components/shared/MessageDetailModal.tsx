@@ -1,6 +1,7 @@
-'use client'
+"use client"
 
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 
 type Recipient = {
   id: string
@@ -18,6 +19,8 @@ export type MessageDetailData = {
 }
 
 export default function MessageDetailModal({ open, onClose, data }: { open: boolean; onClose: () => void; data: MessageDetailData | null }) {
+  const [mounted, setMounted] = React.useState(false)
+  React.useEffect(() => { setMounted(true) }, [])
   const IconX = (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
       <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth={2} strokeLinecap="round"/>
@@ -51,7 +54,9 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
   const teamBadges = recipients.filter(r => r.teams).map(r => r.teams!.name)
   const userBadges = recipients.filter(r => r.profiles).map(r => `${r.profiles!.first_name} ${r.profiles!.last_name}`)
 
-  return (
+  if (!mounted || !open) return null
+
+  return createPortal(
     <div
       className="cs-overlay"
       aria-hidden={open ? 'false' : 'true'}
@@ -144,6 +149,7 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
           </div>
         )}
       </section>
-    </div>
+    </div>,
+    document.body
   )
 }
