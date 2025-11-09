@@ -515,7 +515,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
               subject: m.subject,
               preview: m.content,
               created_at: m.created_at ? new Date(m.created_at) : undefined,
-              from: m.created_by_profile ? `${m.created_by_profile.first_name} ${m.created_by_profile.last_name}` : undefined,
+              from: (m as any).from || (m.created_by_profile ? `${m.created_by_profile.first_name || ''} ${m.created_by_profile.last_name || ''}`.trim() : undefined),
             }))}
             viewAllHref="/athlete/messages"
             onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}

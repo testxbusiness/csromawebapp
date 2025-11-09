@@ -425,7 +425,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
               subject: m.subject,
               preview: m.content,
               created_at: m.created_at ? new Date(m.created_at) : undefined,
-              from: (m as any).created_by_profile ? `${(m as any).created_by_profile.first_name} ${(m as any).created_by_profile.last_name}` : undefined,
+              from: (m as any).from || ((m as any).created_by_profile ? `${(m as any).created_by_profile.first_name || ''} ${(m as any).created_by_profile.last_name || ''}`.trim() : undefined),
             }))}
             viewAllHref="/coach/messages"
             onDetail={(id)=>{ const mm = recentMessages.find(x=>x.id===id); if (mm) setSelectedMessage(mm as any) }}
