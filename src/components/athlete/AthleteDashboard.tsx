@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import EventDetailModal from '@/components/shared/EventDetailModal'
+import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
@@ -550,40 +552,34 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           </div>
         </div>
       </div>
-      {/* Drawers */}
+      {/* Modals dettagli */}
       {selectedEvent && (
-        <DetailsDrawer open={true} title="Dettaglio Evento" onClose={() => setSelectedEvent(null)}>
-          <div className="space-y-3 text-sm">
-            <div className="font-medium">{selectedEvent.title}</div>
-            <div>📅 {new Date(selectedEvent.start_time).toLocaleString('it-IT')}</div>
-            {selectedEvent.location && <div>📍 {selectedEvent.location}</div>}
-            {selectedEvent.description && <div className="text-secondary">{selectedEvent.description}</div>}
-          </div>
-        </DetailsDrawer>
+        <EventDetailModal
+          open={true}
+          onClose={() => setSelectedEvent(null)}
+          data={{
+            title: selectedEvent.title,
+            event_kind: (selectedEvent as any).event_kind,
+            start_date: (selectedEvent as any).start_time,
+            end_date: (selectedEvent as any).end_time,
+            location: selectedEvent.location || undefined,
+            description: selectedEvent.description || undefined,
+          }}
+        />
       )}
       {selectedMessage && (
-        <DetailsDrawer open={true} title="Dettaglio Messaggio" onClose={() => setSelectedMessage(null)}>
-          <div className="space-y-3 text-sm">
-            <div className="font-medium">{(messageDetail?.subject) || selectedMessage.subject}</div>
-            <div className="text-xs text-secondary">{new Date(selectedMessage.created_at).toLocaleString('it-IT')}</div>
-            <div className="whitespace-pre-wrap">{(messageDetail?.content) || selectedMessage.content}</div>
-            {messageDetail?.created_by_profile && (
-              <div>✍️ {messageDetail.created_by_profile.first_name} {messageDetail.created_by_profile.last_name}</div>
-            )}
-            {messageDetail?.message_recipients && messageDetail.message_recipients.length > 0 && (
-              <div>
-                <div className="text-xs text-secondary mb-1">Destinatari</div>
-                <div className="flex flex-wrap gap-1">
-                  {messageDetail.message_recipients.map((mr: any) => (
-                    <span key={mr.id} className="cs-badge cs-badge--neutral">
-                      {mr.teams ? `🏀 ${mr.teams.name}` : mr.profiles ? `👤 ${mr.profiles.first_name} ${mr.profiles.last_name}` : '—'}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </DetailsDrawer>
+        <MessageDetailModal
+          open={true}
+          onClose={() => setSelectedMessage(null)}
+          data={{
+            subject: messageDetail?.subject || selectedMessage.subject,
+            content: messageDetail?.content || selectedMessage.content,
+            created_at: selectedMessage.created_at,
+            created_by_profile: (selectedMessage as any).created_by_profile || null,
+            message_recipients: (messageDetail?.message_recipients as any) || (selectedMessage as any).message_recipients || [],
+            attachments: ((selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
+          }}
+        />
       )}
     </div>
   )
