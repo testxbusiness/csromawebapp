@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
+import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
 interface User {
   id: string
@@ -397,64 +399,35 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Events */}
-        <div className="cs-card cs-card--primary">
-          <h3 id="coach-events" className="font-semibold mb-4">Prossimi Eventi</h3>
-          {upcomingEvents.length === 0 ? (
-            <p className="text-secondary text-sm">Nessun evento programmato</p>
-          ) : (
-            <div className="cs-list">
-              {upcomingEvents.map((event) => {
-                const startDate = new Date(event.start_date)
-                const endDate = new Date(event.end_date)
-                
-                return (
-                  <div key={event.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedEvent(event)}>
-                    <div className="font-medium">{event.title}</div>
-                    <div className="text-sm">
-                      📅 {startDate.toLocaleDateString('it-IT')}
-                    </div>
-                    <div className="text-sm">
-                      🕒 {startDate.toLocaleTimeString('it-IT', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })} - {endDate.toLocaleTimeString('it-IT', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
-                    </div>
-                    {event.location && (<div className="text-sm text-secondary">📍 {event.location}</div>)}
-                    {event.teams && (<div className="text-xs text-secondary mt-1">👥 {event.teams}</div>)}
-                    <div className="text-xs text-secondary mt-1">
-                      {event.event_type === 'one_time' ? 'Evento singolo' : 'Ricorrente'}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        {/* Upcoming Events clean */}
+        <UpcomingEventsPanel
+          items={upcomingEvents.map(ev => ({
+            id: ev.id!,
+            title: ev.title,
+            start: new Date(ev.start_date),
+            end: new Date(ev.end_date),
+            location: ev.location || null,
+            kind: (ev as any).event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
+            subtitle: ev.description || null,
+          }))}
+          viewAllHref="/coach/calendar"
+          onDetail={(id)=>{ const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
+        />
 
         {/* Recent Messages & Payments */}
         <div className="space-y-6">
-          {/* Recent Messages */}
-          <div className="cs-card cs-card--primary">
-            <h3 id="coach-messages" className="font-semibold mb-4">Messaggi Recenti</h3>
-            {recentMessages.length === 0 ? (
-              <p className="text-secondary text-sm">Nessun messaggio recente</p>
-            ) : (
-              <div className="cs-list">
-              {recentMessages.slice(0, 3).map((message) => (
-                  <div key={message.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedMessage(message)}>
-                    <div className="font-medium text-sm">{message.subject}</div>
-                    <div className="text-xs text-secondary">
-                      {new Date(message.created_at).toLocaleDateString('it-IT')}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Recent Messages clean */}
+          <LatestMessagesPanel
+            items={recentMessages.slice(0,3).map(m => ({
+              id: m.id,
+              subject: m.subject,
+              preview: m.content,
+              created_at: m.created_at ? new Date(m.created_at) : undefined,
+              from: (m as any).created_by_profile ? `${(m as any).created_by_profile.first_name} ${(m as any).created_by_profile.last_name}` : undefined,
+            }))}
+            viewAllHref="/coach/messages"
+            onDetail={(id)=>{ const mm = recentMessages.find(x=>x.id===id); if (mm) setSelectedMessage(mm as any) }}
+          />
 
           {/* Payments Summary */}
           <div className="cs-card cs-card--primary">

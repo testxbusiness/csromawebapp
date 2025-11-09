@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
+import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
 interface User {
   id: string
@@ -487,51 +489,35 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Events */}
-        <div className="cs-card cs-card--primary">
-          <h3 id="athlete-events" className="font-semibold mb-4">Prossimi Eventi</h3>
-          {upcomingEvents.length === 0 ? (
-            <p className="text-secondary text-sm">Nessun evento programmato</p>
-          ) : (
-            <div className="cs-list max-h-80 overflow-y-auto">
-              {upcomingEvents.map((event) => (
-                <div key={event.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedEvent(event)}>
-                  <div className="font-medium">{event.title}</div>
-                  <div className="text-sm">
-                    {new Date(event.start_time).toLocaleDateString('it-IT')} alle{' '}
-                    {new Date(event.start_time).toLocaleTimeString('it-IT', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
-                  </div>
-                  {event.location && (<div className="text-sm text-secondary">📍 {event.location}</div>)}
-                  {event.description && (<div className="text-xs text-secondary mt-1 line-clamp-2">{event.description}</div>)}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* Upcoming Events clean */}
+        <UpcomingEventsPanel
+          items={upcomingEvents.map(ev => ({
+            id: ev.id,
+            title: ev.title,
+            start: new Date(ev.start_time),
+            end: new Date(ev.end_time),
+            location: ev.location || null,
+            kind: ev.event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
+            subtitle: ev.description || null,
+          }))}
+          viewAllHref="/athlete/calendar"
+          onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
+        />
 
         {/* Messages & Fees */}
         <div className="space-y-6">
-          {/* Unread Messages */}
-          <div className="cs-card cs-card--primary">
-            <h3 id="athlete-messages" className="font-semibold mb-4">Ultimi Messaggi</h3>
-            {unreadMessages.length === 0 ? (
-              <p className="text-secondary text-sm">Nessun messaggio non letto</p>
-            ) : (
-              <div className="cs-list">
-                {unreadMessages.slice(0, 3).map((message) => (
-                  <div key={message.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedMessage(message)}>
-                    <div className="font-medium text-sm">{message.subject}</div>
-                    <div className="text-xs text-secondary">
-                      {new Date(message.created_at).toLocaleDateString('it-IT')}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Unread Messages clean */}
+          <LatestMessagesPanel
+            items={unreadMessages.slice(0,3).map(m => ({
+              id: m.id,
+              subject: m.subject,
+              preview: m.content,
+              created_at: m.created_at ? new Date(m.created_at) : undefined,
+              from: m.created_by_profile ? `${m.created_by_profile.first_name} ${m.created_by_profile.last_name}` : undefined,
+            }))}
+            viewAllHref="/athlete/messages"
+            onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
+          />
 
           {/* Fee Installments */}
           <div className="cs-card cs-card--primary">
