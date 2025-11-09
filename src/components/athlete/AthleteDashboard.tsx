@@ -574,10 +574,10 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,
-            created_at: selectedMessage.created_at,
-            created_by_profile: (selectedMessage as any).created_by_profile || null,
+            created_at: messageDetail?.created_at || selectedMessage.created_at,
+            created_by_profile: messageDetail?.created_by_profile || (selectedMessage as any).created_by_profile || null,
             message_recipients: (messageDetail?.message_recipients as any) || (selectedMessage as any).message_recipients || [],
-            attachments: ((selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
+            attachments: (messageDetail?.attachments || (selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
           }}
         />
       )}
