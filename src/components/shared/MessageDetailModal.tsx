@@ -53,7 +53,8 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
 
   return (
     <div className="cs-overlay" aria-hidden={open ? 'false' : 'true'}>
-      <section role="dialog" aria-modal="true" className="cs-modal cs-modal--md cs-modal--centered" data-state={open ? 'open' : 'closed'} style={{ margin: 'auto' }}>
+      <div style={{ display: 'grid', placeItems: 'center', minHeight: '100dvh', padding: 16 }}>
+      <section role="dialog" aria-modal="true" className="cs-modal cs-modal--md cs-modal--centered" data-state={open ? 'open' : 'closed'}>
         <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
 
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
@@ -135,6 +136,7 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
           </div>
         )}
       </section>
+      </div>
     </div>
   )
 }
