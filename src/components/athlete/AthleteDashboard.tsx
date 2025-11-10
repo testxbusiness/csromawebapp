@@ -114,18 +114,26 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   // Ricarica intelligente quando la tab torna visibile (solo se necessario)
   const lastLoadTimeRef = useRef<number>(0)
   useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
+      if (debounceTimer) clearTimeout(debounceTimer)
 
-      // Solo se i dati sono vecchi (> 2 minuti)
-      const now = Date.now()
-      const timeSinceLastLoad = now - lastLoadTimeRef.current
-      if (timeSinceLastLoad > 120000) { // 2 minuti
-        loadAthleteData()
-      }
+      debounceTimer = setTimeout(() => {
+        // Solo se i dati sono vecchi (> 2 minuti)
+        const now = Date.now()
+        const timeSinceLastLoad = now - lastLoadTimeRef.current
+        if (timeSinceLastLoad > 120000) { // 2 minuti
+          loadAthleteData()
+          lastLoadTimeRef.current = now
+        }
+      }, 1000) // Debounce di 1 secondo
     }
+
     window.addEventListener('visibilitychange', onVisible)
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
       window.removeEventListener('visibilitychange', onVisible)
     }
   }, [])

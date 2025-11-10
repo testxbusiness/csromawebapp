@@ -13,7 +13,6 @@ type ProfileRow = {
   must_change_password: boolean | null
   created_at: string | null
   updated_at: string | null
-  // aggiungi qui altri campi se servono
 }
 
 interface UseAuthReturn {
@@ -95,6 +94,40 @@ export function useAuth(): UseAuthReturn {
     if (!mounted.current) return
     if (error) {
       console.warn('[useAuth] profiles select error', error)
+
+      // Se errore 401/403, il token potrebbe essere scaduto - forza refresh della sessione
+      const isAuthError = error.message?.includes('JWT') ||
+                         error.message?.includes('token') ||
+                         error.message?.includes('unauthorized') ||
+                         error.code === 'PGRST301' || // PostgREST JWT expired
+                         error.code === '401' ||
+                         error.code === '403'
+
+      if (isAuthError) {
+        console.warn('[useAuth] Auth error detected, attempting session refresh...')
+        try {
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+          if (!refreshError && refreshData.session) {
+            console.log('[useAuth] Session refreshed successfully, retrying profile load...')
+            // Retry profile load con il nuovo token
+            lastProfileFor.current = null
+            const { data: retryData, error: retryError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', uid)
+              .single()
+
+            if (!retryError && retryData && mounted.current) {
+              console.log('[useAuth] Profile loaded successfully after session refresh')
+              setProfile(retryData as ProfileRow)
+              return
+            }
+          }
+        } catch (refreshErr) {
+          console.error('[useAuth] Failed to refresh session:', refreshErr)
+        }
+      }
+
       setProfile(null)
       return
     }
@@ -237,33 +270,46 @@ export function useAuth(): UseAuthReturn {
     }
   }, [loadProfile])
 
-  // Refresh session/profile quando la tab torna visibile (debounced e intelligente)
+  // Refresh session/profile quando la tab torna visibile (debounced)
   const lastRefreshTimeRef = useRef<number>(0)
   useEffect(() => {
     let t: ReturnType<typeof setTimeout> | null = null
     let isSubscribed = true
-
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
       if (t) clearTimeout(t)
       t = setTimeout(async () => {
         if (!isSubscribed || document.visibilityState !== 'visible') return
 
-        // Solo se i dati sono vecchi (> 60 secondi) o mancanti
+        // Ridotta soglia a 10 secondi per refresh più reattivo
         const now = Date.now()
         const timeSinceLastRefresh = now - lastRefreshTimeRef.current
-        const shouldRefresh = !profile || timeSinceLastRefresh > 60000
+        const shouldRefresh = !profile || timeSinceLastRefresh > 10000
 
         if (shouldRefresh) {
           try {
-            const { data } = await supabase.auth.getSession()
+            // Forza refresh della sessione da Supabase per validare il token
+            const { data, error } = await supabase.auth.refreshSession()
             if (!isSubscribed) return
-            setSession(data.session ?? null)
-            setUser(data.session?.user ?? null)
-            const uid = data.session?.user?.id
+
+            if (error) {
+              console.warn('[useAuth] session refresh failed on visibility change:', error)
+              // Se il refresh fallisce, prova a ottenere la sessione esistente
+              const { data: fallbackData } = await supabase.auth.getSession()
+              setSession(fallbackData.session ?? null)
+              setUser(fallbackData.session?.user ?? null)
+            } else {
+              setSession(data.session ?? null)
+              setUser(data.session?.user ?? null)
+            }
+
+            const uid = data?.session?.user?.id
             if (uid) {
               lastProfileFor.current = null
               await loadProfile(uid)
+            } else {
+              // Nessuna sessione valida, pulisci il profilo
+              setProfile(null)
             }
             lastRefreshTimeRef.current = now
           } catch (e) {
@@ -271,7 +317,7 @@ export function useAuth(): UseAuthReturn {
             console.warn('[useAuth] visibility refresh error', e)
           }
         }
-      }, 1000) // Debounce più lungo per evitare trigger multipli
+      }, 1000) // Debounce di 1 secondo per evitare trigger multipli
     }
 
     window.addEventListener('visibilitychange', onVisible)
