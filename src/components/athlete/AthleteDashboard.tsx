@@ -668,7 +668,12 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                     </div>
                     <div className="text-right">
                       <div className="font-medium">€{installment.amount}</div>
-                      <span className={`cs-badge ${installment.status==='paid' ? 'cs-badge--success' : installment.status==='overdue' ? 'cs-badge--danger' : 'cs-badge--warning'}`}>{getStatusText(installment.status)}</span>
+                      <span className={`cs-badge ${
+                        installment.status==='paid' ? 'cs-badge--success' :
+                        installment.status==='overdue' ? 'cs-badge--danger' :
+                        installment.status==='due_soon' ? 'cs-badge--warning' :
+                        'cs-badge--neutral'
+                      }`}>{getStatusText(installment.status)}</span>
                     </div>
                   </div>
                 ))}
