@@ -21,6 +21,7 @@ interface UseAuthReturn {
   profile: ProfileRow | null
   role: string | null
   loading: boolean
+  profileLoading: boolean
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -34,6 +35,7 @@ export function useAuth(): UseAuthReturn {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profileLoading, setProfileLoading] = useState(true)
 
   // Evita refetch multipli dello stesso profilo
   const lastProfileFor = useRef<string | null>(null)
@@ -85,55 +87,65 @@ export function useAuth(): UseAuthReturn {
     // Debug timing
     console.log('[useAuth] loadProfile started for:', uid)
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', uid)
-      .single()
+    // Inizia caricamento profilo
+    setProfileLoading(true)
 
-    if (!mounted.current) return
-    if (error) {
-      console.warn('[useAuth] profiles select error', error)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', uid)
+        .single()
 
-      // Se errore 401/403, il token potrebbe essere scaduto - forza refresh della sessione
-      const isAuthError = error.message?.includes('JWT') ||
-                         error.message?.includes('token') ||
-                         error.message?.includes('unauthorized') ||
-                         error.code === 'PGRST301' || // PostgREST JWT expired
-                         error.code === '401' ||
-                         error.code === '403'
+      if (!mounted.current) return
+      if (error) {
+        console.warn('[useAuth] profiles select error', error)
 
-      if (isAuthError) {
-        console.warn('[useAuth] Auth error detected, attempting session refresh...')
-        try {
-          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
-          if (!refreshError && refreshData.session) {
-            console.log('[useAuth] Session refreshed successfully, retrying profile load...')
-            // Retry profile load con il nuovo token
-            lastProfileFor.current = null
-            const { data: retryData, error: retryError } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', uid)
-              .single()
+        // Se errore 401/403, il token potrebbe essere scaduto - forza refresh della sessione
+        const isAuthError = error.message?.includes('JWT') ||
+                           error.message?.includes('token') ||
+                           error.message?.includes('unauthorized') ||
+                           error.code === 'PGRST301' || // PostgREST JWT expired
+                           error.code === '401' ||
+                           error.code === '403'
 
-            if (!retryError && retryData && mounted.current) {
-              console.log('[useAuth] Profile loaded successfully after session refresh')
-              setProfile(retryData as ProfileRow)
-              return
+        if (isAuthError) {
+          console.warn('[useAuth] Auth error detected, attempting session refresh...')
+          try {
+            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+            if (!refreshError && refreshData.session) {
+              console.log('[useAuth] Session refreshed successfully, retrying profile load...')
+              // Retry profile load con il nuovo token
+              lastProfileFor.current = null
+              const { data: retryData, error: retryError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', uid)
+                .single()
+
+              if (!retryError && retryData && mounted.current) {
+                console.log('[useAuth] Profile loaded successfully after session refresh')
+                setProfile(retryData as ProfileRow)
+                return
+              }
             }
+          } catch (refreshErr) {
+            console.error('[useAuth] Failed to refresh session:', refreshErr)
           }
-        } catch (refreshErr) {
-          console.error('[useAuth] Failed to refresh session:', refreshErr)
         }
+
+        setProfile(null)
+        return
       }
 
-      setProfile(null)
-      return
+      console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
+      setProfile(data as ProfileRow)
+    } finally {
+      // Termina caricamento profilo sempre, anche in caso di errore
+      if (mounted.current) {
+        setProfileLoading(false)
+      }
     }
-
-    console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
-    setProfile(data as ProfileRow)
   }, [])
 
   const refreshProfile = useCallback(async () => {
@@ -191,6 +203,7 @@ export function useAuth(): UseAuthReturn {
 
   useEffect(() => {
     let unsub: (() => void) | null = null
+    let hasValidSessionFromGetSession = false
 
     const init = async () => {
       // Watchdog di sicurezza: sblocca dopo 5 secondi max
@@ -210,20 +223,26 @@ export function useAuth(): UseAuthReturn {
         setSession(data.session ?? null)
         setUser(data.session?.user ?? null)
         currentUserIdRef.current = data.session?.user?.id ?? null
+        hasValidSessionFromGetSession = !!data.session?.user?.id
 
         if (data.session?.user?.id) {
           // Aspetta il caricamento del profilo per evitare il flash del fallback
+          setProfileLoading(true)
           await loadProfile(data.session.user.id)
         } else {
           setProfile(null)
+          setProfileLoading(false)
         }
       } finally {
-        // Pulisci il watchdog e sblocca loading
+        // Pulisci il watchdog e sblocca loading SOLO se abbiamo una sessione valida
+        // Se getSession() ha ritornato null, aspettiamo il listener onAuthStateChange
         if (loadingWatchdog.current) {
           clearTimeout(loadingWatchdog.current)
           loadingWatchdog.current = null
         }
-        if (mounted.current) setLoading(false)
+        if (mounted.current && hasValidSessionFromGetSession) {
+          setLoading(false)
+        }
       }
 
       // 2) subscribe ai cambi di auth
@@ -352,5 +371,5 @@ export function useAuth(): UseAuthReturn {
     currentUserIdRef.current = null
   }, [])
 
-  return { user, session, profile, role, loading, refreshProfile, signOut, forceRefresh, silentRefresh }
+  return { user, session, profile, role, loading, profileLoading, refreshProfile, signOut, forceRefresh, silentRefresh }
 }
