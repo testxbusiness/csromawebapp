@@ -203,6 +203,7 @@ export function useAuth(): UseAuthReturn {
 
   useEffect(() => {
     let unsub: (() => void) | null = null
+    let hasValidSessionFromGetSession = false
 
     const init = async () => {
       // Watchdog di sicurezza: sblocca dopo 5 secondi max
@@ -222,6 +223,7 @@ export function useAuth(): UseAuthReturn {
         setSession(data.session ?? null)
         setUser(data.session?.user ?? null)
         currentUserIdRef.current = data.session?.user?.id ?? null
+        hasValidSessionFromGetSession = !!data.session?.user?.id
 
         if (data.session?.user?.id) {
           // Aspetta il caricamento del profilo per evitare il flash del fallback
@@ -232,12 +234,15 @@ export function useAuth(): UseAuthReturn {
           setProfileLoading(false)
         }
       } finally {
-        // Pulisci il watchdog e sblocca loading
+        // Pulisci il watchdog e sblocca loading SOLO se abbiamo una sessione valida
+        // Se getSession() ha ritornato null, aspettiamo il listener onAuthStateChange
         if (loadingWatchdog.current) {
           clearTimeout(loadingWatchdog.current)
           loadingWatchdog.current = null
         }
-        if (mounted.current) setLoading(false)
+        if (mounted.current && hasValidSessionFromGetSession) {
+          setLoading(false)
+        }
       }
 
       // 2) subscribe ai cambi di auth
