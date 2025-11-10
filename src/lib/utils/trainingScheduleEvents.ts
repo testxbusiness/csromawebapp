@@ -85,15 +85,28 @@ import { SupabaseClient } from '@supabase/supabase-js'
         // Componi recurrence_end_date (fine giornata della stagione)
         const recurrenceEndDateTime = new Date(seasonEndDate)
         recurrenceEndDateTime.setHours(23, 59, 59, 999)
+        // Ottieni l'utente corrente per created_by
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          console.error('Utente non autenticato')
+          continue
+        }
+
+        const eventTitle = `Allenamento ${team.name}`
+        const eventLocation = gym.city ? `${gym.name}, ${gym.city}` : gym.name
+
         // Crea evento ricorrente
         const { data: newEvent, error: eventError } = await supabase
           .from('events')
           .insert({
-            title: `Allenamento ${team.name}`,
+            name: eventTitle,  // Campo obbligatorio
+            title: eventTitle,
             description: `Allenamento settimanale - ${getDayName(schedule.day_of_week)}`,
             start_date: startDateTime.toISOString(),
             end_date: endDateTime.toISOString(),
-            location: gym.city ? `${gym.name}, ${gym.city}` : gym.name,
+            start_time: startDateTime.toISOString(),  // Campo obbligatorio (sembra duplicato)
+            end_time: endDateTime.toISOString(),      // Campo obbligatorio (sembra duplicato)
+            location: eventLocation,
             gym_id: gym.id,
             activity_id: team.activity_id,
             event_type: 'recurring',
@@ -101,6 +114,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
             recurrence_rule: { frequency: 'weekly', interval: 1 },
             recurrence_end_date: recurrenceEndDateTime.toISOString(),
             parent_event_id: null,  // Questo è il parent
+            created_by: user.id,    // Campo obbligatorio
             requires_confirmation: false,
           })
           .select('id')
