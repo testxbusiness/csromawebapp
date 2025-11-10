@@ -16,7 +16,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, role, user, loading, signOut, refreshProfile, silentRefresh } = useAuth()
+  const { profile, role, user, loading, profileLoading, signOut, refreshProfile, silentRefresh } = useAuth()
   const router = useRouter()
   const { registerSW } = usePush()
   useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
@@ -86,7 +86,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   // Mostra skeleton solo quando lo stato auth è in caricamento
   const isAuthLoading = loading
   // Stato intermedio: utente presente ma profilo non ancora caricato
-  const isProfileLoading = !!user && !profile && loading
+  const isProfileLoading = !!user && !profile && profileLoading
 
   const fallbackFirst = (user as any)?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0] : '')
   const fallbackLast = (user as any)?.user_metadata?.last_name || ''
