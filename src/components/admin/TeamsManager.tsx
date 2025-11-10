@@ -41,10 +41,18 @@ interface Coach {
   email: string
 }
 
+interface Gym {
+  id: string
+  name: string
+  city?: string
+  address?: string
+}
+
 export default function TeamsManager() {
   const [teams, setTeams] = useState<Team[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [coaches, setCoaches] = useState<Coach[]>([])
+  const [gyms, setGyms] = useState<Gym[]>([])
   const [loading, setLoading] = useState(true)
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -54,6 +62,7 @@ export default function TeamsManager() {
     loadTeams()
     loadActivities()
     loadCoaches()
+    loadGyms()
   }, [])
 
   const loadTeams = async () => {
@@ -165,6 +174,16 @@ export default function TeamsManager() {
       .order('first_name')
 
     setCoaches(data || [])
+  }
+
+  const loadGyms = async () => {
+    const { data } = await supabase
+      .from('gyms')
+      .select('id, name, city, address')
+      .eq('is_active', true)
+      .order('name')
+
+    setGyms(data || [])
   }
 
   const generateTeamCode = (teamName: string, activityName: string): string => {
@@ -280,6 +299,7 @@ export default function TeamsManager() {
   team={editingTeam}
   activities={activities}
   coaches={coaches}
+  gyms={gyms}
   onCreate={handleCreateTeam}
   onUpdate={handleUpdateTeam}
   onGenerateCode={generateTeamCode}
