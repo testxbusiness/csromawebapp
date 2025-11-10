@@ -35,7 +35,7 @@ export function useAuth(): UseAuthReturn {
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
-  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(true)
 
   // Evita refetch multipli dello stesso profilo
   const lastProfileFor = useRef<string | null>(null)
