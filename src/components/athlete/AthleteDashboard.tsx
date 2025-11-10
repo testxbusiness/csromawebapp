@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
+import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
@@ -90,6 +91,8 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [messageDetail, setMessageDetail] = useState<any>(null)
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
+  const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
   const supabase = createClient()
 
   // Enrich selected message on open
@@ -106,6 +109,15 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     }
     loadDetail()
   }, [selectedMessage])
+
+  // Load team details when team is selected
+  useEffect(() => {
+    if (selectedTeamId) {
+      loadTeamDetail(selectedTeamId)
+    } else {
+      setTeamDetailData(null)
+    }
+  }, [selectedTeamId])
 
   useEffect(() => {
     loadAthleteData()
@@ -350,6 +362,73 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     if (data) setFeeInstallments(data)
   }
 
+  const loadTeamDetail = async (teamId: string) => {
+    try {
+      // 1. Team basic info
+      const { data: teamData } = await supabase
+        .from('teams')
+        .select('name, code, activity_id, activities(name)')
+        .eq('id', teamId)
+        .single()
+
+      if (!teamData) return
+
+      // 2. Training schedules with gyms
+      const { data: schedules } = await supabase
+        .from('team_training_schedules')
+        .select('day_of_week, start_time, end_time, gym_id, gyms(name, city)')
+        .eq('team_id', teamId)
+        .eq('is_active', true)
+        .order('day_of_week, start_time')
+
+      // 3. Coaches with profiles
+      const { data: coachesData } = await supabase
+        .from('team_coaches')
+        .select('coach_id, role, profiles(id, first_name, last_name)')
+        .eq('team_id', teamId)
+
+      // 4. Athletes (team members) with profiles
+      const { data: membersData } = await supabase
+        .from('team_members')
+        .select('profile_id, jersey_number, profiles(id, first_name, last_name)')
+        .eq('team_id', teamId)
+        .order('jersey_number')
+
+      // Build TeamDetailData
+      const detail: TeamDetailData = {
+        name: teamData.name,
+        code: teamData.code,
+        activity: teamData.activities ? { name: teamData.activities.name } : undefined,
+        training_schedules: schedules?.map(s => ({
+          day_of_week: s.day_of_week,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          gym: {
+            name: s.gyms?.name || 'N/D',
+            city: s.gyms?.city
+          }
+        })) || [],
+        coaches: coachesData?.map(c => ({
+          id: c.profiles?.id || '',
+          first_name: c.profiles?.first_name || '',
+          last_name: c.profiles?.last_name || '',
+          role: c.role
+        })) || [],
+        athletes: membersData?.map(m => ({
+          id: m.profiles?.id || '',
+          first_name: m.profiles?.first_name || '',
+          last_name: m.profiles?.last_name || '',
+          jersey_number: m.jersey_number
+        })) || []
+      }
+
+      setTeamDetailData(detail)
+    } catch (error) {
+      console.error('Error loading team details:', error)
+      setTeamDetailData(null)
+    }
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'paid':
@@ -461,7 +540,11 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
               {teamMemberships.map((membership) => {
                 const certStatus = getMedicalCertificateStatus(membership.medical_certificate_expiry)
                 return (
-                  <div key={membership.id} className="cs-list-item">
+                  <div
+                    key={membership.id}
+                    className="cs-list-item cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => setSelectedTeamId(membership.team.id)}
+                  >
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <div className="font-medium">{membership.team.name}</div>
@@ -596,6 +679,13 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
             message_recipients: (messageDetail?.message_recipients as any) || (selectedMessage as any).message_recipients || [],
             attachments: (messageDetail?.attachments || (selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
           }}
+        />
+      )}
+      {selectedTeamId && (
+        <TeamDetailModal
+          open={true}
+          onClose={() => setSelectedTeamId(null)}
+          data={teamDetailData}
         />
       )}
     </div>
