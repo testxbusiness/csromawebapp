@@ -225,9 +225,11 @@ export function useAuth(): UseAuthReturn {
 
         if (data.session?.user?.id) {
           // Aspetta il caricamento del profilo per evitare il flash del fallback
+          setProfileLoading(true)
           await loadProfile(data.session.user.id)
         } else {
           setProfile(null)
+          setProfileLoading(false)
         }
       } finally {
         // Pulisci il watchdog e sblocca loading
