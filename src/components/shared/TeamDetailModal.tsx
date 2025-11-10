@@ -103,8 +103,8 @@ export default function TeamDetailModal({
 
   const getRoleLabel = (role: string): string => {
     const roles: Record<string, string> = {
-      'head_coach': 'Allenatore Capo',
-      'assistant_coach': 'Assistente',
+      'head_coach': 'Primo Allenatore',
+      'assistant_coach': 'Secondo Allenatore',
       'trainer': 'Preparatore',
       'manager': 'Manager'
     }
