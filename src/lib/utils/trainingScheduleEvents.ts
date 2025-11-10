@@ -69,6 +69,13 @@ import { SupabaseClient } from '@supabase/supabase-js'
       }
       // 5. Genera eventi per ogni schedule
       let eventsCreated = 0
+
+      // Ottieni l'utente corrente una volta sola
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        return { success: false, error: 'Utente non autenticato' }
+      }
+
       for (const schedule of activeSchedules) {
         // Ottieni info palestra per location
         const { data: gym } = await supabase
@@ -77,46 +84,70 @@ import { SupabaseClient } from '@supabase/supabase-js'
           .eq('id', schedule.gym_id)
           .single()
         if (!gym) continue
-        // Calcola la prima data valida per questo giorno della settimana
-        const firstDate = getNextDateForDayOfWeek(schedule.day_of_week)
-        // Componi start_date e end_date (combina data + time)
-        const startDateTime = combineDateAndTime(firstDate, schedule.start_time)
-        const endDateTime = combineDateAndTime(firstDate, schedule.end_time)
-        // Componi recurrence_end_date (fine giornata della stagione)
-        const recurrenceEndDateTime = new Date(seasonEndDate)
-        recurrenceEndDateTime.setHours(23, 59, 59, 999)
-        // Crea evento ricorrente
-        const { data: newEvent, error: eventError } = await supabase
-          .from('events')
-          .insert({
-            title: `Allenamento ${team.name}`,
-            description: `Allenamento settimanale - ${getDayName(schedule.day_of_week)}`,
+
+        const eventTitle = `Allenamento ${team.name}`
+        const eventLocation = gym.city ? `${gym.name}, ${gym.city}` : gym.name
+        const eventDescription = `Allenamento settimanale - ${getDayName(schedule.day_of_week)}`
+
+        // Calcola TUTTE le date fino alla fine della stagione
+        const allDates = generateRecurringDates(
+          schedule.day_of_week,
+          new Date(),
+          new Date(seasonEndDate)
+        )
+
+        // Crea un evento fisico per OGNI occorrenza
+        const eventsToInsert = allDates.map(date => {
+          const startDateTime = combineDateAndTime(date, schedule.start_time)
+          const endDateTime = combineDateAndTime(date, schedule.end_time)
+
+          return {
+            name: eventTitle,
+            title: eventTitle,
+            description: eventDescription,
             start_date: startDateTime.toISOString(),
             end_date: endDateTime.toISOString(),
-            location: gym.city ? `${gym.name}, ${gym.city}` : gym.name,
+            start_time: startDateTime.toISOString(),
+            end_time: endDateTime.toISOString(),
+            location: eventLocation,
             gym_id: gym.id,
             activity_id: team.activity_id,
             event_type: 'recurring',
             event_kind: 'training',
             recurrence_rule: { frequency: 'weekly', interval: 1 },
-            recurrence_end_date: recurrenceEndDateTime.toISOString(),
-            parent_event_id: null,  // Questo è il parent
+            parent_event_id: null,
+            created_by: user.id,
             requires_confirmation: false,
-          })
-          .select('id')
-          .single()
-        if (eventError) {
-          console.error('Errore creazione evento:', eventError)
-          continue
-        }
-        // Collega evento alla squadra
-        await supabase
-          .from('event_teams')
-          .insert({
-            event_id: newEvent.id,
+          }
+        })
+
+        // Inserisci tutti gli eventi in batch (max 100 alla volta per sicurezza)
+        const batchSize = 100
+        for (let i = 0; i < eventsToInsert.length; i += batchSize) {
+          const batch = eventsToInsert.slice(i, i + batchSize)
+
+          const { data: newEvents, error: eventError } = await supabase
+            .from('events')
+            .insert(batch)
+            .select('id')
+
+          if (eventError) {
+            console.error('Errore creazione eventi batch:', eventError)
+            continue
+          }
+
+          // Collega tutti gli eventi alla squadra
+          const eventTeamsToInsert = newEvents.map(event => ({
+            event_id: event.id,
             team_id: teamId,
-          })
-        eventsCreated++
+          }))
+
+          await supabase
+            .from('event_teams')
+            .insert(eventTeamsToInsert)
+
+          eventsCreated += newEvents.length
+        }
       }
       return {
         success: true,
@@ -184,7 +215,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
   // Helper: Calcola prossima data per giorno della settimana
   // =====================================================
   function getNextDateForDayOfWeek(
-    targetDayOfWeek: number, 
+    targetDayOfWeek: number,
     afterDate: Date = new Date()
   ): Date {
     const result = new Date(afterDate)
@@ -196,6 +227,29 @@ import { SupabaseClient } from '@supabase/supabase-js'
     }
     result.setDate(result.getDate() + daysToAdd)
     return result
+  }
+
+  // =====================================================
+  // Helper: Genera tutte le date ricorrenti settimanali
+  // =====================================================
+  function generateRecurringDates(
+    dayOfWeek: number,
+    startDate: Date,
+    endDate: Date
+  ): Date[] {
+    const dates: Date[] = []
+
+    // Trova la prima occorrenza del giorno della settimana
+    let currentDate = getNextDateForDayOfWeek(dayOfWeek, startDate)
+
+    // Genera tutte le date settimanali fino alla fine
+    while (currentDate <= endDate) {
+      dates.push(new Date(currentDate))
+      // Aggiungi 7 giorni per la prossima settimana
+      currentDate.setDate(currentDate.getDate() + 7)
+    }
+
+    return dates
   }
   // =====================================================
   // Helper: Combina data e time

@@ -34,6 +34,7 @@ export default function CoachCalendarManager() {
   const supabase = createClient()
 
   const [events, setEvents] = useState<Event[]>([])
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
@@ -44,10 +45,20 @@ export default function CoachCalendarManager() {
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
+  const [filterEventKind, setFilterEventKind] = useState<string>('')
 
   useEffect(() => {
     if (user) loadData()
   }, [user])
+
+  useEffect(() => {
+    // Applica filtro event_kind
+    if (filterEventKind) {
+      setFilteredEvents(events.filter(e => e.event_kind === filterEventKind))
+    } else {
+      setFilteredEvents(events)
+    }
+  }, [events, filterEventKind])
 
   const loadData = async () => {
     setLoading(true)
@@ -281,6 +292,23 @@ export default function CoachCalendarManager() {
           </div>
         </div>
 
+        {/* Filtro Tipo Evento */}
+        <div className="mb-4">
+          <label className="cs-field__label">Tipo Evento</label>
+          <select
+            value={filterEventKind}
+            onChange={(e) => setFilterEventKind(e.target.value)}
+            className="cs-select"
+            style={{ maxWidth: '300px' }}
+          >
+            <option value="">Tutti i tipi</option>
+            <option value="training">Allenamento</option>
+            <option value="match">Partita</option>
+            <option value="meeting">Riunione</option>
+            <option value="other">Altro</option>
+          </select>
+        </div>
+
         {viewMode === 'calendar' ? (
           <FullCalendarWidget
             initialDate={currentDate}
@@ -327,55 +355,115 @@ export default function CoachCalendarManager() {
             <p className="text-secondary mb-4">Non hai squadre assegnate</p>
             <p className="text-sm text-secondary">Contatta l'amministratore per essere assegnato a una squadra</p>
           </div>
-        ) : events.length === 0 ? (
+        ) : filteredEvents.length === 0 ? (
           <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Nessun evento creato</p>
-            <button onClick={() => setShowForm(true)} className="cs-btn cs-btn--primary">
-              Crea il tuo primo evento
-            </button>
+            <p className="text-secondary mb-4">Nessun evento trovato</p>
+            {events.length === 0 && (
+              <button onClick={() => setShowForm(true)} className="cs-btn cs-btn--primary">
+                Crea il tuo primo evento
+              </button>
+            )}
           </div>
         ) : (
-          <div className="cs-list">
-            {events.map((event) => (
-              <div key={event.id} className="cs-list-item cursor-pointer" onClick={() => setSelectedEvent(event)}>
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{event.title}</h3>
-                    {event.description && <p className="text-secondary mt-1">{event.description}</p>}
-                    <div className="mt-2 text-sm text-secondary space-y-1">
-                      <div>
-                        📅 {new Date(event.start_time).toLocaleDateString('it-IT')} dalle{' '}
-                        {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} alle{' '}
+          <div className="overflow-hidden">
+            {/* Desktop */}
+            <div className="hidden md:block">
+              <table className="cs-table">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Data/Ora</th>
+                    <th>Luogo</th>
+                    <th>Squadre</th>
+                    <th>Tipo</th>
+                    <th>Azioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEvents.map((event) => (
+                    <tr key={event.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedEvent(event)}>
+                      <td className="px-6 py-4">
+                        <div>
+                          <div className="font-medium">{event.title}</div>
+                          <div className="text-secondary text-sm">{event.description}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div>{new Date(event.start_time).toLocaleDateString('it-IT')}</div>
+                        <div className="text-xs text-secondary">
+                          {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} - {new Date(event.end_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>{event.location || 'N/D'}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div>{event.selected_teams.map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`cs-badge ${
+                          event.event_kind === 'training' ? 'cs-badge--primary' :
+                          event.event_kind === 'match' ? 'cs-badge--danger' :
+                          event.event_kind === 'meeting' ? 'cs-badge--accent' :
+                          'cs-badge--neutral'
+                        }`}>
+                          {event.event_kind === 'training' ? 'Allenamento' :
+                           event.event_kind === 'match' ? 'Partita' :
+                           event.event_kind === 'meeting' ? 'Riunione' :
+                           event.event_kind === 'other' ? 'Altro' : 'N/D'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
+                        <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowForm(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden p-4 space-y-3">
+              {filteredEvents.map((event) => (
+                <div key={event.id} className="cs-card" onClick={() => setSelectedEvent(event)}>
+                  <div className="font-semibold">{event.title}</div>
+                  {event.description && (
+                    <div className="text-sm text-secondary line-clamp-3">{event.description}</div>
+                  )}
+                  <div className="mt-2 grid gap-2 text-sm">
+                    <div>
+                      <strong>Data:</strong> {new Date(event.start_time).toLocaleDateString('it-IT')}
+                      <span className="text-secondary ml-2">
+                        {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                        {' - '}
                         {new Date(event.end_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                      {event.location && <div>📍 {event.location}</div>}
-                      {event.is_recurring && <div>🔄 Evento ricorrente</div>}
-                      <div>
-                        👥 Squadre: {event.selected_teams.map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ')}
-                      </div>
+                      </span>
+                    </div>
+                    <div><strong>Luogo:</strong> {event.location || 'N/D'}</div>
+                    <div><strong>Squadre:</strong> {event.selected_teams.map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
+                    <div>
+                      <strong>Tipo:</strong>
+                      <span className={`ml-2 cs-badge ${
+                        event.event_kind === 'training' ? 'cs-badge--primary' :
+                        event.event_kind === 'match' ? 'cs-badge--danger' :
+                        event.event_kind === 'meeting' ? 'cs-badge--accent' :
+                        'cs-badge--neutral'
+                      }`}>
+                        {event.event_kind === 'training' ? 'Allenamento' :
+                         event.event_kind === 'match' ? 'Partita' :
+                         event.event_kind === 'meeting' ? 'Riunione' :
+                         event.event_kind === 'other' ? 'Altro' : 'N/D'}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex space-x-2 ml-4">
-                    {event.created_by === user?.id && (
-                      <>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowForm(true) }}
-                          className="cs-btn cs-btn--ghost cs-btn--sm"
-                        >
-                          Modifica
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); deleteEvent(event.id!) }}
-                          className="cs-btn cs-btn--danger cs-btn--sm"
-                        >
-                          Elimina
-                        </button>
-                      </>
-                    )}
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowForm(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
+                    <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 

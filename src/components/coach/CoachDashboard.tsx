@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
+import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
@@ -73,6 +74,8 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [messageDetail, setMessageDetail] = useState<any>(null)
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
+  const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -122,6 +125,15 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     }
     loadDetail()
   }, [selectedMessage])
+
+  // Load team details when team is selected
+  useEffect(() => {
+    if (selectedTeamId) {
+      loadTeamDetail(selectedTeamId)
+    } else {
+      setTeamDetailData(null)
+    }
+  }, [selectedTeamId])
 
   const loadCoachData = async () => {
     setLoading(true)
@@ -332,6 +344,98 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     if (data) setPayments(data)
   }
 
+  const loadTeamDetail = async (teamId: string) => {
+    try {
+      // 1. Team basic info
+      const { data: teamData } = await supabase
+        .from('teams')
+        .select('name, code, activity_id, activities(name)')
+        .eq('id', teamId)
+        .single()
+
+      if (!teamData) return
+
+      // 2. Training schedules with gyms
+      const { data: schedules } = await supabase
+        .from('team_training_schedules')
+        .select('day_of_week, start_time, end_time, gym_id, gyms(name, city)')
+        .eq('team_id', teamId)
+        .eq('is_active', true)
+        .order('day_of_week, start_time')
+
+      // 3. Coaches (without join)
+      const { data: coachesData } = await supabase
+        .from('team_coaches')
+        .select('coach_id, role')
+        .eq('team_id', teamId)
+
+      // 4. Athletes (without join)
+      const { data: membersData, error: membersError } = await supabase
+        .from('team_members')
+        .select('profile_id, jersey_number')
+        .eq('team_id', teamId)
+        .order('jersey_number')
+
+      console.warn('Coach loading members:', { membersData, membersError, teamId })
+
+      // 5. Load profiles separately to avoid RLS recursion
+      const coachIds = coachesData?.map(c => c.coach_id).filter(Boolean) || []
+      const memberIds = membersData?.map(m => m.profile_id).filter(Boolean) || []
+      const allProfileIds = [...coachIds, ...memberIds]
+
+      let profilesMap = new Map<string, any>()
+      if (allProfileIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', allProfileIds)
+
+        console.warn('Coach loading profiles:', { allProfileIds, profilesData, profilesError })
+
+        profilesData?.forEach(p => profilesMap.set(p.id, p))
+      }
+
+      // Build TeamDetailData
+      const detail: TeamDetailData = {
+        name: teamData.name,
+        code: teamData.code,
+        activity: teamData.activities ? { name: teamData.activities.name } : undefined,
+        training_schedules: schedules?.map(s => ({
+          day_of_week: s.day_of_week,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          gym: {
+            name: s.gyms?.name || 'N/D',
+            city: s.gyms?.city
+          }
+        })) || [],
+        coaches: coachesData?.map(c => {
+          const profile = profilesMap.get(c.coach_id)
+          return {
+            id: c.coach_id,
+            first_name: profile?.first_name || '',
+            last_name: profile?.last_name || '',
+            role: c.role
+          }
+        }) || [],
+        athletes: membersData?.map(m => {
+          const profile = profilesMap.get(m.profile_id)
+          return {
+            id: m.profile_id,
+            first_name: profile?.first_name || '',
+            last_name: profile?.last_name || '',
+            jersey_number: m.jersey_number
+          }
+        }) || []
+      }
+
+      setTeamDetailData(detail)
+    } catch (error) {
+      console.error('Error loading team details:', error)
+      setTeamDetailData(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -398,7 +502,11 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
           ) : (
             <div className="cs-list">
               {teams.map((team) => (
-                <div key={team.id} className="cs-list-item">
+                <div
+                  key={team.id}
+                  className="cs-list-item cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedTeamId(team.id)}
+                >
                   <div>
                     <div className="font-medium">{team.name}</div>
                     <div className="text-sm text-secondary">Codice: {team.code}</div>
@@ -499,6 +607,13 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
             message_recipients: (messageDetail?.message_recipients as any) || (selectedMessage as any).message_recipients || [],
             attachments: (messageDetail?.attachments || (selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
           }}
+        />
+      )}
+      {selectedTeamId && (
+        <TeamDetailModal
+          open={true}
+          onClose={() => setSelectedTeamId(null)}
+          data={teamDetailData}
         />
       )}
     </div>
