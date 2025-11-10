@@ -363,18 +363,33 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         .eq('is_active', true)
         .order('day_of_week, start_time')
 
-      // 3. Coaches with profiles
+      // 3. Coaches (without join)
       const { data: coachesData } = await supabase
         .from('team_coaches')
-        .select('coach_id, role, profiles(id, first_name, last_name)')
+        .select('coach_id, role')
         .eq('team_id', teamId)
 
-      // 4. Athletes (team members) with profiles
+      // 4. Athletes (without join)
       const { data: membersData } = await supabase
         .from('team_members')
-        .select('profile_id, jersey_number, profiles(id, first_name, last_name)')
+        .select('profile_id, jersey_number')
         .eq('team_id', teamId)
         .order('jersey_number')
+
+      // 5. Load profiles separately to avoid RLS recursion
+      const coachIds = coachesData?.map(c => c.coach_id).filter(Boolean) || []
+      const memberIds = membersData?.map(m => m.profile_id).filter(Boolean) || []
+      const allProfileIds = [...coachIds, ...memberIds]
+
+      let profilesMap = new Map<string, any>()
+      if (allProfileIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', allProfileIds)
+
+        profilesData?.forEach(p => profilesMap.set(p.id, p))
+      }
 
       // Build TeamDetailData
       const detail: TeamDetailData = {
@@ -390,18 +405,24 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
             city: s.gyms?.city
           }
         })) || [],
-        coaches: coachesData?.map(c => ({
-          id: c.profiles?.id || '',
-          first_name: c.profiles?.first_name || '',
-          last_name: c.profiles?.last_name || '',
-          role: c.role
-        })) || [],
-        athletes: membersData?.map(m => ({
-          id: m.profiles?.id || '',
-          first_name: m.profiles?.first_name || '',
-          last_name: m.profiles?.last_name || '',
-          jersey_number: m.jersey_number
-        })) || []
+        coaches: coachesData?.map(c => {
+          const profile = profilesMap.get(c.coach_id)
+          return {
+            id: c.coach_id,
+            first_name: profile?.first_name || '',
+            last_name: profile?.last_name || '',
+            role: c.role
+          }
+        }) || [],
+        athletes: membersData?.map(m => {
+          const profile = profilesMap.get(m.profile_id)
+          return {
+            id: m.profile_id,
+            first_name: profile?.first_name || '',
+            last_name: profile?.last_name || '',
+            jersey_number: m.jersey_number
+          }
+        }) || []
       }
 
       setTeamDetailData(detail)
