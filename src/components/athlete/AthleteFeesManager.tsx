@@ -158,6 +158,17 @@ export default function AthleteFeesManager() {
     return Array.from(m.values())
   })()
 
+  // Riepilogo per quota (membership_fee) per mostrare dettagli: iscrizione, assicurazione, mensile, mesi e riferimenti
+  const feeSummaries = (() => {
+    const m = new Map<string, FeeInstallment['membership_fee']>()
+    installments.forEach((inst) => {
+      const fee = inst.membership_fee
+      const key = fee?.id || `${fee?.team?.name}-${fee?.name}`
+      if (fee && !m.has(key)) m.set(key, fee)
+    })
+    return Array.from(m.values())
+  })()
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -170,6 +181,43 @@ export default function AthleteFeesManager() {
     <div className="space-y-6">
       {/* Header opzionale della pagina */}
       <PageHeader title="Le Mie Quote Associative" subtitle="Area Atleta" />
+
+      {/* Riepilogo quote (dettagli quota) */}
+      {feeSummaries.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold">Dettaglio Quota Associativa</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {feeSummaries.map((fee) => (
+              <div key={fee.id} className="cs-card cs-card--primary">
+                <div className="mb-2">
+                  <div className="text-sm font-medium text-secondary">
+                    {fee.team.name} ({fee.team.code}) • {fee.team.activity.name}
+                  </div>
+                  <div className="text-base font-semibold">{fee.name}</div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-secondary">Iscrizione</span>
+                    <span>€{Number(fee.enrollment_fee || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-secondary">Assicurazione</span>
+                    <span>€{Number(fee.insurance_fee || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-secondary">Frequenza mensile</span>
+                    <span>€{Number(fee.monthly_fee || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-secondary">Mesi</span>
+                    <span>{Number(fee.months_count || 0)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Summary Cards */}
       {teamTotals.length > 0 && (
