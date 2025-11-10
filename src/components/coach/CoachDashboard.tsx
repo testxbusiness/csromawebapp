@@ -79,14 +79,30 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     loadCoachData()
   }, [])
 
-  // Ricarica quando si torna alla tab / finestra
+  // Ricarica quando si torna alla tab / finestra (con debounce e throttling)
   useEffect(() => {
+    let lastRefreshTime = 0
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
     const onVisible = () => {
-      if (document.visibilityState === 'visible') loadCoachData()
+      if (document.visibilityState !== 'visible') return
+      if (debounceTimer) clearTimeout(debounceTimer)
+
+      debounceTimer = setTimeout(() => {
+        // Throttle: ricarica solo se sono passati almeno 30 secondi dall'ultimo refresh
+        const now = Date.now()
+        const timeSinceLastRefresh = now - lastRefreshTime
+        if (timeSinceLastRefresh > 30000) {
+          loadCoachData()
+          lastRefreshTime = now
+        }
+      }, 1000) // Debounce di 1 secondo
     }
+
     window.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', onVisible)
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
       window.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
