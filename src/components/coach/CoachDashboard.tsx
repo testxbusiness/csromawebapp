@@ -376,7 +376,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         .eq('team_id', teamId)
         .order('jersey_number')
 
-      console.log('Coach loading members:', { membersData, membersError, teamId })
+      console.warn('Coach loading members:', { membersData, membersError, teamId })
 
       // 5. Load profiles separately to avoid RLS recursion
       const coachIds = coachesData?.map(c => c.coach_id).filter(Boolean) || []
@@ -390,7 +390,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
           .select('id, first_name, last_name')
           .in('id', allProfileIds)
 
-        console.log('Coach loading profiles:', { allProfileIds, profilesData, profilesError })
+        console.warn('Coach loading profiles:', { allProfileIds, profilesData, profilesError })
 
         profilesData?.forEach(p => profilesMap.set(p.id, p))
       }
