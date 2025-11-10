@@ -81,6 +81,7 @@ export default function EventsManager() {
   const [teams, setTeams] = useState<Team[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [filterTeam, setFilterTeam] = useState<string>('')
+  const [filterEventKind, setFilterEventKind] = useState<string>('')
   const [filterFrom, setFilterFrom] = useState<string>('')
   const [filterTo, setFilterTo] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -118,13 +119,19 @@ export default function EventsManager() {
 
       console.log('Eventi caricati:', result.events)
       // Assicurati che i dati correlati siano sempre oggetti validi
-      const eventsWithSafeData = (result.events || []).map(event => ({
+      let eventsWithSafeData = (result.events || []).map(event => ({
         ...event,
         gyms: event.gyms || null,
         activities: event.activities || null,
         event_teams: event.event_teams || [],
         created_by_profile: event.created_by_profile || null
       }))
+
+      // Filtro locale per event_kind
+      if (filterEventKind) {
+        eventsWithSafeData = eventsWithSafeData.filter(e => e.event_kind === filterEventKind)
+      }
+
       setEvents(eventsWithSafeData)
       setLoading(false)
     } catch (error) {
@@ -303,7 +310,7 @@ export default function EventsManager() {
 
       {/* Filtri */}
       <div className="cs-card cs-card--primary p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div>
             <label className="cs-field__label">Squadra</label>
             <select
@@ -315,6 +322,20 @@ export default function EventsManager() {
               {teams.map(t => (
                 <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
               ))}
+            </select>
+          </div>
+          <div>
+            <label className="cs-field__label">Tipo Evento</label>
+            <select
+              value={filterEventKind}
+              onChange={(e) => setFilterEventKind(e.target.value)}
+              className="cs-select"
+            >
+              <option value="">Tutti i tipi</option>
+              <option value="training">Allenamento</option>
+              <option value="match">Partita</option>
+              <option value="meeting">Riunione</option>
+              <option value="other">Altro</option>
             </select>
           </div>
           <div>
@@ -337,7 +358,7 @@ export default function EventsManager() {
           </div>
           <div className="flex gap-2">
             <button onClick={() => loadEvents()} className="cs-btn cs-btn--primary">Applica filtri</button>
-            <button onClick={() => { setFilterTeam(''); setFilterFrom(''); setFilterTo(''); setLoading(true); loadEvents(); }} className="cs-btn cs-btn--ghost">Reset</button>
+            <button onClick={() => { setFilterTeam(''); setFilterEventKind(''); setFilterFrom(''); setFilterTo(''); setLoading(true); loadEvents(); }} className="cs-btn cs-btn--ghost">Reset</button>
           </div>
         </div>
       </div>
@@ -440,8 +461,16 @@ export default function EventsManager() {
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`cs-badge ${event.event_type==='one_time'?'cs-badge--neutral':'cs-badge--accent'}`}>
-                    {event.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}
+                  <span className={`cs-badge ${
+                    event.event_kind === 'training' ? 'cs-badge--primary' :
+                    event.event_kind === 'match' ? 'cs-badge--danger' :
+                    event.event_kind === 'meeting' ? 'cs-badge--accent' :
+                    'cs-badge--neutral'
+                  }`}>
+                    {event.event_kind === 'training' ? 'Allenamento' :
+                     event.event_kind === 'match' ? 'Partita' :
+                     event.event_kind === 'meeting' ? 'Riunione' :
+                     event.event_kind === 'other' ? 'Altro' : 'N/D'}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
@@ -475,8 +504,16 @@ export default function EventsManager() {
                 <div><strong>Squadre:</strong> {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}</div>
                 <div>
                   <strong>Tipo:</strong>
-                  <span className={`ml-2 cs-badge ${event.event_type==='one_time'?'cs-badge--neutral':'cs-badge--accent'}`}>
-                    {event.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}
+                  <span className={`ml-2 cs-badge ${
+                    event.event_kind === 'training' ? 'cs-badge--primary' :
+                    event.event_kind === 'match' ? 'cs-badge--danger' :
+                    event.event_kind === 'meeting' ? 'cs-badge--accent' :
+                    'cs-badge--neutral'
+                  }`}>
+                    {event.event_kind === 'training' ? 'Allenamento' :
+                     event.event_kind === 'match' ? 'Partita' :
+                     event.event_kind === 'meeting' ? 'Riunione' :
+                     event.event_kind === 'other' ? 'Altro' : 'N/D'}
                   </span>
                 </div>
               </div>

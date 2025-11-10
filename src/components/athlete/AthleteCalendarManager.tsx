@@ -49,9 +49,17 @@ export default function AthleteCalendarManager() {
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
+  const [filterEventKind, setFilterEventKind] = useState<string>('')
 
   useEffect(() => { if (user) void loadData() }, [user])
-  useEffect(() => { setFilteredEvents(events) }, [events])
+
+  useEffect(() => {
+    let filtered = events
+    if (filterEventKind) {
+      filtered = filtered.filter(e => e.event_kind === filterEventKind)
+    }
+    setFilteredEvents(filtered)
+  }, [events, filterEventKind])
 
   async function loadData() {
     setLoading(true)
@@ -186,6 +194,24 @@ export default function AthleteCalendarManager() {
           </div>
         </div>
 
+        {/* Filtri */}
+        <div className="mb-4 flex gap-3">
+          <div className="flex-1">
+            <label className="cs-field__label">Tipo Evento</label>
+            <select
+              className="cs-select"
+              value={filterEventKind}
+              onChange={(e) => setFilterEventKind(e.target.value)}
+            >
+              <option value="">Tutti i tipi</option>
+              <option value="training">Allenamento</option>
+              <option value="match">Partita</option>
+              <option value="meeting">Riunione</option>
+              <option value="other">Altro</option>
+            </select>
+          </div>
+        </div>
+
         {viewMode === 'calendar' ? (
           <FullCalendarWidget
             initialDate={currentDate}
@@ -213,32 +239,111 @@ export default function AthleteCalendarManager() {
             <p className="text-secondary mb-4">Nessun evento trovato</p>
           </div>
         ) : (
-          <div className="cs-list">
-            {filteredEvents.map((event) => (
-              <div
-                key={event.id}
-                className="cs-list-item cursor-pointer"
-                onClick={() => setSelectedEvent(event)}
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{event.title}</h3>
-                    {event.description && <p className="text-secondary mt-1">{event.description}</p>}
-                    <div className="mt-2 text-sm text-secondary space-y-1">
-                      <div>
-                        📅 {new Date(event.start_time).toLocaleDateString('it-IT')} dalle{' '}
-                        {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} alle{' '}
-                        {new Date(event.end_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                      {event.location && <div>📍 {event.location}</div>}
-                      {event.is_recurring && <div>🔄 Evento ricorrente</div>}
-                      {!!event.teams.length && <div>👥 Squadre: {event.teams.join(', ')}</div>}
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="cs-table">
+                <thead>
+                  <tr>
+                    <th>Evento</th>
+                    <th>Data/Ora</th>
+                    <th>Luogo</th>
+                    <th>Squadre</th>
+                    <th>Tipo</th>
+                    <th>Azioni</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEvents.map((event) => (
+                    <tr key={event.id}>
+                      <td>
+                        <div>
+                          <div className="font-semibold">{event.title}</div>
+                          {event.description && (
+                            <div className="text-sm text-secondary">{event.description}</div>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="text-sm">
+                          <div>{new Date(event.start_time).toLocaleDateString('it-IT')}</div>
+                          <div className="text-secondary">
+                            {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} -{' '}
+                            {new Date(event.end_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        {event.location || <span className="text-secondary">N/D</span>}
+                      </td>
+                      <td>
+                        {event.teams.length > 0 ? event.teams.join(', ') : <span className="text-secondary">N/D</span>}
+                      </td>
+                      <td>
+                        <span className={`cs-badge ${
+                          event.event_kind === 'training' ? 'cs-badge--primary' :
+                          event.event_kind === 'match' ? 'cs-badge--danger' :
+                          event.event_kind === 'meeting' ? 'cs-badge--accent' :
+                          'cs-badge--neutral'
+                        }`}>
+                          {event.event_kind === 'training' ? 'Allenamento' :
+                           event.event_kind === 'match' ? 'Partita' :
+                           event.event_kind === 'meeting' ? 'Riunione' :
+                           event.event_kind === 'other' ? 'Altro' : 'N/D'}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          onClick={() => setSelectedEvent(event)}
+                          className="cs-btn cs-btn--ghost cs-btn--sm"
+                        >
+                          Dettagli
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="block md:hidden space-y-3">
+              {filteredEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="cs-card cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedEvent(event)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-semibold text-lg flex-1">{event.title}</h3>
+                    <span className={`cs-badge ${
+                      event.event_kind === 'training' ? 'cs-badge--primary' :
+                      event.event_kind === 'match' ? 'cs-badge--danger' :
+                      event.event_kind === 'meeting' ? 'cs-badge--accent' :
+                      'cs-badge--neutral'
+                    }`}>
+                      {event.event_kind === 'training' ? 'Allenamento' :
+                       event.event_kind === 'match' ? 'Partita' :
+                       event.event_kind === 'meeting' ? 'Riunione' :
+                       event.event_kind === 'other' ? 'Altro' : 'N/D'}
+                    </span>
+                  </div>
+                  {event.description && (
+                    <p className="text-secondary text-sm mb-3">{event.description}</p>
+                  )}
+                  <div className="text-sm text-secondary space-y-1">
+                    <div>
+                      📅 {new Date(event.start_time).toLocaleDateString('it-IT')} dalle{' '}
+                      {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} alle{' '}
+                      {new Date(event.end_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                     </div>
+                    {event.location && <div>📍 {event.location}</div>}
+                    {!!event.teams.length && <div>👥 {event.teams.join(', ')}</div>}
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
