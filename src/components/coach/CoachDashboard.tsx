@@ -370,11 +370,13 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         .eq('team_id', teamId)
 
       // 4. Athletes (without join)
-      const { data: membersData } = await supabase
+      const { data: membersData, error: membersError } = await supabase
         .from('team_members')
         .select('profile_id, jersey_number')
         .eq('team_id', teamId)
         .order('jersey_number')
+
+      console.log('Coach loading members:', { membersData, membersError, teamId })
 
       // 5. Load profiles separately to avoid RLS recursion
       const coachIds = coachesData?.map(c => c.coach_id).filter(Boolean) || []
@@ -383,10 +385,12 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
       let profilesMap = new Map<string, any>()
       if (allProfileIds.length > 0) {
-        const { data: profilesData } = await supabase
+        const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
           .select('id, first_name, last_name')
           .in('id', allProfileIds)
+
+        console.log('Coach loading profiles:', { allProfileIds, profilesData, profilesError })
 
         profilesData?.forEach(p => profilesMap.set(p.id, p))
       }

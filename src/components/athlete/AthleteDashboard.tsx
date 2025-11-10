@@ -382,10 +382,12 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         .order('day_of_week, start_time')
 
       // 3. Coaches (without join)
-      const { data: coachesData } = await supabase
+      const { data: coachesData, error: coachesError } = await supabase
         .from('team_coaches')
         .select('coach_id, role')
         .eq('team_id', teamId)
+
+      console.log('Athlete loading coaches:', { coachesData, coachesError, teamId })
 
       // 4. Athletes (without join)
       const { data: membersData } = await supabase
@@ -401,10 +403,12 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
       let profilesMap = new Map<string, any>()
       if (allProfileIds.length > 0) {
-        const { data: profilesData } = await supabase
+        const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
           .select('id, first_name, last_name')
           .in('id', allProfileIds)
+
+        console.log('Athlete loading profiles:', { allProfileIds, profilesData, profilesError })
 
         profilesData?.forEach(p => profilesMap.set(p.id, p))
       }
