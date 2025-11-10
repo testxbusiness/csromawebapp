@@ -193,25 +193,38 @@ export function useAuth(): UseAuthReturn {
     let unsub: (() => void) | null = null
 
     const init = async () => {
-      // 1) sessione iniziale (non bloccare l'UI su loadProfile)
-      const { data, error } = await supabase.auth.getSession()
-      if (!mounted.current) return
-      if (error) {
-        // eslint-disable-next-line no-console
-        console.error('[useAuth] getSession error', error)
-      }
-      setSession(data.session ?? null)
-      setUser(data.session?.user ?? null)
-      currentUserIdRef.current = data.session?.user?.id ?? null
+      // Watchdog di sicurezza: sblocca dopo 5 secondi max
+      if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+      loadingWatchdog.current = setTimeout(() => {
+        if (mounted.current) setLoading(false)
+      }, 5000)
 
-      if (data.session?.user?.id) {
-        // carica profilo in background
-        loadProfile(data.session.user.id).catch(() => {})
-      } else {
-        setProfile(null)
-      }
+      try {
+        // 1) sessione iniziale - aspetta il caricamento completo del profilo
+        const { data, error } = await supabase.auth.getSession()
+        if (!mounted.current) return
+        if (error) {
+          // eslint-disable-next-line no-console
+          console.error('[useAuth] getSession error', error)
+        }
+        setSession(data.session ?? null)
+        setUser(data.session?.user ?? null)
+        currentUserIdRef.current = data.session?.user?.id ?? null
 
-      setLoading(false)
+        if (data.session?.user?.id) {
+          // Aspetta il caricamento del profilo per evitare il flash del fallback
+          await loadProfile(data.session.user.id)
+        } else {
+          setProfile(null)
+        }
+      } finally {
+        // Pulisci il watchdog e sblocca loading
+        if (loadingWatchdog.current) {
+          clearTimeout(loadingWatchdog.current)
+          loadingWatchdog.current = null
+        }
+        if (mounted.current) setLoading(false)
+      }
 
       // 2) subscribe ai cambi di auth
       const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
