@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { NextStepViewport } from 'nextstepjs'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Bell, Menu, Search, X } from 'lucide-react'
@@ -209,7 +210,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </aside>
 
         <main className="cs-main">
-          {children}
+          <NextStepViewport id="app-viewport">
+            {children}
+          </NextStepViewport>
         </main>
       </div>
 

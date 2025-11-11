@@ -15,6 +15,7 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
             {
         icon: <>👥</>,
@@ -23,7 +24,8 @@ export const onboardingTours: Tour[] = [
         selector: '#coach-teams',
         side: 'top',
         showControls: true,
-        showSkip: true,        
+        showSkip: true,
+        viewportID: 'app-viewport',
       },
       {
         icon: <>📅</>,
@@ -33,6 +35,7 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
       {
         icon: <>✉️</>,
@@ -42,6 +45,7 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
       {
         icon: <>💳</>,
@@ -51,6 +55,7 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
     ],
   },
@@ -65,6 +70,7 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
       {
         icon: <>👥</>,
@@ -73,7 +79,8 @@ export const onboardingTours: Tour[] = [
         selector: '#athlete-teams',
         side: 'top',
         showControls: true,
-        showSkip: true,        
+        showSkip: true,
+        viewportID: 'app-viewport',
       },
       {
         icon: <>📅</>,
@@ -83,6 +90,7 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
       {
         icon: <>✉️</>,
@@ -92,6 +100,7 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
       {
         icon: <>💶</>,
@@ -101,8 +110,8 @@ export const onboardingTours: Tour[] = [
         side: 'top',
         showControls: true,
         showSkip: true,
+        viewportID: 'app-viewport',
       },
     ],
   },
 ]
-
