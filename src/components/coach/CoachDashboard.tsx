@@ -527,6 +527,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events clean */}
         <UpcomingEventsPanel
+          anchorId="coach-events"
           items={upcomingEvents.map(ev => ({
             id: ev.id!,
             title: ev.title,
@@ -544,6 +545,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         <div className="space-y-6">
           {/* Recent Messages clean */}
           <LatestMessagesPanel
+            anchorId="coach-messages"
             items={recentMessages.slice(0,3).map(m => ({
               id: m.id,
               subject: m.subject,

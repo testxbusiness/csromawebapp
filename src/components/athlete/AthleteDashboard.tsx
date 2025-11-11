@@ -618,6 +618,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Events clean */}
         <UpcomingEventsPanel
+          anchorId="athlete-events"
           items={upcomingEvents.map(ev => ({
             id: ev.id,
             title: ev.title,
@@ -635,6 +636,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         <div className="space-y-6">
           {/* Unread Messages clean */}
           <LatestMessagesPanel
+            anchorId="athlete-messages"
             items={unreadMessages.slice(0,3).map(m => ({
               id: m.id,
               subject: m.subject,

@@ -13,12 +13,14 @@ type MessageItem = {
 
 export default function LatestMessagesPanel({
   title = 'Ultimi Messaggi',
+  anchorId,
   items,
   emptyText = 'Nessun messaggio',
   viewAllHref,
   onDetail,
 }: {
   title?: string
+  anchorId?: string
   items: MessageItem[]
   emptyText?: string
   viewAllHref: string
@@ -33,7 +35,7 @@ export default function LatestMessagesPanel({
   return (
     <div className="cs-card cs-card--primary">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold">{title}</h3>
+        <h3 className="font-semibold" id={anchorId}>{title}</h3>
         <Link href={viewAllHref} className="cs-btn cs-btn--ghost cs-btn--sm">Vedi tutti</Link>
       </div>
 

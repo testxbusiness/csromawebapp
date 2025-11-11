@@ -15,12 +15,14 @@ type EventItem = {
 
 export default function UpcomingEventsPanel({
   title = 'Prossimi Eventi',
+  anchorId,
   items,
   emptyText = 'Nessun evento programmato',
   viewAllHref,
   onDetail,
 }: {
   title?: string
+  anchorId?: string
   items: EventItem[]
   emptyText?: string
   viewAllHref: string
@@ -36,7 +38,7 @@ export default function UpcomingEventsPanel({
   return (
     <div className="cs-card cs-card--primary">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold">{title}</h3>
+        <h3 className="font-semibold" id={anchorId}>{title}</h3>
         <Link href={viewAllHref} className="cs-btn cs-btn--ghost cs-btn--sm">Vedi tutti</Link>
       </div>
 
@@ -74,4 +76,3 @@ export default function UpcomingEventsPanel({
     </div>
   )
 }
-
