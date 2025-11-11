@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import { NextStepViewport } from 'nextstepjs'
 
 type Recipient = {
   id: string
@@ -69,88 +70,90 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
         data-state={open ? 'open' : 'closed'}
         style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
       >
-        <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
+        <NextStepViewport id="message-detail-viewport">
+          <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
 
-        <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
-          <div className="cs-modal__icon" aria-hidden>✉️</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 className="cs-modal__title">Dettaglio Messaggio</h2>
-            {data?.subject && <div style={{ marginTop: 4, fontWeight: 600 }}>{data.subject}</div>}
-          </div>
-        </div>
-
-        {!data ? (
-          <div className="p-4 text-secondary text-sm">Caricamento…</div>
-        ) : (
-          <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
-            {/* Mittente */}
-            <div>
-              <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Mittente</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <IconUser />
-                <div>{data.created_by_profile && (data.created_by_profile.first_name || data.created_by_profile.last_name)
-                  ? `${data.created_by_profile.first_name || ''} ${data.created_by_profile.last_name || ''}`.trim()
-                  : '—'}</div>
-              </div>
+          <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }} id="message-detail-title">
+            <div className="cs-modal__icon" aria-hidden>✉️</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 className="cs-modal__title">Dettaglio Messaggio</h2>
+              {data?.subject && <div style={{ marginTop: 4, fontWeight: 600 }}>{data.subject}</div>}
             </div>
-
-            {/* Data */}
-            <div>
-              <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Data</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <IconClock />
-                <div>{data.created_at ? new Date(data.created_at).toLocaleString('it-IT') : '—'}</div>
-              </div>
-            </div>
-
-            {/* Destinatari squadre */}
-            {teamBadges.length > 0 && (
-              <div>
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Destinatari (Squadre)</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {teamBadges.map((t, i) => (<span key={i} className="cs-badge cs-badge--neutral">{t}</span>))}
-                </div>
-              </div>
-            )}
-
-            {/* Destinatari utenti */}
-            {userBadges.length > 0 && (
-              <div>
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Destinatari (Utenti)</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {userBadges.map((u, i) => (<span key={i} className="cs-badge cs-badge--neutral">{u}</span>))}
-                </div>
-              </div>
-            )}
-
-            {/* Contenuto */}
-            {data.content && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Contenuto</div>
-                <p style={{ whiteSpace: 'pre-wrap' }}>{data.content}</p>
-              </div>
-            )}
-
-            {/* Allegati */}
-            {data.attachments && data.attachments.length > 0 && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Allegati</div>
-                <div style={{ display: 'grid', gap: 6 }}>
-                  {data.attachments.map((a, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <IconPaperclip />
-                      {a.download_url ? (
-                        <a href={a.download_url} className="underline" target="_blank" rel="noreferrer">{a.file_name}</a>
-                      ) : (
-                        <span>{a.file_name}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-        )}
+
+          {!data ? (
+            <div className="p-4 text-secondary text-sm">Caricamento…</div>
+          ) : (
+            <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
+              {/* Mittente */}
+              <div id="message-detail-sender">
+                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Mittente</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <IconUser />
+                  <div>{data.created_by_profile && (data.created_by_profile.first_name || data.created_by_profile.last_name)
+                    ? `${data.created_by_profile.first_name || ''} ${data.created_by_profile.last_name || ''}`.trim()
+                    : '—'}</div>
+                </div>
+              </div>
+
+              {/* Data */}
+              <div id="message-detail-date">
+                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Data</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <IconClock />
+                  <div>{data.created_at ? new Date(data.created_at).toLocaleString('it-IT') : '—'}</div>
+                </div>
+              </div>
+
+              {/* Destinatari squadre */}
+              {teamBadges.length > 0 && (
+                <div id="message-detail-recipients-teams">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Destinatari (Squadre)</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {teamBadges.map((t, i) => (<span key={i} className="cs-badge cs-badge--neutral">{t}</span>))}
+                  </div>
+                </div>
+              )}
+
+              {/* Destinatari utenti */}
+              {userBadges.length > 0 && (
+                <div id="message-detail-recipients-users">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Destinatari (Utenti)</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {userBadges.map((u, i) => (<span key={i} className="cs-badge cs-badge--neutral">{u}</span>))}
+                  </div>
+                </div>
+              )}
+
+              {/* Contenuto */}
+              {data.content && (
+                <div style={{ gridColumn: '1 / -1' }} id="message-detail-content">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Contenuto</div>
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{data.content}</p>
+                </div>
+              )}
+
+              {/* Allegati */}
+              {data.attachments && data.attachments.length > 0 && (
+                <div style={{ gridColumn: '1 / -1' }} id="message-detail-attachments">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Allegati</div>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {data.attachments.map((a, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <IconPaperclip />
+                        {a.download_url ? (
+                          <a href={a.download_url} className="underline" target="_blank" rel="noreferrer">{a.file_name}</a>
+                        ) : (
+                          <span>{a.file_name}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </NextStepViewport>
       </section>
     </div>,
     document.body

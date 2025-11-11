@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import { NextStepViewport } from 'nextstepjs'
 
 type TeamLike = { id?: string; name: string } | string
 
@@ -76,77 +77,79 @@ export default function EventDetailModal({ open, onClose, data }: { open: boolea
         data-state={open ? 'open' : 'closed'}
         style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
       >
-        <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
+        <NextStepViewport id="event-detail-viewport">
+          <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
 
-        <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
-          <div className="cs-modal__icon" aria-hidden>📅</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 className="cs-modal__title">Dettaglio Evento</h2>
-            {data?.title && <div style={{ marginTop: 4, fontWeight: 600 }}>{data.title}</div>}
-            {data?.event_kind && <div className="text-secondary" style={{ fontSize: 12 }}>{humanKind(data.event_kind)}</div>}
+          <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }} id="event-detail-title">
+            <div className="cs-modal__icon" aria-hidden>📅</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h2 className="cs-modal__title">Dettaglio Evento</h2>
+              {data?.title && <div style={{ marginTop: 4, fontWeight: 600 }}>{data.title}</div>}
+              {data?.event_kind && <div className="text-secondary" style={{ fontSize: 12 }}>{humanKind(data.event_kind)}</div>}
+            </div>
           </div>
-        </div>
 
-        {!data ? (
-          <div className="p-4 text-secondary text-sm">Caricamento…</div>
-        ) : (
-          <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
-            {/* Orario */}
-            <div>
-              <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Orario</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <IconClock />
-                <div>
-                  <div><strong>Inizio:</strong> {data.start_date ? new Date(data.start_date).toLocaleString('it-IT') : '—'}</div>
-                  <div><strong>Fine:</strong> {data.end_date ? new Date(data.end_date).toLocaleString('it-IT') : '—'}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Luogo */}
-            <div>
-              <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Luogo</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <IconMapPin />
-                <div>{place(data)}</div>
-              </div>
-            </div>
-
-            {/* Squadre */}
-            {!!(data.teams?.length) && (
-              <div>
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Squadre</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <IconUsers />
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {data.teams!.map((t, i) => (
-                      <span key={i} className="cs-badge cs-badge--neutral">{typeof t === 'string' ? t : (t.name || '')}</span>
-                    ))}
+          {!data ? (
+            <div className="p-4 text-secondary text-sm">Caricamento…</div>
+          ) : (
+            <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
+              {/* Orario */}
+              <div id="event-detail-time">
+                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Orario</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <IconClock />
+                  <div>
+                    <div><strong>Inizio:</strong> {data.start_date ? new Date(data.start_date).toLocaleString('it-IT') : '—'}</div>
+                    <div><strong>Fine:</strong> {data.end_date ? new Date(data.end_date).toLocaleString('it-IT') : '—'}</div>
                   </div>
                 </div>
               </div>
-            )}
 
-            {/* Creato da */}
-            {data.creator && (
-              <div>
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Creata da</div>
+              {/* Luogo */}
+              <div id="event-detail-place">
+                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Luogo</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <IconPencil />
-                  <div>{[data.creator?.first_name, data.creator?.last_name].filter(Boolean).join(' ') || '—'}</div>
+                  <IconMapPin />
+                  <div>{place(data)}</div>
                 </div>
               </div>
-            )}
 
-            {/* Descrizione */}
-            {data.description && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Descrizione</div>
-                <p style={{ whiteSpace: 'pre-wrap' }}>{data.description}</p>
-              </div>
-            )}
-          </div>
-        )}
+              {/* Squadre */}
+              {!!(data.teams?.length) && (
+                <div id="event-detail-teams">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Squadre</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <IconUsers />
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {data.teams!.map((t, i) => (
+                        <span key={i} className="cs-badge cs-badge--neutral">{typeof t === 'string' ? t : (t.name || '')}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Creato da */}
+              {data.creator && (
+                <div id="event-detail-creator">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Creata da</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <IconPencil />
+                    <div>{[data.creator?.first_name, data.creator?.last_name].filter(Boolean).join(' ') || '—'}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Descrizione */}
+              {data.description && (
+                <div style={{ gridColumn: '1 / -1' }} id="event-detail-description">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Descrizione</div>
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{data.description}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </NextStepViewport>
       </section>
     </div>,
     document.body
