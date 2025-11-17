@@ -179,9 +179,9 @@ export default function AthleteCalendarManager() {
   return (
     <>
       <div className="cs-card cs-card--primary">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--success">
               Esporta Excel
             </button>
@@ -195,7 +195,7 @@ export default function AthleteCalendarManager() {
         </div>
 
         {/* Filtri */}
-        <div className="mb-4 flex gap-3">
+        <div className="mb-4 flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
             <label className="cs-field__label">Tipo Evento</label>
             <select

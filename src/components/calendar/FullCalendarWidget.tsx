@@ -47,8 +47,9 @@ export default function FullCalendarWidget({
   const initialView = view === 'month' ? 'dayGridMonth' : 'timeGridWeek'
 
   return (
-    <div className="fc cs-card cs-card--primary p-2">
-      <FullCalendar
+    <div className="calendar-responsive">
+      <div className="fc cs-card cs-card--primary p-2">
+        <FullCalendar
         ref={calendarRef as any}
         locales={[itLocale]}
         locale="it"
@@ -76,7 +77,7 @@ export default function FullCalendarWidget({
           onViewChange(newView)
         }}
       />
+      </div>
     </div>
   )
 }
-

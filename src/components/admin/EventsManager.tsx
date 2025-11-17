@@ -292,9 +292,9 @@ export default function EventsManager() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h2 className="text-2xl font-bold">Calendario e Eventi</h2>
-        <div className="flex gap-3">
+        <div className="flex flex-col gap-2 w-full md:w-auto md:flex-row md:flex-wrap md:gap-3">
           <button onClick={exportEventsToExcel} className="cs-btn cs-btn--outline">
             <span className="mr-2">📊</span>
             Export Excel

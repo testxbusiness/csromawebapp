@@ -274,9 +274,9 @@ export default function CoachCalendarManager() {
   return (
     <>
       <div className="cs-card cs-card--primary">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             <button
               onClick={() => { setEditingEvent(null); setShowForm(true) }}
               className="cs-btn cs-btn--danger"

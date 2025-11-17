@@ -270,7 +270,12 @@ a{ color:inherit; text-decoration:none }
 .cs-navbar, .cs-sidebar, .cs-bottomnav{
   background: var(--cs-surface); border-bottom:1px solid var(--cs-border)
 }
-.cs-sidebar{ width: 280px; border-right:1px solid var(--cs-border); padding: 24px 16px }
+.cs-sidebar{
+  width: 280px;
+  border-right:1px solid var(--cs-border);
+  padding: 24px 16px;
+  overflow-y: auto;
+}
 @media (max-width: 768px){ .cs-sidebar{ display:none } }
 
 /* Drawer (mobile sidebar) — ancorato a SINISTRA */
@@ -285,6 +290,36 @@ a{ color:inherit; text-decoration:none }
   padding: 24px 16px;
   z-index: 120;
   transform: translateX(0);      /* ; mancava */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.calendar-responsive{ width:100%; }
+.calendar-responsive .cs-card{ overflow-x:auto; }
+@media (max-width: 768px){
+  .calendar-responsive{ overflow-x:auto; -webkit-overflow-scrolling: touch; }
+  .calendar-responsive .cs-card{ min-width: 620px; }
+  .fc .fc-toolbar.fc-header-toolbar{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .fc .fc-toolbar-chunk{
+    display:flex;
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: space-between;
+    gap: 6px;
+  }
+  .fc .fc-toolbar-chunk:first-child,
+  .fc .fc-toolbar-chunk:last-child{
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .fc .fc-toolbar .fc-button{
+    flex:1 1 48%;
+    min-width: 0;
+  }
 }
 
 /* ----------------------------
