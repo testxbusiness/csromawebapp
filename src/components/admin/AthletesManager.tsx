@@ -44,6 +44,22 @@ export default function AthletesManager() {
   const [selectedActivity, setSelectedActivity] = useState<string>('all')
   const [selectedTeam, setSelectedTeam] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const certificateStats = useMemo(() => {
+    let withoutCertificate = 0
+    let expiredCertificate = 0
+    const now = Date.now()
+    athletes.forEach((athlete) => {
+      if (!athlete.medical_certificate_expiry) {
+        withoutCertificate += 1
+      } else {
+        const expiryTime = new Date(athlete.medical_certificate_expiry).getTime()
+        if (!Number.isNaN(expiryTime) && expiryTime < now) {
+          expiredCertificate += 1
+        }
+      }
+    })
+    return { withoutCertificate, expiredCertificate }
+  }, [athletes])
 
   const loadAthletes = useCallback(async () => {
     try {
@@ -122,7 +138,9 @@ export default function AthletesManager() {
       }
 
       // Filtro squadra
-      if (selectedTeam !== 'all') {
+      if (selectedTeam === 'none') {
+        if (athlete.teams && athlete.teams.length > 0) return false
+      } else if (selectedTeam !== 'all') {
         const hasTeam = athlete.teams?.some(team => team.id === selectedTeam)
         if (!hasTeam) return false
       }
@@ -342,6 +360,26 @@ export default function AthletesManager() {
 
       {/* Filtri di contesto */}
       <section className="cs-card cs-card--primary p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="cs-card cs-card--primary bg-[color:var(--cs-primary)]/5 border border-[color:var(--cs-primary)]/30">
+            <p className="text-sm text-[color:var(--cs-primary)] font-semibold uppercase tracking-wide">Certificato Scaduto</p>
+            <p className="text-3xl font-bold mt-2">{certificateStats.expiredCertificate}</p>
+            <p className="text-secondary text-xs mt-1">Atleti con certificato già scaduto</p>
+          </div>
+          <div className="cs-card">
+            <p className="text-sm text-secondary font-semibold uppercase tracking-wide">Certificato Mancante</p>
+            <p className="text-3xl font-bold mt-2">{certificateStats.withoutCertificate}</p>
+            <p className="text-secondary text-xs mt-1">Atleti senza data di scadenza inserita</p>
+          </div>
+          <div className="cs-card">
+            <p className="text-sm text-secondary font-semibold uppercase tracking-wide">Totale Atleti</p>
+            <p className="text-3xl font-bold mt-2">{athletes.length}</p>
+            <p className="text-secondary text-xs mt-1">Conteggio globale del database</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="cs-card cs-card--primary p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="cs-field__label">Stagione</label>
@@ -383,6 +421,7 @@ export default function AthletesManager() {
               className="cs-select"
             >
               <option value="all">Tutte le squadre</option>
+              <option value="none">Nessuna squadra</option>
               {teams.map(team => (
                 <option key={team.id} value={team.id}>
                   {team.name}
