@@ -153,14 +153,18 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const loadAthleteData = async () => {
     setLoading(true)
     try {
-      await loadActiveSeason()
-      const memberships = await loadTeamMemberships()
-      const teamIds = memberships.map(m => m.team.id)
-      await Promise.all([
-        loadUpcomingEvents(teamIds),
-        loadUnreadMessages(teamIds),
-        loadFeeInstallments()
-      ])
+      const response = await fetch('/api/athlete/dashboard')
+      if (!response.ok) {
+        console.error('Error loading athlete dashboard:', response.statusText)
+        return
+      }
+
+      const result = await response.json()
+      setActiveSeason(result.activeSeason)
+      setTeamMemberships(result.teamMemberships || [])
+      setUpcomingEvents(result.upcomingEvents || [])
+      setUnreadMessages(result.unreadMessages || [])
+      setFeeInstallments(result.feeInstallments || [])
       lastLoadTimeRef.current = Date.now()
     } catch (e) {
       console.error('Error loading athlete data:', e)
