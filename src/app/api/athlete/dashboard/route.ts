@@ -17,31 +17,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Execute all queries in parallel
-    const [
-      { data: seasons },
-      { data: memberships },
-      { data: msgRecipients },
-      { data: feeInstallments }
-    ] = await Promise.all([
+    const [seasonRes, memberRes, msgRes, feeRes] = await Promise.all([
       // 1. Get active season
       supabase
         .from('seasons')
         .select('*')
         .eq('is_active', true)
-        .single()
-        .catch(() => ({ data: null })),
+        .single(),
 
-      // 2. Get team memberships with team and activity info
+      // 2. Get team memberships
       supabase
         .from('team_members')
         .select('id, team_id, jersey_number')
         .eq('profile_id', user.id),
 
-      // 3. Get unread messages
+      // 3. Get unread messages for this user
       supabase
         .from('message_recipients')
         .select('message_id, is_read, created_at, messages(id, subject, content, created_at)')
-        .or(`profile_id.eq.${user.id},team_id.in.(${[]})`)
+        .eq('profile_id', user.id)
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -52,6 +46,11 @@ export async function GET(request: NextRequest) {
         .eq('profile_id', user.id)
         .limit(5)
     ])
+
+    const seasons = seasonRes.data
+    const memberships = memberRes.data
+    const msgRecipients = msgRes.data
+    const feeInstallments = feeRes.data
 
     // Get team IDs
     const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
@@ -93,7 +92,7 @@ export async function GET(request: NextRequest) {
         .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
         .limit(100),
 
-      membershipFees && membershipFees.length > 0
+      feeInstallments && feeInstallments.length > 0
         ? supabase
             .from('membership_fees')
             .select('id, team_id, name')
