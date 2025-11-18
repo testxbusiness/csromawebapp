@@ -1,5 +1,6 @@
 'use client'
 
+import { memo, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
@@ -68,7 +69,7 @@ const athleteItems: NavItem[] = [
   { href: '/athlete/profile', label: 'Profilo', icon: UserCog },
 ]
 
-function getItemsForRole(role: Role | undefined): NavItem[] {
+const getItemsForRole = (role: Role | undefined): NavItem[] => {
   if (role === 'admin') return adminItems
   if (role === 'coach') return coachItems
   if (role === 'athlete') return athleteItems
@@ -80,24 +81,63 @@ interface RoleSidebarProps {
   onNavigate?: () => void
 }
 
-export default function RoleSidebar({ variant = 'desktop', onNavigate }: RoleSidebarProps) {
+const NavItem = memo(
+  ({
+    href,
+    label,
+    icon: Icon,
+    active,
+    onNavigate,
+  }: {
+    href: string
+    label: string
+    icon: LucideIcon
+    active: boolean
+    onNavigate?: () => void
+  }) => {
+    return (
+      <Link
+        href={href}
+        onClick={onNavigate}
+        className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-150 ${
+          active
+            ? 'bg-[color:var(--cs-primary)]/10 text-[color:var(--cs-primary)] shadow-[0_12px_26px_rgba(15,28,63,0.08)]'
+            : 'text-[color:var(--cs-text-secondary)] hover:bg-white/70 hover:text-[color:var(--cs-primary)]'
+        }`}
+      >
+        <Icon
+          className={`h-4 w-4 ${
+            active
+              ? 'text-[color:var(--cs-primary)]'
+              : 'text-[color:var(--cs-text-tertiary)] group-hover:text-[color:var(--cs-primary)]'
+          }`}
+        />
+        <span className="truncate">{label}</span>
+      </Link>
+    )
+  }
+)
+
+NavItem.displayName = 'NavItem'
+
+const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps) => {
   const { profile, loading } = useAuth()
   const pathname = usePathname()
-  const items = getItemsForRole(profile?.role)
 
-  // Skeleton while loading or no items yet
+  const items = useMemo(() => getItemsForRole(profile?.role), [profile?.role])
+
   if (loading) {
     return (
       <div className={`flex flex-col gap-3 ${variant === 'mobile' ? '' : 'sticky top-6'}`}>
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--cs-text-tertiary)]">Navigazione</p>
-          <p className="text-sm text-[color:var(--cs-text-secondary)]">Caricamento…</p>
+          <div className="cs-skeleton w-32 h-3" />
         </div>
         <div className="flex flex-col gap-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="cs-list-item">
-              <div className="cs-skeleton" style={{ width: '140px', height: '12px' }} />
-              <div className="cs-skeleton" style={{ width: '24px', height: '12px' }} />
+            <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="cs-skeleton w-4 h-4 rounded" />
+              <div className="cs-skeleton w-24 h-3" />
             </div>
           ))}
         </div>
@@ -109,44 +149,27 @@ export default function RoleSidebar({ variant = 'desktop', onNavigate }: RoleSid
 
   const description =
     variant === 'mobile'
-      ? 'Scegli una sezione da aprire e gestire. Le azioni rapide sono disponibili nel menu principale.'
+      ? 'Scegli una sezione da aprire e gestire.'
       : 'Gestisci rapidamente le aree della tua società.'
 
   return (
     <div className={`flex flex-col gap-6 ${variant === 'mobile' ? '' : 'sticky top-6'}`}>
       <div className="space-y-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--cs-text-tertiary)]">
-          Navigazione
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[color:var(--cs-text-tertiary)]">Navigazione</p>
         <p className="text-sm text-[color:var(--cs-text-secondary)]">{description}</p>
       </div>
+
       <nav className="flex flex-col gap-1">
-        {items.map(({ href, label, icon: Icon }) => {
+        {items.map(({ href, label, icon }) => {
           const active = pathname?.startsWith(href)
 
-          return (
-            <Link
-              key={href}
-              href={href}
-              onClick={onNavigate}
-              className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-150 ${
-                active
-                  ? 'bg-[color:var(--cs-primary)]/10 text-[color:var(--cs-primary)] shadow-[0_12px_26px_rgba(15,28,63,0.08)]'
-                  : 'text-[color:var(--cs-text-secondary)] hover:bg-white/70 hover:text-[color:var(--cs-primary)]'
-              }`}
-            >
-              <Icon
-                className={`h-4 w-4 ${
-                  active
-                    ? 'text-[color:var(--cs-primary)]'
-                    : 'text-[color:var(--cs-text-tertiary)] group-hover:text-[color:var(--cs-primary)]'
-                }`}
-              />
-              <span className="truncate">{label}</span>
-            </Link>
-          )
+          return <NavItem key={href} href={href} label={label} icon={icon} active={active} onNavigate={onNavigate} />
         })}
       </nav>
     </div>
   )
-}
+})
+
+RoleSidebar.displayName = 'RoleSidebar'
+
+export default RoleSidebar

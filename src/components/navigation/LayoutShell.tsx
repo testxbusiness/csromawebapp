@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { NextStepViewport } from 'nextstepjs'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, Menu, Search, X } from 'lucide-react'
+import { Bell, Menu, X } from 'lucide-react'
 import RoleSidebar from './RoleSidebar'
 import { useAuth } from '@/hooks/useAuth'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -17,14 +17,17 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, role, user, loading, profileLoading, signOut, refreshProfile, silentRefresh } = useAuth()
+  const { profile, role, user, loading, profileLoading, signOut, silentRefresh } = useAuth()
   const router = useRouter()
   const { registerSW } = usePush()
-  useEffect(() => { registerSW().catch(() => {}) }, [registerSW])
 
-  // Smart refresh: quando si torna su /dashboard o su pagine profilo
+  useEffect(() => {
+    registerSW().catch(() => {})
+  }, [registerSW])
+
   const prevPathRef = useRef(pathname)
   const lastRefreshedPathRef = useRef<string | null>(null)
+
   useEffect(() => {
     const prev = prevPathRef.current
     prevPathRef.current = pathname
@@ -33,30 +36,35 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     const isProfilePage = /^\/(admin\/profile|coach\/profile|athlete\/profile)(\/|$)/.test(pathname)
     const cameFromOther = changed && prev !== '/dashboard'
     const shouldRefresh = (isDashboard && cameFromOther) || (isProfilePage && cameFromOther)
+
     if (shouldRefresh && user && lastRefreshedPathRef.current !== pathname) {
       lastRefreshedPathRef.current = pathname
       silentRefresh().catch(() => {})
     }
   }, [pathname, user, silentRefresh])
 
-  // Client-side guard: force reset-password for users flagged to change password
+  const mustChangePasswordChecked = useRef(false)
+
   useEffect(() => {
-    if (!profile) return
+    if (!profile || mustChangePasswordChecked.current) return
+
     const mustChange = (profile as any)?.must_change_password === true
-    if (!mustChange) return
+    if (!mustChange) {
+      mustChangePasswordChecked.current = true
+      return
+    }
+
     if (pathname === '/reset-password') return
 
-    // Respect one-shot bypass cookie set after successful reset
-    // This mirrors the middleware behavior to avoid client-side loops
     try {
       const hasBypass = typeof document !== 'undefined' && document.cookie.includes('csr_pw_reset=1')
       if (hasBypass) {
-        // Consume the cookie client-side as well
         document.cookie = 'csr_pw_reset=; path=/; max-age=0'
+        mustChangePasswordChecked.current = true
         return
       }
     } catch {}
-    // Redirect preserving current path to return after reset
+
     const next = encodeURIComponent(pathname || '/dashboard')
     router.replace(`/reset-password?next=${next}`)
   }, [profile, pathname, router])
@@ -65,34 +73,23 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     try {
       await signOut()
     } finally {
-      router.replace('/login') // oppure router.push('/login')
+      router.replace('/login')
     }
   }
 
-  // Se abbiamo user ma non profile e non stiamo caricando, prova a rinfrescare
-  // (Disabilitato per evitare conflitti con il hook useAuth principale)
-  // useEffect(() => {
-  //   if (user && !profile && !loading) {
-  //     refreshProfile().catch(() => {})
-  //   }
-  // }, [user, profile, loading, refreshProfile])
-
-  // (Opzionale) se non loggato e su rotta protetta, rimbalza al login
-  // useEffect(() => {
-  //   if (!profile && showAuthenticatedLayout) router.replace('/login')
-  // }, [profile, showAuthenticatedLayout, router])
-
   if (!showAuthenticatedLayout) return <>{children}</>
 
-  // Mostra skeleton solo quando lo stato auth è in caricamento
-  const isAuthLoading = loading
-  // Stato intermedio: utente presente ma profilo non ancora caricato
-  const isProfileLoading = !!user && !profile && profileLoading
+  const hasUserData = !!user || !!profile
+  const shouldShowSkeleton = loading && !hasUserData
+  const shouldShowProfileLoading = !!user && !profile && profileLoading
 
-  const fallbackFirst = (user as any)?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0] : '')
+  const fallbackFirst =
+    (user as any)?.user_metadata?.first_name || (user?.email ? user.email.split('@')[0] : '')
   const fallbackLast = (user as any)?.user_metadata?.last_name || ''
+
   const first = profile?.first_name ?? fallbackFirst
   const last = profile?.last_name ?? fallbackLast
+
   const initials = (first || last)
     ? [first, last]
         .filter(Boolean)
@@ -101,7 +98,40 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         .slice(0, 2)
     : 'CS'
 
-  const roleLabel = role ? roleName(role) : ''
+  const roleLabel = role ? roleName(role) : user ? 'Utente' : ''
+
+  const UserBadge = () => {
+    if (shouldShowSkeleton) {
+      return (
+        <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
+          <div className="cs-avatar cs-bg-primary animate-pulse" />
+          <div className="hidden sm:block min-w-[120px]">
+            <div className="h-3 w-24 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
+            <div className="h-2 w-16 bg-[color:var(--cs-border)] rounded animate-pulse" />
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
+        <div className="cs-avatar cs-bg-primary">
+          <span className="text-sm font-semibold">{initials}</span>
+        </div>
+        <div className="hidden sm:block">
+          <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+            {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
+          </p>
+          {roleLabel && (
+            <p className="text-xs text-[color:var(--cs-text-secondary)]">
+              {roleLabel}
+              {shouldShowProfileLoading && ' • Caricamento...'}
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="cs-page">
@@ -116,90 +146,47 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             >
               <Menu className="h-5 w-5" />
             </button>
-             <Link href="/dashboard" className="flex items-center gap-2 lg:hidden" aria-label="CSRoma – Dashboard">
-    <div className="relative h-8 w-8">
-      <Image
-        src="/images/logo_CSRoma.png"
-        alt="CSRoma"
-        fill
-        className="object-contain select-none"
-        sizes="32px"
-        priority
-      />
-    </div>
-  </Link>
 
-  {/* LOGO DESKTOP (grande, a sinistra della topbar) */}
-  <Link href="/dashboard" className="hidden lg:flex items-center gap-3" aria-label="CSRoma – Dashboard">
-    <div className="relative h-16 w-16 xl:h-20 xl:w-20">
-      <Image
-        src="/images/logo_CSRoma.svg"
-        alt="CSRoma"
-        fill
-        className="object-contain select-none"
-        sizes="(max-width: 1280px) 40px, 48px"
-        priority
-      />
-    </div>
-    {/* opzionale: testo brand accanto al logo su desktop */}
-    <div className="hidden xl:block">
-      <p className="text-sm font-semibold text-[color:var(--cs-text-secondary)] leading-none">CSRoma</p>
-      <p className="text-lg font-semibold text-[color:var(--cs-primary)] leading-none">Control Center</p>
-    </div>
-  </Link>
-</div>
+            <Link href="/dashboard" className="flex items-center gap-2 lg:hidden" aria-label="CSRoma – Dashboard">
+              <div className="relative h-8 w-8">
+                <Image
+                  src="/images/logo_CSRoma.png"
+                  alt="CSRoma"
+                  fill
+                  className="object-contain select-none"
+                  sizes="32px"
+                  priority
+                />
+              </div>
+            </Link>
+
+            <Link href="/dashboard" className="hidden lg:flex items-center gap-3" aria-label="CSRoma – Dashboard">
+              <div className="relative h-16 w-16 xl:h-20 xl:w-20">
+                <Image
+                  src="/images/logo_CSRoma.svg"
+                  alt="CSRoma"
+                  fill
+                  className="object-contain select-none"
+                  sizes="(max-width: 1280px) 40px, 48px"
+                  priority
+                />
+              </div>
+              <div className="hidden xl:block">
+                <p className="text-sm font-semibold text-[color:var(--cs-text-secondary)] leading-none">CSRoma</p>
+                <p className="text-lg font-semibold text-[color:var(--cs-primary)] leading-none">Control Center</p>
+              </div>
+            </Link>
+          </div>
 
           <div className="flex items-center gap-3">
             <ThemeToggle />
-            <button
-              type="button"
-              className="cs-btn cs-btn--ghost cs-btn--icon"
-              aria-label="Notifiche"
-            >
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--icon" aria-label="Notifiche">
               <Bell className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="cs-btn cs-btn--primary"
-            >
+            <button type="button" onClick={handleSignOut} className="cs-btn cs-btn--primary">
               Esci
             </button>
-            {isAuthLoading ? (
-              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
-                <div className="cs-avatar cs-bg-primary animate-pulse" />
-                <div className="hidden sm:block min-w-[120px]">
-                  <div className="h-3 w-24 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
-                  <div className="h-2 w-16 bg-[color:var(--cs-border)] rounded animate-pulse" />
-                </div>
-              </div>
-            ) : isProfileLoading ? (
-              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
-                <div className="cs-avatar cs-bg-primary">
-                  <span className="text-sm font-semibold">{user?.email?.charAt(0)?.toUpperCase() || 'U'}</span>
-                </div>
-                <div className="hidden sm:block">
-                  <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                    {user?.email || 'Utente CSRoma'}
-                  </p>
-                  <p className="text-xs text-[color:var(--cs-text-secondary)]">Caricamento profilo...</p>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
-                <div className="cs-avatar cs-bg-primary">
-                  <span className="text-sm font-semibold">{initials}</span>
-                </div>
-                <div className="hidden sm:block">
-                  <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                    {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
-                  </p>
-                  {!!roleLabel && (
-                    <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
-                  )}
-                </div>
-              </div>
-            )}
+            <UserBadge />
           </div>
         </div>
       </header>
@@ -210,19 +197,13 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </aside>
 
         <main className="cs-main">
-          <NextStepViewport id="app-viewport">
-            {children}
-          </NextStepViewport>
+          <NextStepViewport id="app-viewport">{children}</NextStepViewport>
         </main>
       </div>
 
       {mobileMenuOpen && (
         <div className="lg:hidden">
-          <div
-            className="cs-overlay"
-            aria-hidden="false"
-            onClick={() => setMobileMenuOpen(false)} // chiude il drawer, NON fa logout
-          />
+          <div className="cs-overlay" aria-hidden="false" onClick={() => setMobileMenuOpen(false)} />
           <div className="cs-drawer" aria-hidden="false">
             <div className="mb-6 flex items-center justify-between">
               <div>
@@ -238,29 +219,27 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                 <X className="h-5 w-5" />
               </button>
             </div>
+
             <RoleSidebar variant="mobile" onNavigate={() => setMobileMenuOpen(false)} />
+
             <div className="mt-8 space-y-2">
               <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--cs-text-secondary)]">Account</p>
               <div className="cs-card">
-                {isAuthLoading ? (
+                {shouldShowSkeleton ? (
                   <>
                     <div className="h-3 w-28 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
                     <div className="h-2 w-20 bg-[color:var(--cs-border)] rounded animate-pulse" />
-                  </>
-                ) : isProfileLoading ? (
-                  <>
-                    <p className="text-sm font-semibold text-[color:var(--cs-text)]">
-                      {user?.email || 'Utente CSRoma'}
-                    </p>
-                    <p className="text-xs text-[color:var(--cs-text-secondary)]">Caricamento profilo...</p>
                   </>
                 ) : (
                   <>
                     <p className="text-sm font-semibold text-[color:var(--cs-text)]">
                       {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
                     </p>
-                    {!!roleLabel && (
-                      <p className="text-xs text-[color:var(--cs-text-secondary)]">{roleLabel}</p>
+                    {roleLabel && (
+                      <p className="text-xs text-[color:var(--cs-text-secondary)]">
+                        {roleLabel}
+                        {shouldShowProfileLoading && ' • Caricamento...'}
+                      </p>
                     )}
                   </>
                 )}

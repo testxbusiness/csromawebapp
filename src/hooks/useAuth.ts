@@ -24,24 +24,28 @@ interface UseAuthReturn {
   profileLoading: boolean
   refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
+  forceRefresh: () => Promise<void>
+  silentRefresh: () => Promise<void>
 }
 
 export function useAuth(): UseAuthReturn {
-  // Client Supabase stabile con useRef
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
 
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [profileLoading, setProfileLoading] = useState(true)
 
-  // Evita refetch multipli dello stesso profilo
+  const [authInitialized, setAuthInitialized] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(false)
+
   const lastProfileFor = useRef<string | null>(null)
   const mounted = useRef(true)
   const currentUserIdRef = useRef<string | null>(null)
   const loadingWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const PROFILE_CACHE_KEY = 'csroma_profile_cache'
+  const PROFILE_CACHE_DURATION = 5 * 60 * 1000
 
   useEffect(() => {
     mounted.current = true
@@ -50,7 +54,117 @@ export function useAuth(): UseAuthReturn {
     }
   }, [])
 
-  // Deriva un ruolo “risolto” con fallback al JWT, normalizzato
+  const loadProfileFromCache = useCallback((userId: string): ProfileRow | null => {
+    try {
+      const cached = sessionStorage.getItem(PROFILE_CACHE_KEY)
+      if (!cached) return null
+
+      const { data, timestamp, userId: cachedUserId } = JSON.parse(cached)
+      if (cachedUserId !== userId) return null
+      if (Date.now() - timestamp > PROFILE_CACHE_DURATION) return null
+      return data as ProfileRow
+    } catch {
+      return null
+    }
+  }, [])
+
+  const saveProfileToCache = useCallback((userId: string, profileData: ProfileRow) => {
+    try {
+      sessionStorage.setItem(
+        PROFILE_CACHE_KEY,
+        JSON.stringify({
+          data: profileData,
+          timestamp: Date.now(),
+          userId,
+        })
+      )
+    } catch {
+      // ignore storage errors
+    }
+  }, [])
+
+  const loadProfile = useCallback(
+    async (uid: string, skipCache = false) => {
+      if (!uid) return
+
+      if (!skipCache && lastProfileFor.current === uid) {
+        console.log('[useAuth] Skipping duplicate profile load for', uid)
+        return
+      }
+
+      if (!skipCache) {
+        const cachedProfile = loadProfileFromCache(uid)
+        if (cachedProfile) {
+          console.log('[useAuth] Profile loaded from cache for', uid)
+          setProfile(cachedProfile)
+          lastProfileFor.current = uid
+          return
+        }
+      }
+
+      lastProfileFor.current = uid
+      setProfileLoading(true)
+
+      console.log('[useAuth] Loading profile from database for', uid)
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', uid)
+          .single()
+
+        if (!mounted.current) return
+
+        if (error) {
+          console.warn('[useAuth] Profile load error', error)
+
+          const isAuthError =
+            error.message?.includes('JWT') ||
+            error.message?.includes('token') ||
+            error.code === 'PGRST301'
+
+          if (isAuthError) {
+            console.warn('[useAuth] Auth error, refreshing session...')
+            try {
+              const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+              if (!refreshError && refreshData.session) {
+                console.log('[useAuth] Session refreshed, retrying profile load...')
+                lastProfileFor.current = null
+                const { data: retryData, error: retryError } = await supabase
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', uid)
+                  .single()
+
+                if (!retryError && retryData && mounted.current) {
+                  console.log('[useAuth] Profile loaded after session refresh')
+                  setProfile(retryData as ProfileRow)
+                  saveProfileToCache(uid, retryData as ProfileRow)
+                  return
+                }
+              }
+            } catch (refreshErr) {
+              console.error('[useAuth] Session refresh failed:', refreshErr)
+            }
+          }
+
+          setProfile(null)
+          return
+        }
+
+        console.log('[useAuth] Profile loaded successfully from database')
+        setProfile(data as ProfileRow)
+        saveProfileToCache(uid, data as ProfileRow)
+      } finally {
+        if (mounted.current) {
+          setProfileLoading(false)
+        }
+      }
+    },
+    [supabase, loadProfileFromCache, saveProfileToCache]
+  )
+
   const role = useMemo(() => {
     const raw =
       profile?.role ??
@@ -61,306 +175,191 @@ export function useAuth(): UseAuthReturn {
     return String(raw).trim().toLowerCase()
   }, [profile?.role, user])
 
-  // Debug opzionale: abilita su Vercel con NEXT_PUBLIC_DEBUG_ROLE=1
-  useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_DEBUG_ROLE) return
-    // Non loggare dati sensibili; giusto due info utili di debug
-    // eslint-disable-next-line no-console
-    console.log('[useAuth] role debug', {
-      roleFromProfile: profile?.role,
-      roleFromAppMeta: (user as any)?.app_metadata?.role,
-      roleFromUserMeta: (user as any)?.user_metadata?.role,
-      resolvedRole: role,
-    })
-  }, [profile?.role, user, role])
-
-  const loadProfile = useCallback(async (uid: string) => {
-    if (!uid) return
-    // Evita richieste duplicate; lasciamo che chi forza il reload azzeri il marker
-    if (lastProfileFor.current === uid) {
-      // eslint-disable-next-line no-console
-      console.log('[useAuth] loadProfile: skipping duplicate for', uid)
-      return
-    }
-    lastProfileFor.current = uid
-
-    // Debug timing
-    console.log('[useAuth] loadProfile started for:', uid)
-
-    // Inizia caricamento profilo
-    setProfileLoading(true)
-
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', uid)
-        .single()
-
-      if (!mounted.current) return
-      if (error) {
-        console.warn('[useAuth] profiles select error', error)
-
-        // Se errore 401/403, il token potrebbe essere scaduto - forza refresh della sessione
-        const isAuthError = error.message?.includes('JWT') ||
-                           error.message?.includes('token') ||
-                           error.message?.includes('unauthorized') ||
-                           error.code === 'PGRST301' || // PostgREST JWT expired
-                           error.code === '401' ||
-                           error.code === '403'
-
-        if (isAuthError) {
-          console.warn('[useAuth] Auth error detected, attempting session refresh...')
-          try {
-            const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
-            if (!refreshError && refreshData.session) {
-              console.log('[useAuth] Session refreshed successfully, retrying profile load...')
-              // Retry profile load con il nuovo token
-              lastProfileFor.current = null
-              const { data: retryData, error: retryError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', uid)
-                .single()
-
-              if (!retryError && retryData && mounted.current) {
-                console.log('[useAuth] Profile loaded successfully after session refresh')
-                setProfile(retryData as ProfileRow)
-                return
-              }
-            }
-          } catch (refreshErr) {
-            console.error('[useAuth] Failed to refresh session:', refreshErr)
-          }
-        }
-
-        setProfile(null)
-        return
-      }
-
-      console.log('[useAuth] loadProfile completed for:', uid, data ? 'success' : 'error')
-      setProfile(data as ProfileRow)
-    } finally {
-      // Termina caricamento profilo sempre, anche in caso di errore
-      if (mounted.current) {
-        setProfileLoading(false)
-      }
-    }
-  }, [])
-
   const refreshProfile = useCallback(async () => {
     const uid = currentUserIdRef.current
     if (!uid) return
     lastProfileFor.current = null
-    await loadProfile(uid)
+    await loadProfile(uid, true)
   }, [loadProfile])
 
-  // Aggiorna forzando sessione e profilo con loading esplicito
   const forceRefresh = useCallback(async () => {
-    setLoading(true)
+    setAuthInitialized(false)
     if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+
     loadingWatchdog.current = setTimeout(() => {
-      if (mounted.current) setLoading(false)
+      if (mounted.current) setAuthInitialized(true)
     }, 5000)
+
     try {
       const { data } = await supabase.auth.getSession()
       if (!mounted.current) return
+
       setSession(data.session ?? null)
       setUser(data.session?.user ?? null)
       const uid = data.session?.user?.id
+
       if (uid) {
         lastProfileFor.current = null
-        await loadProfile(uid)
+        await loadProfile(uid, true)
       }
     } finally {
-      if (loadingWatchdog.current) { clearTimeout(loadingWatchdog.current); loadingWatchdog.current = null }
-      if (mounted.current) setLoading(false)
+      if (loadingWatchdog.current) {
+        clearTimeout(loadingWatchdog.current)
+        loadingWatchdog.current = null
+      }
+      if (mounted.current) setAuthInitialized(true)
     }
-  }, [loadProfile])
+  }, [loadProfile, supabase])
 
-  // Aggiorna silenziosamente in background senza toccare loading
   const silentRefresh = useCallback(async () => {
     try {
       const { data } = await supabase.auth.getSession()
       if (!mounted.current) return
+
       setSession(data.session ?? null)
       setUser(data.session?.user ?? null)
       const uid = data.session?.user?.id
+
       if (uid) {
-        // ricarica direttamente il profilo senza passare da loadProfile per non alterare lastProfileFor
-        const { data: p } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', uid)
-          .single()
-        if (mounted.current && p) setProfile(p as ProfileRow)
+        await loadProfile(uid, false)
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[useAuth] silentRefresh error', e)
+      console.warn('[useAuth] Silent refresh error', e)
     }
-  }, [])
+  }, [loadProfile, supabase])
 
   useEffect(() => {
     let unsub: (() => void) | null = null
-    let hasValidSessionFromGetSession = false
 
     const init = async () => {
-      // Watchdog di sicurezza: sblocca dopo 5 secondi max
       if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
+
       loadingWatchdog.current = setTimeout(() => {
-        if (mounted.current) setLoading(false)
+        if (mounted.current) setAuthInitialized(true)
       }, 5000)
 
       try {
-        // 1) sessione iniziale - aspetta il caricamento completo del profilo
         const { data, error } = await supabase.auth.getSession()
         if (!mounted.current) return
+
         if (error) {
-          // eslint-disable-next-line no-console
           console.error('[useAuth] getSession error', error)
         }
+
         setSession(data.session ?? null)
         setUser(data.session?.user ?? null)
         currentUserIdRef.current = data.session?.user?.id ?? null
-        hasValidSessionFromGetSession = !!data.session?.user?.id
 
         if (data.session?.user?.id) {
-          // Aspetta il caricamento del profilo per evitare il flash del fallback
           setProfileLoading(true)
-          await loadProfile(data.session.user.id)
+          await loadProfile(data.session.user.id, false)
         } else {
           setProfile(null)
           setProfileLoading(false)
         }
       } finally {
-        // Pulisci il watchdog e sblocca loading SOLO se abbiamo una sessione valida
-        // Se getSession() ha ritornato null, aspettiamo il listener onAuthStateChange
         if (loadingWatchdog.current) {
           clearTimeout(loadingWatchdog.current)
           loadingWatchdog.current = null
         }
-        if (mounted.current && hasValidSessionFromGetSession) {
-          setLoading(false)
+        if (mounted.current) {
+          setAuthInitialized(true)
         }
       }
 
-      // 2) subscribe ai cambi di auth
       const { data: sub } = supabase.auth.onAuthStateChange(async (event, _session) => {
         if (!mounted.current) return
+
         const prevUserId = currentUserIdRef.current
         const nextUserId = _session?.user?.id ?? null
         const sameUser = !!(prevUserId && nextUserId && prevUserId === nextUserId)
-        const isRefresh = event === 'TOKEN_REFRESHED' || event === 'TOKEN_REFRESH'
+        const isRefresh = event === 'TOKEN_REFRESHED'
 
-        // Aggiorna sempre sessione/utente e traccia user corrente
         setSession(_session ?? null)
         setUser(_session?.user ?? null)
         currentUserIdRef.current = nextUserId
 
-        // Gestione silenziosa dei token refresh per lo stesso utente
         if (isRefresh && sameUser) {
           if (nextUserId && !profile) {
-            // Solo se manca il profilo fai un refetch silenzioso
-            await loadProfile(nextUserId)
+            await loadProfile(nextUserId, false)
           }
           return
         }
 
-        // Per cambi utente o SIGNED_IN/USER_UPDATED, gestisci loading esplicito
-        setLoading(true)
-        if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
-        loadingWatchdog.current = setTimeout(() => {
-          if (mounted.current) setLoading(false)
-        }, 5000)
-
-        try {
-          if (nextUserId) {
-            lastProfileFor.current = null
-            await loadProfile(nextUserId)
-          } else {
-            setProfile(null)
-          }
-        } finally {
-          if (loadingWatchdog.current) { clearTimeout(loadingWatchdog.current); loadingWatchdog.current = null }
-          if (mounted.current) setLoading(false)
+        if (nextUserId) {
+          lastProfileFor.current = null
+          setProfileLoading(true)
+          await loadProfile(nextUserId, false)
+          setProfileLoading(false)
+        } else {
+          setProfile(null)
+          setProfileLoading(false)
+          try {
+            sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          } catch {}
         }
       })
+
       unsub = () => sub.subscription.unsubscribe()
     }
 
     init().catch((e) => {
       if (!mounted.current) return
-      // eslint-disable-next-line no-console
-      console.error('[useAuth] init unexpected error', e)
-      setLoading(false)
+      console.error('[useAuth] Init error', e)
+      setAuthInitialized(true)
     })
 
     return () => {
       unsub?.()
       if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
     }
-  }, [loadProfile])
+  }, [loadProfile, profile, supabase])
 
-  // Refresh session/profile quando la tab torna visibile (debounced)
   const lastRefreshTimeRef = useRef<number>(0)
+  const visibilityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
-    let t: ReturnType<typeof setTimeout> | null = null
     let isSubscribed = true
+
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
-      if (t) clearTimeout(t)
-      t = setTimeout(async () => {
+      if (visibilityTimeoutRef.current) clearTimeout(visibilityTimeoutRef.current)
+
+      visibilityTimeoutRef.current = setTimeout(async () => {
         if (!isSubscribed || document.visibilityState !== 'visible') return
 
-        // Ridotta soglia a 10 secondi per refresh più reattivo
         const now = Date.now()
         const timeSinceLastRefresh = now - lastRefreshTimeRef.current
-        const shouldRefresh = !profile || timeSinceLastRefresh > 10000
+        const shouldRefresh = timeSinceLastRefresh > 30000
 
         if (shouldRefresh) {
+          console.log('[useAuth] Refreshing on visibility change')
           try {
-            // Forza refresh della sessione da Supabase per validare il token
-            const { data, error } = await supabase.auth.refreshSession()
-            if (!isSubscribed) return
-
-            if (error) {
-              console.warn('[useAuth] session refresh failed on visibility change:', error)
-              // Se il refresh fallisce, prova a ottenere la sessione esistente
-              const { data: fallbackData } = await supabase.auth.getSession()
-              setSession(fallbackData.session ?? null)
-              setUser(fallbackData.session?.user ?? null)
-            } else {
-              setSession(data.session ?? null)
-              setUser(data.session?.user ?? null)
-            }
-
-            const uid = data?.session?.user?.id
-            if (uid) {
-              lastProfileFor.current = null
-              await loadProfile(uid)
-            } else {
-              // Nessuna sessione valida, pulisci il profilo
-              setProfile(null)
-            }
+            await silentRefresh()
             lastRefreshTimeRef.current = now
           } catch (e) {
-            // eslint-disable-next-line no-console
-            console.warn('[useAuth] visibility refresh error', e)
+            console.warn('[useAuth] Visibility refresh error', e)
           }
+        } else {
+          console.log(
+            '[useAuth] Skipping refresh, last refresh was',
+            Math.round(timeSinceLastRefresh / 1000),
+            'seconds ago'
+          )
         }
-      }, 1000) // Debounce di 1 secondo per evitare trigger multipli
+      }, 500)
     }
 
     window.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', onVisible)
+
     return () => {
       isSubscribed = false
-      if (t) clearTimeout(t)
+      if (visibilityTimeoutRef.current) clearTimeout(visibilityTimeoutRef.current)
       window.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
     }
-  }, [loadProfile, profile])
+  }, [silentRefresh])
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
@@ -369,7 +368,22 @@ export function useAuth(): UseAuthReturn {
     setProfile(null)
     lastProfileFor.current = null
     currentUserIdRef.current = null
-  }, [])
 
-  return { user, session, profile, role, loading, profileLoading, refreshProfile, signOut, forceRefresh, silentRefresh }
+    try {
+      sessionStorage.removeItem(PROFILE_CACHE_KEY)
+    } catch {}
+  }, [supabase])
+
+  return {
+    user,
+    session,
+    profile,
+    role,
+    loading: !authInitialized,
+    profileLoading,
+    refreshProfile,
+    signOut,
+    forceRefresh,
+    silentRefresh,
+  }
 }

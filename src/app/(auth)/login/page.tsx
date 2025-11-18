@@ -4,11 +4,10 @@ import { useState, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div />}> {/* wrap to satisfy useSearchParams requirement */}
+    <Suspense fallback={<div />}>
       <LoginPageInner />
     </Suspense>
   )
@@ -20,12 +19,10 @@ function LoginPageInner() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
-  const supabase = createClient()
   const searchParams = useSearchParams()
 
   const nextPath = useMemo(() => {
     const raw = searchParams?.get('next') || '/dashboard'
-    // allow only internal paths starting with single '/'
     if (raw && raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/_next') && !raw.startsWith('/api')) {
       return raw
     }
@@ -36,20 +33,43 @@ function LoginPageInner() {
     e.preventDefault()
     setLoading(true)
     setError('')
+
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
       })
+
       if (!res.ok) {
         const j = await res.json().catch(() => ({}))
         setError(j?.error || 'Credenziali non valide')
         return
       }
+
       const j = await res.json()
-      if (j?.user) router.push(nextPath)
-    } catch {
+
+      if (j?.profile && j?.user) {
+        try {
+          sessionStorage.setItem(
+            'csroma_profile_cache',
+            JSON.stringify({
+              data: j.profile,
+              timestamp: Date.now(),
+              userId: j.user.id,
+            })
+          )
+          console.log('Profile cached during login')
+        } catch (err) {
+          console.warn('Failed to cache profile:', err)
+        }
+      }
+
+      if (j?.user) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        router.push(nextPath)
+      }
+    } catch (err) {
       setError('Si è verificato un errore durante il login')
     } finally {
       setLoading(false)
@@ -58,29 +78,14 @@ function LoginPageInner() {
 
   return (
     <div className="relative min-h-screen">
-      {/* Sfondo a tutta pagina */}
-      <Image
-        src="/images/volleyball-net.jpg"
-        alt=""              // decorativo
-        fill
-        priority
-        className="object-cover"
-      />
-      {/* Velo per contrasto testo */}
+      <Image src="/images/volleyball-net.jpg" alt="" fill priority className="object-cover" />
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,.25)' }} />
 
-      {/* Contenuto sopra lo sfondo */}
       <main className="relative z-10 flex min-h-screen items-center justify-center p-6 md:p-10">
-        {/* Box a SINISTRA */}
-        <div className="w-full max-w-lg md:max-w-xl"> {/* md ~ 480px → xl ~ 640px */}
-          <div className="cs-card cs-card--primary" style={{ padding: 24 }}> {/* padding più generoso */}
-            {/* Logo centrato */}
+        <div className="w-full max-w-lg md:max-w-xl">
+          <div className="cs-card cs-card--primary" style={{ padding: 24 }}>
             <div className="text-center" style={{ marginBottom: 16 }}>
-              <img
-                src="/images/logo_CSRoma.svg"
-                alt="CSRoma"
-                className="h-16 mx-auto mb-2"
-              />
+              <img src="/images/logo_CSRoma.svg" alt="CSRoma" className="h-16 mx-auto mb-2" />
               <h1 className="text-2xl font-bold">CSRoma WebApp</h1>
               <p className="text-secondary text-base">Accedi per continuare</p>
             </div>
@@ -93,7 +98,9 @@ function LoginPageInner() {
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="cs-field">
-                <label htmlFor="email" className="cs-field__label">Email</label>
+                <label htmlFor="email" className="cs-field__label">
+                  Email
+                </label>
                 <input
                   id="email"
                   type="email"
@@ -107,7 +114,9 @@ function LoginPageInner() {
               </div>
 
               <div className="cs-field">
-                <label htmlFor="password" className="cs-field__label">Password</label>
+                <label htmlFor="password" className="cs-field__label">
+                  Password
+                </label>
                 <input
                   id="password"
                   type="password"
@@ -131,7 +140,7 @@ function LoginPageInner() {
               </Link>
             </div>
             <div className="text-center text-secondary text-xs" style={{ marginTop: 8 }}>
-              Per creare un account contatta l’amministratore.
+              Per creare un account contatta l'amministratore.
             </div>
           </div>
         </div>
