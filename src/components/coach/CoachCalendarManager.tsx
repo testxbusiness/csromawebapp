@@ -70,21 +70,25 @@ export default function CoachCalendarManager() {
 
   const loadData = async () => {
     setLoading(true)
-    const coachTeams = await loadCoachTeams()
-    await loadEvents(coachTeams)
-    setLoading(false)
-  }
+    try {
+      const response = await fetch('/api/coach/calendar')
+      if (!response.ok) {
+        console.error('Error loading coach calendar:', response.statusText)
+        setEvents([])
+        setTeams([])
+        return
+      }
 
-  const loadCoachTeams = async (): Promise<Team[]> => {
-    const { data } = await supabase
-      .from('team_coaches')
-      .select('team_id, teams(id, name, code)')
-      .eq('coach_id', user?.id)
-
-    const list = (data || []).map((row) => row.teams).filter(Boolean) as Team[]
-    const ordered = list.sort((a, b) => a.name.localeCompare(b.name))
-    setTeams(ordered)
-    return ordered
+      const result = await response.json()
+      setTeams(result.teams || [])
+      setEvents(result.events || [])
+    } catch (error) {
+      console.error('Error loading coach calendar:', error)
+      setEvents([])
+      setTeams([])
+    } finally {
+      setLoading(false)
+    }
   }
 
   const loadSelectOptions = async () => {
@@ -101,36 +105,6 @@ export default function CoachCalendarManager() {
     } finally {
       setLoadingSelects(false)
     }
-  }
-
-  const loadEvents = async (teamsArg?: Team[]) => {
-    const teamList = teamsArg ?? teams
-    if (teamList.length === 0) { setEvents([]); return }
-
-    const teamIds = teamList.map(t => t.id)
-
-    const { data: links, error: etErr } = await supabase
-      .from('event_teams')
-      .select('event_id, team_id')
-      .in('team_id', teamIds)
-    if (etErr || !links || links.length === 0) { setEvents([]); return }
-
-    const eventIds = Array.from(new Set(links.map(l => l.event_id)))
-
-    const { data: rows } = await supabase
-      .from('events')
-      .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by')
-      .in('id', eventIds)
-      .order('start_date', { ascending: false })
-
-    const transformed = (rows || []).map((e: any) => ({
-      ...e,
-      is_recurring: e.event_type === 'recurring',
-      selected_teams: links.filter(l => l.event_id === e.id).map(l => l.team_id),
-      event_kind: e.event_kind
-    }))
-
-    setEvents(transformed)
   }
 
   const saveEvent = async (eventData: Event) => {

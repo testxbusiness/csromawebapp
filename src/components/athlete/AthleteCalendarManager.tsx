@@ -64,100 +64,24 @@ export default function AthleteCalendarManager() {
   async function loadData() {
     setLoading(true)
     try {
-      const memberships = await loadTeamMemberships()
-      const teamIds = memberships.map(m => m.id)
-      await loadEvents(teamIds, memberships)    // passiamo anche i nomi per evitare race sullo stato
+      const response = await fetch('/api/athlete/calendar')
+      if (!response.ok) {
+        console.error('Error loading athlete calendar:', response.statusText)
+        setEvents([])
+        setTeamMemberships([])
+        return
+      }
+
+      const result = await response.json()
+      setTeamMemberships(result.teams || [])
+      setEvents(result.events || [])
+    } catch (error) {
+      console.error('Error loading athlete calendar:', error)
+      setEvents([])
+      setTeamMemberships([])
     } finally {
       setLoading(false)
     }
-  }
-
-  async function loadTeamMemberships(): Promise<TeamLite[]> {
-    const { data: memberships, error } = await supabase
-      .from('team_members')
-      .select('team_id')
-      .eq('profile_id', user?.id)
-
-    if (error) {
-      console.error('Error loading athlete team memberships:', error)
-      setTeamMemberships([])
-      return []
-    }
-
-    const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
-    if (teamIds.length === 0) { setTeamMemberships([]); return [] }
-
-    const { data: teams, error: teamsErr } = await supabase
-      .from('teams')
-      .select('id, name, code')
-      .in('id', teamIds)
-
-    if (teamsErr) {
-      console.error('Error loading teams for athlete:', teamsErr)
-      setTeamMemberships([])
-      return []
-    }
-
-    const mapped = (teams || []).map(t => ({ id: t.id, name: t.name, code: t.code }))
-    setTeamMemberships(mapped)
-    return mapped
-  }
-
-  async function loadEvents(teamIds: string[], membershipTeams: TeamLite[]) {
-    if (!teamIds?.length) { setEvents([]); return }
-
-    // 1) relazioni evento-squadre per le squadre dell’atleta
-    const { data: relations, error: relErr } = await supabase
-      .from('event_teams')
-      .select('event_id, team_id')
-      .in('team_id', teamIds)
-
-    if (relErr) {
-      console.error('Error loading event-team relations for athlete:', relErr)
-      setEvents([])
-      return
-    }
-
-    const eventIds = [...new Set((relations || []).map(r => r.event_id))]
-    if (eventIds.length === 0) { setEvents([]); return }
-
-    // 2) eventi
-    const { data: rows, error: evErr } = await supabase
-      .from('events')
-      .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind')
-      .in('id', eventIds)
-      .order('start_date', { ascending: true })
-
-    if (evErr) {
-      console.error('Error loading events for athlete:', evErr)
-      setEvents([])
-      return
-    }
-
-    // mappa teamId -> name usando l’array passato (evita dipendere da setState async)
-    const teamNameById = new Map(membershipTeams.map(t => [t.id, t.name]))
-    const teamsByEvent = new Map<string, string[]>()
-    for (const r of relations || []) {
-      const name = teamNameById.get(r.team_id)
-      if (!name) continue
-      const arr = teamsByEvent.get(r.event_id) || []
-      if (!arr.includes(name)) arr.push(name)
-      teamsByEvent.set(r.event_id, arr)
-    }
-
-    const transformed: Event[] = (rows || []).map((ev: any) => ({
-      id: ev.id,
-      title: ev.title,
-      description: ev.description,
-      location: ev.location,
-      start_time: ev.start_time,
-      end_time: ev.end_time,
-      is_recurring: ev.event_type === 'recurring',
-      event_kind: ev.event_kind as EventKind | undefined,
-      teams: teamsByEvent.get(ev.id) || []
-    }))
-
-    setEvents(transformed)
   }
 
   if (loading) {
