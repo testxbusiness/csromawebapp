@@ -98,20 +98,23 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Build team map for events
-    const { data: eventTeamLinks } = await supabase
-      .from('event_teams')
-      .select('event_id, team_id')
-      .in('event_id', allEvents.map(e => e.id))
-
     const teamsByEventId = new Map<string, string[]>()
     const teamNameById = new Map(teamData.map(t => [t.id, t.name]))
 
-    for (const link of (eventTeamLinks || [])) {
-      const teamName = teamNameById.get(link.team_id)
-      if (!teamName) continue
-      const arr = teamsByEventId.get(link.event_id) || []
-      if (!arr.includes(teamName)) arr.push(teamName)
-      teamsByEventId.set(link.event_id, arr)
+    if (allEvents.length > 0) {
+      const eventIdsList = allEvents.map(e => e.id)
+      const { data: eventTeamLinks } = await supabase
+        .from('event_teams')
+        .select('event_id, team_id')
+        .in('event_id', eventIdsList)
+
+      for (const link of (eventTeamLinks || [])) {
+        const teamName = teamNameById.get(link.team_id)
+        if (!teamName) continue
+        const arr = teamsByEventId.get(link.event_id) || []
+        if (!arr.includes(teamName)) arr.push(teamName)
+        teamsByEventId.set(link.event_id, arr)
+      }
     }
 
     // 5. Transform events

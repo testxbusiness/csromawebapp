@@ -162,11 +162,11 @@ export async function GET(request: NextRequest) {
     }
 
     // 6. Get all attachments for all messages
-    const { data: allAttachments } = msgIds.length > 0
+    const { data: allAttachments } = fullMsgIds.length > 0
       ? await adminClient
           .from('message_attachments')
           .select('id, message_id, file_path, file_name, mime_type, file_size')
-          .in('message_id', msgIds)
+          .in('message_id', fullMsgIds)
       : { data: [] }
 
     // 7. Generate signed URLs in batch
