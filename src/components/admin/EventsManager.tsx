@@ -85,6 +85,7 @@ export default function EventsManager() {
   const [filterFrom, setFilterFrom] = useState<string>('')
   const [filterTo, setFilterTo] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [loadingSelects, setLoadingSelects] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
@@ -94,10 +95,15 @@ export default function EventsManager() {
 
   useEffect(() => {
     loadEvents()
-    loadGyms()
-    loadActivities()
     loadTeams()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lazy load gyms/activities solo quando il modal si apre
+  useEffect(() => {
+    if (showModal && gyms.length === 0 && activities.length === 0) {
+      loadSelectOptions()
+    }
+  }, [showModal])
 
   const loadEvents = async () => {
     setLoading(true)
@@ -141,22 +147,20 @@ export default function EventsManager() {
     }
   }
 
-  const loadGyms = async () => {
-    const { data } = await supabase
-      .from('gyms')
-      .select('id, name, address, city')
-      .order('name')
-
-    setGyms(data || [])
-  }
-
-  const loadActivities = async () => {
-    const { data } = await supabase
-      .from('activities')
-      .select('id, name')
-      .order('name')
-
-    setActivities(data || [])
+  const loadSelectOptions = async () => {
+    setLoadingSelects(true)
+    try {
+      const [{ data: gymsData }, { data: activitiesData }] = await Promise.all([
+        supabase.from('gyms').select('id, name, address, city').order('name'),
+        supabase.from('activities').select('id, name').order('name')
+      ])
+      setGyms(gymsData || [])
+      setActivities(activitiesData || [])
+    } catch (error) {
+      console.error('Errore caricamento select:', error)
+    } finally {
+      setLoadingSelects(false)
+    }
   }
 
   const loadTeams = async () => {

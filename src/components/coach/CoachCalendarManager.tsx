@@ -39,6 +39,7 @@ export default function CoachCalendarManager() {
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingSelects, setLoadingSelects] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
@@ -60,11 +61,16 @@ export default function CoachCalendarManager() {
     }
   }, [events, filterEventKind])
 
+  // Lazy load gyms/activities solo quando il form si apre
+  useEffect(() => {
+    if (showForm && gyms.length === 0 && activities.length === 0) {
+      loadSelectOptions()
+    }
+  }, [showForm])
+
   const loadData = async () => {
     setLoading(true)
     const coachTeams = await loadCoachTeams()
-    await loadGyms()
-    await loadActivities()
     await loadEvents(coachTeams)
     setLoading(false)
   }
@@ -81,14 +87,20 @@ export default function CoachCalendarManager() {
     return ordered
   }
 
-  const loadGyms = async () => {
-    const { data } = await supabase.from('gyms').select('id, name, city').order('name')
-    setGyms(data || [])
-  }
-
-  const loadActivities = async () => {
-    const { data } = await supabase.from('activities').select('id, name').order('name')
-    setActivities(data || [])
+  const loadSelectOptions = async () => {
+    setLoadingSelects(true)
+    try {
+      const [{ data: gymsData }, { data: activitiesData }] = await Promise.all([
+        supabase.from('gyms').select('id, name, city').order('name'),
+        supabase.from('activities').select('id, name').order('name')
+      ])
+      setGyms(gymsData || [])
+      setActivities(activitiesData || [])
+    } catch (error) {
+      console.error('Errore caricamento select:', error)
+    } finally {
+      setLoadingSelects(false)
+    }
   }
 
   const loadEvents = async (teamsArg?: Team[]) => {
@@ -527,15 +539,19 @@ export default function CoachCalendarManager() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="cs-field__label">Palestra</label>
-                    <select name="gym_id" className="cs-select">
-                      <option value="">Seleziona una palestra</option>
+                    <select name="gym_id" className="cs-select" disabled={loadingSelects}>
+                      <option value="">
+                        {loadingSelects ? 'Caricamento...' : 'Seleziona una palestra'}
+                      </option>
                       {gyms.map(g => (<option key={g.id} value={g.id}>{g.name}{g.city ? ` - ${g.city}` : ''}</option>))}
                     </select>
                   </div>
                   <div>
                     <label className="cs-field__label">Attività</label>
-                    <select name="activity_id" className="cs-select">
-                      <option value="">Seleziona un'attività</option>
+                    <select name="activity_id" className="cs-select" disabled={loadingSelects}>
+                      <option value="">
+                        {loadingSelects ? 'Caricamento...' : 'Seleziona un\'attività'}
+                      </option>
                       {activities.map(a => (<option key={a.id} value={a.id}>{a.name}</option>))}
                     </select>
                   </div>

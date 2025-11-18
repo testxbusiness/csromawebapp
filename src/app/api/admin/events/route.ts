@@ -209,7 +209,9 @@ export async function GET(request: NextRequest) {
     const teamId = searchParams.get('team_id')
     const from = searchParams.get('from') // ISO string
     const to = searchParams.get('to') // ISO string
-    
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50'), 1), 200) // Max 200
+    const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
+
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -221,7 +223,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // Se filtriamo per squadra, recupera gli event_ids prima
+    // Se filtriamo per squadra, recupera gli event_ids prima con batching
     let eventIds: string[] | null = null
     if (teamId) {
       const { data: links, error: linkErr } = await adminClient
@@ -233,20 +235,46 @@ export async function GET(request: NextRequest) {
       }
       eventIds = Array.from(new Set((links || []).map(l => l.event_id)))
       if (eventIds.length === 0) {
-        return NextResponse.json({ events: [] })
+        return NextResponse.json({ events: [], total: 0 })
       }
     }
 
-    // Ottieni gli eventi base senza joins automatici (per evitare errori di relazione)
+    // Ottieni gli eventi base con paginazione
     let query = adminClient
       .from('events')
-      .select('*')
+      .select('*', { count: 'exact' })
 
-    if (eventIds) query = query.in('id', eventIds)
+    if (eventIds) {
+      // Dividi in batch per evitare URL troppo lunghi
+      if (eventIds.length > 100) {
+        const batchedEvents = []
+        for (let i = 0; i < eventIds.length; i += 100) {
+          const batch = eventIds.slice(i, i + 100)
+          const { data } = await adminClient
+            .from('events')
+            .select('*')
+            .in('id', batch)
+          batchedEvents.push(...(data || []))
+        }
+        // Ordina e applica paginazione manualmente
+        batchedEvents.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
+        let eventsData = batchedEvents.slice(offset, offset + limit)
+        return NextResponse.json({
+          events: eventsData,
+          total: batchedEvents.length,
+          limit,
+          offset
+        })
+      }
+      query = query.in('id', eventIds)
+    }
+
     if (from) query = query.gte('start_date', from)
     if (to) query = query.lte('start_date', to)
 
-    const { data: eventsData, error } = await query.order('start_date', { ascending: true })
+    const { data: eventsData, error, count } = await query
+      .order('start_date', { ascending: true })
+      .range(offset, offset + limit - 1)
 
     if (error) {
       console.error('Errore query eventi base:', error)
@@ -255,104 +283,87 @@ export async function GET(request: NextRequest) {
 
     // Se non ci sono eventi, ritorna array vuoto
     if (!eventsData || eventsData.length === 0) {
-      return NextResponse.json({ events: [] })
+      return NextResponse.json({ events: [], total: count || 0, limit, offset })
     }
 
-    // Ora arricchisci con i dati correlati usando query separate
-    const enrichedEvents = await Promise.all(
-      (eventsData || []).map(async (event) => {
-        try {
-          const enrichedEvent = { ...event, gyms: null, activities: null, event_teams: [], created_by_profile: null }
+    // === AGGREGAZIONE BATCH QUERIES ANZICHÉ N+1 ===
 
-          // Ottieni dati palestra se gym_id presente
-          if (event.gym_id) {
-            try {
-              const { data: gymData, error: gymError } = await adminClient
-                .from('gyms')
-                .select('name, address, city')
-                .eq('id', event.gym_id)
-                .single()
-              
-              if (!gymError && gymData) {
-                enrichedEvent.gyms = gymData
-              }
-            } catch (gymError: any) {
-              // Gestisci errori di tabella non esistente o altri errori
-              console.error(`Errore query palestra ${event.gym_id}:`, gymError.message)
-            }
-          }
+    // Raccogli tutti gli IDs unici da queryare
+    const gymIds = [...new Set(eventsData.filter(e => e.gym_id).map(e => e.gym_id))]
+    const activityIds = [...new Set(eventsData.filter(e => e.activity_id).map(e => e.activity_id))]
+    const creatorIds = [...new Set(eventsData.filter(e => e.created_by).map(e => e.created_by))]
+    const eventIdsList = eventsData.map(e => e.id)
 
-          // Ottieni dati attività se activity_id presente
-          if (event.activity_id) {
-            try {
-              const { data: activityData, error: activityError } = await adminClient
-                .from('activities')
-                .select('name')
-                .eq('id', event.activity_id)
-                .single()
-              
-              if (!activityError && activityData) {
-                enrichedEvent.activities = activityData
-              }
-            } catch (activityError: any) {
-              console.error(`Errore query attività ${event.activity_id}:`, activityError.message)
-            }
-          }
+    // Query aggregate (massimo 5 query invece di 500+)
+    const [gymsResult, activitiesResult, creatorsResult, eventTeamsResult] = await Promise.all([
+      // Query 1: Tutte le palestre
+      gymIds.length > 0 ? adminClient
+        .from('gyms')
+        .select('id, name, address, city')
+        .in('id', gymIds)
+        : Promise.resolve({ data: [] }),
+      // Query 2: Tutte le attività
+      activityIds.length > 0 ? adminClient
+        .from('activities')
+        .select('id, name')
+        .in('id', activityIds)
+        : Promise.resolve({ data: [] }),
+      // Query 3: Tutti i creators
+      creatorIds.length > 0 ? adminClient
+        .from('profiles')
+        .select('id, first_name, last_name')
+        .in('id', creatorIds)
+        : Promise.resolve({ data: [] }),
+      // Query 4: Tutte le relazioni event_teams
+      eventIdsList.length > 0 ? adminClient
+        .from('event_teams')
+        .select('event_id, team_id')
+        .in('event_id', eventIdsList)
+        : Promise.resolve({ data: [] })
+    ])
 
-          // Ottieni squadre associate
-          try {
-            const { data: eventTeams, error: teamsError } = await adminClient
-              .from('event_teams')
-              .select('team_id')
-              .eq('event_id', event.id)
+    // Crea mappe per lookup O(1)
+    const gymsMap = new Map((gymsResult.data || []).map(g => [g.id, g]))
+    const activitiesMap = new Map((activitiesResult.data || []).map(a => [a.id, a]))
+    const creatorsMap = new Map((creatorsResult.data || []).map(p => [p.id, p]))
 
-            if (!teamsError && eventTeams && eventTeams.length > 0) {
-              try {
-                const teamIds = eventTeams.map(et => et.team_id)
-                const { data: teamsData, error: teamDataError } = await adminClient
-                  .from('teams')
-                  .select('id, name')
-                  .in('id', teamIds)
+    // Query 5: Tutte le squadre associate agli event_teams
+    const teamIds = [...new Set((eventTeamsResult.data || []).map(et => et.team_id))]
+    const teamsResult = teamIds.length > 0
+      ? await adminClient
+          .from('teams')
+          .select('id, name')
+          .in('id', teamIds)
+      : { data: [] }
 
-                if (!teamDataError && teamsData) {
-                  enrichedEvent.event_teams = teamsData.map(team => ({
-                    teams: team
-                  }))
-                }
-              } catch (teamError: any) {
-                console.error(`Errore query teams per evento ${event.id}:`, teamError.message)
-              }
-            }
-          } catch (teamsError: any) {
-            console.error(`Errore query event_teams per evento ${event.id}:`, teamsError.message)
-          }
+    const teamsMap = new Map((teamsResult.data || []).map(t => [t.id, t]))
 
-          // Ottieni dati creatore
-          if (event.created_by) {
-            try {
-              const { data: profileData, error: profileError } = await adminClient
-                .from('profiles')
-                .select('first_name, last_name')
-                .eq('id', event.created_by)
-                .single()
-              
-              if (!profileError && profileData) {
-                enrichedEvent.created_by_profile = profileData
-              }
-            } catch (profileError) {
-              console.error(`Errore query creatore ${event.created_by}:`, profileError)
-            }
-          }
+    // Crea mappa event_teams per lookup
+    const eventTeamsMap = new Map<string, any[]>()
+    for (const et of (eventTeamsResult.data || [])) {
+      if (!eventTeamsMap.has(et.event_id)) {
+        eventTeamsMap.set(et.event_id, [])
+      }
+      eventTeamsMap.get(et.event_id)!.push(et)
+    }
 
-          return enrichedEvent
-        } catch (error) {
-          console.error(`Errore arricchimento evento ${event.id}:`, error)
-          return event // Ritorna l'evento base in caso di errore
-        }
-      })
-    )
+    // Enrichisci gli eventi in O(n) instead di O(n*m)
+    const enrichedEvents = eventsData.map(event => ({
+      ...event,
+      gyms: event.gym_id ? gymsMap.get(event.gym_id) || null : null,
+      activities: event.activity_id ? activitiesMap.get(event.activity_id) || null : null,
+      created_by_profile: event.created_by ? creatorsMap.get(event.created_by) || null : null,
+      event_teams: (eventTeamsMap.get(event.id) || []).map(et => ({
+        teams: teamsMap.get(et.team_id)
+      }))
+    }))
 
-    return NextResponse.json({ events: enrichedEvents })
+    return NextResponse.json({
+      events: enrichedEvents,
+      total: count || 0,
+      limit,
+      offset
+    })
 
   } catch (error) {
     console.error('Errore API lista eventi:', error)
