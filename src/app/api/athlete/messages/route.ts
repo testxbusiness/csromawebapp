@@ -110,35 +110,35 @@ export async function GET(request: NextRequest) {
     // === BATCH AGGREGATION FOR FULL VIEW ===
 
     // 1. Get all creators
-    const creatorIds = [...new Set((msgs || []).filter(m => m.created_by).map(m => m.created_by))]
-    const { data: creators } = creatorIds.length > 0
+    const fullCreatorIds = [...new Set((msgs || []).filter(m => m.created_by).map(m => m.created_by))]
+    const { data: creators } = fullCreatorIds.length > 0
       ? await adminClient
           .from('profiles')
           .select('id, first_name, last_name')
-          .in('id', creatorIds)
+          .in('id', fullCreatorIds)
       : { data: [] }
     const creatorsMap = new Map((creators || []).map(c => [c.id, c]))
 
     // 2. Get all recipients for all messages
-    const msgIds = (msgs || []).map(m => m.id)
-    const { data: allRecipients } = msgIds.length > 0
+    const fullMsgIds = (msgs || []).map(m => m.id)
+    const { data: allRecipients } = fullMsgIds.length > 0
       ? await supabase
           .from('message_recipients')
           .select('id, message_id, team_id, profile_id, is_read, read_at')
-          .in('message_id', msgIds)
+          .in('message_id', fullMsgIds)
       : { data: [] }
 
     // 3. Collect team and profile IDs from recipients
-    const teamIds = [...new Set((allRecipients || []).filter(r => r.team_id).map(r => r.team_id))]
-    const profileIds = [...new Set((allRecipients || []).filter(r => r.profile_id).map(r => r.profile_id))]
+    const teamRecipientIds = [...new Set((allRecipients || []).filter(r => r.team_id).map(r => r.team_id))]
+    const profileRecipientIds = [...new Set((allRecipients || []).filter(r => r.profile_id).map(r => r.profile_id))]
 
     // 4. Get all teams and profiles in batch
     const [{ data: teams }, { data: profiles }] = await Promise.all([
-      teamIds.length > 0
-        ? supabase.from('teams').select('id, name').in('id', teamIds)
+      teamRecipientIds.length > 0
+        ? supabase.from('teams').select('id, name').in('id', teamRecipientIds)
         : Promise.resolve({ data: [] }),
-      profileIds.length > 0
-        ? supabase.from('profiles').select('id, first_name, last_name, email').in('id', profileIds)
+      profileRecipientIds.length > 0
+        ? supabase.from('profiles').select('id, first_name, last_name, email').in('id', profileRecipientIds)
         : Promise.resolve({ data: [] })
     ])
 
