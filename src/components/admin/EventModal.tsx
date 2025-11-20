@@ -131,6 +131,9 @@ export default function EventModal({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogContent className="cs-modal--centered cs-modal--lg">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{event ? 'Modifica Evento' : 'Nuovo Evento'}</DialogTitle>
+        </DialogHeader>
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
           <div className="cs-modal__icon" aria-hidden>📅</div>
           <div style={{ flex: 1, minWidth: 0 }}>

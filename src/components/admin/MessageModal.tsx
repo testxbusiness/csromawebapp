@@ -127,6 +127,9 @@ export default function MessageModal({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       {/* centrato e coerente con il DS */}
       <DialogContent className="cs-modal--centered cs-modal--md">
+        <DialogHeader className="sr-only">
+          <DialogTitle>{message ? 'Modifica Messaggio' : 'Nuovo Messaggio'}</DialogTitle>
+        </DialogHeader>
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
           <div className="cs-modal__icon" aria-hidden>✉️</div>
           <div style={{ flex: 1, minWidth: 0 }}>
