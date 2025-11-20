@@ -1,7 +1,7 @@
 // src/components/coach/CoachCalendarManager.tsx
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import { createClient } from '@/lib/supabase/client'
@@ -103,13 +103,17 @@ export default function CoachCalendarManager() {
   }, [userId, loadData])
 
   useEffect(() => {
-    // Applica filtro event_kind
     if (filterEventKind) {
       setFilteredEvents(events.filter(e => e.event_kind === filterEventKind))
     } else {
       setFilteredEvents(events)
     }
   }, [events, filterEventKind])
+
+  const filteredEventsForCalendar = useMemo(() => {
+    if (!filterEventKind) return filteredEvents
+    return filteredEvents.filter((e) => e.event_kind === filterEventKind)
+  }, [filteredEvents, filterEventKind])
 
   // Lazy load gyms/activities solo quando il form si apre
   useEffect(() => {
@@ -326,7 +330,7 @@ export default function CoachCalendarManager() {
           <FullCalendarWidget
             initialDate={currentDate}
             view={calView}
-            events={(events||[]).map((e:any)=>({
+            events={(filteredEventsForCalendar || []).map((e:any)=>({
               id: e.id!, title: e.title,
               start: new Date(e.start_time), end: new Date(e.end_time),
               color: (function(){
@@ -363,11 +367,6 @@ export default function CoachCalendarManager() {
               setShowForm(true)
             }}
           />
-        ) : teams.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Non hai squadre assegnate</p>
-            <p className="text-sm text-secondary">Contatta l'amministratore per essere assegnato a una squadra</p>
-          </div>
         ) : teams.length === 0 ? (
           <div className="cs-card text-center py-12">
             <p className="text-secondary mb-4">Non hai squadre assegnate</p>
@@ -416,7 +415,7 @@ export default function CoachCalendarManager() {
                         <div>{event.location || 'N/D'}</div>
                       </td>
                       <td className="px-6 py-4">
-                        <div>{event.selected_teams.map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
+                        <div>{(event.selected_teams || []).map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`cs-badge ${
@@ -459,7 +458,7 @@ export default function CoachCalendarManager() {
                       </span>
                     </div>
                     <div><strong>Luogo:</strong> {event.location || 'N/D'}</div>
-                    <div><strong>Squadre:</strong> {event.selected_teams.map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
+                    <div><strong>Squadre:</strong> {(event.selected_teams || []).map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
                     <div>
                       <strong>Tipo:</strong>
                       <span className={`ml-2 cs-badge ${
