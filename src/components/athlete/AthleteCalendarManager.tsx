@@ -1,11 +1,9 @@
 // src/components/athlete/AthleteCalendarManager.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
-import { toast } from '@/components/ui'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { useAuth } from '@/hooks/useAuth'
@@ -38,7 +36,7 @@ function kindColor(kind?: string) {
 
 export default function AthleteCalendarManager() {
   const { user } = useAuth()
-  const supabase = createClient()
+  const userId = user?.id || null
 
   const [events, setEvents] = useState<Event[]>([])
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
@@ -51,20 +49,12 @@ export default function AthleteCalendarManager() {
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const [filterEventKind, setFilterEventKind] = useState<string>('')
 
-  useEffect(() => { if (user) void loadData() }, [user])
+  const fetchControllerRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    let filtered = events
-    if (filterEventKind) {
-      filtered = filtered.filter(e => e.event_kind === filterEventKind)
-    }
-    setFilteredEvents(filtered)
-  }, [events, filterEventKind])
-
-  async function loadData() {
+  const loadData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true)
     try {
-      const response = await fetch('/api/athlete/calendar')
+      const response = await fetch('/api/athlete/calendar', { signal })
       if (!response.ok) {
         console.error('Error loading athlete calendar:', response.statusText)
         setEvents([])
@@ -75,14 +65,43 @@ export default function AthleteCalendarManager() {
       const result = await response.json()
       setTeamMemberships(result.teams || [])
       setEvents(result.events || [])
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return
       console.error('Error loading athlete calendar:', error)
       setEvents([])
       setTeamMemberships([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!userId) {
+      setEvents([])
+      setTeamMemberships([])
+      setLoading(false)
+      fetchControllerRef.current?.abort()
+      fetchControllerRef.current = null
+      return
+    }
+
+    const controller = new AbortController()
+    fetchControllerRef.current?.abort()
+    fetchControllerRef.current = controller
+    void loadData(controller.signal)
+
+    return () => {
+      controller.abort()
+    }
+  }, [userId, loadData])
+
+  useEffect(() => {
+    let filtered = events
+    if (filterEventKind) {
+      filtered = filtered.filter(e => e.event_kind === filterEventKind)
+    }
+    setFilteredEvents(filtered)
+  }, [events, filterEventKind])
 
   if (loading) {
     return (
