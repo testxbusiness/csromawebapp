@@ -101,16 +101,25 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Build team map for events (reuse stored event_teams data, no new query needed)
-    const teamsByEventId = new Map<string, string[]>()
+    const teamIdsByEventId = new Map<string, string[]>()
+    const teamNamesByEventId = new Map<string, string[]>()
     const teamNameById = new Map(teamData.map(t => [t.id, t.name]))
 
     // Use the stored event_teams links instead of querying again
     for (const link of allEventTeamLinks) {
+      const idsArr = teamIdsByEventId.get(link.event_id) || []
+      if (!idsArr.includes(link.team_id)) {
+        idsArr.push(link.team_id)
+        teamIdsByEventId.set(link.event_id, idsArr)
+      }
+
       const teamName = teamNameById.get(link.team_id)
       if (!teamName) continue
-      const arr = teamsByEventId.get(link.event_id) || []
-      if (!arr.includes(teamName)) arr.push(teamName)
-      teamsByEventId.set(link.event_id, arr)
+      const namesArr = teamNamesByEventId.get(link.event_id) || []
+      if (!namesArr.includes(teamName)) {
+        namesArr.push(teamName)
+        teamNamesByEventId.set(link.event_id, namesArr)
+      }
     }
 
     // 5. Transform events
@@ -122,7 +131,9 @@ export async function GET(request: NextRequest) {
       start_time: ev.start_time,
       end_time: ev.end_time,
       is_recurring: ev.event_type === 'recurring',
-      teams: teamsByEventId.get(ev.id) || [],
+      // selected_teams is required on the UI to resolve the names, keep names for backwards compatibility
+      selected_teams: teamIdsByEventId.get(ev.id) || [],
+      teams: teamNamesByEventId.get(ev.id) || [],
       event_kind: ev.event_kind,
       parent_event_id: ev.parent_event_id,
       created_by: ev.created_by

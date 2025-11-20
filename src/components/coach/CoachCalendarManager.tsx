@@ -48,6 +48,7 @@ export default function CoachCalendarManager() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const [filterEventKind, setFilterEventKind] = useState<string>('')
+  const [filterTeamId, setFilterTeamId] = useState<string>('')
 
   const fetchControllerRef = useRef<AbortController | null>(null)
 
@@ -103,17 +104,21 @@ export default function CoachCalendarManager() {
   }, [userId, loadData])
 
   useEffect(() => {
+    let next = events
     if (filterEventKind) {
-      setFilteredEvents(events.filter(e => e.event_kind === filterEventKind))
-    } else {
-      setFilteredEvents(events)
+      next = next.filter(e => e.event_kind === filterEventKind)
     }
-  }, [events, filterEventKind])
+    if (filterTeamId) {
+      next = next.filter(e => (e.selected_teams || []).includes(filterTeamId))
+    }
+    setFilteredEvents(next)
+  }, [events, filterEventKind, filterTeamId])
 
-  const filteredEventsForCalendar = useMemo(() => {
-    if (!filterEventKind) return filteredEvents
-    return filteredEvents.filter((e) => e.event_kind === filterEventKind)
-  }, [filteredEvents, filterEventKind])
+  const filteredEventsForCalendar = useMemo(() => filteredEvents, [filteredEvents])
+
+  const refreshEvents = useCallback(() => {
+    void loadData()
+  }, [loadData])
 
   // Lazy load gyms/activities solo quando il form si apre
   useEffect(() => {
@@ -240,7 +245,7 @@ export default function CoachCalendarManager() {
 
       setEditingEvent(null)
       setShowForm(false)
-      loadEvents()
+      refreshEvents()
     } catch (error) {
       console.error('Error saving event:', error)
     }
@@ -272,11 +277,11 @@ export default function CoachCalendarManager() {
       if (ids.length) {
         await supabase.from('event_teams').delete().in('event_id', ids)
         const { error } = await supabase.from('events').delete().in('id', ids)
-        if (!error) loadEvents()
+        if (!error) refreshEvents()
       }
     } else {
       const { error } = await supabase.from('events').delete().eq('id', id)
-      if (!error) loadEvents()
+      if (!error) refreshEvents()
     }
   }
 
@@ -309,21 +314,35 @@ export default function CoachCalendarManager() {
           </div>
         </div>
 
-        {/* Filtro Tipo Evento */}
-        <div className="mb-4">
-          <label className="cs-field__label">Tipo Evento</label>
-          <select
-            value={filterEventKind}
-            onChange={(e) => setFilterEventKind(e.target.value)}
-            className="cs-select"
-            style={{ maxWidth: '300px' }}
-          >
-            <option value="">Tutti i tipi</option>
-            <option value="training">Allenamento</option>
-            <option value="match">Partita</option>
-            <option value="meeting">Riunione</option>
-            <option value="other">Altro</option>
-          </select>
+        {/* Filtri */}
+        <div className="mb-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="cs-field__label">Tipo Evento</label>
+            <select
+              value={filterEventKind}
+              onChange={(e) => setFilterEventKind(e.target.value)}
+              className="cs-select"
+            >
+              <option value="">Tutti i tipi</option>
+              <option value="training">Allenamento</option>
+              <option value="match">Partita</option>
+              <option value="meeting">Riunione</option>
+              <option value="other">Altro</option>
+            </select>
+          </div>
+          <div>
+            <label className="cs-field__label">Squadra</label>
+            <select
+              value={filterTeamId}
+              onChange={(e) => setFilterTeamId(e.target.value)}
+              className="cs-select"
+            >
+              <option value="">Tutte le squadre</option>
+              {teams.map(team => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {viewMode === 'calendar' ? (
