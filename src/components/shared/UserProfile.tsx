@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
@@ -21,6 +21,7 @@ interface UserProfileProps {
 
 export default function UserProfile({ userRole }: UserProfileProps) {
   const { user, profile, refreshProfile } = useAuth()
+  const userId = user?.id || null
   const isEditable = userRole === 'admin'
   const [profileData, setProfileData] = useState<ProfileData>({
     first_name: '',
@@ -47,17 +48,18 @@ export default function UserProfile({ userRole }: UserProfileProps) {
   const [isSubscribed, setIsSubscribed] = useState<boolean>(false)
 
   useEffect(() => {
-    if (profile) {
-      setProfileData({
-        first_name: profile.first_name || '',
-        last_name: profile.last_name || '',
-        phone_number: (profile as any).phone || (profile as any).phone_number || '',
-        date_of_birth: profile.date_of_birth || '',
-        avatar_url: profile.avatar_url || ''
-      })
-      loadUserData()
+    if (!profile) return
+    setProfileData({
+      first_name: profile.first_name || '',
+      last_name: profile.last_name || '',
+      phone_number: (profile as any).phone || (profile as any).phone_number || '',
+      date_of_birth: profile.date_of_birth || '',
+      avatar_url: profile.avatar_url || ''
+    })
+    if (userRole !== 'athlete') {
+      setLoading(false)
     }
-  }, [profile])
+  }, [profile, userRole])
 
   // Push capability check
   useEffect(() => {
@@ -71,65 +73,87 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     }).catch(() => setIsSubscribed(false))
   }, [])
 
-  const loadUserData = async () => {
+  const membershipsRequestRef = useRef(0)
+
+  const loadTeamMemberships = useCallback(async () => {
+    if (userRole !== 'athlete' || !userId) {
+      setTeamMemberships([])
+      setLoading(false)
+      return
+    }
+
+    const requestId = ++membershipsRequestRef.current
     setLoading(true)
-    
-    if (userRole === 'athlete' && user) {
-      // Load team memberships for athletes (avoid PostgREST deep embeds to prevent 400)
+
+    try {
       const { data: memberships, error: mErr } = await supabase
         .from('team_members')
         .select('id, team_id, jersey_number')
-        .eq('profile_id', user.id)
+        .eq('profile_id', userId)
 
       if (mErr) {
         console.error('Error loading team memberships:', mErr)
         setTeamMemberships([])
-      } else {
-        const list = memberships || []
-        if (list.length === 0) {
-          setTeamMemberships([])
-        } else {
-          const teamIds = Array.from(new Set(list.map((r:any)=>r.team_id).filter(Boolean)))
-          let teams: any[] = []
-          let activities: any[] = []
-          if (teamIds.length > 0) {
-            const { data: tdata } = await supabase
-              .from('teams')
-              .select('id, name, code, activity_id')
-              .in('id', teamIds)
-            teams = tdata || []
-            const activityIds = Array.from(new Set(teams.map((t:any)=>t.activity_id).filter(Boolean)))
-            if (activityIds.length > 0) {
-              const { data: adata } = await supabase
-                .from('activities')
-                .select('id, name')
-                .in('id', activityIds)
-              activities = adata || []
-            }
-          }
+        return
+      }
 
-          const teamMap = new Map(teams.map((t:any)=>[t.id, t]))
-          const activityMap = new Map(activities.map((a:any)=>[a.id, a]))
+      const list = memberships || []
+      if (list.length === 0) {
+        setTeamMemberships([])
+        return
+      }
 
-          const composed = list.map((r:any)=>{
-            const t = teamMap.get(r.team_id)
-            const a = t ? activityMap.get(t.activity_id) : null
-
-            return {
-              id: r.id,
-              jersey_number: r.jersey_number,
-              membership_number: profile?.athlete_profile?.membership_number ?? undefined,
-              medical_certificate_expiry: profile?.athlete_profile?.medical_certificate_expiry ?? undefined,
-              team: t ? { id: t.id, name: t.name, code: t.code, activity: a ? { name: a.name } : null } : null
-            }
-          })
-          setTeamMemberships(composed)
+      const teamIds = Array.from(new Set(list.map((r:any)=>r.team_id).filter(Boolean)))
+      let teams: any[] = []
+      let activities: any[] = []
+      if (teamIds.length > 0) {
+        const { data: tdata } = await supabase
+          .from('teams')
+          .select('id, name, code, activity_id')
+          .in('id', teamIds)
+        teams = tdata || []
+        const activityIds = Array.from(new Set(teams.map((t:any)=>t.activity_id).filter(Boolean)))
+        if (activityIds.length > 0) {
+          const { data: adata } = await supabase
+            .from('activities')
+            .select('id, name')
+            .in('id', activityIds)
+          activities = adata || []
         }
       }
+
+      const teamMap = new Map(teams.map((t:any)=>[t.id, t]))
+      const activityMap = new Map(activities.map((a:any)=>[a.id, a]))
+
+      const composed = list.map((r:any)=>{
+        const t = teamMap.get(r.team_id)
+        const a = t ? activityMap.get(t.activity_id) : null
+
+        return {
+          id: r.id,
+          jersey_number: r.jersey_number,
+          membership_number: profile?.athlete_profile?.membership_number ?? undefined,
+          medical_certificate_expiry: profile?.athlete_profile?.medical_certificate_expiry ?? undefined,
+          team: t ? { id: t.id, name: t.name, code: t.code, activity: a ? { name: a.name } : null } : null
+        }
+      })
+      setTeamMemberships(composed)
+    } finally {
+      if (membershipsRequestRef.current === requestId) {
+        setLoading(false)
+      }
     }
-    
-    setLoading(false)
-  }
+  }, [userRole, userId, supabase, profile?.athlete_profile])
+
+  useEffect(() => {
+    if (userRole !== 'athlete') return
+    if (!userId) {
+      setTeamMemberships([])
+      setLoading(false)
+      return
+    }
+    loadTeamMemberships()
+  }, [userRole, userId, loadTeamMemberships])
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
