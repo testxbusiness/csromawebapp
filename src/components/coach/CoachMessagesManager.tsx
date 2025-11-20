@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
@@ -30,6 +30,7 @@ interface Team { id: string; name: string; code: string }
 
 export default function CoachMessagesManager() {
   const { user } = useAuth()
+  const userId = user?.id || null
   const supabase = useMemo(() => createClient(), [])
   const [messages, setMessages] = useState<Message[]>([])
   const [teams, setTeams] = useState<Team[]>([])
@@ -43,29 +44,36 @@ export default function CoachMessagesManager() {
   // details (drawer/modale già presente)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
 
-  useEffect(() => {
-    if (!user) return
-    loadTeams()
-    loadMessages()
-  }, [user])
+  const fetchControllerRef = useRef<AbortController | null>(null)
 
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
+    if (!userId) {
+      setTeams([])
+      return
+    }
+
     const { data } = await supabase
       .from('team_coaches')
       .select('team_id, teams(id, name, code)')
-      .eq('coach_id', user!.id)
+      .eq('coach_id', userId)
 
     const list = (data || [])
       .map((row) => row.teams)
       .filter(Boolean) as Team[]
 
     setTeams(list.sort((a, b) => a.name.localeCompare(b.name)))
-  }
+  }, [supabase, userId])
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async (signal?: AbortSignal) => {
+    if (!userId) {
+      setMessages([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
-      const res = await fetch('/api/coach/messages?view=full')
+      const res = await fetch('/api/coach/messages?view=full', { signal })
       const result = await res.json()
       if (!res.ok) {
         console.error('Errore caricamento messaggi coach:', result.error)
@@ -73,13 +81,36 @@ export default function CoachMessagesManager() {
       } else {
         setMessages(result.messages || [])
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'AbortError') return
       console.error('Errore rete caricamento messaggi coach:', e)
       setMessages([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) {
+      setTeams([])
+      setMessages([])
+      setLoading(false)
+      fetchControllerRef.current?.abort()
+      fetchControllerRef.current = null
+      return
+    }
+
+    loadTeams().catch(() => {})
+
+    const controller = new AbortController()
+    fetchControllerRef.current?.abort()
+    fetchControllerRef.current = controller
+    void loadMessages(controller.signal)
+
+    return () => {
+      controller.abort()
+    }
+  }, [userId, loadTeams, loadMessages])
 
   const canEdit = (m: Message) => m.created_by === user?.id
 

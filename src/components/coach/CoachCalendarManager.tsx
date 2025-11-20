@@ -368,6 +368,11 @@ export default function CoachCalendarManager() {
             <p className="text-secondary mb-4">Non hai squadre assegnate</p>
             <p className="text-sm text-secondary">Contatta l'amministratore per essere assegnato a una squadra</p>
           </div>
+        ) : teams.length === 0 ? (
+          <div className="cs-card text-center py-12">
+            <p className="text-secondary mb-4">Non hai squadre assegnate</p>
+            <p className="text-sm text-secondary">Contatta l'amministratore per essere assegnato a una squadra</p>
+          </div>
         ) : filteredEvents.length === 0 ? (
           <div className="cs-card text-center py-12">
             <p className="text-secondary mb-4">Nessun evento trovato</p>
