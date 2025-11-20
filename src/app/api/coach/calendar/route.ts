@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
 
     // 2. Get event-team relations (batch processing for large arrays)
     let eventIds: string[] = []
+    let allEventTeamLinks: any[] = [] // STORE for later reuse
 
     if (teamIds.length > 100) {
       for (let i = 0; i < teamIds.length; i += 100) {
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
           .select('event_id, team_id')
           .in('team_id', batch)
 
+        allEventTeamLinks.push(...(relations || []))
         eventIds.push(...(relations || []).map(r => r.event_id))
       }
       eventIds = [...new Set(eventIds)]
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ events: [], teams: teamData })
       }
 
+      allEventTeamLinks = relations || []
       eventIds = [...new Set((relations || []).map(r => r.event_id))]
     }
 
@@ -97,24 +100,17 @@ export async function GET(request: NextRequest) {
       allEvents = events || []
     }
 
-    // 4. Build team map for events
+    // 4. Build team map for events (reuse stored event_teams data, no new query needed)
     const teamsByEventId = new Map<string, string[]>()
     const teamNameById = new Map(teamData.map(t => [t.id, t.name]))
 
-    if (allEvents.length > 0) {
-      const eventIdsList = allEvents.map(e => e.id)
-      const { data: eventTeamLinks } = await supabase
-        .from('event_teams')
-        .select('event_id, team_id')
-        .in('event_id', eventIdsList)
-
-      for (const link of (eventTeamLinks || [])) {
-        const teamName = teamNameById.get(link.team_id)
-        if (!teamName) continue
-        const arr = teamsByEventId.get(link.event_id) || []
-        if (!arr.includes(teamName)) arr.push(teamName)
-        teamsByEventId.set(link.event_id, arr)
-      }
+    // Use the stored event_teams links instead of querying again
+    for (const link of allEventTeamLinks) {
+      const teamName = teamNameById.get(link.team_id)
+      if (!teamName) continue
+      const arr = teamsByEventId.get(link.event_id) || []
+      if (!arr.includes(teamName)) arr.push(teamName)
+      teamsByEventId.set(link.event_id, arr)
     }
 
     // 5. Transform events
