@@ -1,8 +1,7 @@
 // src/components/athlete/AthleteFeesManager.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import PageHeader from '@/components/shared/PageHeader' // se vuoi l'header qui, altrimenti toglilo
 // import EventDetails from '@/components/.../EventDetails' // TODO: se lo usi davvero, importa il path corretto
@@ -34,7 +33,7 @@ interface FeeInstallment {
 
 export default function AthleteFeesManager() {
   const { user } = useAuth()
-  const supabase = createClient()
+  const userId = user?.id || null
 
   const [installments, setInstallments] = useState<FeeInstallment[]>([])
   const [filteredInstallments, setFilteredInstallments] = useState<FeeInstallment[]>([])
@@ -53,82 +52,59 @@ export default function AthleteFeesManager() {
     }
   }
 
-  useEffect(() => { if (user) void loadInstallments() }, [user])
-  useEffect(() => { filterInstallments() }, [installments, filter])
+  const fetchControllerRef = useRef<AbortController | null>(null)
 
-  async function loadInstallments() {
+  const loadInstallments = useCallback(async (signal?: AbortSignal) => {
+    if (!userId) {
+      setInstallments([])
+      setFilteredInstallments([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
-      const { data: base, error: baseErr } = await supabase
-        .from('fee_installments')
-        .select('id, installment_number, due_date, amount, status, paid_at, membership_fee_id')
-        .eq('profile_id', user?.id)
-        .order('due_date', { ascending: true })
-
-      if (baseErr) {
-        console.error('Error loading fee installments (athlete):', baseErr)
+      const response = await fetch('/api/athlete/fees', { signal })
+      if (!response.ok) {
+        console.error('Error loading fee installments (athlete):', response.statusText)
         setInstallments([])
         return
       }
 
-      const feeIds = [...new Set((base || []).map((r: any) => r.membership_fee_id).filter(Boolean))]
-      if (feeIds.length === 0) { setInstallments([]); return }
-
-      const { data: fees, error: feesErr } = await supabase
-        .from('membership_fees')
-        .select('id, team_id, name, description, total_amount, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count')
-        .in('id', feeIds)
-      if (feesErr) { console.error('Error loading membership fees:', feesErr); setInstallments([]); return }
-
-      const teamIds = [...new Set((fees || []).map((f: any) => f.team_id).filter(Boolean))]
-      const { data: teams = [] } = teamIds.length
-        ? await supabase.from('teams').select('id, name, code, activity_id').in('id', teamIds)
-        : { data: [] as any[] }
-
-      const activityIds = [...new Set(teams.map((t: any) => t.activity_id).filter(Boolean))]
-      const { data: activities = [] } = activityIds.length
-        ? await supabase.from('activities').select('id, name').in('id', activityIds)
-        : { data: [] as any[] }
-
-      const feeMap = new Map((fees || []).map((f: any) => [f.id, f]))
-      const teamMap = new Map(teams.map((t: any) => [t.id, t]))
-      const activityMap = new Map(activities.map((a: any) => [a.id, a]))
-
-      const composed: FeeInstallment[] = (base || []).map((row: any) => {
-        const fee = feeMap.get(row.membership_fee_id)
-        const team = fee ? teamMap.get(fee.team_id) : null
-        const activity = team ? activityMap.get(team.activity_id) : null
-        return {
-          id: row.id,
-          installment_number: row.installment_number,
-          due_date: row.due_date,
-          amount: row.amount,
-          status: row.status,
-          paid_at: row.paid_at || undefined,
-          membership_fee: {
-            id: fee?.id,
-            name: fee?.name || 'Quota',
-            description: fee?.description || undefined,
-            total_amount: fee?.total_amount || 0,
-            enrollment_fee: fee?.enrollment_fee || 0,
-            insurance_fee: fee?.insurance_fee || 0,
-            monthly_fee: fee?.monthly_fee || 0,
-            months_count: fee?.months_count || 0,
-            installments_count: fee?.installments_count || 1,
-            team: {
-              name: team?.name || 'N/D',
-              code: team?.code || 'N/D',
-              activity: { name: activity?.name || 'N/D' }
-            }
-          }
-        }
-      })
-
-      setInstallments(composed)
+      const result = await response.json()
+      setInstallments(result.installments || [])
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return
+      console.error('Error loading fee installments (athlete):', error)
+      setInstallments([])
     } finally {
       setLoading(false)
     }
-  }
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId) {
+      fetchControllerRef.current?.abort()
+      fetchControllerRef.current = null
+      setInstallments([])
+      setFilteredInstallments([])
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    fetchControllerRef.current?.abort()
+    fetchControllerRef.current = controller
+    void loadInstallments(controller.signal)
+
+    return () => {
+      controller.abort()
+    }
+  }, [userId, loadInstallments])
+
+  useEffect(() => {
+    filterInstallments()
+  }, [installments, filter])
 
   function filterInstallments() {
     if (filter === 'pending') setFilteredInstallments(installments.filter(i => i.status !== 'paid'))
