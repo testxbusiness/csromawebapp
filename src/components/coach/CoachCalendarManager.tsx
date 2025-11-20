@@ -1,7 +1,7 @@
 // src/components/coach/CoachCalendarManager.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import { createClient } from '@/lib/supabase/client'
@@ -31,6 +31,7 @@ interface Activity { id: string; name: string }
 
 export default function CoachCalendarManager() {
   const { user } = useAuth()
+  const userId = user?.id || null
   const supabase = createClient()
 
   const [events, setEvents] = useState<Event[]>([])
@@ -48,9 +49,58 @@ export default function CoachCalendarManager() {
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const [filterEventKind, setFilterEventKind] = useState<string>('')
 
+  const fetchControllerRef = useRef<AbortController | null>(null)
+
+  const loadData = useCallback(async (signal?: AbortSignal) => {
+    if (!userId) {
+      setEvents([])
+      setTeams([])
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    try {
+      const response = await fetch('/api/coach/calendar', { signal })
+      if (!response.ok) {
+        console.error('Error loading coach calendar:', response.statusText)
+        setEvents([])
+        setTeams([])
+        return
+      }
+
+      const result = await response.json()
+      setTeams(result.teams || [])
+      setEvents(result.events || [])
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return
+      console.error('Error loading coach calendar:', error)
+      setEvents([])
+      setTeams([])
+    } finally {
+      setLoading(false)
+    }
+  }, [userId])
+
   useEffect(() => {
-    if (user) loadData()
-  }, [user])
+    if (!userId) {
+      fetchControllerRef.current?.abort()
+      fetchControllerRef.current = null
+      setEvents([])
+      setTeams([])
+      setLoading(false)
+      return
+    }
+
+    const controller = new AbortController()
+    fetchControllerRef.current?.abort()
+    fetchControllerRef.current = controller
+    void loadData(controller.signal)
+
+    return () => {
+      controller.abort()
+    }
+  }, [userId, loadData])
 
   useEffect(() => {
     // Applica filtro event_kind
@@ -67,29 +117,6 @@ export default function CoachCalendarManager() {
       loadSelectOptions()
     }
   }, [showForm])
-
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      const response = await fetch('/api/coach/calendar')
-      if (!response.ok) {
-        console.error('Error loading coach calendar:', response.statusText)
-        setEvents([])
-        setTeams([])
-        return
-      }
-
-      const result = await response.json()
-      setTeams(result.teams || [])
-      setEvents(result.events || [])
-    } catch (error) {
-      console.error('Error loading coach calendar:', error)
-      setEvents([])
-      setTeams([])
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const loadSelectOptions = async () => {
     setLoadingSelects(true)
