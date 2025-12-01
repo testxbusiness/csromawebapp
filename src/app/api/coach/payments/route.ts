@@ -43,6 +43,7 @@ export async function GET() {
         )
       `)
       .eq('type', 'coach_payment')
+      .eq('coach_id', user.id)          // 👈 filtro fondamentale
       .order('due_date', { ascending: true, nullsFirst: true })
 
     if (error) {
