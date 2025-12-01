@@ -20,6 +20,7 @@ import {
   LineChart,
   Mail,
   MessageSquare,
+  Trophy,
   User,
   UserCog,
   UsersRound,
@@ -39,6 +40,7 @@ const adminItems: NavItem[] = [
   { href: '/admin/seasons', label: 'Stagioni', icon: Flag },
   { href: '/admin/activities', label: 'Attività', icon: Activity },
   { href: '/admin/teams', label: 'Squadre', icon: UsersRound },
+  { href: '/admin/campionati', label: 'Campionati', icon: Trophy },
   { href: '/admin/users', label: 'Utenti', icon: ClipboardList },
   { href: '/admin/atleti', label: 'Iscritti', icon: User },
   { href: '/admin/collaboratori', label: 'Collaboratori', icon: UserCog },
@@ -55,6 +57,7 @@ const adminItems: NavItem[] = [
 
 const coachItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LineChart },
+  { href: '/coach/campionati', label: 'Campionati', icon: Trophy },
   { href: '/coach/calendar', label: 'Calendario', icon: CalendarClock },
   { href: '/coach/messages', label: 'Messaggi', icon: Mail },
   { href: '/coach/payments', label: 'Pagamenti', icon: CreditCard },
@@ -63,6 +66,7 @@ const coachItems: NavItem[] = [
 
 const athleteItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LineChart },
+  { href: '/athlete/campionati', label: 'Campionati', icon: Trophy },
   { href: '/athlete/calendar', label: 'Calendario', icon: CalendarClock },
   { href: '/athlete/messages', label: 'Messaggi', icon: Mail },
   { href: '/athlete/fees', label: 'Quote Associative', icon: Wallet2 },
