@@ -66,6 +66,34 @@ type Match = {
   away_club_team?: ClubTeam
 }
 
+type ConvocationMember = {
+  team_member_id: string
+  profile_id?: string | null
+  profiles?: { first_name?: string | null; last_name?: string | null } | null
+  team_members?: {
+    jersey_number?: number | null
+    profile_id?: string | null
+    profiles?: { first_name?: string | null; last_name?: string | null } | null
+  } | null
+}
+
+type Convocation = {
+  id?: string
+  match_id: string
+  championship_club_team_id: string
+  team_id?: string | null
+  notes?: string | null
+  championship_match_convocation_members?: ConvocationMember[]
+  championship_club_teams?: ClubTeam
+}
+
+type TeamMember = {
+  id: string
+  profile_id: string
+  jersey_number?: number | null
+  profiles?: { first_name?: string | null; last_name?: string | null } | null
+}
+
 type Standing = {
   championship_group_id: string
   club_team_id: string
@@ -144,6 +172,15 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
   const [resultEditingMatch, setResultEditingMatch] = useState<Match | null>(null)
   const [coachTeamIds, setCoachTeamIds] = useState<Set<string>>(new Set())
   const [athleteTeamIds, setAthleteTeamIds] = useState<Set<string>>(new Set())
+  const [nextMatch, setNextMatch] = useState<Match | null>(null)
+  const [convocationModalOpen, setConvocationModalOpen] = useState(false)
+  const [convocationLoading, setConvocationLoading] = useState(false)
+  const [convocationSaving, setConvocationSaving] = useState(false)
+  const [convocation, setConvocation] = useState<Convocation | null>(null)
+  const [convocationSelection, setConvocationSelection] = useState<Set<string>>(new Set())
+  const [convocationTeamMembers, setConvocationTeamMembers] = useState<TeamMember[]>([])
+  const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
+  const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
 
   useEffect(() => {
     loadChampionships()
@@ -200,6 +237,10 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
       setImportGroupId(selectedGroupId)
     }
   }, [selectedGroupId])
+
+  useEffect(() => {
+    computeNextMatch(matches)
+  }, [matches, mode, coachTeamIds, athleteTeamIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadChampionships = async () => {
     setLoading(true)
@@ -380,6 +421,10 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     const fromList = clubTeams.find((c) => c.id === clubTeamId)
     if (fromList) return `${fromList.name}${fromList.code ? ` (${fromList.code})` : ''}`
     return clubTeamId
+  }
+
+  const clubTeamPlainName = (clubTeamId: string) => {
+    return clubTeamName(clubTeamId).replace(/\s*\([^)]*\)\s*$/, '')
   }
 
   const formatScore = (sets?: MatchSet[]) => {
@@ -724,6 +769,9 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
       team_name: c?.name || clubTeamName(s.club_team_id).replace(/\s*\([^)]*\)\s*$/, '')
     }
   })
+  const convocationCSRTeams = convocationMatch ? matchCSRClubTeams(convocationMatch) : []
+  const convocationClubTeam = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam || null
+  const canEditConvocation = mode === 'admin' || (mode === 'coach' && !!(convocationClubTeam?.team_id && coachTeamIds.has(convocationClubTeam.team_id)))
 
   const formatDate = (value?: string | null) => {
     if (!value) return '—'
@@ -764,6 +812,193 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     const safeM = mm.padStart(2, '0')
     const safeS = ss ? ss.padStart(2, '0') : '00'
     return `${safeH}:${safeM}:${safeS}`
+  }
+
+  function isCSRClubTeam(club?: ClubTeam | null) {
+    return !!(club?.is_home_club || club?.team_id)
+  }
+
+  const matchDateTime = (m: Match) => {
+    if (!m.match_date) return null
+    const time = m.start_time ? m.start_time.slice(0, 8) : '00:00:00'
+    const iso = `${m.match_date}T${time}`
+    const d = new Date(iso)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+
+  function matchCSRClubTeams(m: Match) {
+    const home = m.home_club_team || clubTeams.find((c) => c.id === m.home_club_team_id)
+    const away = m.away_club_team || clubTeams.find((c) => c.id === m.away_club_team_id)
+    const csr: { clubTeam: ClubTeam; side: 'home' | 'away' }[] = []
+    if (home && isCSRClubTeam(home)) csr.push({ clubTeam: home, side: 'home' })
+    if (away && isCSRClubTeam(away)) csr.push({ clubTeam: away, side: 'away' })
+    return csr
+  }
+
+  const matchVisibleForRole = (m: Match) => {
+    const csrTeams = matchCSRClubTeams(m)
+    if (csrTeams.length === 0) return false
+    if (mode === 'admin') return true
+    if (mode === 'coach') {
+      return csrTeams.some(({ clubTeam }) => clubTeam.team_id && coachTeamIds.has(clubTeam.team_id))
+    }
+    if (mode === 'athlete') {
+      return csrTeams.some(({ clubTeam }) => clubTeam.team_id && athleteTeamIds.has(clubTeam.team_id))
+    }
+    return false
+  }
+
+  const computeNextMatch = (input: Match[]) => {
+    const now = new Date()
+    const filtered = input.filter((m) => m.status === 'scheduled' && matchVisibleForRole(m))
+    const upcoming = filtered
+      .map((m) => ({ match: m, date: matchDateTime(m) }))
+      .filter((item) => item.date && item.date.getTime() >= now.getTime())
+      .sort((a, b) => (a.date!.getTime() - b.date!.getTime()))
+    setNextMatch(upcoming.length ? upcoming[0].match : null)
+  }
+
+  const pickUserClubTeamForMatch = (m: Match) => {
+    const csrTeams = matchCSRClubTeams(m)
+    if (mode === 'admin') return csrTeams[0]?.clubTeam || null
+    if (mode === 'coach') {
+      return csrTeams.find(({ clubTeam }) => clubTeam.team_id && coachTeamIds.has(clubTeam.team_id))?.clubTeam || null
+    }
+    if (mode === 'athlete') {
+      return csrTeams.find(({ clubTeam }) => clubTeam.team_id && athleteTeamIds.has(clubTeam.team_id))?.clubTeam || null
+    }
+    return null
+  }
+
+  const loadTeamMembers = async (teamId: string | null) => {
+    if (!teamId) {
+      setConvocationTeamMembers([])
+      return
+    }
+    const { data, error } = await supabase
+      .from('team_members')
+      .select('id, profile_id, jersey_number, profiles ( first_name, last_name )')
+      .eq('team_id', teamId)
+      .eq('role', 'athlete')
+      .order('id', { ascending: true })
+    if (error) {
+      console.error('Errore caricamento atleti squadra', error)
+      toast.error('Impossibile caricare gli atleti della squadra')
+      setConvocationTeamMembers([])
+      return
+    }
+    setConvocationTeamMembers(data || [])
+  }
+
+  const loadConvocationData = async (m: Match, clubTeamId: string, teamId: string | null) => {
+    setConvocationLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('championship_match_convocations')
+        .select(`
+          id, match_id, championship_club_team_id, team_id, notes,
+          championship_club_teams ( id, name, is_home_club, team_id ),
+          championship_match_convocation_members (
+            team_member_id, profile_id,
+            profiles ( first_name, last_name ),
+            team_members ( profile_id, jersey_number, profiles ( first_name, last_name ) )
+          )
+        `)
+        .eq('match_id', m.id)
+        .eq('championship_club_team_id', clubTeamId)
+        .maybeSingle()
+
+      if (error && error.code !== 'PGRST116') throw error
+
+      setConvocation(data || {
+        match_id: m.id,
+        championship_club_team_id: clubTeamId,
+        team_id: teamId
+      })
+
+      const selectedIds = new Set<string>()
+      data?.championship_match_convocation_members?.forEach((cm) => cm.team_member_id && selectedIds.add(cm.team_member_id))
+      setConvocationSelection(selectedIds)
+      await loadTeamMembers(teamId)
+    } catch (err) {
+      console.error('Errore caricamento convocazioni', err)
+      toast.error('Impossibile caricare le convocazioni')
+      setConvocation(null)
+      setConvocationSelection(new Set())
+    } finally {
+      setConvocationLoading(false)
+    }
+  }
+
+  const openConvocationModal = async (m: Match) => {
+    const candidate = pickUserClubTeamForMatch(m)
+    const csrTeams = matchCSRClubTeams(m)
+    const fallback = candidate || csrTeams[0]?.clubTeam || null
+    const clubTeamId = fallback?.id || null
+    setConvocationClubTeamId(clubTeamId)
+    setConvocationMatch(m)
+    setConvocationSelection(new Set())
+    setConvocation(null)
+    setConvocationTeamMembers([])
+    setConvocationModalOpen(true)
+    if (clubTeamId) {
+      await loadConvocationData(m, clubTeamId, fallback?.team_id || null)
+    }
+  }
+
+  const saveConvocation = async () => {
+    if (!convocationMatch || !convocationClubTeamId) return
+    const match = convocationMatch
+    const csrTeam = matchCSRClubTeams(match).find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam
+    const teamId = csrTeam?.team_id || null
+    if (!teamId) {
+      toast.error('Seleziona una squadra CSRoma')
+      return
+    }
+    setConvocationSaving(true)
+    try {
+      const { data: upserted, error: upsertError } = await supabase
+        .from('championship_match_convocations')
+        .upsert({
+          id: convocation?.id,
+          match_id: match.id,
+          championship_club_team_id: convocationClubTeamId,
+          team_id: teamId
+        }, { onConflict: 'match_id,championship_club_team_id' })
+        .select('id')
+        .single()
+      if (upsertError) throw upsertError
+      const convocationId = upserted.id
+
+      await supabase
+        .from('championship_match_convocation_members')
+        .delete()
+        .eq('convocation_id', convocationId)
+
+      if (convocationSelection.size > 0) {
+        const tmById = new Map(convocationTeamMembers.map((tm) => [tm.id, tm]))
+        const payload = Array.from(convocationSelection).map((tmId) => {
+          const tm = tmById.get(tmId)
+          return {
+            convocation_id: convocationId,
+            team_member_id: tmId,
+            profile_id: tm?.profile_id || null
+          }
+        })
+        const { error: insErr } = await supabase
+          .from('championship_match_convocation_members')
+          .insert(payload)
+        if (insErr) throw insErr
+      }
+
+      toast.success('Convocazioni salvate')
+      await loadConvocationData(match, convocationClubTeamId, teamId)
+    } catch (err) {
+      console.error('Errore salvataggio convocazioni', err)
+      toast.error('Impossibile salvare le convocazioni')
+    } finally {
+      setConvocationSaving(false)
+    }
   }
 
   const handleDeleteCalendar = async (scope: 'group' | 'championship') => {
@@ -919,22 +1154,50 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
         </div>
       </Card>
 
-      <Card className="mt-4">
-        <CardTitle>Info campionato</CardTitle>
-        <div className="mt-2 text-sm text-slate-500">
-          {selectedChampionship ? (
-            <ul className="space-y-1">
-              <li><strong>Nome:</strong> {selectedChampionship.name}</li>
-              <li><strong>Sport:</strong> {selectedChampionship.sport}</li>
-              <li><strong>Stato:</strong> {selectedChampionship.status}</li>
-              <li><strong>Periodo:</strong> {formatDate(selectedChampionship.start_date)} - {formatDate(selectedChampionship.end_date)}</li>
-              <li><strong>Gironi:</strong> {currentGroups.length}</li>
-            </ul>
-          ) : (
-            <p>Nessun campionato selezionato</p>
+      <div className="grid gap-4 md:grid-cols-2 mt-4">
+        <Card>
+          <CardTitle>Info campionato</CardTitle>
+          <div className="mt-2 text-sm text-slate-500">
+            {selectedChampionship ? (
+              <ul className="space-y-1">
+                <li><strong>Nome:</strong> {selectedChampionship.name}</li>
+                <li><strong>Sport:</strong> {selectedChampionship.sport}</li>
+                <li><strong>Stato:</strong> {selectedChampionship.status}</li>
+                <li><strong>Periodo:</strong> {formatDate(selectedChampionship.start_date)} - {formatDate(selectedChampionship.end_date)}</li>
+                <li><strong>Gironi:</strong> {currentGroups.length}</li>
+              </ul>
+            ) : (
+              <p>Nessun campionato selezionato</p>
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <CardTitle>Prossima partita CSRoma</CardTitle>
+          {!nextMatch && (
+            <div className="mt-2 text-sm text-slate-500">Nessuna prossima partita CSRoma</div>
           )}
-        </div>
-      </Card>
+          {nextMatch && (
+            <div className="mt-2 space-y-2 text-sm text-slate-600">
+              <div className="text-base font-semibold">
+                {nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                {nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0,5)}` : ''}
+              </div>
+              <div className="font-medium">
+                {clubTeamPlainName(nextMatch.home_club_team_id)} vs {clubTeamPlainName(nextMatch.away_club_team_id)}
+              </div>
+              <div className="text-xs text-slate-500">
+                {nextMatch.location_text || 'Luogo da definire'}{nextMatch.match_day ? ` · Giornata ${nextMatch.match_day}` : ''}
+              </div>
+              <div>
+                <Button size="sm" onClick={() => openConvocationModal(nextMatch)}>
+                  Convocazioni
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-3 mt-4">
         <div className="md:col-span-2">
@@ -1090,6 +1353,133 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
           </Card>
         </div>
       </div>
+
+      <Modal
+        open={convocationModalOpen}
+        onOpenChange={(open) => {
+          setConvocationModalOpen(open)
+          if (!open) {
+            setConvocation(null)
+            setConvocationSelection(new Set())
+            setConvocationTeamMembers([])
+            setConvocationClubTeamId(null)
+            setConvocationMatch(null)
+          }
+        }}
+        title="Convocazioni"
+        description={convocationMatch ? `${clubTeamPlainName(convocationMatch.home_club_team_id)} vs ${clubTeamPlainName(convocationMatch.away_club_team_id)}` : ''}
+      >
+        {!convocationMatch && <div className="text-sm text-slate-500">Seleziona una partita</div>}
+        {convocationMatch && (
+          <div className="space-y-4">
+            {convocationCSRTeams.length > 1 && (
+              <div>
+                <label className="cs-label">Squadra CSR da convocare</label>
+                <Select
+                  value={convocationClubTeamId || ''}
+                  onChange={async (e) => {
+                    const id = e.target.value
+                    setConvocationClubTeamId(id || null)
+                    setConvocationSelection(new Set())
+                    setConvocation(null)
+                    const chosen = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === id)?.clubTeam
+                    if (id && convocationMatch) {
+                      await loadConvocationData(convocationMatch, id, chosen?.team_id || null)
+                    }
+                  }}
+                >
+                  {convocationCSRTeams.map(({ clubTeam }) => (
+                    <option key={clubTeam.id} value={clubTeam.id}>
+                      {clubTeam.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+
+            <div className="text-sm text-slate-600">
+              {convocationClubTeam
+                ? `Rosa: ${convocationClubTeam.name}`
+                : 'Seleziona una squadra CSRoma'}
+            </div>
+
+            {convocationLoading && (
+              <div className="text-sm text-slate-500">Caricamento convocazioni...</div>
+            )}
+
+            {!convocationLoading && mode === 'athlete' && (
+              <>
+                {convocation?.championship_match_convocation_members?.length ? (
+                  <div className="space-y-2">
+                    {convocation.championship_match_convocation_members.map((cm) => {
+                      const labelFromProfile = cm.profiles?.first_name || cm.profiles?.last_name
+                        ? `${cm.profiles?.first_name || ''} ${cm.profiles?.last_name || ''}`.trim()
+                        : ''
+                      const labelFromTMProfile = cm.team_members?.profiles?.first_name || cm.team_members?.profiles?.last_name
+                        ? `${cm.team_members?.profiles?.first_name || ''} ${cm.team_members?.profiles?.last_name || ''}`.trim()
+                        : ''
+                      const label = labelFromProfile || labelFromTMProfile || 'Atleta'
+                      return (
+                        <div key={cm.team_member_id} className="rounded border border-slate-200 px-3 py-2 text-sm">
+                          {label}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500">Le convocazioni non sono ancora state pubblicate</div>
+                )}
+              </>
+            )}
+
+            {!convocationLoading && mode !== 'athlete' && (
+              <div className="space-y-2">
+                {convocationTeamMembers.length === 0 && (
+                  <div className="text-sm text-slate-500">Nessun atleta disponibile per questa squadra</div>
+                )}
+                {convocationTeamMembers.length > 0 && (
+                  <div className="max-h-64 overflow-y-auto rounded border border-slate-200 divide-y divide-slate-100">
+                    {convocationTeamMembers.map((tm) => {
+                      const selected = convocationSelection.has(tm.id)
+                      const name = tm.profiles ? `${tm.profiles.first_name || ''} ${tm.profiles.last_name || ''}`.trim() : tm.id
+                      return (
+                        <label key={tm.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={(e) => {
+                                setConvocationSelection((prev) => {
+                                  const next = new Set(prev)
+                                  if (e.target.checked) next.add(tm.id)
+                                  else next.delete(tm.id)
+                                  return next
+                                })
+                              }}
+                              disabled={!canEditConvocation}
+                            />
+                            <span>{name}</span>
+                          </span>
+                          <span className="text-xs text-slate-500">{tm.jersey_number ? `#${tm.jersey_number}` : ''}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConvocationModalOpen(false)}>Chiudi</Button>
+              {mode !== 'athlete' && (
+                <Button onClick={saveConvocation} disabled={!canEditConvocation || convocationSaving}>
+                  {convocationSaving ? 'Salvataggio...' : 'Salva convocazioni'}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {loading && (
         <div className="text-center text-slate-500">Caricamento...</div>

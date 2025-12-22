@@ -89,8 +89,8 @@ export async function GET(request: NextRequest) {
         .from('event_teams')
         .select('event_id, created_at')
         .in('team_id', teamIds)
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-        .limit(100),
+        .order('created_at', { ascending: false })
+        .limit(500),
 
       feeInstallments && feeInstallments.length > 0
         ? supabase
@@ -109,21 +109,25 @@ export async function GET(request: NextRequest) {
       if (eventIds.length > 100) {
         for (let i = 0; i < eventIds.length; i += 100) {
           const batch = eventIds.slice(i, i + 100)
-          const { data: events } = await supabase
-            .from('events')
-            .select('id, title, start_time:start_date, end_time:end_date, location, description')
-            .in('id', batch)
-          allEvents.push(...(events || []))
-        }
-      } else {
         const { data: events } = await supabase
           .from('events')
           .select('id, title, start_time:start_date, end_time:end_date, location, description')
-          .in('id', eventIds)
-          .gte('start_date', new Date().toISOString())
+          .in('id', batch)
+          .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
+          .order('start_date', { ascending: true })
           .limit(10)
-        allEvents = events || []
+        allEvents.push(...(events || []))
       }
+    } else {
+      const { data: events } = await supabase
+        .from('events')
+        .select('id, title, start_time:start_date, end_time:end_date, location, description')
+        .in('id', eventIds)
+        .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
+        .order('start_date', { ascending: true })
+        .limit(10)
+      allEvents = events || []
+    }
     }
 
     // Get activities and enriched team data

@@ -253,16 +253,26 @@ function parseExcelDate(value: any): string | null {
     if (typeof value === 'number') {
       const date = XLSX.SSF.parse_date_code(value)
       if (date) {
-        return new Date(date.y, date.m - 1, date.d).toISOString().split('T')[0]
+        const y = date.y.toString().padStart(4, '0')
+        const m = date.m.toString().padStart(2, '0')
+        const d = date.d.toString().padStart(2, '0')
+        return `${y}-${m}-${d}`
       }
     }
     
     // Try to parse as string
-    const parsed = new Date(value)
+    // Accept already formatted YYYY-MM-DD
+    const asString = value.toString().trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(asString)) return asString
+
+    const parsed = new Date(asString)
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0]
+      const y = parsed.getUTCFullYear().toString().padStart(4, '0')
+      const m = (parsed.getUTCMonth() + 1).toString().padStart(2, '0')
+      const d = parsed.getUTCDate().toString().padStart(2, '0')
+      return `${y}-${m}-${d}`
     }
-    
+
     return null
   } catch {
     return null
