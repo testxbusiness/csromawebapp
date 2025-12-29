@@ -60,3 +60,14 @@ cookies.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Editor / temp
+*.swp
+
+# Documenti locali
+*.xlsx
+CLAUDE.md
+SECURITY_AUDIT_*.md
+
+# Backup DB
+dbbackup/
