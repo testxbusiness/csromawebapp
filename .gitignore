@@ -60,3 +60,10 @@ cookies.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Other stuff
+*.xlsx
+*.swp
+dbbackup/
+SECURITY_AUDIT_*.md
+CLAUDE.md
