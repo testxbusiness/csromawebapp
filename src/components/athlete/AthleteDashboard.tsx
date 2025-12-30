@@ -53,6 +53,16 @@ interface Event {
   description?: string
 }
 
+interface ChampionshipMatch {
+  id: string
+  match_day?: number | null
+  match_date?: string | null
+  start_time?: string | null
+  location_text?: string | null
+  home_club_team?: { id: string; name: string } | null
+  away_club_team?: { id: string; name: string } | null
+}
+
 interface Message {
   id: string
   subject: string
@@ -86,6 +96,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
   const [feeInstallments, setFeeInstallments] = useState<FeeInstallment[]>([])
+  const [nextChampionshipMatch, setNextChampionshipMatch] = useState<ChampionshipMatch | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeSeason, setActiveSeason] = useState<any>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
@@ -163,6 +174,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       setActiveSeason(result.activeSeason)
       setTeamMemberships(result.teamMemberships || [])
       setUpcomingEvents(result.upcomingEvents || [])
+      setNextChampionshipMatch(result.nextChampionshipMatch || null)
       setUnreadMessages(result.unreadMessages || [])
       setFeeInstallments(result.feeInstallments || [])
       lastLoadTimeRef.current = Date.now()
@@ -616,7 +628,29 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           )}
         </div>
 
-        {/* Quick Actions removed: replaced by role-based sidebar */}
+        <div className="cs-card cs-card--primary">
+          <h3 className="font-semibold mb-4">Prossima Partita</h3>
+          {!nextChampionshipMatch && (
+            <p className="text-secondary text-sm">NON CI SONO PARTITE IN PROGRAMMA</p>
+          )}
+          {nextChampionshipMatch && (
+            <div className="space-y-2 text-sm text-secondary">
+              <div className="text-lg font-semibold text-primary">
+                {nextChampionshipMatch.match_date
+                  ? new Date(nextChampionshipMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                  : '—'}
+                {nextChampionshipMatch.start_time ? ` · ${nextChampionshipMatch.start_time.slice(0, 5)}` : ''}
+              </div>
+              <div className="text-base font-medium text-primary">
+                {nextChampionshipMatch.home_club_team?.name || '—'} vs {nextChampionshipMatch.away_club_team?.name || '—'}
+              </div>
+              <div>
+                {nextChampionshipMatch.location_text || 'Luogo da definire'}
+                {nextChampionshipMatch.match_day ? ` · Giornata ${nextChampionshipMatch.match_day}` : ''}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

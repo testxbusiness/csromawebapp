@@ -1,7 +1,7 @@
 'use client'
 
-import ChampionshipsManager from '@/components/admin/ChampionshipsManager'
+import ChampionshipsManager from '@/components/athlete/ChampionshipsManager'
 
 export default function AthleteChampionshipsManager() {
-  return <ChampionshipsManager mode="athlete" />
+  return <ChampionshipsManager />
 }

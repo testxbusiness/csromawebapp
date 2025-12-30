@@ -128,7 +128,7 @@ interface ChampionshipsManagerProps {
   mode?: ManagerMode
 }
 
-export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsManagerProps) {
+export default function ChampionshipsManager({ mode = 'athlete' }: ChampionshipsManagerProps) {
   const supabase = createClient()
   const [championships, setChampionships] = useState<Championship[]>([])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
@@ -1121,17 +1121,6 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
                 Aggiungi girone
               </Button>
             )}
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (!selectedGroupId) return
-                setImportGroupId(selectedGroupId)
-                setShowImportModal(true)
-              }}
-              disabled={!selectedGroupId || mode === 'athlete'}
-            >
-              Importa calendario
-            </Button>
             {mode !== 'athlete' && (
               <Button variant="outline" onClick={() => { setShowTeamsModal(true); initGroupTeamsSelection(selectedGroupId) }} disabled={!selectedGroupId}>
                 Gestisci squadre

@@ -124,11 +124,8 @@ type ClubTeamOption = ClubTeam
 
 type ManagerMode = 'admin' | 'coach' | 'athlete'
 
-interface ChampionshipsManagerProps {
-  mode?: ManagerMode
-}
-
-export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsManagerProps) {
+export default function ChampionshipsManager() {
+  const mode: ManagerMode = 'coach'
   const supabase = createClient()
   const [championships, setChampionships] = useState<Championship[]>([])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
@@ -1117,7 +1114,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
               ))}
             </Select>
             {mode !== 'athlete' && (
-              <Button variant="outline" onClick={() => setShowGroupModal(true)} disabled={!selectedChampionshipId || mode === 'coach'}>
+              <Button variant="outline" onClick={() => setShowGroupModal(true)} disabled={!selectedChampionshipId}>
                 Aggiungi girone
               </Button>
             )}
@@ -1142,7 +1139,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
                 {deleting === 'group' ? 'Eliminazione...' : 'Elimina calendario girone'}
               </Button>
             )}
-            {mode === 'admin' && (
+            {mode !== 'athlete' && (
               <>
                 <Button variant="danger" onClick={() => handleDeleteCalendar('championship')} disabled={!selectedChampionshipId || deleting !== null}>
                   {deleting === 'championship' ? 'Eliminazione...' : 'Elimina tutto il campionato'}
@@ -1485,7 +1482,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
         <div className="text-center text-slate-500">Caricamento...</div>
       )}
 
-      {mode === 'admin' && (
+      {mode !== 'athlete' && (
         <Modal
           open={showCreateModal}
           onOpenChange={setShowCreateModal}

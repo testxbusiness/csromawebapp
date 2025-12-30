@@ -78,7 +78,8 @@ export async function GET(request: NextRequest) {
     const [
       { data: teams },
       { data: eventTeamLinks },
-      { data: membershipFees }
+      { data: membershipFees },
+      { data: clubTeams }
     ] = await Promise.all([
       supabase
         .from('teams')
@@ -97,7 +98,12 @@ export async function GET(request: NextRequest) {
             .from('membership_fees')
             .select('id, team_id, name')
             .in('id', (feeInstallments || []).map(f => f.membership_fee_id).filter(Boolean))
-        : Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [] }),
+
+      supabase
+        .from('championship_club_teams')
+        .select('id, team_id')
+        .in('team_id', teamIds)
     ])
 
     // Get event IDs
@@ -138,6 +144,27 @@ export async function GET(request: NextRequest) {
           .select('id, name')
           .in('id', activityIds)
       : { data: [] }
+
+    let nextChampionshipMatch = null
+    const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
+    if (clubTeamIds.length > 0) {
+      const clubTeamList = clubTeamIds.join(',')
+      const { data: nextMatch } = await supabase
+        .from('championship_matches')
+        .select(`
+          id, match_day, match_date, start_time, location_text, status,
+          home_club_team:home_club_team_id ( id, name, code, is_home_club, team_id ),
+          away_club_team:away_club_team_id ( id, name, code, is_home_club, team_id )
+        `)
+        .or(`home_club_team_id.in.(${clubTeamList}),away_club_team_id.in.(${clubTeamList})`)
+        .eq('status', 'scheduled')
+        .gte('match_date', new Date().toISOString().slice(0, 10))
+        .order('match_date', { ascending: true })
+        .order('start_time', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      nextChampionshipMatch = nextMatch || null
+    }
 
     // Build enriched response
     const activitiesMap = new Map((activities || []).map(a => [a.id, a]))
@@ -194,6 +221,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       teamMemberships: enrichedMemberships,
       upcomingEvents: allEvents.slice(0, 10),
+      nextChampionshipMatch,
       unreadMessages,
       feeInstallments: enrichedFees,
       activeSeason: seasons
