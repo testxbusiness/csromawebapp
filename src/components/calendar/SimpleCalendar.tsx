@@ -20,9 +20,9 @@ export default function SimpleCalendar({
   onNavigate,
   onViewChange,
   onEventClick,
-  onDayClick,         // (opz.) click su giorno
-  timezone = 'Europe/Rome', // (opz.) per toLocale*
-  onSelectSlot,       // (opz.) drag per selezione slot nella vista settimana
+  onDayClick,
+  timezone = 'Europe/Rome',
+  onSelectSlot,
 }: {
   currentDate: Date
   view: View
@@ -56,14 +56,15 @@ export default function SimpleCalendar({
   }
 
   const getTextColorForBg = (hex?: string) => {
-    // fallback brand
-    const h = (hex || '#2563eb').replace('#','')
-    const bigint = parseInt(h.length === 3 ? h.split('').map(c=>c+c).join('') : h, 16)
+    const h = (hex || '#2563eb').replace('#', '')
+    const bigint = parseInt(
+      h.length === 3 ? h.split('').map((c) => c + c).join('') : h,
+      16
+    )
     const r = (bigint >> 16) & 255
     const g = (bigint >> 8) & 255
     const b = bigint & 255
-    // luminanza percettiva
-    const L = 0.299*r + 0.587*g + 0.114*b
+    const L = 0.299 * r + 0.587 * g + 0.114 * b
     return L > 140 ? '#111827' : '#ffffff'
   }
 
@@ -103,8 +104,8 @@ export default function SimpleCalendar({
     for (const ev of events) {
       const cur = new Date(ev.start)
       const end = new Date(ev.end)
-      cur.setHours(0,0,0,0)
-      end.setHours(0,0,0,0)
+      cur.setHours(0, 0, 0, 0)
+      end.setHours(0, 0, 0, 0)
 
       while (cur <= end) {
         const k = dateKey(cur)
@@ -112,28 +113,33 @@ export default function SimpleCalendar({
         cur.setDate(cur.getDate() + 1)
       }
     }
-    // ordina per orario di inizio
-    Object.values(map).forEach(arr => arr.sort((a,b)=> a.start.getTime() - b.start.getTime()))
+    Object.values(map).forEach((arr) =>
+      arr.sort((a, b) => a.start.getTime() - b.start.getTime())
+    )
     return map
   }, [events])
 
   // ===== Label intestazione
   const monthLabel = currentDate.toLocaleDateString('it-IT', {
-    month: 'long', year: 'numeric', timeZone: timezone,
+    month: 'long',
+    year: 'numeric',
+    timeZone: timezone,
   })
 
   // ===== UI state per overflow “+N”
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const toggleDay = useCallback((k: string) => {
-    setExpanded(prev => ({ ...prev, [k]: !prev[k] }))
+    setExpanded((prev) => ({ ...prev, [k]: !prev[k] }))
   }, [])
 
-  const monthBtnClass = 'cs-btn cs-btn--sm ' + (view === 'month' ? 'cs-btn--primary' : 'cs-btn--ghost')
-  const weekBtnClass  = 'cs-btn cs-btn--sm ' + (view === 'week'  ? 'cs-btn--primary' : 'cs-btn--ghost')
+  const monthBtnClass =
+    'cs-btn cs-btn--sm ' + (view === 'month' ? 'cs-btn--primary' : 'cs-btn--ghost')
+  const weekBtnClass =
+    'cs-btn cs-btn--sm ' + (view === 'week' ? 'cs-btn--primary' : 'cs-btn--ghost')
 
   const today = useMemo(() => {
     const t = new Date()
-    t.setHours(0,0,0,0)
+    t.setHours(0, 0, 0, 0)
     return t
   }, [])
 
@@ -143,31 +149,51 @@ export default function SimpleCalendar({
       {/* Toolbar */}
       <div className="flex items-center justify-between">
         <div className="flex gap-2">
-          <button onClick={() => onNavigate('today')} className="cs-btn cs-btn--sm cs-btn--ghost" aria-label="Vai a oggi">Oggi</button>
-          <button onClick={() => onNavigate('prev')} className="cs-btn cs-btn--sm cs-btn--ghost" aria-label="Precedente">←</button>
-          <button onClick={() => onNavigate('next')} className="cs-btn cs-btn--sm cs-btn--ghost" aria-label="Successivo">→</button>
+          <button
+            onClick={() => onNavigate('today')}
+            className="cs-btn cs-btn--sm cs-btn--ghost"
+            aria-label="Vai a oggi"
+          >
+            Oggi
+          </button>
+          <button
+            onClick={() => onNavigate('prev')}
+            className="cs-btn cs-btn--sm cs-btn--ghost"
+            aria-label="Precedente"
+          >
+            ←
+          </button>
+          <button
+            onClick={() => onNavigate('next')}
+            className="cs-btn cs-btn--sm cs-btn--ghost"
+            aria-label="Successivo"
+          >
+            →
+          </button>
         </div>
         <div className="font-semibold capitalize tracking-wide">{monthLabel}</div>
         <div className="flex gap-2">
-          <button onClick={() => onViewChange('month')} className={monthBtnClass}>Mese</button>
-          <button onClick={() => onViewChange('week')}  className={weekBtnClass}>Settimana</button>
+          <button onClick={() => onViewChange('month')} className={monthBtnClass}>
+            Mese
+          </button>
+          <button onClick={() => onViewChange('week')} className={weekBtnClass}>
+            Settimana
+          </button>
         </div>
       </div>
 
       {/* Intestazione giorni */}
       <div className="grid grid-cols-7 gap-1 px-1">
-        {['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map((d) => (
-          <div key={d} className="text-xs text-secondary px-2 pb-1 select-none">{d}</div>
+        {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((d) => (
+          <div key={d} className="text-xs text-secondary px-2 pb-1 select-none">
+            {d}
+          </div>
         ))}
       </div>
 
       {view === 'month' ? (
         // ====================== MONTH VIEW ======================
-        <div
-          role="grid"
-          aria-readonly
-          className="grid grid-cols-7 gap-1"
-        >
+        <div role="grid" aria-readonly className="grid grid-cols-7 gap-1">
           {days.map((d, idx) => {
             const isOtherMonth = d.getMonth() !== currentDate.getMonth()
             const isToday = isSameDay(d, today)
@@ -184,7 +210,9 @@ export default function SimpleCalendar({
                 role="rowgroup"
                 className={[
                   'min-h-[110px] border rounded p-1 transition-colors',
-                  isOtherMonth ? 'bg-[color:var(--cs-surface-2)] opacity-80' : 'bg-[color:var(--cs-surface-1)]',
+                  isOtherMonth
+                    ? 'bg-[color:var(--cs-surface-2)] opacity-80'
+                    : 'bg-[color:var(--cs-surface-1)]',
                   'hover:bg-[color:var(--cs-surface-hover)]',
                   isToday ? 'ring-2 ring-[color:var(--cs-primary)]' : '',
                 ].join(' ')}
@@ -196,22 +224,36 @@ export default function SimpleCalendar({
                     onClick={() => onDayClick?.(d)}
                     className={[
                       'text-xs px-1 py-0.5 rounded',
-                      isToday ? 'bg-[color:var(--cs-primary)] text-white' : 'text-secondary hover:bg-black/5'
+                      isToday
+                        ? 'bg-[color:var(--cs-primary)] text-white'
+                        : 'text-secondary hover:bg-black/5',
                     ].join(' ')}
-                    aria-label={d.toLocaleDateString('it-IT', { day:'numeric', month:'long', year:'numeric', timeZone: timezone })}
-                    title={d.toLocaleDateString('it-IT', { weekday:'long', day:'numeric', month:'long', timeZone: timezone })}
+                    aria-label={d.toLocaleDateString('it-IT', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                      timeZone: timezone,
+                    })}
+                    title={d.toLocaleDateString('it-IT', {
+                      weekday: 'long',
+                      day: 'numeric',
+                      month: 'long',
+                      timeZone: timezone,
+                    })}
                   >
                     {d.getDate()}
                   </button>
 
                   {list.length > 0 && (
-                    <span className="text-[10px] text-secondary">{list.length} evento{list.length>1?'i':''}</span>
+                    <span className="text-[10px] text-secondary">
+                      {list.length} evento{list.length > 1 ? 'i' : ''}
+                    </span>
                   )}
                 </div>
 
                 {/* Events */}
                 <div className="space-y-1">
-                  {visible.map(ev => {
+                  {visible.map((ev) => {
                     const bg = ev.color || '#2563eb'
                     const fg = getTextColorForBg(ev.color)
                     return (
@@ -221,7 +263,11 @@ export default function SimpleCalendar({
                         onClick={() => onEventClick?.(ev.id)}
                         className="w-full text-left truncate text-[11px] px-1 py-0.5 rounded hover:opacity-90"
                         style={{ backgroundColor: bg, color: fg }}
-                        title={`${ev.title} — ${ev.start.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit', timeZone: timezone})}`}
+                        title={`${ev.title} — ${ev.start.toLocaleTimeString('it-IT', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          timeZone: timezone,
+                        })}`}
                         aria-label={ev.title}
                       >
                         {ev.title}
@@ -252,6 +298,7 @@ export default function SimpleCalendar({
           onEventClick={onEventClick}
           timezone={timezone}
           onSelectSlot={onSelectSlot}
+          getTextColorForBg={getTextColorForBg}
         />
       )}
     </div>
@@ -265,51 +312,152 @@ function WeekTimeGrid({
   onEventClick,
   timezone,
   onSelectSlot,
+  getTextColorForBg,
 }: {
   weekDays: Date[]
   events: CalEvent[]
   onEventClick?: (id: string) => void
   timezone: string
   onSelectSlot?: (start: Date, end: Date) => void
+  getTextColorForBg: (hex?: string) => string
 }) {
   // fascia oraria visibile
   const startHour = 8
-  const endHour   = 20
+  const endHour = 20
+  const totalMins = (endHour - startHour) * 60
+
+  // ==== refs per colonne (1 per giorno) -> NO hooks dentro map
+  const colRefs = React.useRef<(HTMLDivElement | null)[]>([])
+
+  // ==== stato drag globale (indica anche quale colonna)
+  const [drag, setDrag] = React.useState<{
+    active: boolean
+    dayIdx: number
+    startMin: number
+    endMin: number
+  } | null>(null)
+
+  const clampMin = React.useCallback(
+    (mins: number) => Math.max(0, Math.min(totalMins, mins)),
+    [totalMins]
+  )
+
+  const posToMinutes = React.useCallback(
+    (dayIdx: number, clientY: number) => {
+      const el = colRefs.current[dayIdx]
+      const rect = el?.getBoundingClientRect()
+      if (!rect) return 0
+      const y = clientY - rect.top
+      const pct = y / rect.height
+      const mins = Math.round(pct * totalMins)
+      const snapped = Math.round(mins / 15) * 15
+      return clampMin(snapped)
+    },
+    [clampMin, totalMins]
+  )
 
   // eventi della settimana, segmentati per giorno e con style inline (top/height)
   const data = useMemo(() => {
-    const byDay: Record<string, Array<CalEvent & { topPct:number; heightPct:number }>> = {}
+    const byDay: Record<
+      string,
+      Array<CalEvent & { topPct: number; heightPct: number }>
+    > = {}
+
     for (const day of weekDays) {
       const k = day.toDateString()
       byDay[k] = []
-      const dayStart = new Date(day); dayStart.setHours(0,0,0,0)
-      const dayEnd   = new Date(day); dayEnd.setHours(23,59,59,999)
 
-      const todaysEvents = events.filter(ev => !(ev.end < dayStart || ev.start > dayEnd))
+      const dayStart = new Date(day)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(day)
+      dayEnd.setHours(23, 59, 59, 999)
+
+      const gridStart = new Date(day)
+      gridStart.setHours(startHour, 0, 0, 0)
+      const gridEnd = new Date(day)
+      gridEnd.setHours(endHour, 0, 0, 0)
+
+      const todaysEvents = events.filter((ev) => !(ev.end < dayStart || ev.start > dayEnd))
+
       for (const ev of todaysEvents) {
-        const s = new Date(Math.max(ev.start.getTime(), new Date(day.setHours(startHour,0,0,0)).getTime()))
-        const e = new Date(Math.min(ev.end.getTime(), new Date(new Date(day).setHours(endHour,0,0,0)).getTime()))
-        const totalMins = (endHour - startHour) * 60
+        const s = new Date(Math.max(ev.start.getTime(), gridStart.getTime()))
+        const e = new Date(Math.min(ev.end.getTime(), gridEnd.getTime()))
+
         const startMins = (s.getHours() - startHour) * 60 + s.getMinutes()
-        const endMins   = (e.getHours() - startHour) * 60 + e.getMinutes()
-        const topPct    = Math.max(0, (startMins / totalMins) * 100)
-        const heightPct = Math.max(8, ((endMins - startMins) / totalMins) * 100) // min height 8%
+        const endMins = (e.getHours() - startHour) * 60 + e.getMinutes()
+
+        const topPct = Math.max(0, (startMins / totalMins) * 100)
+        const heightPct = Math.max(
+          8,
+          ((Math.max(endMins, startMins + 15) - startMins) / totalMins) * 100
+        ) // min height ~ 15 min
+
         byDay[k].push({ ...ev, topPct, heightPct })
       }
     }
+
     return byDay
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(weekDays.map(d=>d.toDateString())), JSON.stringify(events)])
+  }, [events, weekDays])
+
+  const onMouseDown = React.useCallback(
+    (dayIdx: number, e: React.MouseEvent) => {
+      if (!onSelectSlot) return
+      if ((e.target as HTMLElement).closest('button')) return // non interferire con click eventi
+      const m = posToMinutes(dayIdx, e.clientY)
+      setDrag({ active: true, dayIdx, startMin: m, endMin: m })
+    },
+    [onSelectSlot, posToMinutes]
+  )
+
+  React.useEffect(() => {
+    if (!drag?.active) return
+
+    const onMove = (ev: MouseEvent) => {
+      setDrag((prev) => {
+        if (!prev?.active) return prev
+        return { ...prev, endMin: posToMinutes(prev.dayIdx, ev.clientY) }
+      })
+    }
+
+    const onUp = () => {
+      setDrag((prev) => {
+        if (!prev) return prev
+
+        const s = Math.min(prev.startMin, prev.endMin)
+        const e = Math.max(prev.startMin, prev.endMin)
+
+        const start = new Date(weekDays[prev.dayIdx])
+        start.setHours(startHour, 0, 0, 0)
+        start.setMinutes(start.getMinutes() + s)
+
+        const end = new Date(weekDays[prev.dayIdx])
+        end.setHours(startHour, 0, 0, 0)
+        // minimo 30 minuti
+        end.setMinutes(end.getMinutes() + Math.max(e, s + 30))
+
+        onSelectSlot?.(start, end)
+        return null
+      })
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp, { once: true })
+
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [drag?.active, onSelectSlot, posToMinutes, startHour, weekDays])
 
   return (
     <div className="grid grid-cols-[60px_repeat(7,1fr)] gap-1">
       {/* Orari colonna */}
       <div className="flex flex-col">
-        {[...Array(endHour - startHour + 1)].map((_,i) => {
+        {[...Array(endHour - startHour + 1)].map((_, i) => {
           const h = startHour + i
           return (
             <div key={h} className="h-16 text-[10px] text-right pr-2 text-secondary">
-              {String(h).padStart(2,'0')}:00
+              {String(h).padStart(2, '0')}:00
             </div>
           )
         })}
@@ -318,108 +466,87 @@ function WeekTimeGrid({
       {/* 7 colonne giornaliere */}
       {weekDays.map((d, dayIdx) => {
         const key = d.toDateString()
-        const dayLabel = d.toLocaleDateString('it-IT',{ weekday:'short', day:'numeric', timeZone: timezone })
+        const dayLabel = d.toLocaleDateString('it-IT', {
+          weekday: 'short',
+          day: 'numeric',
+          timeZone: timezone,
+        })
+
         const todays = data[key] || []
-        const colRef = React.useRef<HTMLDivElement | null>(null)
-        const [drag, setDrag] = React.useState<{ active: boolean; startMin: number; endMin: number } | null>(null)
-
-        const clampMin = (mins: number) => Math.max(0, Math.min((endHour - startHour) * 60, mins))
-        const posToMinutes = (clientY: number) => {
-          const rect = colRef.current?.getBoundingClientRect()
-          if (!rect) return 0
-          const y = clientY - rect.top
-          const pct = y / rect.height
-          const mins = Math.round(pct * ((endHour - startHour) * 60))
-          // snap a 15 minuti
-          const snapped = Math.round(mins / 15) * 15
-          return clampMin(snapped)
-        }
-
-        const onMouseDown = (e: React.MouseEvent) => {
-          if (!onSelectSlot) return
-          if ((e.target as HTMLElement).closest('button')) return // non interferire con click eventi
-          const m = posToMinutes(e.clientY)
-          setDrag({ active: true, startMin: m, endMin: m })
-        }
-
-        React.useEffect(() => {
-          if (!drag?.active) return
-          const onMove = (ev: MouseEvent) => {
-            setDrag(prev => prev ? { ...prev, endMin: posToMinutes(ev.clientY) } : prev)
-          }
-          const onUp = () => {
-            setDrag(prev => {
-              if (!prev) return prev
-              const s = Math.min(prev.startMin, prev.endMin)
-              const e = Math.max(prev.startMin, prev.endMin)
-              const start = new Date(weekDays[dayIdx])
-              start.setHours(startHour, 0, 0, 0)
-              start.setMinutes(start.getMinutes() + s)
-              const end = new Date(weekDays[dayIdx])
-              end.setHours(startHour, 0, 0, 0)
-              end.setMinutes(end.getMinutes() + Math.max(e, s + 30)) // minimo 30 minuti
-              onSelectSlot?.(start, end)
-              return null
-            })
-          }
-          window.addEventListener('mousemove', onMove)
-          window.addEventListener('mouseup', onUp, { once: true })
-          return () => {
-            window.removeEventListener('mousemove', onMove)
-            window.removeEventListener('mouseup', onUp)
-          }
-        }, [drag?.active, dayIdx, onSelectSlot])
 
         return (
           <div
             key={key}
-            ref={colRef}
+            ref={(el) => {
+              colRefs.current[dayIdx] = el
+            }}
             className="relative border rounded overflow-hidden bg-[color:var(--cs-surface-1)] cursor-crosshair"
-            onMouseDown={onMouseDown}
+            onMouseDown={(e) => onMouseDown(dayIdx, e)}
           >
             {/* Righe orarie */}
-            {[...Array(endHour - startHour)].map((_,i) => (
+            {[...Array(endHour - startHour)].map((_, i) => (
               <div key={i} className="h-16 border-b border-dashed/50" />
             ))}
+
             {/* Header compatto (sticky) */}
             <div className="absolute top-0 left-0 right-0 text-[11px] font-medium px-2 py-1 bg-[color:var(--cs-surface-1)]/90 backdrop-blur">
               {dayLabel}
             </div>
 
             {/* Selezione drag */}
-            {drag?.active && (
+            {drag?.active && drag.dayIdx === dayIdx && (
               <div
                 className="absolute left-1 right-1 rounded bg-[color:var(--cs-primary)]/20 border border-[color:var(--cs-primary)]"
                 style={{
-                  top: `${(Math.min(drag.startMin, drag.endMin) / ((endHour - startHour) * 60)) * 100}%`,
-                  height: `${(Math.max(drag.startMin, drag.endMin) - Math.min(drag.startMin, drag.endMin)) / ((endHour - startHour) * 60) * 100}%`
+                  top: `${(Math.min(drag.startMin, drag.endMin) / totalMins) * 100}%`,
+                  height: `${((Math.max(drag.startMin, drag.endMin) -
+                    Math.min(drag.startMin, drag.endMin)) /
+                    totalMins) *
+                    100}%`,
                 }}
               />
             )}
 
             {/* Eventi posizionati */}
-            {todays.map(ev => {
+            {todays.map((ev) => {
               const bg = ev.color || '#2563eb'
-              const fg = (function(){
-                const c = bg.replace('#','')
-                const v = parseInt(c.length===3? c.split('').map(x=>x+x).join(''): c, 16)
-                const r = (v>>16)&255, g=(v>>8)&255, b=v&255
-                return (0.299*r+0.587*g+0.114*b) > 140 ? '#111827' : '#ffffff'
-              })()
+              const fg = getTextColorForBg(bg)
+
               return (
                 <button
                   key={ev.id}
                   type="button"
                   onClick={() => onEventClick?.(ev.id)}
                   className="absolute left-1 right-1 rounded px-2 text-left text-[11px] shadow-sm hover:opacity-90 focus:outline-none focus:ring-2"
-                  style={{ top: `${ev.topPct}%`, height: `${ev.heightPct}%`, backgroundColor: bg, color: fg }}
-                  title={`${ev.title} — ${ev.start.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit', timeZone: timezone})} → ${ev.end.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit', timeZone: timezone})}`}
+                  style={{
+                    top: `${ev.topPct}%`,
+                    height: `${ev.heightPct}%`,
+                    backgroundColor: bg,
+                    color: fg,
+                  }}
+                  title={`${ev.title} — ${ev.start.toLocaleTimeString('it-IT', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: timezone,
+                  })} → ${ev.end.toLocaleTimeString('it-IT', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    timeZone: timezone,
+                  })}`}
                 >
                   <div className="font-medium truncate">{ev.title}</div>
                   <div className="opacity-90">
-                    {ev.start.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit', timeZone: timezone})}
+                    {ev.start.toLocaleTimeString('it-IT', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: timezone,
+                    })}
                     {' — '}
-                    {ev.end.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit', timeZone: timezone})}
+                    {ev.end.toLocaleTimeString('it-IT', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      timeZone: timezone,
+                    })}
                   </div>
                 </button>
               )

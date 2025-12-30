@@ -21,7 +21,6 @@
 /build
 
 # misc
-.DS_Store
 *.pem
 
 # debug
@@ -61,9 +60,14 @@ cookies.txt
 .DS_Store
 Thumbs.db
 
-# Other stuff
-*.xlsx
+# Editor / temp
 *.swp
-dbbackup/
-SECURITY_AUDIT_*.md
+
+# Documenti locali
+*.xlsx
 CLAUDE.md
+SECURITY_AUDIT_*.md
+
+# Backup DB
+dbbackup/
+
