@@ -139,6 +139,7 @@ export default function ChampionshipsManager() {
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showImportResultsModal, setShowImportResultsModal] = useState(false)
   const [showGroupModal, setShowGroupModal] = useState(false)
   const [showTeamsModal, setShowTeamsModal] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -156,6 +157,9 @@ export default function ChampionshipsManager() {
   const [importGroupId, setImportGroupId] = useState<string | null>(null)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
+  const [importResultsGroupId, setImportResultsGroupId] = useState<string | null>(null)
+  const [importResultsFile, setImportResultsFile] = useState<File | null>(null)
+  const [importingResults, setImportingResults] = useState(false)
   const [seasons, setSeasons] = useState<Season[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
@@ -167,6 +171,10 @@ export default function ChampionshipsManager() {
   const [deleting, setDeleting] = useState<'group'|'championship'|null>(null)
   const [resultModalOpen, setResultModalOpen] = useState(false)
   const [resultEditingMatch, setResultEditingMatch] = useState<Match | null>(null)
+  const [infoModalOpen, setInfoModalOpen] = useState(false)
+  const [infoEditingMatch, setInfoEditingMatch] = useState<Match | null>(null)
+  const [infoForm, setInfoForm] = useState({ match_date: '', start_time: '', location_text: '' })
+  const [infoSaving, setInfoSaving] = useState(false)
   const [coachTeamIds, setCoachTeamIds] = useState<Set<string>>(new Set())
   const [athleteTeamIds, setAthleteTeamIds] = useState<Set<string>>(new Set())
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
@@ -232,6 +240,12 @@ export default function ChampionshipsManager() {
   useEffect(() => {
     if (selectedGroupId) {
       setImportGroupId(selectedGroupId)
+    }
+  }, [selectedGroupId])
+
+  useEffect(() => {
+    if (selectedGroupId) {
+      setImportResultsGroupId(selectedGroupId)
     }
   }, [selectedGroupId])
 
@@ -448,6 +462,42 @@ export default function ChampionshipsManager() {
     setResultModalOpen(true)
   }
 
+  const openInfoEditor = (match: Match) => {
+    setInfoEditingMatch(match)
+    setInfoForm({
+      match_date: match.match_date || '',
+      start_time: match.start_time ? match.start_time.slice(0, 5) : '',
+      location_text: match.location_text || ''
+    })
+    setInfoModalOpen(true)
+  }
+
+  const saveMatchInfo = async () => {
+    if (!infoEditingMatch) return
+    setInfoSaving(true)
+    try {
+      const payload = {
+        match_date: infoForm.match_date || null,
+        start_time: infoForm.start_time ? `${infoForm.start_time}:00` : null,
+        location_text: infoForm.location_text || null
+      }
+      const { error } = await supabase
+        .from('championship_matches')
+        .update(payload)
+        .eq('id', infoEditingMatch.id)
+      if (error) throw error
+      toast.success('Info gara aggiornate')
+      setInfoModalOpen(false)
+      setInfoEditingMatch(null)
+      if (selectedGroupId) await loadGroupDetails(selectedGroupId)
+    } catch (err) {
+      console.error('Errore aggiornamento info gara', err)
+      toast.error('Impossibile aggiornare le info gara')
+    } finally {
+      setInfoSaving(false)
+    }
+  }
+
   const parseResultInput = (input: string) => {
     if (!input.trim()) return []
     return input.split(',').map((part) => {
@@ -614,6 +664,14 @@ export default function ChampionshipsManager() {
     note: { key: 'note', required: false, type: 'string' },
   }
 
+  const resultImportColumns: Record<string, ImportColumn> = {
+    giornata: { key: 'giornata', required: true, type: 'number' },
+    casa: { key: 'casa', required: true, type: 'string' },
+    ospiti: { key: 'ospiti', required: true, type: 'string' },
+    risultato_set: { key: 'risultato_set', required: false, type: 'string' },
+    risultato: { key: 'risultato', required: false, type: 'string' }
+  }
+
   const handleImportMatches = async () => {
     const groupId = importGroupId || selectedGroupId
     if (!groupId) {
@@ -755,6 +813,131 @@ export default function ChampionshipsManager() {
       toast.error('Impossibile importare il calendario')
     } finally {
       setImporting(false)
+    }
+  }
+
+  const handleImportResults = async () => {
+    const groupId = importResultsGroupId || selectedGroupId
+    if (!groupId) {
+      toast.error('Seleziona un girone')
+      return
+    }
+    if (!importResultsFile) {
+      toast.error('Seleziona un file Excel')
+      return
+    }
+
+    setImportingResults(true)
+    try {
+      const result = await importFromExcel<{
+        giornata?: number
+        casa: string
+        ospiti: string
+        risultato_set?: string
+        risultato?: string
+      }>(importResultsFile, resultImportColumns, { skipFirstRow: true })
+
+      if (!result.success || result.validRows === 0) {
+        toast.error(result.errors.join(', ') || 'File non valido')
+        setImportingResults(false)
+        return
+      }
+
+      const { data: matchesData, error: matchesError } = await supabase
+        .from('championship_matches')
+        .select('id, match_day, home_club_team_id, away_club_team_id')
+        .eq('championship_group_id', groupId)
+
+      if (matchesError) throw matchesError
+
+      const clubByCode = new Map<string, ClubTeamOption>()
+      clubTeams.forEach((ct) => { clubByCode.set(ct.code.trim().toUpperCase(), ct) })
+
+      const matchMap = new Map<string, string>()
+      ;(matchesData || []).forEach((m: any) => {
+        const key = `${m.match_day ?? ''}|${m.home_club_team_id}|${m.away_club_team_id}`
+        matchMap.set(key, m.id)
+      })
+
+      const errors: string[] = []
+      const updates: { matchId: string; sets: { home: number; away: number }[] }[] = []
+
+      for (const row of result.data) {
+        const giornata = row.giornata ?? null
+        if (!giornata) {
+          errors.push('Giornata mancante')
+          continue
+        }
+        const homeCode = row.casa?.trim().toUpperCase()
+        const awayCode = row.ospiti?.trim().toUpperCase()
+        if (!homeCode || !awayCode) {
+          errors.push(`Codici squadra mancanti per giornata ${giornata}`)
+          continue
+        }
+        const homeClub = clubByCode.get(homeCode)
+        const awayClub = clubByCode.get(awayCode)
+        if (!homeClub || !awayClub) {
+          errors.push(`Squadre non trovate (${homeCode} vs ${awayCode})`)
+          continue
+        }
+        const key = `${giornata}|${homeClub.id}|${awayClub.id}`
+        const matchId = matchMap.get(key)
+        if (!matchId) {
+          errors.push(`Partita non trovata (G${giornata} ${homeCode} vs ${awayCode})`)
+          continue
+        }
+
+        const resultString = row.risultato_set || row.risultato || ''
+        if (!resultString.trim()) {
+          errors.push(`Risultato mancante (G${giornata} ${homeCode} vs ${awayCode})`)
+          continue
+        }
+
+        try {
+          const sets = parseResultInput(resultString)
+          updates.push({ matchId, sets })
+        } catch (err: any) {
+          errors.push(`Risultato non valido (G${giornata} ${homeCode} vs ${awayCode}): ${err.message || 'errore'}`)
+        }
+      }
+
+      let updated = 0
+      for (const item of updates) {
+        await supabase.from('championship_match_sets').delete().eq('match_id', item.matchId)
+        if (item.sets.length > 0) {
+          const payload = item.sets.map((s, idx) => ({
+            match_id: item.matchId,
+            set_number: idx + 1,
+            home_points: s.home,
+            away_points: s.away
+          }))
+          const { error: insertError } = await supabase.from('championship_match_sets').insert(payload)
+          if (insertError) throw insertError
+        }
+        const { error: statusError } = await supabase
+          .from('championship_matches')
+          .update({ status: item.sets.length > 0 ? 'completed' : 'scheduled' })
+          .eq('id', item.matchId)
+        if (statusError) throw statusError
+        updated += 1
+      }
+
+      if (errors.length > 0) {
+        console.error('Errori import risultati:', errors)
+        toast.error(`Import completato con ${errors.length} errori`)
+      }
+      if (updated > 0) {
+        toast.success(`Aggiornate ${updated} partite`)
+      }
+
+      setShowImportResultsModal(false)
+      setImportResultsFile(null)
+      await loadGroupDetails(groupId)
+    } catch (err) {
+      console.error('Errore import risultati', err)
+      toast.error('Impossibile importare i risultati')
+    } finally {
+      setImportingResults(false)
     }
   }
 
@@ -1130,6 +1313,19 @@ export default function ChampionshipsManager() {
               Importa calendario
             </Button>
             {mode !== 'athlete' && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!selectedGroupId) return
+                  setImportResultsGroupId(selectedGroupId)
+                  setShowImportResultsModal(true)
+                }}
+                disabled={!selectedGroupId}
+              >
+                Importa risultati
+              </Button>
+            )}
+            {mode !== 'athlete' && (
               <Button variant="outline" onClick={() => { setShowTeamsModal(true); initGroupTeamsSelection(selectedGroupId) }} disabled={!selectedGroupId}>
                 Gestisci squadre
               </Button>
@@ -1258,17 +1454,20 @@ export default function ChampionshipsManager() {
                           )}
                         </td>
                       )}
-                      {mode !== 'athlete' && (
-                        <td>
-                          <TableActions className="gap-2">
-                            <Button size="sm" variant="outline" onClick={() => openResultEditor(m)}>
-                              Modifica risultato
-                            </Button>
-                          </TableActions>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
+                    {mode !== 'athlete' && (
+                      <td>
+                        <TableActions className="gap-2">
+                          <Button size="sm" variant="outline" onClick={() => openResultEditor(m)}>
+                            Modifica risultato
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => openInfoEditor(m)}>
+                            Modifica info gara
+                          </Button>
+                        </TableActions>
+                      </td>
+                    )}
+                  </tr>
+                ))}
                 </tbody>
               </Table>
             </div>
@@ -1302,6 +1501,51 @@ export default function ChampionshipsManager() {
                   }}>Annulla</Button>
                   <Button onClick={saveResult} disabled={savingResult}>
                     {savingResult ? 'Salvataggio...' : 'Salva'}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+
+            <Modal
+              open={infoModalOpen}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setInfoModalOpen(false)
+                  setInfoEditingMatch(null)
+                }
+              }}
+              title="Modifica info gara"
+              description={infoEditingMatch ? `${clubTeamName(infoEditingMatch.home_club_team_id)} vs ${clubTeamName(infoEditingMatch.away_club_team_id)}` : ''}
+            >
+              <div className="space-y-3">
+                <div>
+                  <label className="cs-label">Data</label>
+                  <Input
+                    type="date"
+                    value={infoForm.match_date}
+                    onChange={(e) => setInfoForm((prev) => ({ ...prev, match_date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="cs-label">Ora</label>
+                  <Input
+                    type="time"
+                    value={infoForm.start_time}
+                    onChange={(e) => setInfoForm((prev) => ({ ...prev, start_time: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="cs-label">Luogo</label>
+                  <Input
+                    value={infoForm.location_text}
+                    onChange={(e) => setInfoForm((prev) => ({ ...prev, location_text: e.target.value }))}
+                    placeholder="Palestra / indirizzo"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setInfoModalOpen(false)}>Annulla</Button>
+                  <Button onClick={saveMatchInfo} disabled={infoSaving}>
+                    {infoSaving ? 'Salvataggio...' : 'Salva'}
                   </Button>
                 </div>
               </div>
@@ -1663,6 +1907,41 @@ export default function ChampionshipsManager() {
             <Button variant="ghost" onClick={() => setShowImportModal(false)}>Annulla</Button>
             <Button onClick={handleImportMatches} disabled={importing || mode === 'athlete'}>
               {importing ? 'Importazione...' : 'Importa calendario'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal import risultati */}
+      <Modal
+        open={showImportResultsModal}
+        onOpenChange={setShowImportResultsModal}
+        title="Importa risultati (Excel)"
+        description="Colonne attese: giornata, casa, ospiti, risultato_set (es: 25-20, 25-21, 23-25, 25-22)."
+      >
+        <div className="space-y-3">
+          <div>
+            <label className="cs-label">Girone</label>
+            <Select
+              value={importResultsGroupId || ''}
+              onChange={(e) => setImportResultsGroupId(e.target.value || null)}
+            >
+              {currentGroups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <label className="cs-label">File Excel</label>
+            <Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportResultsFile(e.target.files?.[0] || null)} />
+          </div>
+          <div className="text-sm text-slate-600">
+            La partita viene trovata con la chiave: giornata + casa + ospiti (codici squadra).
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setShowImportResultsModal(false)}>Annulla</Button>
+            <Button onClick={handleImportResults} disabled={importingResults || mode === 'athlete'}>
+              {importingResults ? 'Importazione...' : 'Importa risultati'}
             </Button>
           </div>
         </div>
