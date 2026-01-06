@@ -669,6 +669,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           }))}
           viewAllHref="/athlete/messages"
           onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
+          showSenderText={false}
         />
 
         {/* Fee Installments */}

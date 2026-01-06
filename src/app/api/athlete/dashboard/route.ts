@@ -34,7 +34,19 @@ export async function GET(request: NextRequest) {
       // 3. Get unread messages for this user
       supabase
         .from('message_recipients')
-        .select('message_id, is_read, created_at, messages(id, subject, content, created_at)')
+        .select(`
+          message_id,
+          is_read,
+          created_at,
+          messages(
+            id,
+            subject,
+            content,
+            created_at,
+            created_by,
+            created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
+          )
+        `)
         .eq('profile_id', user.id)
         .order('created_at', { ascending: false })
         .limit(5),
@@ -214,7 +226,8 @@ export async function GET(request: NextRequest) {
         subject: r.messages.subject,
         content: r.messages.content,
         created_at: r.messages.created_at,
-        is_read: r.is_read
+        is_read: r.is_read,
+        created_by_profile: r.messages.created_by_profile || null
       }))
       .slice(0, 5)
 

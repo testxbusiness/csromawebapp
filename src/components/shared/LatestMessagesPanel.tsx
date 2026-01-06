@@ -18,6 +18,7 @@ export default function LatestMessagesPanel({
   emptyText = 'Nessun messaggio',
   viewAllHref,
   onDetail,
+  showSenderText = true,
 }: {
   title?: string
   anchorId?: string
@@ -25,6 +26,7 @@ export default function LatestMessagesPanel({
   emptyText?: string
   viewAllHref: string
   onDetail: (id: string) => void
+  showSenderText?: boolean
 }) {
   const initials = (name?: string) => {
     const src = (name && name.trim()) || '?'
@@ -56,7 +58,7 @@ export default function LatestMessagesPanel({
                   )}
                 </div>
                 <div className="text-sm text-secondary truncate">
-                  {m.from ? (<><span className="font-medium">Da {m.from}</span> · </>) : null}
+                  {showSenderText && m.from ? (<><span className="font-medium">Da {m.from}</span> · </>) : null}
                   {m.preview || ''}
                 </div>
               </div>
