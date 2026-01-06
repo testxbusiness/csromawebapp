@@ -525,52 +525,82 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="cs-card cs-card--primary">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="athlete-welcome" className="text-xl font-semibold">
-            Bentornato, {profile.first_name} {profile.last_name}
-          </h2>
-          <button
-            id="athlete-start-tour"
-            className="cs-btn cs-btn--ghost"
-            onClick={() => startNextStep('athlete')}
-          >
-            Guida
-          </button>
-        </div>
-        
-        {activeSeason && (
-          <div className="cs-card cs-card--primary mb-4">
-            <h3 className="font-semibold">Stagione</h3>
-            <p className="font-normal">{activeSeason.name}</p>
-            <p className="text-secondary text-sm">
-              {new Date(activeSeason.start_date).toLocaleDateString('it-IT')} - 
-              {new Date(activeSeason.end_date).toLocaleDateString('it-IT')}
-            </p>
+      <div
+        className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900 text-white"
+        style={{ backgroundImage: "url('/images/banner.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+      >
+        <div className="absolute inset-0 bg-slate-900/70"></div>
+        <div className="relative p-6 md:p-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 id="athlete-welcome" className="text-2xl md:text-3xl font-semibold">
+                Bentornato, {profile.first_name} {profile.last_name}
+              </h2>
+              {activeSeason && (
+                <p className="text-sm text-slate-200 mt-1">
+                  {activeSeason.name}
+                </p>
+              )}
+            </div>
+            <button
+              id="athlete-start-tour"
+              className="cs-btn cs-btn--ghost"
+              onClick={() => startNextStep('athlete')}
+            >
+              Guida
+            </button>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="cs-card cs-card--primary">
-            <div className="cs-card__meta">Squadre</div>
-            <div className="text-3xl font-extrabold" style={{color:'var(--cs-accent)'}}>{teamMemberships.length}</div>
-          </div>
-          <div className="cs-card cs-card--primary">
-            <div className="cs-card__meta">Prossimi Eventi</div>
-            <div className="text-3xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
-          </div>
-          <div className="cs-card cs-card--primary">
-            <div className="cs-card__meta">Ultimi Messaggi</div>
-            <div className="text-3xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
-          </div>
-          <div className="cs-card cs-card--primary">
-            <div className="cs-card__meta">Rate Attive</div>
-            <div className="text-3xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+            <div className="lg:col-span-2 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="cs-card cs-card--primary">
+                  <div className="cs-card__meta">Squadre</div>
+                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-accent)'}}>{teamMemberships.length}</div>
+                </div>
+                <div className="cs-card cs-card--primary">
+                  <div className="cs-card__meta">Prossimi Eventi</div>
+                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
+                </div>
+                <div className="cs-card cs-card--primary">
+                  <div className="cs-card__meta">Ultimi Messaggi</div>
+                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
+                </div>
+                <div className="cs-card cs-card--primary">
+                  <div className="cs-card__meta">Rate Attive</div>
+                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="cs-card cs-card--primary p-4 flex flex-col justify-between text-slate-900">
+              <div className="text-sm font-bold uppercase text-[color:var(--cs-danger)]">Prossima partita</div>
+              {!nextChampionshipMatch && (
+                <div className="text-sm text-slate-500 mt-2">NON CI SONO PARTITE IN PROGRAMMA</div>
+              )}
+              {nextChampionshipMatch && (
+                <div className="mt-3 space-y-2">
+                  <div className="text-lg font-semibold">
+                    {nextChampionshipMatch.match_date
+                      ? new Date(nextChampionshipMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
+                      : '—'}
+                    {nextChampionshipMatch.start_time ? ` · ${nextChampionshipMatch.start_time.slice(0, 5)}` : ''}
+                  </div>
+                  <div className="font-medium">
+                    {nextChampionshipMatch.home_club_team?.name || '—'} vs {nextChampionshipMatch.away_club_team?.name || '—'}
+                  </div>
+                  <div className="text-sm text-slate-600">
+                    {nextChampionshipMatch.location_text || 'Luogo da definire'}
+                    {nextChampionshipMatch.match_day ? ` · Giornata ${nextChampionshipMatch.match_day}` : ''}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Team Memberships */}
         <div className="cs-card cs-card--primary">
           <h3 id="athlete-teams" className="font-semibold mb-4">Le Tue Squadre</h3>
@@ -591,7 +621,6 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                         <div className="font-medium">{membership.team.name}</div>
                         <div className="text-sm text-secondary">Attività: {membership.team.activity?.name}</div>
                       </div>
-                      {/* Status moved near expiry date below */}
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -628,100 +657,70 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           )}
         </div>
 
+        {/* Unread Messages clean */}
+        <LatestMessagesPanel
+          anchorId="athlete-messages"
+          items={unreadMessages.slice(0,3).map(m => ({
+            id: m.id,
+            subject: m.subject,
+            preview: m.content,
+            created_at: m.created_at ? new Date(m.created_at) : undefined,
+            from: (m as any).from || (m.created_by_profile ? `${m.created_by_profile.first_name || ''} ${m.created_by_profile.last_name || ''}`.trim() : undefined),
+          }))}
+          viewAllHref="/athlete/messages"
+          onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
+        />
+
+        {/* Fee Installments */}
         <div className="cs-card cs-card--primary">
-          <h3 className="font-semibold mb-4">Prossima Partita</h3>
-          {!nextChampionshipMatch && (
-            <p className="text-secondary text-sm">NON CI SONO PARTITE IN PROGRAMMA</p>
-          )}
-          {nextChampionshipMatch && (
-            <div className="space-y-2 text-sm text-secondary">
-              <div className="text-lg font-semibold text-primary">
-                {nextChampionshipMatch.match_date
-                  ? new Date(nextChampionshipMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                  : '—'}
-                {nextChampionshipMatch.start_time ? ` · ${nextChampionshipMatch.start_time.slice(0, 5)}` : ''}
-              </div>
-              <div className="text-base font-medium text-primary">
-                {nextChampionshipMatch.home_club_team?.name || '—'} vs {nextChampionshipMatch.away_club_team?.name || '—'}
-              </div>
-              <div>
-                {nextChampionshipMatch.location_text || 'Luogo da definire'}
-                {nextChampionshipMatch.match_day ? ` · Giornata ${nextChampionshipMatch.match_day}` : ''}
-              </div>
+          <h3 id="athlete-fees" className="font-semibold mb-4">Quote Associative</h3>
+          {feeInstallments.length === 0 ? (
+            <p className="text-secondary text-sm">Nessuna quota associativa</p>
+          ) : (
+            <div className="cs-list">
+              {feeInstallments.slice(0, 3).map((installment) => (
+                <div key={installment.id} className="cs-list-item">
+                  <div className="text-sm">
+                    <div className="font-medium">
+                      {installment.membership_fee.name} - Rata {installment.installment_number}
+                    </div>
+                    <div className="text-secondary">
+                      {installment.membership_fee.team.name}
+                    </div>
+                    <div className="text-secondary">
+                      Scadenza: {new Date(installment.due_date).toLocaleDateString('it-IT')}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-medium">€{installment.amount}</div>
+                    <span className={`cs-badge ${
+                      installment.status==='paid' ? 'cs-badge--success' :
+                      installment.status==='overdue' ? 'cs-badge--danger' :
+                      installment.status==='due_soon' ? 'cs-badge--warning' :
+                      'cs-badge--neutral'
+                    }`}>{getStatusText(installment.status)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Events clean */}
-        <UpcomingEventsPanel
-          anchorId="athlete-events"
-          items={upcomingEvents.map(ev => ({
-            id: ev.id,
-            title: ev.title,
-            start: new Date(ev.start_time),
-            end: new Date(ev.end_time),
-            location: ev.location || null,
-            kind: ev.event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
-            subtitle: ev.description || null,
-          }))}
-          viewAllHref="/athlete/calendar"
-          onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
-        />
-
-        {/* Messages & Fees */}
-        <div className="space-y-6">
-          {/* Unread Messages clean */}
-          <LatestMessagesPanel
-            anchorId="athlete-messages"
-            items={unreadMessages.slice(0,3).map(m => ({
-              id: m.id,
-              subject: m.subject,
-              preview: m.content,
-              created_at: m.created_at ? new Date(m.created_at) : undefined,
-              from: (m as any).from || (m.created_by_profile ? `${m.created_by_profile.first_name || ''} ${m.created_by_profile.last_name || ''}`.trim() : undefined),
-            }))}
-            viewAllHref="/athlete/messages"
-            onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
-          />
-
-          {/* Fee Installments */}
-          <div className="cs-card cs-card--primary">
-            <h3 id="athlete-fees" className="font-semibold mb-4">Quote Associative</h3>
-            {feeInstallments.length === 0 ? (
-              <p className="text-secondary text-sm">Nessuna quota associativa</p>
-            ) : (
-              <div className="cs-list">
-                {feeInstallments.slice(0, 3).map((installment) => (
-                  <div key={installment.id} className="cs-list-item">
-                    <div className="text-sm">
-                      <div className="font-medium">
-                        {installment.membership_fee.name} - Rata {installment.installment_number}
-                      </div>
-                      <div className="text-secondary">
-                        {installment.membership_fee.team.name}
-                      </div>
-                      <div className="text-secondary">
-                        Scadenza: {new Date(installment.due_date).toLocaleDateString('it-IT')}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium">€{installment.amount}</div>
-                      <span className={`cs-badge ${
-                        installment.status==='paid' ? 'cs-badge--success' :
-                        installment.status==='overdue' ? 'cs-badge--danger' :
-                        installment.status==='due_soon' ? 'cs-badge--warning' :
-                        'cs-badge--neutral'
-                      }`}>{getStatusText(installment.status)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <UpcomingEventsPanel
+        anchorId="athlete-events"
+        items={upcomingEvents.map(ev => ({
+          id: ev.id,
+          title: ev.title,
+          start: new Date(ev.start_time),
+          end: new Date(ev.end_time),
+          location: ev.location || null,
+          kind: ev.event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
+          subtitle: ev.description || null,
+        }))}
+        viewAllHref="/athlete/calendar"
+        onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
+      />
       {/* Modals dettagli */}
       {selectedEvent && (
         <EventDetailModal
