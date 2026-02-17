@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
@@ -16,6 +16,13 @@ const KIND_COLORS: Record<'training'|'match'|'meeting'|'other', string> = {
   meeting:  '#f5eb00', // Riunione (giallo CSRoma)
   other:    '#6b7280', // Altro (grigio)
 }
+
+const EVENT_KIND_OPTIONS = [
+  { value: 'training', label: 'Allenamento' },
+  { value: 'match', label: 'Partita' },
+  { value: 'meeting', label: 'Riunione' },
+  { value: 'other', label: 'Altro' },
+] as const
 
 interface Event {
   id?: string
@@ -80,8 +87,10 @@ export default function EventsManager() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [filterTeam, setFilterTeam] = useState<string>('')
-  const [filterEventKind, setFilterEventKind] = useState<string>('')
+  const [filterTeams, setFilterTeams] = useState<string[]>([])
+  const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false)
+  const [filterEventKinds, setFilterEventKinds] = useState<string[]>([])
+  const [isEventKindDropdownOpen, setIsEventKindDropdownOpen] = useState(false)
   const [filterFrom, setFilterFrom] = useState<string>('')
   const [filterTo, setFilterTo] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -91,7 +100,27 @@ export default function EventsManager() {
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
+  const teamDropdownRef = useRef<HTMLDivElement | null>(null)
+  const eventKindDropdownRef = useRef<HTMLDivElement | null>(null)
   const supabase = createClient()
+
+  const selectedTeamsLabel = (() => {
+    if (filterTeams.length === 0) return 'Tutte le squadre'
+    if (filterTeams.length === 1) {
+      const team = teams.find((t) => t.id === filterTeams[0])
+      return team ? `${team.name} (${team.code})` : '1 squadra selezionata'
+    }
+    return `${filterTeams.length} squadre selezionate`
+  })()
+
+  const selectedEventKindsLabel = (() => {
+    if (filterEventKinds.length === 0) return 'Tutti i tipi'
+    if (filterEventKinds.length === 1) {
+      const item = EVENT_KIND_OPTIONS.find((option) => option.value === filterEventKinds[0])
+      return item?.label || '1 tipo selezionato'
+    }
+    return `${filterEventKinds.length} tipi selezionati`
+  })()
 
   useEffect(() => {
     loadEvents()
@@ -105,13 +134,47 @@ export default function EventsManager() {
     }
   }, [showModal])
 
-  const loadEvents = async () => {
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (teamDropdownRef.current && !teamDropdownRef.current.contains(event.target as Node)) {
+        setIsTeamDropdownOpen(false)
+      }
+      if (eventKindDropdownRef.current && !eventKindDropdownRef.current.contains(event.target as Node)) {
+        setIsEventKindDropdownOpen(false)
+      }
+    }
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsTeamDropdownOpen(false)
+        setIsEventKindDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onEscape)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onEscape)
+    }
+  }, [])
+
+  const loadEvents = async (overrides?: {
+    teamIds?: string[]
+    eventKinds?: string[]
+    from?: string
+    to?: string
+  }) => {
     setLoading(true)
     try {
+      const selectedTeamIds = overrides?.teamIds ?? filterTeams
+      const selectedEventKinds = overrides?.eventKinds ?? filterEventKinds
+      const selectedFrom = overrides?.from ?? filterFrom
+      const selectedTo = overrides?.to ?? filterTo
+
       const params = new URLSearchParams()
-      if (filterTeam) params.set('team_id', filterTeam)
-      if (filterFrom) params.set('from', new Date(filterFrom).toISOString())
-      if (filterTo) params.set('to', new Date(filterTo).toISOString())
+      if (selectedTeamIds.length > 0) params.set('team_ids', selectedTeamIds.join(','))
+      if (selectedFrom) params.set('from', new Date(selectedFrom).toISOString())
+      if (selectedTo) params.set('to', new Date(selectedTo).toISOString())
+      params.set('limit', '5000')
       const qs = params.toString()
       const response = await fetch(`/api/admin/events${qs ? `?${qs}` : ''}`)
       const result = await response.json()
@@ -134,8 +197,10 @@ export default function EventsManager() {
       }))
 
       // Filtro locale per event_kind
-      if (filterEventKind) {
-        eventsWithSafeData = eventsWithSafeData.filter(e => e.event_kind === filterEventKind)
+      if (selectedEventKinds.length > 0) {
+        eventsWithSafeData = eventsWithSafeData.filter(
+          (e) => !!e.event_kind && selectedEventKinds.includes(e.event_kind)
+        )
       }
 
       setEvents(eventsWithSafeData)
@@ -170,6 +235,30 @@ export default function EventsManager() {
       .order('name')
 
     setTeams(data || [])
+  }
+
+  const toggleTeamFilter = (teamId: string) => {
+    setFilterTeams((prev) => (
+      prev.includes(teamId)
+        ? prev.filter((id) => id !== teamId)
+        : [...prev, teamId]
+    ))
+  }
+
+  const selectAllTeams = () => {
+    setFilterTeams(teams.map((t) => t.id))
+  }
+
+  const toggleEventKindFilter = (kind: string) => {
+    setFilterEventKinds((prev) => (
+      prev.includes(kind)
+        ? prev.filter((value) => value !== kind)
+        : [...prev, kind]
+    ))
+  }
+
+  const selectAllEventKinds = () => {
+    setFilterEventKinds(EVENT_KIND_OPTIONS.map((option) => option.value))
   }
 
   const handleCreateEvent = async (eventData: Omit<Event, 'id'>) => {
@@ -317,30 +406,127 @@ export default function EventsManager() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div>
             <label className="cs-field__label">Squadra</label>
-            <select
-              value={filterTeam}
-              onChange={(e) => setFilterTeam(e.target.value)}
-              className="cs-select"
-            >
-              <option value="">Tutte le squadre</option>
-              {teams.map(t => (
-                <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
-              ))}
-            </select>
+            <div className="relative" ref={teamDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsTeamDropdownOpen((prev) => !prev)}
+                className="cs-input w-full flex items-center justify-between text-left min-h-[44px]"
+                aria-haspopup="listbox"
+                aria-expanded={isTeamDropdownOpen}
+              >
+                <span className="truncate">{selectedTeamsLabel}</span>
+                <svg
+                  className={`h-4 w-4 transition-transform ${isTeamDropdownOpen ? 'rotate-180' : ''}`}
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {isTeamDropdownOpen && (
+                <div className="absolute z-20 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-gray-100">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-primary hover:underline min-h-[32px]"
+                      onClick={selectAllTeams}
+                    >
+                      Seleziona tutte
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-secondary hover:underline min-h-[32px]"
+                      onClick={() => setFilterTeams([])}
+                    >
+                      Svuota
+                    </button>
+                  </div>
+                  <div className="max-h-56 overflow-auto p-2" role="listbox" aria-multiselectable="true">
+                    {teams.length > 0 ? teams.map((t) => {
+                      const checked = filterTeams.includes(t.id)
+                      return (
+                        <label
+                          key={t.id}
+                          className="flex items-center gap-3 rounded-md px-2 py-2 cursor-pointer hover:bg-gray-50 min-h-[44px]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleTeamFilter(t.id)}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">{t.name} ({t.code})</span>
+                        </label>
+                      )
+                    }) : (
+                      <p className="px-2 py-2 text-sm text-secondary">Nessuna squadra disponibile</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div>
             <label className="cs-field__label">Tipo Evento</label>
-            <select
-              value={filterEventKind}
-              onChange={(e) => setFilterEventKind(e.target.value)}
-              className="cs-select"
-            >
-              <option value="">Tutti i tipi</option>
-              <option value="training">Allenamento</option>
-              <option value="match">Partita</option>
-              <option value="meeting">Riunione</option>
-              <option value="other">Altro</option>
-            </select>
+            <div className="relative" ref={eventKindDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsEventKindDropdownOpen((prev) => !prev)}
+                className="cs-input w-full flex items-center justify-between text-left min-h-[44px]"
+                aria-haspopup="listbox"
+                aria-expanded={isEventKindDropdownOpen}
+              >
+                <span className="truncate">{selectedEventKindsLabel}</span>
+                <svg
+                  className={`h-4 w-4 transition-transform ${isEventKindDropdownOpen ? 'rotate-180' : ''}`}
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {isEventKindDropdownOpen && (
+                <div className="absolute z-20 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg">
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-gray-100">
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-primary hover:underline min-h-[32px]"
+                      onClick={selectAllEventKinds}
+                    >
+                      Seleziona tutte
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-secondary hover:underline min-h-[32px]"
+                      onClick={() => setFilterEventKinds([])}
+                    >
+                      Svuota
+                    </button>
+                  </div>
+                  <div className="max-h-56 overflow-auto p-2" role="listbox" aria-multiselectable="true">
+                    {EVENT_KIND_OPTIONS.map((option) => {
+                      const checked = filterEventKinds.includes(option.value)
+                      return (
+                        <label
+                          key={option.value}
+                          className="flex items-center gap-3 rounded-md px-2 py-2 cursor-pointer hover:bg-gray-50 min-h-[44px]"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleEventKindFilter(option.value)}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-sm">{option.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div>
             <label className="cs-field__label">Dal</label>
@@ -362,7 +548,18 @@ export default function EventsManager() {
           </div>
           <div className="flex gap-2">
             <button onClick={() => loadEvents()} className="cs-btn cs-btn--primary">Applica filtri</button>
-            <button onClick={() => { setFilterTeam(''); setFilterEventKind(''); setFilterFrom(''); setFilterTo(''); setLoading(true); loadEvents(); }} className="cs-btn cs-btn--ghost">Reset</button>
+            <button
+              onClick={() => {
+                setFilterTeams([])
+                setFilterEventKinds([])
+                setFilterFrom('')
+                setFilterTo('')
+                loadEvents({ teamIds: [], eventKinds: [], from: '', to: '' })
+              }}
+              className="cs-btn cs-btn--ghost"
+            >
+              Reset
+            </button>
           </div>
         </div>
       </div>

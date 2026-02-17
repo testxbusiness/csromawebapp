@@ -207,9 +207,20 @@ export async function GET(request: NextRequest) {
     const adminClient = createAdminClient()
     const { searchParams } = new URL(request.url)
     const teamId = searchParams.get('team_id')
+    const teamIdsParam = searchParams.get('team_ids')
+    const teamIds = Array.from(
+      new Set(
+        (teamIdsParam ? teamIdsParam.split(',') : [])
+          .map((id) => id.trim())
+          .filter(Boolean)
+      )
+    )
+    if (teamId && !teamIds.includes(teamId)) {
+      teamIds.push(teamId)
+    }
     const from = searchParams.get('from') // ISO string
     const to = searchParams.get('to') // ISO string
-    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50'), 1), 200) // Max 200
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '200'), 1), 5000) // Max 5000
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
 
     // Verifica che l'utente corrente sia admin
@@ -225,11 +236,11 @@ export async function GET(request: NextRequest) {
 
     // Se filtriamo per squadra, recupera gli event_ids prima con batching
     let eventIds: string[] | null = null
-    if (teamId) {
+    if (teamIds.length > 0) {
       const { data: links, error: linkErr } = await adminClient
         .from('event_teams')
         .select('event_id')
-        .eq('team_id', teamId)
+        .in('team_id', teamIds)
       if (linkErr) {
         return NextResponse.json({ error: linkErr.message }, { status: 400 })
       }
@@ -328,12 +339,12 @@ export async function GET(request: NextRequest) {
     const creatorsMap = new Map((creatorsResult.data || []).map(p => [p.id, p]))
 
     // Query 5: Tutte le squadre associate agli event_teams
-    const teamIds = [...new Set((eventTeamsResult.data || []).map(et => et.team_id))]
-    const teamsResult = teamIds.length > 0
+    const eventTeamIds = [...new Set((eventTeamsResult.data || []).map(et => et.team_id))]
+    const teamsResult = eventTeamIds.length > 0
       ? await adminClient
           .from('teams')
           .select('id, name')
-          .in('id', teamIds)
+          .in('id', eventTeamIds)
       : { data: [] }
 
     const teamsMap = new Map((teamsResult.data || []).map(t => [t.id, t]))
