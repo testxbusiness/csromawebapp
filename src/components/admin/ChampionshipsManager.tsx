@@ -952,6 +952,8 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
       team_name: c?.name || clubTeamName(s.club_team_id).replace(/\s*\([^)]*\)\s*$/, '')
     }
   })
+  const sortedStandings = [...standingsWithNames]
+    .sort((a, b) => b.class_points - a.class_points || (b.set_ratio || 0) - (a.set_ratio || 0))
   const convocationCSRTeams = convocationMatch ? matchCSRClubTeams(convocationMatch) : []
   const convocationClubTeam = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam || null
   const canEditConvocation = mode === 'admin' || (mode === 'coach' && !!(convocationClubTeam?.team_id && coachTeamIds.has(convocationClubTeam.team_id)))
@@ -1400,7 +1402,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
           <Card>
             <CardTitle>Partite del girone</CardTitle>
             <CardMeta>Modifica risultati (coach/admin) e sincronizzazione eventi match</CardMeta>
-            <div className="mt-4 overflow-x-auto">
+            <div className="mt-4 overflow-x-auto hidden md:block">
               <Table compact className="min-w-full">
                 <thead>
                   <tr>
@@ -1474,8 +1476,55 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
                 </tbody>
               </Table>
             </div>
+            <div className="mt-4 space-y-3 md:hidden">
+              {matches.length === 0 && (
+                <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+                  Nessuna partita
+                </div>
+              )}
+              {matches.map((m) => (
+                <div key={m.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        {m.match_day ? `Giornata ${m.match_day}` : 'Giornata da definire'}
+                      </div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">
+                        {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}
+                        {m.start_time ? ` · ${m.start_time.slice(0,5)}` : ''}
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                      {formatScore(m.championship_match_sets)}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-sm font-semibold text-slate-900">
+                    {m.home_club_team?.name || clubTeamName(m.home_club_team_id)}
+                  </div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">vs</div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
+                  </div>
+                  <div className="mt-3 space-y-1 text-sm text-slate-600">
+                    <div><span className="font-medium text-slate-700">Set:</span> {formatSetsDetail(m.championship_match_sets) || '—'}</div>
+                    <div><span className="font-medium text-slate-700">Luogo:</span> {m.location_text || '—'}</div>
+                    <div><span className="font-medium text-slate-700">Stato:</span> {STATUS_LABEL[m.status] || m.status}</div>
+                    <div><span className="font-medium text-slate-700">Calendario:</span> {m.event_id ? 'Sincronizzato' : '—'}</div>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <Button size="sm" variant="outline" block onClick={() => openResultEditor(m)}>
+                      Modifica risultato
+                    </Button>
+                    <Button size="sm" variant="outline" block onClick={() => openInfoEditor(m)}>
+                      Modifica info gara
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
 
             <Modal
+              fullscreenOnMobile
               open={resultModalOpen}
               onOpenChange={(open) => {
                 if (!open) {
@@ -1510,6 +1559,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
             </Modal>
 
             <Modal
+              fullscreenOnMobile
               open={infoModalOpen}
               onOpenChange={(open) => {
                 if (!open) {
@@ -1559,7 +1609,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
         <div>
           <Card>
             <CardTitle>Classifica</CardTitle>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto hidden md:block">
               <Table compact>
                 <thead>
                   <tr>
@@ -1578,9 +1628,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
                       <td colSpan={7} className="text-center text-slate-400 py-4">Nessun dato</td>
                     </tr>
                   )}
-                  {standingsWithNames
-                    .sort((a, b) => b.class_points - a.class_points || (b.set_ratio || 0) - (a.set_ratio || 0))
-                    .map((row) => (
+                  {sortedStandings.map((row) => (
                       <tr key={row.club_team_id}>
                         <td>{row.team_name}</td>
                         <td>{row.class_points}</td>
@@ -1590,15 +1638,46 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
                         <td>{row.sets_for}-{row.sets_against}</td>
                         <td>{row.points_for}-{row.points_against}</td>
                       </tr>
-                    ))}
+                  ))}
                 </tbody>
               </Table>
+            </div>
+            <div className="space-y-3 md:hidden">
+              {sortedStandings.length === 0 && (
+                <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+                  Nessun dato
+                </div>
+              )}
+              {sortedStandings.map((row, index) => (
+                <div key={row.club_team_id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">#{index + 1}</div>
+                      <div className="mt-1 text-sm font-semibold text-slate-900">{row.team_name}</div>
+                    </div>
+                    <div className="rounded-xl bg-slate-900 px-3 py-2 text-center text-white">
+                      <div className="text-[11px] uppercase tracking-wide text-slate-300">Pts</div>
+                      <div className="text-lg font-bold leading-none">{row.class_points}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                    <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] uppercase tracking-wide text-slate-500">G</div><div className="font-semibold text-slate-900">{row.matches_played}</div></div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] uppercase tracking-wide text-slate-500">V</div><div className="font-semibold text-slate-900">{row.wins}</div></div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-[11px] uppercase tracking-wide text-slate-500">P</div><div className="font-semibold text-slate-900">{row.losses}</div></div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-lg border border-slate-200 px-3 py-2"><div className="text-[11px] uppercase tracking-wide text-slate-500">Set</div><div className="font-semibold text-slate-900">{row.sets_for}-{row.sets_against}</div></div>
+                    <div className="rounded-lg border border-slate-200 px-3 py-2"><div className="text-[11px] uppercase tracking-wide text-slate-500">Punti</div><div className="font-semibold text-slate-900">{row.points_for}-{row.points_against}</div></div>
+                  </div>
+                </div>
+              ))}
             </div>
           </Card>
         </div>
       </div>
 
       <Modal
+        fullscreenOnMobile
         open={convocationModalOpen}
         onOpenChange={(open) => {
           setConvocationModalOpen(open)
@@ -1731,6 +1810,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
 
       {mode === 'admin' && (
         <Modal
+          fullscreenOnMobile
           open={showCreateModal}
           onOpenChange={setShowCreateModal}
           title="Crea campionato"
@@ -1843,6 +1923,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
       {/* Modal nuovo girone */}
       {mode !== 'athlete' && (
         <Modal
+          fullscreenOnMobile
           open={showGroupModal}
           onOpenChange={setShowGroupModal}
           title="Aggiungi girone"
@@ -1882,6 +1963,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
 
       {/* Modal import calendario */}
       <Modal
+        fullscreenOnMobile
         open={showImportModal}
         onOpenChange={setShowImportModal}
         title="Importa calendario (Excel)"
@@ -1917,6 +1999,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
 
       {/* Modal import risultati */}
       <Modal
+        fullscreenOnMobile
         open={showImportResultsModal}
         onOpenChange={setShowImportResultsModal}
         title="Importa risultati (Excel)"
@@ -1953,6 +2036,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
       {/* Modal gestione squadre girone */}
       {mode !== 'athlete' && (
         <Modal
+          fullscreenOnMobile
           open={showTeamsModal}
           onOpenChange={setShowTeamsModal}
           title="Squadre del girone"
