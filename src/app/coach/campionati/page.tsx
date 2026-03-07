@@ -6,7 +6,7 @@ import CoachChampionshipsManager from '@/components/coach/CoachChampionshipsMana
 export default function CoachChampionshipsPage() {
   return (
     <>
-      <PageHeader title="Campionati" subtitle="Gestisci risultati e calendari delle tue squadre" />
+      <PageHeader title="Campionati" subtitle="Gestisci risultati, info gara, convocazioni e calendario delle tue squadre" />
       <CoachChampionshipsManager />
     </>
   )

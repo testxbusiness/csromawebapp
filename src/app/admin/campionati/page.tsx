@@ -8,7 +8,7 @@ export default function ChampionshipsPage() {
     <>
       <PageHeader
         title="Campionati"
-        subtitle="Gestisci gironi, risultati e sincronizzazione calendario"
+        subtitle="Gestisci struttura, calendari, risultati e sincronizzazione del campionato"
       />
       <AdminChampionshipsManager />
     </>

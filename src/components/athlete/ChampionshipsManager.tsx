@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Card, CardTitle, CardMeta, Table, TableActions, Button, Input, Select, toast, Modal } from '@/components/ui'
+import { Card, CardTitle, CardMeta, Table, Button, Input, Select, toast, Modal } from '@/components/ui'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
+import { CalendarDays, ChevronDown, ChevronUp, Clock3, MapPin, Trophy, Users } from 'lucide-react'
 
 type ClubTeam = {
   id: string
@@ -173,6 +174,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const [coachTeamIds, setCoachTeamIds] = useState<Set<string>>(new Set())
   const [athleteTeamIds, setAthleteTeamIds] = useState<Set<string>>(new Set())
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
+  const [showSchedule, setShowSchedule] = useState(false)
   const [convocationModalOpen, setConvocationModalOpen] = useState(false)
   const [convocationLoading, setConvocationLoading] = useState(false)
   const [convocationSaving, setConvocationSaving] = useState(false)
@@ -1084,345 +1086,373 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   }
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 pb-4">
+      <Card variant="primary" className="overflow-hidden">
+        <div className="flex flex-col gap-5">
           <div>
-            <CardTitle>Campionati</CardTitle>
-            <CardMeta>Seleziona o crea un campionato, importa il calendario, gestisci risultati e classifica</CardMeta>
+            <CardTitle className="text-lg sm:text-xl">Campionati</CardTitle>
+            <CardMeta>Segui la prossima gara CSRoma, consulta le convocazioni e controlla la classifica del girone.</CardMeta>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Select
-              value={selectedChampionshipId || ''}
-              onChange={(e) => setSelectedChampionshipId(e.target.value || null)}
-            >
-              {championships.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · {c.sport} {c.status === 'published' ? '· Pubblicato' : ''}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={selectedGroupId || ''}
-              onChange={(e) => {
-                const val = e.target.value
-                setSelectedGroupId(val || null)
-                setImportGroupId(val || null)
-                initGroupTeamsSelection(val || null)
-              }}
-              disabled={!currentGroups.length}
-            >
-              {currentGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name} · {g.phase}
-                </option>
-              ))}
-            </Select>
-            {mode !== 'athlete' && (
-              <Button variant="outline" onClick={() => setShowGroupModal(true)} disabled={!selectedChampionshipId || mode === 'coach'}>
-                Aggiungi girone
-              </Button>
-            )}
-            {mode !== 'athlete' && (
-              <Button variant="outline" onClick={() => { setShowTeamsModal(true); initGroupTeamsSelection(selectedGroupId) }} disabled={!selectedGroupId}>
-                Gestisci squadre
-              </Button>
-            )}
-            {mode !== 'athlete' && (
-              <Button variant="outline" onClick={() => handleDeleteCalendar('group')} disabled={!selectedGroupId || deleting !== null}>
-                {deleting === 'group' ? 'Eliminazione...' : 'Elimina calendario girone'}
-              </Button>
-            )}
-            {mode === 'admin' && (
-              <>
-                <Button variant="danger" onClick={() => handleDeleteCalendar('championship')} disabled={!selectedChampionshipId || deleting !== null}>
-                  {deleting === 'championship' ? 'Eliminazione...' : 'Elimina tutto il campionato'}
-                </Button>
-                <Button onClick={() => setShowCreateModal(true)}>Crea campionato</Button>
-              </>
-            )}
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Campionato</label>
+              <Select
+                value={selectedChampionshipId || ''}
+                onChange={(e) => setSelectedChampionshipId(e.target.value || null)}
+              >
+                {championships.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.sport} {c.status === 'published' ? '· Pubblicato' : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Girone</label>
+              <Select
+                value={selectedGroupId || ''}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setSelectedGroupId(val || null)
+                  setImportGroupId(val || null)
+                  initGroupTeamsSelection(val || null)
+                }}
+                disabled={!currentGroups.length}
+              >
+                {currentGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} · {g.phase}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
+              <Trophy className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
+              {selectedChampionship ? selectedChampionship.name : 'Seleziona un campionato'}
+            </div>
+            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
+              <Users className="h-4 w-4 text-[color:var(--cs-accent)]" aria-hidden="true" />
+              {currentGroups.length} {currentGroups.length === 1 ? 'girone' : 'gironi'}
+            </div>
           </div>
         </div>
       </Card>
 
-      <div className="grid gap-4 md:grid-cols-2 mt-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.8fr)]">
+        <Card variant="primary" className="overflow-hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-lg">Prossima partita CSRoma</CardTitle>
+              <CardMeta>È il contenuto principale per gli atleti: data, avversario, luogo e convocazioni.</CardMeta>
+            </div>
+            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-white/80 text-[color:var(--cs-primary)] shadow-sm sm:flex">
+              <CalendarDays className="h-5 w-5" aria-hidden="true" />
+            </div>
+          </div>
+          {!nextMatch && (
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-6 text-sm text-slate-500">
+              Nessuna prossima partita CSRoma disponibile.
+            </div>
+          )}
+          {nextMatch && (
+            <div className="mt-5 space-y-5">
+              <div className="flex flex-wrap gap-2">
+                <div className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm">
+                  <Clock3 className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
+                  {nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Data da definire'}
+                  {nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0,5)}` : ''}
+                </div>
+                <div className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm">
+                  <Trophy className="h-4 w-4 text-[color:var(--cs-accent)]" aria-hidden="true" />
+                  {nextMatch.match_day ? `Giornata ${nextMatch.match_day}` : 'Turno da definire'}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
+                  {clubTeamPlainName(nextMatch.home_club_team_id)} <span className="text-slate-400">vs</span> {clubTeamPlainName(nextMatch.away_club_team_id)}
+                </div>
+                <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm text-slate-700">
+                  <MapPin className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
+                  {nextMatch.location_text || 'Luogo da definire'}
+                </div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button className="min-h-11 sm:min-w-52" onClick={() => openConvocationModal(nextMatch)}>
+                  <Users className="h-4 w-4" aria-hidden="true" />
+                  Convocazioni
+                </Button>
+                <div className="text-sm text-slate-600">
+                  Apri la convocazione per vedere subito chi è stato inserito per la gara.
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+
         <Card>
           <CardTitle>Info campionato</CardTitle>
-          <div className="mt-2 text-sm text-slate-500">
+          <CardMeta>Riepilogo rapido del contesto competitivo selezionato.</CardMeta>
+          <div className="mt-4">
             {selectedChampionship ? (
-              <ul className="space-y-1">
-                <li><strong>Nome:</strong> {selectedChampionship.name}</li>
-                <li><strong>Sport:</strong> {selectedChampionship.sport}</li>
-                <li><strong>Stato:</strong> {selectedChampionship.status}</li>
-                <li><strong>Periodo:</strong> {formatDate(selectedChampionship.start_date)} - {formatDate(selectedChampionship.end_date)}</li>
-                <li><strong>Gironi:</strong> {currentGroups.length}</li>
-              </ul>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Nome</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{selectedChampionship.name}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Sport e stato</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{selectedChampionship.sport} · {selectedChampionship.status}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Periodo</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{formatDate(selectedChampionship.start_date)} - {formatDate(selectedChampionship.end_date)}</div>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Gironi</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{currentGroups.length}</div>
+                </div>
+              </div>
             ) : (
-              <p>Nessun campionato selezionato</p>
+              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
+                Nessun campionato selezionato.
+              </div>
             )}
           </div>
         </Card>
+      </div>
 
-        <Card>
-          <CardTitle>Prossima partita CSRoma</CardTitle>
-          {!nextMatch && (
-            <div className="mt-2 text-sm text-slate-500">Nessuna prossima partita CSRoma</div>
-          )}
-          {nextMatch && (
-            <div className="mt-2 space-y-2 text-sm text-slate-600">
-              <div className="text-base font-semibold">
-                {nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
-                {nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0,5)}` : ''}
-              </div>
-              <div className="font-medium">
-                {clubTeamPlainName(nextMatch.home_club_team_id)} vs {clubTeamPlainName(nextMatch.away_club_team_id)}
-              </div>
-              <div className="text-xs text-slate-500">
-                {nextMatch.location_text || 'Luogo da definire'}{nextMatch.match_day ? ` · Giornata ${nextMatch.match_day}` : ''}
-              </div>
-              <div>
-                <Button size="sm" onClick={() => openConvocationModal(nextMatch)}>
-                  Convocazioni
-                </Button>
-              </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+        <Card className="overflow-hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-lg">Classifica</CardTitle>
+              <CardMeta>La lettura deve restare veloce sia su desktop sia su mobile.</CardMeta>
             </div>
-          )}
+            <div className="rounded-2xl bg-slate-900 px-3 py-2 text-center text-white shadow-sm">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-300">Squadre</div>
+              <div className="text-lg font-bold leading-none">{sortedStandings.length}</div>
+            </div>
+          </div>
+          <div className="mt-4 overflow-x-auto hidden md:block">
+            <Table compact>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Squadra</th>
+                  <th>Pts</th>
+                  <th>G</th>
+                  <th>V</th>
+                  <th>P</th>
+                  <th>Set</th>
+                  <th>Punti</th>
+                </tr>
+              </thead>
+              <tbody>
+                {standingsWithNames.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="py-6 text-center text-slate-400">Nessun dato</td>
+                  </tr>
+                )}
+                {sortedStandings.map((row, index) => (
+                  <tr key={row.club_team_id} className={index < 3 ? 'bg-amber-50' : undefined}>
+                    <td className="font-semibold text-slate-500">{index + 1}</td>
+                    <td className="font-semibold">{row.team_name}</td>
+                    <td>{row.class_points}</td>
+                    <td>{row.matches_played}</td>
+                    <td>{row.wins}</td>
+                    <td>{row.losses}</td>
+                    <td>{row.sets_for}-{row.sets_against}</td>
+                    <td>{row.points_for}-{row.points_against}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+          <div className="mt-4 space-y-3 md:hidden">
+            {sortedStandings.length === 0 && (
+              <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+                Nessun dato
+              </div>
+            )}
+            {sortedStandings.map((row, index) => (
+              <div key={row.club_team_id} className={`rounded-2xl border p-4 shadow-sm ${index < 3 ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">#{index + 1}</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">{row.team_name}</div>
+                  </div>
+                  <div className="rounded-xl bg-slate-900 px-3 py-2 text-center text-white">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-300">Pts</div>
+                    <div className="text-lg font-bold leading-none">{row.class_points}</div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                  <div className="rounded-lg bg-white/70 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">G</div>
+                    <div className="font-semibold text-slate-900">{row.matches_played}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/70 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">V</div>
+                    <div className="font-semibold text-slate-900">{row.wins}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/70 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">P</div>
+                    <div className="font-semibold text-slate-900">{row.losses}</div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">Set</div>
+                    <div className="font-semibold text-slate-900">{row.sets_for}-{row.sets_against}</div>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500">Punti</div>
+                    <div className="font-semibold text-slate-900">{row.points_for}-{row.points_against}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="h-fit">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Calendario partite</CardTitle>
+              <CardMeta>Per gli atleti resta secondario: lo mostriamo solo quando serve.</CardMeta>
+            </div>
+            <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+              <CalendarDays className="h-5 w-5" aria-hidden="true" />
+            </div>
+          </div>
+          <div className="mt-4 space-y-4">
+            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-600">
+              {matches.length === 0 ? 'Nessuna partita disponibile nel girone selezionato.' : `${matches.length} partite caricate per questo girone.`}
+            </div>
+            <Button variant="outline" block onClick={() => setShowSchedule((prev) => !prev)} aria-expanded={showSchedule}>
+              <CalendarDays className="h-4 w-4" aria-hidden="true" />
+              {showSchedule ? 'Nascondi calendario' : 'Mostra calendario'}
+              {showSchedule ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
+            </Button>
+          </div>
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3 mt-4">
-        <div className="md:col-span-2">
-          <Card>
-            <CardTitle>Partite del girone</CardTitle>
-            <CardMeta>Modifica risultati (coach/admin) e sincronizzazione eventi match</CardMeta>
-            <div className="mt-4 overflow-x-auto hidden md:block">
-              <Table compact className="min-w-full">
-                <thead>
+      {showSchedule && (
+        <Card>
+          <CardTitle>Partite del girone</CardTitle>
+          <CardMeta>Calendario completo consultabile su richiesta, ottimizzato per mobile.</CardMeta>
+          <div className="mt-4 overflow-x-auto hidden md:block">
+            <Table compact className="min-w-full">
+              <thead>
+                <tr>
+                  <th>Giornata</th>
+                  <th>Data/Ora</th>
+                  <th>Partita</th>
+                  <th>Risultato</th>
+                  <th>Set</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matches.length === 0 && (
                   <tr>
-                    <th>Giornata</th>
-                    <th>Data/Ora</th>
-                    <th>Partita</th>
-                    {mode !== 'athlete' && <th>Stato</th>}
-                    <th>Risultato</th>
-                    <th>Set</th>
-                    {mode !== 'athlete' && <th>Calendario</th>}
-                    {mode !== 'athlete' && <th>Azioni</th>}
+                    <td colSpan={5} className="text-center text-slate-400 py-4">Nessuna partita</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {matches.length === 0 && (
-                    <tr>
-                      <td colSpan={mode === 'athlete' ? 5 : 8} className="text-center text-slate-400 py-4">Nessuna partita</td>
-                    </tr>
-                  )}
-                  {matches.map((m) => (
-                    <tr key={m.id}>
-                      <td>{m.match_day ?? '—'}</td>
-                      <td>
-                        {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}{' '}
-                        {m.start_time ? m.start_time.slice(0,5) : ''}
-                      </td>
-                      <td>
-                        <div className="font-semibold">
-                          {m.home_club_team?.name || clubTeamName(m.home_club_team_id)} vs {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
-                        </div>
-                        <div className="text-xs text-slate-500">{m.location_text || '—'}</div>
-                      </td>
-                      {mode !== 'athlete' && (
-                        <td>
-                          <Select
-                            value={m.status}
-                            onChange={(e) => changeStatus(m.id, e.target.value)}
-                            disabled={statusUpdating === m.id || mode === 'coach' && !coachTeamIds.size}
-                          >
-                            {Object.entries(STATUS_LABEL).map(([value, label]) => (
-                              <option key={value} value={value}>{label}</option>
-                            ))}
-                          </Select>
-                        </td>
-                      )}
-                      <td className="font-semibold">{formatScore(m.championship_match_sets)}</td>
-                      <td className="text-sm text-slate-600">{formatSetsDetail(m.championship_match_sets)}</td>
-                      {mode !== 'athlete' && (
-                        <td>
-                          {m.event_id ? (
-                            <span className="text-xs text-emerald-600 font-semibold">Sincronizzato</span>
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
-                        </td>
-                      )}
-                      {mode !== 'athlete' && (
-                        <td>
-                          <TableActions className="gap-2">
-                            <Button size="sm" variant="outline" onClick={() => openResultEditor(m)}>
-                              Modifica risultato
-                            </Button>
-                          </TableActions>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
-            <div className="mt-4 space-y-3 md:hidden">
-              {matches.length === 0 && (
-                <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
-                  Nessuna partita
-                </div>
-              )}
-              {matches.map((m) => (
-                <div key={m.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        {m.match_day ? `Giornata ${m.match_day}` : 'Giornata da definire'}
+                )}
+                {matches.map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.match_day ?? '—'}</td>
+                    <td>
+                      {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}{' '}
+                      {m.start_time ? m.start_time.slice(0,5) : ''}
+                    </td>
+                    <td>
+                      <div className="font-semibold">
+                        {m.home_club_team?.name || clubTeamName(m.home_club_team_id)} vs {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
                       </div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">
-                        {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}
-                        {m.start_time ? ` · ${m.start_time.slice(0,5)}` : ''}
-                      </div>
+                      <div className="text-xs text-slate-500">{m.location_text || '—'}</div>
+                    </td>
+                    <td className="font-semibold">{formatScore(m.championship_match_sets)}</td>
+                    <td className="text-sm text-slate-600">{formatSetsDetail(m.championship_match_sets)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </div>
+          <div className="mt-4 space-y-3 md:hidden">
+            {matches.length === 0 && (
+              <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
+                Nessuna partita
+              </div>
+            )}
+            {matches.map((m) => (
+              <div key={m.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      {m.match_day ? `Giornata ${m.match_day}` : 'Giornata da definire'}
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-                      {formatScore(m.championship_match_sets)}
-                    </span>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">
+                      {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}
+                      {m.start_time ? ` · ${m.start_time.slice(0,5)}` : ''}
+                    </div>
                   </div>
-                  <div className="mt-3 text-sm font-semibold text-slate-900">
-                    {m.home_club_team?.name || clubTeamName(m.home_club_team_id)}
-                  </div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">vs</div>
-                  <div className="text-sm font-semibold text-slate-900">
-                    {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
-                  </div>
-                  <div className="mt-3 space-y-1 text-sm text-slate-600">
-                    <div><span className="font-medium text-slate-700">Set:</span> {formatSetsDetail(m.championship_match_sets) || '—'}</div>
-                    <div><span className="font-medium text-slate-700">Luogo:</span> {m.location_text || '—'}</div>
-                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    {formatScore(m.championship_match_sets)}
+                  </span>
                 </div>
-              ))}
-            </div>
-
-            <Modal
-              open={resultModalOpen}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setResultModalOpen(false)
-                  setEditingMatchId(null)
-                  setResultEditingMatch(null)
-                  setResultInput('')
-                }
-              }}
-              title="Modifica risultato"
-              description={resultEditingMatch ? `${clubTeamName(resultEditingMatch.home_club_team_id)} vs ${clubTeamName(resultEditingMatch.away_club_team_id)}` : ''}
-            >
-              <div className="space-y-3">
-                <p className="text-sm text-slate-500">Inserisci i set separati da virgola (es: 25-20, 25-21, 28-26)</p>
-                <Input
-                  placeholder="25-20, 25-21, 28-26"
-                  value={resultInput}
-                  onChange={(e) => setResultInput(e.target.value)}
-                />
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => {
-                    setResultModalOpen(false)
-                    setEditingMatchId(null)
-                    setResultEditingMatch(null)
-                    setResultInput('')
-                  }}>Annulla</Button>
-                  <Button onClick={saveResult} disabled={savingResult}>
-                    {savingResult ? 'Salvataggio...' : 'Salva'}
-                  </Button>
+                <div className="mt-3 text-sm font-semibold text-slate-900">
+                  {m.home_club_team?.name || clubTeamName(m.home_club_team_id)}
+                </div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">vs</div>
+                <div className="text-sm font-semibold text-slate-900">
+                  {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
+                </div>
+                <div className="mt-3 space-y-1 text-sm text-slate-600">
+                  <div><span className="font-medium text-slate-700">Set:</span> {formatSetsDetail(m.championship_match_sets) || '—'}</div>
+                  <div><span className="font-medium text-slate-700">Luogo:</span> {m.location_text || '—'}</div>
                 </div>
               </div>
-            </Modal>
-          </Card>
-        </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
-        <div>
-          <Card>
-            <CardTitle>Classifica</CardTitle>
-            <div className="overflow-x-auto hidden md:block">
-              <Table compact>
-                <thead>
-                  <tr>
-                    <th>Squadra</th>
-                    <th>Pts</th>
-                    <th>G</th>
-                    <th>V</th>
-                    <th>P</th>
-                    <th>Set</th>
-                    <th>Punti</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {standingsWithNames.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="text-center text-slate-400 py-4">Nessun dato</td>
-                    </tr>
-                  )}
-                  {sortedStandings.map((row) => (
-                      <tr key={row.club_team_id}>
-                        <td>{row.team_name}</td>
-                        <td>{row.class_points}</td>
-                        <td>{row.matches_played}</td>
-                        <td>{row.wins}</td>
-                        <td>{row.losses}</td>
-                        <td>{row.sets_for}-{row.sets_against}</td>
-                        <td>{row.points_for}-{row.points_against}</td>
-                      </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </div>
-            <div className="space-y-3 md:hidden">
-              {sortedStandings.length === 0 && (
-                <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
-                  Nessun dato
-                </div>
-              )}
-              {sortedStandings.map((row, index) => (
-                <div key={row.club_team_id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">#{index + 1}</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">{row.team_name}</div>
-                    </div>
-                    <div className="rounded-xl bg-slate-900 px-3 py-2 text-center text-white">
-                      <div className="text-[11px] uppercase tracking-wide text-slate-300">Pts</div>
-                      <div className="text-lg font-bold leading-none">{row.class_points}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-lg bg-slate-50 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-slate-500">G</div>
-                      <div className="font-semibold text-slate-900">{row.matches_played}</div>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-slate-500">V</div>
-                      <div className="font-semibold text-slate-900">{row.wins}</div>
-                    </div>
-                    <div className="rounded-lg bg-slate-50 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-slate-500">P</div>
-                      <div className="font-semibold text-slate-900">{row.losses}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                    <div className="rounded-lg border border-slate-200 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-slate-500">Set</div>
-                      <div className="font-semibold text-slate-900">{row.sets_for}-{row.sets_against}</div>
-                    </div>
-                    <div className="rounded-lg border border-slate-200 px-3 py-2">
-                      <div className="text-[11px] uppercase tracking-wide text-slate-500">Punti</div>
-                      <div className="font-semibold text-slate-900">{row.points_for}-{row.points_against}</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+      <Modal
+        open={resultModalOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setResultModalOpen(false)
+            setEditingMatchId(null)
+            setResultEditingMatch(null)
+            setResultInput('')
+          }
+        }}
+        title="Modifica risultato"
+        description={resultEditingMatch ? `${clubTeamName(resultEditingMatch.home_club_team_id)} vs ${clubTeamName(resultEditingMatch.away_club_team_id)}` : ''}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Inserisci i set separati da virgola (es: 25-20, 25-21, 28-26)</p>
+          <Input
+            placeholder="25-20, 25-21, 28-26"
+            value={resultInput}
+            onChange={(e) => setResultInput(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => {
+              setResultModalOpen(false)
+              setEditingMatchId(null)
+              setResultEditingMatch(null)
+              setResultInput('')
+            }}>Annulla</Button>
+            <Button onClick={saveResult} disabled={savingResult}>
+              {savingResult ? 'Salvataggio...' : 'Salva'}
+            </Button>
+          </div>
         </div>
-      </div>
+      </Modal>
 
       <Modal
         fullscreenOnMobile

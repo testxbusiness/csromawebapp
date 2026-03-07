@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardTitle, CardMeta, Table, TableActions, Button, Input, Select, toast, Modal } from '@/components/ui'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
+import { CalendarDays, Clock3, MapPin, Plus, Trash2, Trophy, Upload, Users } from 'lucide-react'
 
 type ClubTeam = {
   id: string
@@ -1265,46 +1266,55 @@ export default function ChampionshipsManager() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <Card variant="primary" className="overflow-hidden">
+        <div className="flex flex-col gap-5">
           <div>
-            <CardTitle>Campionati</CardTitle>
-            <CardMeta>Seleziona o crea un campionato, importa il calendario, gestisci risultati e classifica</CardMeta>
+            <CardTitle className="text-lg sm:text-xl">Campionati</CardTitle>
+            <CardMeta>Vista operativa per coach: risultati, info gara, convocazioni e monitoraggio del girone.</CardMeta>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Select
-              value={selectedChampionshipId || ''}
-              onChange={(e) => setSelectedChampionshipId(e.target.value || null)}
-            >
-              {championships.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · {c.sport} {c.status === 'published' ? '· Pubblicato' : ''}
-                </option>
-              ))}
-            </Select>
-            <Select
-              value={selectedGroupId || ''}
-              onChange={(e) => {
-                const val = e.target.value
-                setSelectedGroupId(val || null)
-                setImportGroupId(val || null)
-                initGroupTeamsSelection(val || null)
-              }}
-              disabled={!currentGroups.length}
-            >
-              {currentGroups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name} · {g.phase}
-                </option>
-              ))}
-            </Select>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Campionato</label>
+              <Select
+                value={selectedChampionshipId || ''}
+                onChange={(e) => setSelectedChampionshipId(e.target.value || null)}
+              >
+                {championships.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.sport} {c.status === 'published' ? '· Pubblicato' : ''}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Girone</label>
+              <Select
+                value={selectedGroupId || ''}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setSelectedGroupId(val || null)
+                  setImportGroupId(val || null)
+                  initGroupTeamsSelection(val || null)
+                }}
+                disabled={!currentGroups.length}
+              >
+                {currentGroups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} · {g.phase}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex flex-wrap gap-2">
             {mode !== 'athlete' && (
-              <Button variant="outline" onClick={() => setShowGroupModal(true)} disabled={!selectedChampionshipId}>
+              <Button variant="outline" className="min-h-11" onClick={() => setShowGroupModal(true)} disabled={!selectedChampionshipId}>
+                <Plus className="h-4 w-4" aria-hidden="true" />
                 Aggiungi girone
               </Button>
             )}
             <Button
               variant="outline"
+              className="min-h-11"
               onClick={() => {
                 if (!selectedGroupId) return
                 setImportGroupId(selectedGroupId)
@@ -1312,11 +1322,13 @@ export default function ChampionshipsManager() {
               }}
               disabled={!selectedGroupId || mode === 'athlete'}
             >
+              <Upload className="h-4 w-4" aria-hidden="true" />
               Importa calendario
             </Button>
             {mode !== 'athlete' && (
               <Button
                 variant="outline"
+                className="min-h-11"
                 onClick={() => {
                   if (!selectedGroupId) return
                   setImportResultsGroupId(selectedGroupId)
@@ -1324,27 +1336,45 @@ export default function ChampionshipsManager() {
                 }}
                 disabled={!selectedGroupId}
               >
+                <Upload className="h-4 w-4" aria-hidden="true" />
                 Importa risultati
               </Button>
             )}
             {mode !== 'athlete' && (
-              <Button variant="outline" onClick={() => { setShowTeamsModal(true); initGroupTeamsSelection(selectedGroupId) }} disabled={!selectedGroupId}>
+              <Button variant="outline" className="min-h-11" onClick={() => { setShowTeamsModal(true); initGroupTeamsSelection(selectedGroupId) }} disabled={!selectedGroupId}>
+                <Users className="h-4 w-4" aria-hidden="true" />
                 Gestisci squadre
               </Button>
             )}
             {mode !== 'athlete' && (
-              <Button variant="outline" onClick={() => handleDeleteCalendar('group')} disabled={!selectedGroupId || deleting !== null}>
+              <Button variant="outline" className="min-h-11" onClick={() => handleDeleteCalendar('group')} disabled={!selectedGroupId || deleting !== null}>
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
                 {deleting === 'group' ? 'Eliminazione...' : 'Elimina calendario girone'}
               </Button>
             )}
             {mode !== 'athlete' && (
               <>
-                <Button variant="danger" onClick={() => handleDeleteCalendar('championship')} disabled={!selectedChampionshipId || deleting !== null}>
+                <Button variant="danger" className="min-h-11" onClick={() => handleDeleteCalendar('championship')} disabled={!selectedChampionshipId || deleting !== null}>
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
                   {deleting === 'championship' ? 'Eliminazione...' : 'Elimina tutto il campionato'}
                 </Button>
-                <Button onClick={() => setShowCreateModal(true)}>Crea campionato</Button>
+                <Button className="min-h-11" onClick={() => setShowCreateModal(true)}>
+                  <Trophy className="h-4 w-4" aria-hidden="true" />
+                  Crea campionato
+                </Button>
               </>
             )}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
+              <Trophy className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
+              {selectedChampionship ? selectedChampionship.name : 'Nessun campionato selezionato'}
+            </div>
+            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
+              <Users className="h-4 w-4 text-[color:var(--cs-accent)]" aria-hidden="true" />
+              {currentGroups.length} {currentGroups.length === 1 ? 'girone attivo' : 'gironi attivi'}
+            </div>
           </div>
         </div>
       </Card>
@@ -1352,40 +1382,57 @@ export default function ChampionshipsManager() {
       <div className="grid gap-4 md:grid-cols-2 mt-4">
         <Card>
           <CardTitle>Info campionato</CardTitle>
-          <div className="mt-2 text-sm text-slate-500">
+          <CardMeta>Stato del campionato e perimetro del girone selezionato.</CardMeta>
+          <div className="mt-4 text-sm text-slate-500">
             {selectedChampionship ? (
-              <ul className="space-y-1">
-                <li><strong>Nome:</strong> {selectedChampionship.name}</li>
-                <li><strong>Sport:</strong> {selectedChampionship.sport}</li>
-                <li><strong>Stato:</strong> {selectedChampionship.status}</li>
-                <li><strong>Periodo:</strong> {formatDate(selectedChampionship.start_date)} - {formatDate(selectedChampionship.end_date)}</li>
-                <li><strong>Gironi:</strong> {currentGroups.length}</li>
-              </ul>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl bg-slate-50 px-4 py-3"><div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Nome</div><div className="mt-1 text-sm font-semibold text-slate-900">{selectedChampionship.name}</div></div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3"><div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Sport e stato</div><div className="mt-1 text-sm font-semibold text-slate-900">{selectedChampionship.sport} · {selectedChampionship.status}</div></div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3"><div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Periodo</div><div className="mt-1 text-sm font-semibold text-slate-900">{formatDate(selectedChampionship.start_date)} - {formatDate(selectedChampionship.end_date)}</div></div>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3"><div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Gironi</div><div className="mt-1 text-sm font-semibold text-slate-900">{currentGroups.length}</div></div>
+              </div>
             ) : (
-              <p>Nessun campionato selezionato</p>
+              <p className="rounded-2xl border border-dashed border-slate-300 px-4 py-6">Nessun campionato selezionato</p>
             )}
           </div>
         </Card>
 
-        <Card>
-          <CardTitle>Prossima partita CSRoma</CardTitle>
+        <Card variant="primary" className="overflow-hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>Prossima partita CSRoma</CardTitle>
+              <CardMeta>Accesso rapido a convocazioni e dati operativi della prossima gara.</CardMeta>
+            </div>
+            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-white/80 text-[color:var(--cs-primary)] shadow-sm sm:flex">
+              <CalendarDays className="h-5 w-5" aria-hidden="true" />
+            </div>
+          </div>
           {!nextMatch && (
-            <div className="mt-2 text-sm text-slate-500">Nessuna prossima partita CSRoma</div>
+            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-6 text-sm text-slate-500">Nessuna prossima partita CSRoma</div>
           )}
           {nextMatch && (
-            <div className="mt-2 space-y-2 text-sm text-slate-600">
-              <div className="text-base font-semibold">
-                {nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
-                {nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0,5)}` : ''}
+            <div className="mt-5 space-y-4 text-sm text-slate-600">
+              <div className="flex flex-wrap gap-2">
+                <div className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 font-semibold text-slate-800 shadow-sm">
+                  <Clock3 className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
+                  {nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                  {nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0,5)}` : ''}
+                </div>
+                <div className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 font-semibold text-slate-800 shadow-sm">
+                  <Trophy className="h-4 w-4 text-[color:var(--cs-accent)]" aria-hidden="true" />
+                  {nextMatch.match_day ? `Giornata ${nextMatch.match_day}` : 'Turno da definire'}
+                </div>
               </div>
-              <div className="font-medium">
+              <div className="text-lg font-semibold text-slate-950">
                 {clubTeamPlainName(nextMatch.home_club_team_id)} vs {clubTeamPlainName(nextMatch.away_club_team_id)}
               </div>
-              <div className="text-xs text-slate-500">
-                {nextMatch.location_text || 'Luogo da definire'}{nextMatch.match_day ? ` · Giornata ${nextMatch.match_day}` : ''}
+              <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm text-slate-700">
+                <MapPin className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
+                {nextMatch.location_text || 'Luogo da definire'}
               </div>
               <div>
-                <Button size="sm" onClick={() => openConvocationModal(nextMatch)}>
+                <Button size="sm" className="min-h-11" onClick={() => openConvocationModal(nextMatch)}>
+                  <Users className="h-4 w-4" aria-hidden="true" />
                   Convocazioni
                 </Button>
               </div>

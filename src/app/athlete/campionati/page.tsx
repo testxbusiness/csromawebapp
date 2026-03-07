@@ -6,7 +6,7 @@ import AthleteChampionshipsManager from '@/components/athlete/AthleteChampionshi
 export default function AthleteChampionshipsPage() {
   return (
     <>
-      <PageHeader title="Campionati" subtitle="Risultati, classifiche e calendario partite" />
+      <PageHeader title="Campionati" subtitle="Prossima partita CSRoma, convocazioni e classifica del girone" />
       <AthleteChampionshipsManager />
     </>
   )
