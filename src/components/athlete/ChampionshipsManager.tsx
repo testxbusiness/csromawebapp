@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardTitle, CardMeta, Table, Button, Input, Select, toast, Modal } from '@/components/ui'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
 import { CalendarDays, ChevronDown, ChevronUp, Clock3, MapPin, Trophy, Users } from 'lucide-react'
+import { ChampionshipInfoPanel, ConvocationPublishedList, NextMatchPanel, StandingsPanel } from '@/components/championship/ChampionshipPanels'
 
 type ClubTeam = {
   id: string
@@ -1141,183 +1142,31 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.8fr)]">
-        <Card variant="primary" className="overflow-hidden">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg">Prossima partita CSRoma</CardTitle>
-              <CardMeta>È il contenuto principale per gli atleti: data, avversario, luogo e convocazioni.</CardMeta>
-            </div>
-            <div className="hidden h-12 w-12 items-center justify-center rounded-2xl bg-white/80 text-[color:var(--cs-primary)] shadow-sm sm:flex">
-              <CalendarDays className="h-5 w-5" aria-hidden="true" />
-            </div>
-          </div>
-          {!nextMatch && (
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-6 text-sm text-slate-500">
-              Nessuna prossima partita CSRoma disponibile.
-            </div>
-          )}
-          {nextMatch && (
-            <div className="mt-5 space-y-5">
-              <div className="flex flex-wrap gap-2">
-                <div className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm">
-                  <Clock3 className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
-                  {nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Data da definire'}
-                  {nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0,5)}` : ''}
-                </div>
-                <div className="inline-flex min-h-11 items-center gap-2 rounded-full bg-white px-4 text-sm font-semibold text-slate-800 shadow-sm">
-                  <Trophy className="h-4 w-4 text-[color:var(--cs-accent)]" aria-hidden="true" />
-                  {nextMatch.match_day ? `Giornata ${nextMatch.match_day}` : 'Turno da definire'}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
-                  {clubTeamPlainName(nextMatch.home_club_team_id)} <span className="text-slate-400">vs</span> {clubTeamPlainName(nextMatch.away_club_team_id)}
-                </div>
-                <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm text-slate-700">
-                  <MapPin className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
-                  {nextMatch.location_text || 'Luogo da definire'}
-                </div>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Button className="min-h-11 sm:min-w-52" onClick={() => openConvocationModal(nextMatch)}>
-                  <Users className="h-4 w-4" aria-hidden="true" />
-                  Convocazioni
-                </Button>
-                <div className="text-sm text-slate-600">
-                  Apri la convocazione per vedere subito chi è stato inserito per la gara.
-                </div>
-              </div>
-            </div>
-          )}
-        </Card>
+        <NextMatchPanel
+          empty={!nextMatch}
+          matchDateLabel={nextMatch ? `${nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Data da definire'}${nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0, 5)}` : ''}` : ''}
+          roundLabel={nextMatch?.match_day ? `Giornata ${nextMatch.match_day}` : 'Turno da definire'}
+          matchupLabel={nextMatch ? `${clubTeamPlainName(nextMatch.home_club_team_id)} vs ${clubTeamPlainName(nextMatch.away_club_team_id)}` : ''}
+          locationLabel={nextMatch?.location_text || 'Luogo da definire'}
+          onOpenConvocations={() => nextMatch && openConvocationModal(nextMatch)}
+        />
 
-        <Card>
-          <CardTitle>Info campionato</CardTitle>
-          <CardMeta>Riepilogo rapido del contesto competitivo selezionato.</CardMeta>
-          <div className="mt-4">
-            {selectedChampionship ? (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Nome</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">{selectedChampionship.name}</div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Sport e stato</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">{selectedChampionship.sport} · {selectedChampionship.status}</div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Periodo</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">{formatDate(selectedChampionship.start_date)} - {formatDate(selectedChampionship.end_date)}</div>
-                </div>
-                <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Gironi</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">{currentGroups.length}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">
-                Nessun campionato selezionato.
-              </div>
-            )}
-          </div>
-        </Card>
+        <ChampionshipInfoPanel
+          description="Riepilogo rapido del contesto competitivo selezionato."
+          items={selectedChampionship ? [
+            { label: 'Nome', value: selectedChampionship.name },
+            { label: 'Sport e stato', value: `${selectedChampionship.sport} · ${selectedChampionship.status}` },
+            { label: 'Periodo', value: `${formatDate(selectedChampionship.start_date)} - ${formatDate(selectedChampionship.end_date)}` },
+            { label: 'Gironi', value: String(currentGroups.length) },
+          ] : null}
+          emptyText="Nessun campionato selezionato."
+        />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
-        <Card className="overflow-hidden">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg">Classifica</CardTitle>
-              <CardMeta>La lettura deve restare veloce sia su desktop sia su mobile.</CardMeta>
-            </div>
-            <div className="rounded-2xl bg-slate-900 px-3 py-2 text-center text-white shadow-sm">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-slate-300">Squadre</div>
-              <div className="text-lg font-bold leading-none">{sortedStandings.length}</div>
-            </div>
-          </div>
-          <div className="mt-4 overflow-x-auto hidden md:block">
-            <Table compact>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Squadra</th>
-                  <th>Pts</th>
-                  <th>G</th>
-                  <th>V</th>
-                  <th>P</th>
-                  <th>Set</th>
-                  <th>Punti</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standingsWithNames.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="py-6 text-center text-slate-400">Nessun dato</td>
-                  </tr>
-                )}
-                {sortedStandings.map((row, index) => (
-                  <tr key={row.club_team_id} className={index < 3 ? 'bg-amber-50' : undefined}>
-                    <td className="font-semibold text-slate-500">{index + 1}</td>
-                    <td className="font-semibold">{row.team_name}</td>
-                    <td>{row.class_points}</td>
-                    <td>{row.matches_played}</td>
-                    <td>{row.wins}</td>
-                    <td>{row.losses}</td>
-                    <td>{row.sets_for}-{row.sets_against}</td>
-                    <td>{row.points_for}-{row.points_against}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </div>
-          <div className="mt-4 space-y-3 md:hidden">
-            {sortedStandings.length === 0 && (
-              <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
-                Nessun dato
-              </div>
-            )}
-            {sortedStandings.map((row, index) => (
-              <div key={row.club_team_id} className={`rounded-2xl border p-4 shadow-sm ${index < 3 ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">#{index + 1}</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">{row.team_name}</div>
-                  </div>
-                  <div className="rounded-xl bg-slate-900 px-3 py-2 text-center text-white">
-                    <div className="text-[11px] uppercase tracking-wide text-slate-300">Pts</div>
-                    <div className="text-lg font-bold leading-none">{row.class_points}</div>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                  <div className="rounded-lg bg-white/70 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-wide text-slate-500">G</div>
-                    <div className="font-semibold text-slate-900">{row.matches_played}</div>
-                  </div>
-                  <div className="rounded-lg bg-white/70 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-wide text-slate-500">V</div>
-                    <div className="font-semibold text-slate-900">{row.wins}</div>
-                  </div>
-                  <div className="rounded-lg bg-white/70 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-wide text-slate-500">P</div>
-                    <div className="font-semibold text-slate-900">{row.losses}</div>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-wide text-slate-500">Set</div>
-                    <div className="font-semibold text-slate-900">{row.sets_for}-{row.sets_against}</div>
-                  </div>
-                  <div className="rounded-lg border border-slate-200 bg-white/70 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-wide text-slate-500">Punti</div>
-                    <div className="font-semibold text-slate-900">{row.points_for}-{row.points_against}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        <StandingsPanel rows={sortedStandings} highlightTopThree />
 
-        <Card className="h-fit">
+        <Card variant="primary" className="h-fit">
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>Calendario partite</CardTitle>
@@ -1341,7 +1190,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       </div>
 
       {showSchedule && (
-        <Card>
+        <Card variant="primary">
           <CardTitle>Partite del girone</CardTitle>
           <CardMeta>Calendario completo consultabile su richiesta, ottimizzato per mobile.</CardMeta>
           <div className="mt-4 overflow-x-auto hidden md:block">
@@ -1510,26 +1359,23 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
 
             {!convocationLoading && mode === 'athlete' && (
               <>
-                {convocation?.championship_match_convocation_members?.length ? (
-                  <div className="space-y-2">
-                    {convocation.championship_match_convocation_members.map((cm) => {
-                      const labelFromProfile = cm.profiles?.first_name || cm.profiles?.last_name
-                        ? `${cm.profiles?.first_name || ''} ${cm.profiles?.last_name || ''}`.trim()
-                        : ''
-                      const labelFromTMProfile = cm.team_members?.profiles?.first_name || cm.team_members?.profiles?.last_name
-                        ? `${cm.team_members?.profiles?.first_name || ''} ${cm.team_members?.profiles?.last_name || ''}`.trim()
-                        : ''
-                      const label = labelFromProfile || labelFromTMProfile || 'Atleta'
-                      return (
-                        <div key={cm.team_member_id} className="rounded border border-slate-200 px-3 py-2 text-sm">
-                          {label}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-sm text-slate-500">Le convocazioni non sono ancora state pubblicate</div>
-                )}
+                <ConvocationPublishedList
+                  members={(convocation?.championship_match_convocation_members || []).map((cm) => {
+                    const labelFromProfile = cm.profiles?.first_name || cm.profiles?.last_name
+                      ? `${cm.profiles?.first_name || ''} ${cm.profiles?.last_name || ''}`.trim()
+                      : ''
+                    const labelFromTMProfile = cm.team_members?.profiles?.first_name || cm.team_members?.profiles?.last_name
+                      ? `${cm.team_members?.profiles?.first_name || ''} ${cm.team_members?.profiles?.last_name || ''}`.trim()
+                      : ''
+                    const label = labelFromProfile || labelFromTMProfile || 'Atleta'
+                    return {
+                      id: cm.team_member_id,
+                      label,
+                      jerseyNumber: cm.team_members?.jersey_number ? `#${cm.team_members.jersey_number}` : undefined,
+                    }
+                  })}
+                  emptyText="Le convocazioni non sono ancora state pubblicate"
+                />
               </>
             )}
 

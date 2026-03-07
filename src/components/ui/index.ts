@@ -6,6 +6,7 @@ export { Select } from './Select'
 export { Field as FieldWrap } from './Field'
 export { Table, TableActions } from './Table'
 export { Stat } from './Stat'
+export { Badge } from './Badge'
 export { 
   Dialog,
   DialogTrigger,
