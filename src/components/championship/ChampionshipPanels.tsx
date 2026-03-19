@@ -280,7 +280,7 @@ export function ConvocationPublishedList({ members, emptyText }: { members: Conv
   }
 
   return (
-    <div className="space-y-2">
+    <div className="max-h-[min(24rem,calc(100vh-20rem))] space-y-2 overflow-y-auto pr-1">
       {members.map((member) => (
         <div key={member.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
           <span className="font-medium text-slate-900">{member.label}</span>
@@ -299,7 +299,7 @@ export function EditableConvocationList({ members, canEdit, onToggle }: Editable
   }
 
   return (
-    <div className="space-y-2">
+    <div className="max-h-[min(24rem,calc(100vh-20rem))] space-y-2 overflow-y-auto pr-1">
       {members.map((member) => (
         <label
           key={member.id}

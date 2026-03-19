@@ -1385,7 +1385,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
                   <div className="text-sm text-slate-500">Nessun atleta disponibile per questa squadra</div>
                 )}
                 {convocationTeamMembers.length > 0 && (
-                  <div className="max-h-64 overflow-y-auto rounded border border-slate-200 divide-y divide-slate-100">
+                  <div className="max-h-[min(24rem,calc(100vh-20rem))] overflow-y-auto rounded border border-slate-200 divide-y divide-slate-100 pr-1">
                     {convocationTeamMembers.map((tm) => {
                       const selected = convocationSelection.has(tm.id)
                       const name = tm.profiles ? `${tm.profiles.first_name || ''} ${tm.profiles.last_name || ''}`.trim() : tm.id
