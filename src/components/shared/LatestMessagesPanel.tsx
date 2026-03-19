@@ -36,7 +36,7 @@ export default function LatestMessagesPanel({
 
   return (
     <div className="cs-card cs-card--primary">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold" id={anchorId}>{title}</h3>
         <Link href={viewAllHref} className="cs-btn cs-btn--ghost cs-btn--sm">Vedi tutti</Link>
       </div>
@@ -46,7 +46,7 @@ export default function LatestMessagesPanel({
       ) : (
         <div className="space-y-2">
           {items.map((m) => (
-            <div key={m.id} className="cs-card p-3 flex items-start gap-3">
+            <div key={m.id} className="cs-card flex flex-col gap-3 p-3 sm:flex-row sm:items-start">
               <div className="cs-avatar" aria-hidden style={{ width: 32, height: 32 }}>
                 <span style={{ fontSize: 12, fontWeight: 700 }}>{initials(m.from)}</span>
               </div>
@@ -62,8 +62,8 @@ export default function LatestMessagesPanel({
                   {m.preview || ''}
                 </div>
               </div>
-              <div>
-                <button className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => onDetail(m.id)}>Dettagli</button>
+              <div className="w-full sm:w-auto">
+                <button className="cs-btn cs-btn--outline cs-btn--sm w-full sm:w-auto" onClick={() => onDetail(m.id)}>Dettagli</button>
               </div>
             </div>
           ))}

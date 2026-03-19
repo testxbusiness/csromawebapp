@@ -531,7 +531,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       >
         <div className="absolute inset-0 bg-slate-900/70"></div>
         <div className="relative p-6 md:p-8">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 id="athlete-welcome" className="text-2xl md:text-3xl font-semibold">
                 Bentornato, {profile.first_name} {profile.last_name}
@@ -544,7 +544,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
             </div>
             <button
               id="athlete-start-tour"
-              className="cs-btn cs-btn--ghost"
+              className="cs-btn cs-btn--ghost w-full sm:w-auto"
               onClick={() => startNextStep('athlete')}
             >
               Guida
@@ -616,14 +616,14 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                     className="cs-list-item cursor-pointer hover:shadow-md transition-shadow"
                     onClick={() => setSelectedTeamId(membership.team.id)}
                   >
-                    <div className="flex justify-between items-start mb-2">
+                    <div className="mb-2 flex w-full items-start justify-between">
                       <div>
                         <div className="font-medium">{membership.team.name}</div>
                         <div className="text-sm text-secondary">Attività: {membership.team.activity?.name}</div>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid w-full grid-cols-1 gap-3 text-sm sm:grid-cols-2 sm:gap-4">
                       {membership.jersey_number && (
                         <div>
                           <span className="text-secondary">Maglia:</span>
@@ -681,7 +681,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
             <div className="cs-list">
               {feeInstallments.slice(0, 3).map((installment) => (
                 <div key={installment.id} className="cs-list-item">
-                  <div className="text-sm">
+                  <div className="min-w-0 text-sm">
                     <div className="font-medium">
                       {installment.membership_fee.name} - Rata {installment.installment_number}
                     </div>
@@ -692,7 +692,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                       Scadenza: {new Date(installment.due_date).toLocaleDateString('it-IT')}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="w-full text-left sm:w-auto sm:text-right">
                     <div className="font-medium">€{installment.amount}</div>
                     <span className={`cs-badge ${
                       installment.status==='paid' ? 'cs-badge--success' :

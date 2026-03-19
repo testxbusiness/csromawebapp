@@ -264,9 +264,9 @@ a{ color:inherit; text-decoration:none }
 /* ----------------------------
    11) Layout wrappers
    ---------------------------- */
-.cs-page{ min-height:100dvh; display:flex; flex-direction:column }
-.cs-layout{ display:flex; min-height: calc(100dvh - 80px); }
-.cs-main{ flex:1; padding: 24px 16px }
+.cs-page{ min-height:100dvh; display:flex; flex-direction:column; overflow-x:clip }
+.cs-layout{ display:flex; min-height: calc(100dvh - 80px); width:100%; min-width:0 }
+.cs-main{ flex:1; min-width:0; width:100%; padding: 24px 16px }
 .cs-navbar, .cs-sidebar, .cs-bottomnav{
   background: var(--cs-surface); border-bottom:1px solid var(--cs-border)
 }
@@ -490,6 +490,12 @@ a{ color:inherit; text-decoration:none }
   border-radius: var(--cs-r-md);
   background: var(--cs-surface);
 }
+@media (max-width: 640px) {
+  .cs-list-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
 .cs-list-item__title {
   font-weight: 600;
 }
@@ -530,6 +536,9 @@ a{ color:inherit; text-decoration:none }
   height:64px;
   display:flex; align-items:center; justify-content:space-between;
   gap:12px;
+}
+@media (max-width: 640px){
+  .cs-navbar__inner{ gap:8px; }
 }
 
 /* === Theme toggle styles (dimensioni/hover/animazione) === */

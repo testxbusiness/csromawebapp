@@ -37,7 +37,7 @@ export default function UpcomingEventsPanel({
 
   return (
     <div className="cs-card cs-card--primary">
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold" id={anchorId}>{title}</h3>
         <Link href={viewAllHref} className="cs-btn cs-btn--ghost cs-btn--sm">Vedi tutti</Link>
       </div>
@@ -47,7 +47,7 @@ export default function UpcomingEventsPanel({
       ) : (
         <div className="space-y-2">
           {items.map((ev) => (
-            <div key={ev.id} className="cs-card p-3 flex items-start gap-3">
+            <div key={ev.id} className="cs-card flex flex-col gap-3 p-3 sm:flex-row sm:items-start">
               {/* Date badge */}
               <div className="flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-[color:var(--cs-surface-2)] text-sm" aria-hidden>
                 <div className="font-bold leading-none">{fmtDay(ev.start)}</div>
@@ -60,14 +60,14 @@ export default function UpcomingEventsPanel({
                   <span className="text-xs text-secondary">{ev.start.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}{ev.end ? ` — ${ev.end.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}` : ''}</span>
                 </div>
                 {ev.location && (
-                  <div className="text-sm flex items-center gap-1"><IconPin /> {ev.location}</div>
+                  <div className="flex items-center gap-1 break-words text-sm"><IconPin /> {ev.location}</div>
                 )}
                 {ev.subtitle && (
                   <div className="text-sm text-secondary truncate">{ev.subtitle}</div>
                 )}
               </div>
-              <div>
-                <button className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => onDetail(ev.id)}>Dettagli</button>
+              <div className="w-full sm:w-auto">
+                <button className="cs-btn cs-btn--outline cs-btn--sm w-full sm:w-auto" onClick={() => onDetail(ev.id)}>Dettagli</button>
               </div>
             </div>
           ))}
