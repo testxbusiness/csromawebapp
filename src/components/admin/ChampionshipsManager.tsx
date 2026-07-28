@@ -33,6 +33,7 @@ import { persistImportedMatches, persistImportedResults } from '@/components/cha
 import { MatchInfoModal, MatchResultModal } from '@/components/championship/ChampionshipMatchModals'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime, parseMatchResult } from '@/components/championship/formatters'
 import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
+import { ChampionshipCalendarImportModal, ChampionshipResultsImportModal } from '@/components/championship/ChampionshipImportModals'
 
 interface ChampionshipsManagerProps {
   mode?: ManagerMode
@@ -1231,77 +1232,8 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
         </Modal>
       )}
 
-      {/* Modal import calendario */}
-      <Modal
-        fullscreenOnMobile
-        open={showImportModal}
-        onOpenChange={setShowImportModal}
-        title="Importa calendario (Excel)"
-        description="Colonne attese: giornata, data (YYYY-MM-DD), ora (HH:MM), casa, casa_nome, ospiti, ospiti_nome, luogo, note."
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="cs-label">Girone</label>
-            <Select
-              value={importGroupId || ''}
-              onChange={(e) => setImportGroupId(e.target.value || null)}
-            >
-              {currentGroups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="cs-label">File Excel</label>
-            <Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
-          </div>
-          <div className="text-sm text-slate-600">
-            Usa i codici squadra presenti in anagrafica (colonna "code"). Le partite saranno sincronizzate con il calendario per le squadre CSRoma.
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setShowImportModal(false)}>Annulla</Button>
-            <Button onClick={handleImportMatches} disabled={importing || mode === 'athlete'}>
-              {importing ? 'Importazione...' : 'Importa calendario'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Modal import risultati */}
-      <Modal
-        fullscreenOnMobile
-        open={showImportResultsModal}
-        onOpenChange={setShowImportResultsModal}
-        title="Importa risultati (Excel)"
-        description="Colonne attese: giornata, casa, ospiti, risultato_set (es: 25-20, 25-21, 23-25, 25-22)."
-      >
-        <div className="space-y-3">
-          <div>
-            <label className="cs-label">Girone</label>
-            <Select
-              value={importResultsGroupId || ''}
-              onChange={(e) => setImportResultsGroupId(e.target.value || null)}
-            >
-              {currentGroups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <label className="cs-label">File Excel</label>
-            <Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportResultsFile(e.target.files?.[0] || null)} />
-          </div>
-          <div className="text-sm text-slate-600">
-            La partita viene trovata con la chiave: giornata + casa + ospiti (codici squadra).
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setShowImportResultsModal(false)}>Annulla</Button>
-            <Button onClick={handleImportResults} disabled={importingResults || mode === 'athlete'}>
-              {importingResults ? 'Importazione...' : 'Importa risultati'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <ChampionshipCalendarImportModal open={showImportModal} onOpenChange={setShowImportModal} groups={currentGroups} groupId={importGroupId} onGroupChange={setImportGroupId} onFileChange={setImportFile} importing={importing} onImport={handleImportMatches} disabled={mode === 'athlete'} />
+      <ChampionshipResultsImportModal open={showImportResultsModal} onOpenChange={setShowImportResultsModal} groups={currentGroups} groupId={importResultsGroupId} onGroupChange={setImportResultsGroupId} onFileChange={setImportResultsFile} importing={importingResults} onImport={handleImportResults} disabled={mode === 'athlete'} />
 
       {/* Modal gestione squadre girone */}
       {mode !== 'athlete' && (
