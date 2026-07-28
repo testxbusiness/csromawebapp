@@ -35,6 +35,7 @@ import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, 
 import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
 import { ChampionshipCalendarImportModal, ChampionshipResultsImportModal } from '@/components/championship/ChampionshipImportModals'
 import { ChampionshipConvocationModal } from '@/components/championship/ChampionshipConvocationModal'
+import { ChampionshipGroupModal } from '@/components/championship/ChampionshipGroupModal'
 
 export default function ChampionshipsManager() {
   let mode = 'coach' as ManagerMode
@@ -1123,43 +1124,16 @@ export default function ChampionshipsManager() {
 
       {/* Modal nuovo girone */}
       {mode !== 'athlete' && (
-        <Modal
-          fullscreenOnMobile
+        <ChampionshipGroupModal
           open={showGroupModal}
           onOpenChange={setShowGroupModal}
-          title="Aggiungi girone"
-          description="Crea un nuovo girone per il campionato selezionato."
-        >
-          <div className="space-y-3">
-            <div>
-              <label className="cs-label">Nome</label>
-              <Input
-                value={groupForm.name}
-                onChange={(e) => setGroupForm((prev) => ({ ...prev, name: e.target.value }))}
-                placeholder="Girone B"
-              />
-            </div>
-            <div>
-              <label className="cs-label">Fase</label>
-              <Select
-                value={groupForm.phase}
-                onChange={(e) => setGroupForm((prev) => ({ ...prev, phase: e.target.value }))}
-              >
-                <option value="regular">Regular</option>
-                <option value="playoff">Playoff</option>
-                <option value="playout">Playout</option>
-                <option value="cup">Coppa</option>
-                <option value="friendly">Amichevole</option>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setShowGroupModal(false)}>Annulla</Button>
-              <Button onClick={handleCreateGroup} disabled={savingResult}>
-                {savingResult ? 'Salvataggio...' : 'Crea girone'}
-              </Button>
-            </div>
-          </div>
-        </Modal>
+          name={groupForm.name}
+          phase={groupForm.phase}
+          onNameChange={(name) => setGroupForm((prev) => ({ ...prev, name }))}
+          onPhaseChange={(phase) => setGroupForm((prev) => ({ ...prev, phase }))}
+          saving={savingResult}
+          onCreate={handleCreateGroup}
+        />
       )}
 
       <ChampionshipCalendarImportModal open={showImportModal} onOpenChange={setShowImportModal} groups={currentGroups} groupId={importGroupId} onGroupChange={setImportGroupId} onFileChange={setImportFile} importing={importing} onImport={handleImportMatches} disabled={mode === 'athlete'} />
