@@ -26,6 +26,7 @@ import {
 import { useChampionshipCatalog } from '@/components/championship/useChampionshipCatalog'
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
+import { MatchInfoModal, MatchResultModal } from '@/components/championship/ChampionshipMatchModals'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
 
 export default function ChampionshipsManager() {
@@ -1192,86 +1193,26 @@ export default function ChampionshipsManager() {
               ))}
             </div>
 
-            <Modal
-              fullscreenOnMobile
+            <MatchResultModal
               open={resultModalOpen}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setResultModalOpen(false)
-                  setEditingMatchId(null)
-                  setResultEditingMatch(null)
-                  setResultInput('')
-                }
-              }}
-              title="Modifica risultato"
               description={resultEditingMatch ? `${clubTeamName(resultEditingMatch.home_club_team_id)} vs ${clubTeamName(resultEditingMatch.away_club_team_id)}` : ''}
-            >
-              <div className="space-y-3">
-                <p className="text-sm text-slate-500">Inserisci i set separati da virgola (es: 25-20, 25-21, 28-26)</p>
-                <Input
-                  placeholder="25-20, 25-21, 28-26"
-                  value={resultInput}
-                  onChange={(e) => setResultInput(e.target.value)}
-                />
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => {
-                    setResultModalOpen(false)
-                    setEditingMatchId(null)
-                    setResultEditingMatch(null)
-                    setResultInput('')
-                  }}>Annulla</Button>
-              <Button onClick={saveResult} disabled={savingMatchResult}>
-                {savingMatchResult ? 'Salvataggio...' : 'Salva'}
-                  </Button>
-                </div>
-              </div>
-            </Modal>
-
-            <Modal
-              fullscreenOnMobile
+              value={resultInput}
+              saving={savingMatchResult}
+              onOpenChange={(open) => { if (!open) { setResultModalOpen(false); setEditingMatchId(null); setResultEditingMatch(null); setResultInput('') } }}
+              onChange={setResultInput}
+              onCancel={() => { setResultModalOpen(false); setEditingMatchId(null); setResultEditingMatch(null); setResultInput('') }}
+              onSave={saveResult}
+            />
+            <MatchInfoModal
               open={infoModalOpen}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setInfoModalOpen(false)
-                  setInfoEditingMatch(null)
-                }
-              }}
-              title="Modifica info gara"
               description={infoEditingMatch ? `${clubTeamName(infoEditingMatch.home_club_team_id)} vs ${clubTeamName(infoEditingMatch.away_club_team_id)}` : ''}
-            >
-              <div className="space-y-3">
-                <div>
-                  <label className="cs-label">Data</label>
-                  <Input
-                    type="date"
-                    value={infoForm.match_date}
-                    onChange={(e) => setInfoForm((prev) => ({ ...prev, match_date: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="cs-label">Ora</label>
-                  <Input
-                    type="time"
-                    value={infoForm.start_time}
-                    onChange={(e) => setInfoForm((prev) => ({ ...prev, start_time: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="cs-label">Luogo</label>
-                  <Input
-                    value={infoForm.location_text}
-                    onChange={(e) => setInfoForm((prev) => ({ ...prev, location_text: e.target.value }))}
-                    placeholder="Palestra / indirizzo"
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => setInfoModalOpen(false)}>Annulla</Button>
-                  <Button onClick={saveMatchInfo} disabled={infoSaving}>
-                    {infoSaving ? 'Salvataggio...' : 'Salva'}
-                  </Button>
-                </div>
-              </div>
-            </Modal>
+              form={infoForm}
+              saving={infoSaving}
+              onOpenChange={(open) => { if (!open) { setInfoModalOpen(false); setInfoEditingMatch(null) } }}
+              onChange={setInfoForm}
+              onCancel={() => setInfoModalOpen(false)}
+              onSave={saveMatchInfo}
+            />
           </Card>
         </div>
 
