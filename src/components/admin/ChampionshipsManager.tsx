@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardTitle, CardMeta, Table, TableActions, Button, Input, Select, toast, Modal } from '@/components/ui'
-import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
+import { importFromExcel } from '@/lib/utils/excelImport'
 import { CalendarDays, Clock3, MapPin, Plus, Trash2, Trophy, Upload, Users } from 'lucide-react'
 import { CalendarSyncBadge, ChampionshipInfoPanel, ChampionshipToolbar, ConvocationPublishedList, EditableConvocationList, MatchStatusBadge, NextMatchPanel, StandingsPanel } from '@/components/championship/ChampionshipPanels'
 import {
@@ -27,7 +27,8 @@ import { useChampionshipCatalog } from '@/components/championship/useChampionshi
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
 import { MatchInfoModal, MatchResultModal } from '@/components/championship/ChampionshipMatchModals'
-import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
+import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime, parseMatchResult } from '@/components/championship/formatters'
+import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
 
 interface ChampionshipsManagerProps {
   mode?: ManagerMode
@@ -228,17 +229,6 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     setInfoModalOpen(true)
   }
 
-  const parseResultInput = (input: string) => {
-    if (!input.trim()) return []
-    return input.split(',').map((part) => {
-      const [home, away] = part.trim().split('-').map((v) => parseInt(v, 10))
-      if (Number.isNaN(home) || Number.isNaN(away)) {
-        throw new Error('Formato non valido. Usa es. "25-20, 25-21, 28-26"')
-      }
-      return { home, away }
-    })
-  }
-
   const saveResult = () => {
     if (!editingMatchId) return
     void persistResult({
@@ -341,26 +331,6 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     } finally {
       setSavingResult(false)
     }
-  }
-
-  const matchImportColumns: Record<string, ImportColumn> = {
-    giornata: { key: 'giornata', required: false, type: 'number' },
-    data: { key: 'data', required: true, type: 'date' },
-    ora: { key: 'ora', required: true, type: 'string' },
-    casa: { key: 'casa', required: true, type: 'string' },
-    casa_nome: { key: 'casa_nome', required: false, type: 'string' },
-    ospiti: { key: 'ospiti', required: true, type: 'string' },
-    ospiti_nome: { key: 'ospiti_nome', required: false, type: 'string' },
-    luogo: { key: 'luogo', required: false, type: 'string' },
-    note: { key: 'note', required: false, type: 'string' },
-  }
-
-  const resultImportColumns: Record<string, ImportColumn> = {
-    giornata: { key: 'giornata', required: true, type: 'number' },
-    casa: { key: 'casa', required: true, type: 'string' },
-    ospiti: { key: 'ospiti', required: true, type: 'string' },
-    risultato_set: { key: 'risultato_set', required: false, type: 'string' },
-    risultato: { key: 'risultato', required: false, type: 'string' }
   }
 
   const handleImportMatches = async () => {
@@ -585,7 +555,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
         }
 
         try {
-          const sets = parseResultInput(resultString)
+          const sets = parseMatchResult(resultString)
           updates.push({ matchId, sets })
         } catch (err: any) {
           errors.push(`Risultato non valido (G${giornata} ${homeCode} vs ${awayCode}): ${err.message || 'errore'}`)

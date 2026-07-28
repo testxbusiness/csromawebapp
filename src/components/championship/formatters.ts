@@ -45,3 +45,14 @@ export function matchDateTime(match: Match) {
   const date = new Date(`${match.match_date}T${time}`)
   return Number.isNaN(date.getTime()) ? null : date
 }
+
+export function parseMatchResult(input: string) {
+  if (!input.trim()) return []
+  return input.split(',').map((part) => {
+    const [home, away] = part.trim().split('-').map((value) => parseInt(value, 10))
+    if (Number.isNaN(home) || Number.isNaN(away)) {
+      throw new Error('Formato non valido. Usa es. "25-20, 25-21, 28-26"')
+    }
+    return { home, away }
+  })
+}
