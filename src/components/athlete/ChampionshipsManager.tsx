@@ -27,6 +27,7 @@ import { useChampionshipCatalog } from '@/components/championship/useChampionshi
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
 import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
+import { useChampionshipCalendarDeletion } from '@/components/championship/useChampionshipCalendarDeletion'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
 
 interface ChampionshipsManagerProps {
@@ -64,7 +65,6 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const [groupTeamsSaving, setGroupTeamsSaving] = useState(false)
   const [clubTeams, setClubTeams] = useState<ClubTeamOption[]>([])
   const [newClubTeam, setNewClubTeam] = useState({ code: '', name: '', is_home_club: false, team_id: '' })
-  const [deleting, setDeleting] = useState<'group'|'championship'|null>(null)
   const [resultModalOpen, setResultModalOpen] = useState(false)
   const [resultEditingMatch, setResultEditingMatch] = useState<Match | null>(null)
   const [coachTeamIds, setCoachTeamIds] = useState<Set<string>>(new Set())
@@ -108,6 +108,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     setConvocationSelection,
     setConvocationTeamMembers,
   } = useChampionshipConvocations()
+  const { deleteCalendar: persistDeleteCalendar, deleting } = useChampionshipCalendarDeletion()
 
   useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
@@ -556,65 +557,24 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       : 'Eliminare tutte le partite e gli eventi di tutti i gironi del campionato selezionato?'
     if (!window.confirm(confirmMsg)) return
 
-    setDeleting(scope)
-    try {
-      const groupIds = scope === 'group'
-        ? [selectedGroupId!]
-        : (championships.find((c) => c.id === selectedChampionshipId)?.championship_groups || []).map((g) => g.id)
-      if (groupIds.length === 0) {
-        toast.error('Nessun girone da cancellare')
-        setDeleting(null)
-        return
-      }
-
-      const { data: matchesData, error: mErr } = await supabase
-        .from('championship_matches')
-        .select('id, event_id')
-        .in('championship_group_id', groupIds)
-
-      if (mErr) throw mErr
-      const matchIds = (matchesData || []).map((m) => m.id)
-      const eventIds = (matchesData || []).map((m) => m.event_id).filter(Boolean)
-
-      if (eventIds.length) {
-        await supabase.from('event_teams').delete().in('event_id', eventIds as string[])
-        await supabase.from('events').delete().in('id', eventIds as string[])
-      }
-      if (matchIds.length) {
-        await supabase.from('championship_match_sets').delete().in('match_id', matchIds)
-      }
-      await supabase.from('championship_matches').delete().in('championship_group_id', groupIds)
-
-      // Elimina associazioni squadre-girone
-      await supabase.from('championship_group_teams').delete().in('championship_group_id', groupIds)
-
-      if (scope === 'group') {
-        // Elimina il girone stesso
-        await supabase.from('championship_groups').delete().in('id', groupIds)
-      }
-
-      if (scope === 'championship') {
-        // Elimina club teams creati per il campionato
-        await supabase.from('championship_club_teams').delete().eq('championship_id', selectedChampionshipId!)
-        // Elimina il campionato e i gironi residui
-        await supabase.from('championship_groups').delete().in('id', groupIds)
-        await supabase.from('championships').delete().eq('id', selectedChampionshipId!)
-        setSelectedChampionshipId(null)
-        setSelectedGroupId(null)
-      }
-
-      toast.success('Calendario eliminato')
-      await reloadChampionships()
-      if (scope === 'group' && selectedGroupId) {
-        setSelectedGroupId(null)
-        await reloadGroupDetails()
-      }
-    } catch (err) {
-      console.error('Errore eliminazione calendario', err)
-      toast.error('Impossibile eliminare il calendario')
-    } finally {
-      setDeleting(null)
-    }
+    const groupIds = scope === 'group'
+      ? [selectedGroupId!]
+      : (championships.find((c) => c.id === selectedChampionshipId)?.championship_groups || []).map((g) => g.id)
+    void persistDeleteCalendar({
+      scope,
+      groupIds,
+      championshipId: selectedChampionshipId,
+      onSuccess: async (deletedScope) => {
+        await reloadChampionships()
+        if (deletedScope === 'championship') {
+          setSelectedChampionshipId(null)
+          setSelectedGroupId(null)
+        } else if (selectedGroupId) {
+          setSelectedGroupId(null)
+          await reloadGroupDetails()
+        }
+      },
+    })
   }
 
   const initGroupTeamsSelection = useCallback((groupId: string | null) => {
