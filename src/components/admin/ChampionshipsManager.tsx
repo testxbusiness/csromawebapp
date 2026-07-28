@@ -26,6 +26,7 @@ import {
 import { useChampionshipCatalog } from '@/components/championship/useChampionshipCatalog'
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
+import { useImportedClubTeam } from '@/components/championship/useImportedClubTeam'
 import { MatchInfoModal, MatchResultModal } from '@/components/championship/ChampionshipMatchModals'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime, parseMatchResult } from '@/components/championship/formatters'
 import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
@@ -110,6 +111,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     savingResult: savingMatchResult,
     statusUpdating,
   } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails })
+  const { ensureClubTeam } = useImportedClubTeam({ championshipId: selectedChampionshipId, teams })
 
   useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
@@ -360,71 +362,16 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
         return
       }
 
-      const csrByCode = new Map<string, Team>()
-      teams.forEach((t) => { if (t.code) csrByCode.set(t.code.trim().toUpperCase(), t) })
-
       const clubByCode = new Map<string, ClubTeamOption>()
       clubTeams.forEach((ct) => { clubByCode.set(ct.code.trim().toUpperCase(), ct) })
-
-      // Codici CSRoma da considerare home_club anche se non mappati in teams
-      const homeClubCodes = new Set(['PVA1', 'PVA2', 'CSROMA', 'CS ROMA', 'CSR'])
 
       const rows = result.data
       const payload: any[] = []
       const groupClubTeams: Set<string> = new Set()
 
-      const ensureClubTeam = async (codeRaw: string, nameHint?: string) => {
-        const code = codeRaw.trim().toUpperCase()
-        if (!code) throw new Error('Codice squadra mancante')
-
-        if (clubByCode.has(code)) {
-          const existing = clubByCode.get(code)!
-          // Se è CSRoma ma non marcata, aggiorna
-          const csr = csrByCode.get(code)
-          const shouldBeHome = !!csr || homeClubCodes.has(code)
-          const needsUpdate = (shouldBeHome && !existing.is_home_club) || (csr && existing.team_id !== csr.id)
-          if (needsUpdate) {
-            const { data: upd, error: updErr } = await supabase
-              .from('championship_club_teams')
-              .update({
-                is_home_club: shouldBeHome,
-                team_id: csr?.id || existing.team_id,
-                name: nameHint || existing.name
-              })
-              .eq('id', existing.id)
-              .select('id, code, name, is_home_club, team_id')
-              .single()
-            if (updErr) throw updErr
-            const full: ClubTeamOption = { ...upd, teams: csr ? [{ id: csr.id, name: csr.name, code: csr.code || null }] : existing.teams }
-            clubByCode.set(code, full)
-            return full.id
-          }
-          return existing.id
-        }
-
-        const csr = csrByCode.get(code)
-        const newTeam = {
-          championship_id: selectedChampionshipId!,
-          code,
-          name: nameHint || csr?.name || code,
-          is_home_club: !!csr || homeClubCodes.has(code),
-          team_id: csr?.id || null,
-          source: 'import_excel'
-        }
-        const { data: inserted, error } = await supabase
-          .from('championship_club_teams')
-          .insert(newTeam)
-          .select('id, code, name, is_home_club, team_id')
-          .single()
-        if (error) throw error
-        const full: ClubTeamOption = { ...inserted, teams: csr ? [{ id: csr.id, name: csr.name, code: csr.code || null }] : null }
-        clubByCode.set(code, full)
-        return inserted.id
-      }
-
       for (const row of rows) {
-        const homeId = await ensureClubTeam(row.casa, row.casa_nome)
-        const awayId = await ensureClubTeam(row.ospiti, row.ospiti_nome)
+        const homeId = await ensureClubTeam({ codeRaw: row.casa, nameHint: row.casa_nome, clubByCode })
+        const awayId = await ensureClubTeam({ codeRaw: row.ospiti, nameHint: row.ospiti_nome, clubByCode })
         groupClubTeams.add(homeId)
         groupClubTeams.add(awayId)
 
