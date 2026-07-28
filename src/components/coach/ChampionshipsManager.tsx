@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardTitle, CardMeta, Table, TableActions, Button, Input, Select, toast, Modal } from '@/components/ui'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
@@ -29,7 +29,7 @@ import { useChampionshipGroupDetails } from '@/components/championship/useChampi
 
 export default function ChampionshipsManager() {
   let mode = 'coach' as ManagerMode
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [savingResult, setSavingResult] = useState(false)
@@ -100,37 +100,10 @@ export default function ChampionshipsManager() {
   const loading = catalogLoading || groupLoading
 
   useEffect(() => {
-    if (mode === 'coach') void loadCoachTeams()
-    else if (mode === 'athlete') void loadAthleteTeams()
-  }, [mode])
-
-  useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
       setCreateForm((prev) => ({ ...prev, season_id: seasons[0].id }))
     }
   }, [createForm.season_id, seasons])
-
-  useEffect(() => {
-    if (selectedChampionshipId) {
-      loadClubTeams(selectedChampionshipId)
-    } else {
-      setClubTeams([])
-    }
-  }, [selectedChampionshipId])
-
-  useEffect(() => {
-    if (!selectedChampionshipId) return
-    const championship = championships.find((c) => c.id === selectedChampionshipId)
-    if (championship?.championship_groups && championship.championship_groups.length > 0) {
-      const firstGroupId = championship.championship_groups[0].id
-      setSelectedGroupId(firstGroupId)
-      setImportGroupId(firstGroupId)
-      initGroupTeamsSelection(firstGroupId)
-    } else {
-      setSelectedGroupId(null)
-      setImportGroupId(null)
-    }
-  }, [selectedChampionshipId, championships])
 
   // Allinea importGroupId al girone selezionato di default
   useEffect(() => {
@@ -149,7 +122,7 @@ export default function ChampionshipsManager() {
     computeNextMatch(matches)
   }, [matches, mode, coachTeamIds, athleteTeamIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadCoachTeams = async () => {
+  const loadCoachTeams = useCallback(async () => {
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id
       if (!userId) return
@@ -165,9 +138,9 @@ export default function ChampionshipsManager() {
     } catch (err) {
       console.error('Errore caricamento squadre coach', err)
     }
-  }
+  }, [supabase])
 
-  const loadAthleteTeams = async () => {
+  const loadAthleteTeams = useCallback(async () => {
     try {
       const userId = (await supabase.auth.getUser()).data.user?.id
       if (!userId) return
@@ -182,9 +155,9 @@ export default function ChampionshipsManager() {
     } catch (err) {
       console.error('Errore caricamento squadre atleta', err)
     }
-  }
+  }, [supabase])
 
-  const loadClubTeams = async (championshipId: string) => {
+  const loadClubTeams = useCallback(async (championshipId: string) => {
     const { data, error } = await supabase
       .from('championship_club_teams')
       .select('id, championship_id, code, name, is_home_club, team_id, teams(id, name, code)')
@@ -198,7 +171,7 @@ export default function ChampionshipsManager() {
       return
     }
     setClubTeams(data || [])
-  }
+  }, [supabase])
 
   const currentGroups = useMemo(() => {
     return championships.find((c) => c.id === selectedChampionshipId)?.championship_groups || []
@@ -1049,7 +1022,7 @@ export default function ChampionshipsManager() {
     }
   }
 
-  const initGroupTeamsSelection = (groupId: string | null) => {
+  const initGroupTeamsSelection = useCallback((groupId: string | null) => {
     if (!groupId) return
     const group = currentGroups.find((g) => g.id === groupId)
     const map: Record<string, { selected: boolean; is_home_club: boolean }> = {}
@@ -1057,7 +1030,31 @@ export default function ChampionshipsManager() {
       map[t.championship_club_team_id] = { selected: true, is_home_club: !!(t.is_home_club || t.championship_club_teams?.is_home_club) }
     })
     setGroupTeamsSelection(map)
-  }
+  }, [currentGroups])
+
+  useEffect(() => {
+    if (mode === 'coach') void loadCoachTeams()
+    else if (mode === 'athlete') void loadAthleteTeams()
+  }, [loadAthleteTeams, loadCoachTeams, mode])
+
+  useEffect(() => {
+    if (selectedChampionshipId) void loadClubTeams(selectedChampionshipId)
+    else setClubTeams([])
+  }, [loadClubTeams, selectedChampionshipId])
+
+  useEffect(() => {
+    if (!selectedChampionshipId) return
+    const championship = championships.find((c) => c.id === selectedChampionshipId)
+    if (championship?.championship_groups && championship.championship_groups.length > 0) {
+      const firstGroupId = championship.championship_groups[0].id
+      setSelectedGroupId(firstGroupId)
+      setImportGroupId(firstGroupId)
+      initGroupTeamsSelection(firstGroupId)
+    } else {
+      setSelectedGroupId(null)
+      setImportGroupId(null)
+    }
+  }, [championships, initGroupTeamsSelection, selectedChampionshipId])
 
   return (
     <div className="space-y-6">
