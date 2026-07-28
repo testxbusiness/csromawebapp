@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
@@ -110,7 +110,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const [messageDetail, setMessageDetail] = useState<any>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   // Enrich selected message on open
   useEffect(() => {
@@ -127,47 +127,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     loadDetail()
   }, [selectedMessage])
 
-  // Load team details when team is selected
-  useEffect(() => {
-    if (selectedTeamId) {
-      loadTeamDetail(selectedTeamId)
-    } else {
-      setTeamDetailData(null)
-    }
-  }, [selectedTeamId])
-
-  useEffect(() => {
-    loadAthleteData()
-  }, [])
-
-  // Ricarica intelligente quando la tab torna visibile (solo se necessario)
   const lastLoadTimeRef = useRef<number>(0)
-  useEffect(() => {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      if (debounceTimer) clearTimeout(debounceTimer)
-
-      debounceTimer = setTimeout(() => {
-        // Solo se i dati sono vecchi (> 2 minuti)
-        const now = Date.now()
-        const timeSinceLastLoad = now - lastLoadTimeRef.current
-        if (timeSinceLastLoad > 120000) { // 2 minuti
-          loadAthleteData()
-          lastLoadTimeRef.current = now
-        }
-      }, 1000) // Debounce di 1 secondo
-    }
-
-    window.addEventListener('visibilitychange', onVisible)
-    return () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      window.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [])
-
-  const loadAthleteData = async () => {
+  const loadAthleteData = useCallback(async () => {
     setLoading(true)
     try {
       const response = await fetch('/api/athlete/dashboard')
@@ -189,18 +151,18 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const loadActiveSeason = async () => {
+  const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('*')
       .eq('is_active', true)
       .single()
     if (data) setActiveSeason(data)
-  }
+  }, [supabase])
 
-  const loadTeamMemberships = async () => {
+  const loadTeamMemberships = useCallback(async () => {
     // 1) Base memberships (no joins) — avoids PostgREST relationship cache errors
     const { data: baseMemberships, error: tmError } = await supabase
       .from('team_members')
@@ -265,9 +227,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
     setTeamMemberships(mapped)
     return mapped
-  }
+  }, [profile?.athlete_profile, supabase, user.id])
 
-  const loadUpcomingEvents = async (teamIds: string[]) => {
+  const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
     if (!teamIds || teamIds.length === 0) return
 
     // Next 30 days window
@@ -310,9 +272,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     }
 
     setUpcomingEvents(events || [])
-  }
+  }, [supabase])
 
-  const loadUnreadMessages = async (teamIds: string[]) => {
+  const loadUnreadMessages = useCallback(async (teamIds: string[]) => {
     if (!teamIds || teamIds.length === 0) return
 
     const orClauses: string[] = []
@@ -361,9 +323,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       const uniq = Array.from(new Map(mapped.map((m:any) => [m.id, m])).values())
       setUnreadMessages(uniq)
     }
-  }
+  }, [supabase, user.id])
 
-  const loadFeeInstallments = async () => {
+  const loadFeeInstallments = useCallback(async () => {
     const { data } = await supabase
       .from('fee_installments')
       .select(`
@@ -382,9 +344,9 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       .limit(5)
 
     if (data) setFeeInstallments(data as unknown as FeeInstallment[])
-  }
+  }, [supabase, user.id])
 
-  const loadTeamDetail = async (teamId: string) => {
+  const loadTeamDetail = useCallback(async (teamId: string) => {
     try {
       // 1. Team basic info
       const { data: teamData } = await supabase
@@ -474,7 +436,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       console.error('Error loading team details:', error)
       setTeamDetailData(null)
     }
-  }
+  }, [supabase])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -519,6 +481,45 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       return { text: '✅ Valido', color: 'bg-green-100 text-green-800' }
     }
   }
+
+  // Effects that depend on dashboard callbacks are declared after them so the
+  // callbacks are initialized before React evaluates their dependency arrays.
+  useEffect(() => {
+    if (selectedTeamId) {
+      void loadTeamDetail(selectedTeamId)
+    } else {
+      setTeamDetailData(null)
+    }
+  }, [loadTeamDetail, selectedTeamId])
+
+  useEffect(() => {
+    void loadAthleteData()
+  }, [loadAthleteData])
+
+  // Ricarica intelligente quando la tab torna visibile (solo se necessario)
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (debounceTimer) clearTimeout(debounceTimer)
+
+      debounceTimer = setTimeout(() => {
+        const now = Date.now()
+        const timeSinceLastLoad = now - lastLoadTimeRef.current
+        if (timeSinceLastLoad > 120000) {
+          void loadAthleteData()
+          lastLoadTimeRef.current = now
+        }
+      }, 1000)
+    }
+
+    window.addEventListener('visibilitychange', onVisible)
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      window.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [loadAthleteData])
 
   if (loading) {
     return (

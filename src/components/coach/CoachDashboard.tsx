@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
@@ -94,40 +94,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
   const [messageDetail, setMessageDetail] = useState<any>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
-  const supabase = createClient()
-
-  useEffect(() => {
-    loadCoachData()
-  }, [])
-
-  // Ricarica quando si torna alla tab / finestra (con debounce e throttling)
-  useEffect(() => {
-    let lastRefreshTime = 0
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      if (debounceTimer) clearTimeout(debounceTimer)
-
-      debounceTimer = setTimeout(() => {
-        // Throttle: ricarica solo se sono passati almeno 30 secondi dall'ultimo refresh
-        const now = Date.now()
-        const timeSinceLastRefresh = now - lastRefreshTime
-        if (timeSinceLastRefresh > 30000) {
-          loadCoachData()
-          lastRefreshTime = now
-        }
-      }, 1000) // Debounce di 1 secondo
-    }
-
-    window.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onVisible)
-    return () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      window.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onVisible)
-    }
-  }, [])
+  const supabase = useMemo(() => createClient(), [])
 
   // Enrich selected message on open
   useEffect(() => {
@@ -144,51 +111,16 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     loadDetail()
   }, [selectedMessage])
 
-  // Load team details when team is selected
-  useEffect(() => {
-    if (selectedTeamId) {
-      loadTeamDetail(selectedTeamId)
-    } else {
-      setTeamDetailData(null)
-    }
-  }, [selectedTeamId])
-
-  const loadCoachData = async () => {
-    setLoading(true)
-    
-    try {
-      // Carica in sequenza per evitare dipendenze circolari
-      await loadActiveSeason()
-      const teamIds = await loadCoachTeams() // Ottieni gli ID delle squadre
-      
-      if (teamIds.length > 0) {
-        await Promise.all([
-          loadUpcomingEvents(teamIds), // Passa gli ID direttamente
-          loadRecentMessages(teamIds),
-          loadPayments()
-        ])
-      } else {
-        // Se non ci sono squadre, svuota gli stati dipendenti
-        setUpcomingEvents([])
-        setRecentMessages([])
-      }
-    } catch (error) {
-      console.error('Error loading coach data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadActiveSeason = async () => {
+  const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('*')
       .eq('is_active', true)
       .single()
     if (data) setActiveSeason(data)
-  }
+  }, [supabase])
 
-  const loadCoachTeams = async () => {
+  const loadCoachTeams = useCallback(async () => {
     const { data } = await supabase
       .from('team_coaches')
       .select('team_id, teams(id, name, code, activity_id)')
@@ -222,9 +154,9 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
     setTeams(teamsWithActivities as Team[])
     return teamsWithActivities.map(team => team.id)
-  }
+  }, [supabase, user.id])
 
-  const loadUpcomingEvents = async (teamIds: string[]) => {
+  const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
     if (teamIds.length === 0) {
       setUpcomingEvents([])
       return
@@ -263,9 +195,9 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       console.error('Error loading coach calendar:', error)
       setUpcomingEvents([])
     }
-  }
+  }, [])
 
-  const loadRecentMessages = async (teamIds: string[]) => {
+  const loadRecentMessages = useCallback(async (teamIds: string[]) => {
     // Get recent messages sent to coach's teams
     if (teamIds.length === 0) {
       setRecentMessages([])
@@ -312,9 +244,9 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       console.error('Error in loadRecentMessages:', error)
       setRecentMessages([])
     }
-  }
+  }, [])
 
-  const loadPayments = async () => {
+  const loadPayments = useCallback(async () => {
     // Get coach payments
     const { data } = await supabase
       .from('payments')
@@ -325,9 +257,9 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       .limit(5)
 
     if (data) setPayments(data)
-  }
+  }, [supabase, user.id])
 
-  const loadTeamDetail = async (teamId: string) => {
+  const loadTeamDetail = useCallback(async (teamId: string) => {
     try {
       // 1. Team basic info
       const { data: teamData } = await supabase
@@ -417,7 +349,73 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       console.error('Error loading team details:', error)
       setTeamDetailData(null)
     }
-  }
+  }, [supabase])
+
+  const loadCoachData = useCallback(async () => {
+    setLoading(true)
+
+    try {
+      // Carica in sequenza per evitare dipendenze circolari
+      await loadActiveSeason()
+      const teamIds = await loadCoachTeams()
+
+      if (teamIds.length > 0) {
+        await Promise.all([
+          loadUpcomingEvents(teamIds),
+          loadRecentMessages(teamIds),
+          loadPayments()
+        ])
+      } else {
+        setUpcomingEvents([])
+        setRecentMessages([])
+      }
+    } catch (error) {
+      console.error('Error loading coach data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [loadActiveSeason, loadCoachTeams, loadPayments, loadRecentMessages, loadUpcomingEvents])
+
+  useEffect(() => {
+    void loadCoachData()
+  }, [loadCoachData])
+
+  // Ricarica quando si torna alla tab / finestra (con debounce e throttling)
+  useEffect(() => {
+    let lastRefreshTime = 0
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (debounceTimer) clearTimeout(debounceTimer)
+
+      debounceTimer = setTimeout(() => {
+        const now = Date.now()
+        const timeSinceLastRefresh = now - lastRefreshTime
+        if (timeSinceLastRefresh > 30000) {
+          void loadCoachData()
+          lastRefreshTime = now
+        }
+      }, 1000)
+    }
+
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [loadCoachData])
+
+  // Load team details when team is selected
+  useEffect(() => {
+    if (selectedTeamId) {
+      void loadTeamDetail(selectedTeamId)
+    } else {
+      setTeamDetailData(null)
+    }
+  }, [loadTeamDetail, selectedTeamId])
 
   if (loading) {
     return (
