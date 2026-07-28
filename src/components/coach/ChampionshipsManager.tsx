@@ -6,139 +6,34 @@ import { Card, CardTitle, CardMeta, Table, TableActions, Button, Input, Select, 
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
 import { CalendarDays, Clock3, MapPin, Plus, Trash2, Trophy, Upload, Users } from 'lucide-react'
 import { CalendarSyncBadge, ChampionshipInfoPanel, ChampionshipToolbar, ConvocationPublishedList, EditableConvocationList, MatchStatusBadge, NextMatchPanel, StandingsPanel } from '@/components/championship/ChampionshipPanels'
-
-type ClubTeam = {
-  id: string
-  code: string
-  name: string
-  is_home_club: boolean
-  team_id?: string | null
-  teams?: {
-    id: string
-    name: string
-    code?: string | null
-  }[] | null
-}
-
-type GroupTeam = {
-  id: string
-  championship_club_team_id: string
-  is_home_club: boolean
-  championship_club_teams?: ClubTeam
-}
-
-type ChampionshipGroup = {
-  id: string
-  name: string
-  phase: string
-  sort_order: number
-  championship_group_teams?: GroupTeam[]
-}
-
-type Championship = {
-  id: string
-  name: string
-  status: string
-  sport: string
-  start_date?: string | null
-  end_date?: string | null
-  championship_groups?: ChampionshipGroup[]
-}
-
-type MatchSet = {
-  id?: string
-  set_number: number
-  home_points: number
-  away_points: number
-}
-
-type Match = {
-  id: string
-  match_day: number | null
-  round_label?: string | null
-  match_date?: string | null
-  start_time?: string | null
-  status: string
-  location_text?: string | null
-  event_id?: string | null
-  home_club_team_id: string
-  away_club_team_id: string
-  championship_match_sets?: MatchSet[]
-  home_club_team?: ClubTeam
-  away_club_team?: ClubTeam
-}
-
-type ConvocationMember = {
-  team_member_id: string
-  profile_id?: string | null
-  profiles?: { first_name?: string | null; last_name?: string | null } | null
-  team_members?: {
-    jersey_number?: number | null
-    profile_id?: string | null
-    profiles?: { first_name?: string | null; last_name?: string | null } | null
-  } | null
-}
-
-type Convocation = {
-  id?: string
-  match_id: string
-  championship_club_team_id: string
-  team_id?: string | null
-  notes?: string | null
-  championship_match_convocation_members?: ConvocationMember[]
-  championship_club_teams?: ClubTeam
-}
-
-type TeamMember = {
-  id: string
-  profile_id: string
-  jersey_number?: number | null
-  profiles?: { first_name?: string | null; last_name?: string | null } | null
-}
-
-type Standing = {
-  championship_group_id: string
-  club_team_id: string
-  matches_played: number
-  wins: number
-  losses: number
-  sets_for: number
-  sets_against: number
-  points_for: number
-  points_against: number
-  class_points: number
-  set_ratio: number | null
-  point_ratio: number | null
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  scheduled: 'Programmato',
-  completed: 'Concluso',
-  postponed: 'Rinviato',
-  cancelled: 'Cancellato',
-  forfeit: 'Forfait'
-}
-
-type Season = { id: string; name: string }
-type Activity = { id: string; name: string; season_id: string }
-type Team = { id: string; name: string; code?: string | null }
-type ClubTeamOption = ClubTeam
-
-function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
-  return Array.isArray(value) ? value[0] : value ?? undefined
-}
-
-type ManagerMode = 'admin' | 'coach' | 'athlete'
+import {
+  firstRelation,
+  STATUS_LABEL,
+  type Activity,
+  type Championship,
+  type ClubTeam,
+  type ClubTeamOption,
+  type Convocation,
+  type ConvocationMember,
+  type GroupTeam,
+  type ManagerMode,
+  type Match,
+  type MatchSet,
+  type Season,
+  type Standing,
+  type Team,
+  type TeamMember,
+} from '@/components/championship/types'
+import { useChampionshipCatalog } from '@/components/championship/useChampionshipCatalog'
 
 export default function ChampionshipsManager() {
   let mode = 'coach' as ManagerMode
   const supabase = createClient()
-  const [championships, setChampionships] = useState<Championship[]>([])
+  const [detailsLoading, setDetailsLoading] = useState(false)
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [matches, setMatches] = useState<Match[]>([])
   const [standings, setStandings] = useState<Standing[]>([])
-  const [loading, setLoading] = useState(false)
   const [savingResult, setSavingResult] = useState(false)
   const [resultInput, setResultInput] = useState<string>('')
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null)
@@ -166,9 +61,6 @@ export default function ChampionshipsManager() {
   const [importResultsGroupId, setImportResultsGroupId] = useState<string | null>(null)
   const [importResultsFile, setImportResultsFile] = useState<File | null>(null)
   const [importingResults, setImportingResults] = useState(false)
-  const [seasons, setSeasons] = useState<Season[]>([])
-  const [activities, setActivities] = useState<Activity[]>([])
-  const [teams, setTeams] = useState<Team[]>([])
   const [groupTeamsSelection, setGroupTeamsSelection] = useState<Record<string, { selected: boolean; is_home_club: boolean }>>({})
   const [teamSearch, setTeamSearch] = useState('')
   const [groupTeamsSaving, setGroupTeamsSaving] = useState(false)
@@ -193,23 +85,26 @@ export default function ChampionshipsManager() {
   const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
   const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
 
-  useEffect(() => {
-    loadChampionships()
-    loadSelectData()
-    if (mode === 'coach') {
-      loadCoachTeams()
-    } else if (mode === 'athlete') {
-      loadAthleteTeams()
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const {
+    championships,
+    seasons,
+    activities,
+    teams,
+    loading: catalogLoading,
+    reload: reloadChampionships,
+  } = useChampionshipCatalog({ mode, coachTeamIds, athleteTeamIds })
+  const loading = catalogLoading || detailsLoading
 
   useEffect(() => {
-    if (mode === 'coach') {
-      loadChampionships()
-    } else if (mode === 'athlete') {
-      loadChampionships()
+    if (mode === 'coach') void loadCoachTeams()
+    else if (mode === 'athlete') void loadAthleteTeams()
+  }, [mode])
+
+  useEffect(() => {
+    if (seasons[0] && !createForm.season_id) {
+      setCreateForm((prev) => ({ ...prev, season_id: seasons[0].id }))
     }
-  }, [mode, coachTeamIds, athleteTeamIds])
+  }, [createForm.season_id, seasons])
 
   useEffect(() => {
     if (selectedChampionshipId) {
@@ -258,84 +153,6 @@ export default function ChampionshipsManager() {
   useEffect(() => {
     computeNextMatch(matches)
   }, [matches, mode, coachTeamIds, athleteTeamIds]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadChampionships = async () => {
-    setLoading(true)
-    const { data, error } = await supabase
-      .from('championships')
-      .select(`
-        id, name, status, sport, start_date, end_date,
-        championship_groups (
-          id, name, phase, sort_order,
-          championship_group_teams (
-            id, championship_club_team_id, is_home_club,
-            championship_club_teams ( id, code, name, is_home_club, team_id, teams ( id, name, code ) )
-          )
-        )
-      `)
-      .order('created_at', { ascending: false })
-      .order('sort_order', { referencedTable: 'championship_groups', ascending: true })
-
-    if (error) {
-      console.error('Errore caricamento campionati', error)
-      toast.error('Impossibile caricare i campionati')
-      setChampionships([])
-      setLoading(false)
-      return
-    }
-
-    let filtered = data || []
-    if (mode === 'coach' && coachTeamIds.size > 0) {
-      filtered = filtered.filter((c) =>
-        c.championship_groups?.some((g: any) =>
-          g.championship_group_teams?.some((t: any) => {
-            const teamId = t.championship_club_teams?.team_id
-            return teamId && coachTeamIds.has(teamId)
-          })
-        )
-      )
-    }
-    if (mode === 'athlete' && athleteTeamIds.size > 0) {
-      filtered = filtered.filter((c) =>
-        c.championship_groups?.some((g: any) =>
-          g.championship_group_teams?.some((t: any) => {
-            const teamId = t.championship_club_teams?.team_id
-            return teamId && athleteTeamIds.has(teamId)
-          })
-        )
-      )
-    }
-
-    const normalizedChampionships = (filtered as any[]).map((championship) => ({
-      ...championship,
-      championship_groups: (championship.championship_groups || []).map((group: any) => ({
-        ...group,
-        championship_group_teams: (group.championship_group_teams || []).map((groupTeam: any) => ({
-          ...groupTeam,
-          championship_club_teams: firstRelation(groupTeam.championship_club_teams)
-        }))
-      }))
-    })) as Championship[]
-    setChampionships(normalizedChampionships)
-    if (!selectedChampionshipId && data && data.length > 0) {
-      setSelectedChampionshipId(filtered[0]?.id ?? null)
-    }
-    setLoading(false)
-  }
-
-  const loadSelectData = async () => {
-    const [{ data: seasonsData }, { data: activitiesData }, { data: teamsData }] = await Promise.all([
-      supabase.from('seasons').select('id, name').order('start_date', { ascending: false }),
-      supabase.from('activities').select('id, name, season_id').order('name'),
-      supabase.from('teams').select('id, name, code, coach_id').order('name')
-    ])
-    setSeasons(seasonsData || [])
-    setActivities(activitiesData || [])
-    setTeams(teamsData || [])
-    if (seasonsData?.[0] && !createForm.season_id) {
-      setCreateForm((prev) => ({ ...prev, season_id: seasonsData[0].id }))
-    }
-  }
 
   const loadCoachTeams = async () => {
     try {
@@ -389,7 +206,7 @@ export default function ChampionshipsManager() {
   }
 
   const loadGroupDetails = async (groupId: string) => {
-    setLoading(true)
+    setDetailsLoading(true)
     try {
       const [{ data: matchesData, error: matchesError }, { data: standingsData, error: standingsError }] = await Promise.all([
         supabase
@@ -413,7 +230,7 @@ export default function ChampionshipsManager() {
       if (matchesError) {
         console.error('Errore caricamento partite', matchesError)
         toast.error('Impossibile caricare le partite')
-        setLoading(false)
+        setDetailsLoading(false)
         return
       }
 
@@ -429,7 +246,7 @@ export default function ChampionshipsManager() {
       })) as Match[])
       setStandings(standingsData || [])
     } finally {
-      setLoading(false)
+      setDetailsLoading(false)
     }
   }
 
@@ -633,7 +450,7 @@ export default function ChampionshipsManager() {
       toast.success('Campionato creato')
       setShowCreateModal(false)
       setCreateForm((prev) => ({ ...prev, name: '', group_name: 'Girone A' }))
-      await loadChampionships()
+      await reloadChampionships()
     } catch (err) {
       console.error('Errore creazione campionato', err)
       toast.error('Impossibile creare il campionato')
@@ -663,7 +480,7 @@ export default function ChampionshipsManager() {
       toast.success('Girone creato')
       setShowGroupModal(false)
       setGroupForm({ name: 'Girone A', phase: 'regular' })
-      await loadChampionships()
+      await reloadChampionships()
     } catch (err) {
       console.error('Errore creazione girone', err)
       toast.error('Impossibile creare il girone')
@@ -1269,7 +1086,7 @@ export default function ChampionshipsManager() {
       }
 
       toast.success('Calendario eliminato')
-      await loadChampionships()
+      await reloadChampionships()
       if (scope === 'group' && selectedGroupId) {
         setSelectedGroupId(null)
         await loadGroupDetails('')
@@ -2146,7 +1963,7 @@ export default function ChampionshipsManager() {
 
                   toast.success('Squadre aggiornate')
                   setShowTeamsModal(false)
-                  await loadChampionships()
+                  await reloadChampionships()
                   if (selectedGroupId) await loadGroupDetails(selectedGroupId)
                 } catch (err) {
                   console.error('Errore aggiornamento squadre', err)
