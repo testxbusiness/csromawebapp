@@ -111,7 +111,7 @@ export default function ChampionshipsManager() {
     convocationSaving,
     convocationSelection,
     convocationTeamMembers,
-    setConvocationLoading,
+    loadConvocationData,
     saveConvocation: persistConvocation,
     setConvocation,
     setConvocationSelection,
@@ -614,75 +614,6 @@ export default function ChampionshipsManager() {
       return csrTeams.find(({ clubTeam }) => clubTeam.team_id && athleteTeamIds.has(clubTeam.team_id))?.clubTeam || null
     }
     return null
-  }
-
-  const loadTeamMembers = async (teamId: string | null) => {
-    if (!teamId) {
-      setConvocationTeamMembers([])
-      return
-    }
-    const { data, error } = await supabase
-      .from('team_members')
-      .select('id, profile_id, jersey_number, profiles ( first_name, last_name )')
-      .eq('team_id', teamId)
-      .eq('role', 'athlete')
-      .order('id', { ascending: true })
-    if (error) {
-      console.error('Errore caricamento atleti squadra', error)
-      toast.error('Impossibile caricare gli atleti della squadra')
-      setConvocationTeamMembers([])
-      return
-    }
-    setConvocationTeamMembers((data || []).map((member: any) => ({ ...member, profiles: firstRelation(member.profiles) })) as TeamMember[])
-  }
-
-  const loadConvocationData = async (m: Match, clubTeamId: string, teamId: string | null) => {
-    setConvocationLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('championship_match_convocations')
-        .select(`
-          id, match_id, championship_club_team_id, team_id, notes,
-          championship_club_teams ( id, name, is_home_club, team_id ),
-          championship_match_convocation_members (
-            team_member_id, profile_id,
-            profiles ( first_name, last_name ),
-            team_members ( profile_id, jersey_number, profiles ( first_name, last_name ) )
-          )
-        `)
-        .eq('match_id', m.id)
-        .eq('championship_club_team_id', clubTeamId)
-        .maybeSingle()
-
-      if (error && error.code !== 'PGRST116') throw error
-
-      const normalizedConvocation = data ? {
-        ...data,
-        championship_club_teams: firstRelation((data as any).championship_club_teams),
-        championship_match_convocation_members: ((data as any).championship_match_convocation_members || []).map((member: any) => ({
-          ...member,
-          profiles: firstRelation(member.profiles),
-          team_members: firstRelation(member.team_members)
-        }))
-      } as Convocation : null
-      setConvocation(normalizedConvocation || {
-        match_id: m.id,
-        championship_club_team_id: clubTeamId,
-        team_id: teamId
-      })
-
-      const selectedIds = new Set<string>()
-      data?.championship_match_convocation_members?.forEach((cm) => cm.team_member_id && selectedIds.add(cm.team_member_id))
-      setConvocationSelection(selectedIds)
-      await loadTeamMembers(teamId)
-    } catch (err) {
-      console.error('Errore caricamento convocazioni', err)
-      toast.error('Impossibile caricare le convocazioni')
-      setConvocation(null)
-      setConvocationSelection(new Set())
-    } finally {
-      setConvocationLoading(false)
-    }
   }
 
   const openConvocationModal = async (m: Match) => {
