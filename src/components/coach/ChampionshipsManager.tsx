@@ -25,6 +25,7 @@ import {
 } from '@/components/championship/types'
 import { useChampionshipCatalog } from '@/components/championship/useChampionshipCatalog'
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
+import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
 
 export default function ChampionshipsManager() {
@@ -35,7 +36,6 @@ export default function ChampionshipsManager() {
   const [savingResult, setSavingResult] = useState(false)
   const [resultInput, setResultInput] = useState<string>('')
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null)
-  const [statusUpdating, setStatusUpdating] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showImportResultsModal, setShowImportResultsModal] = useState(false)
@@ -70,7 +70,6 @@ export default function ChampionshipsManager() {
   const [infoModalOpen, setInfoModalOpen] = useState(false)
   const [infoEditingMatch, setInfoEditingMatch] = useState<Match | null>(null)
   const [infoForm, setInfoForm] = useState({ match_date: '', start_time: '', location_text: '' })
-  const [infoSaving, setInfoSaving] = useState(false)
   const [coachTeamIds, setCoachTeamIds] = useState<Set<string>>(new Set())
   const [athleteTeamIds, setAthleteTeamIds] = useState<Set<string>>(new Set())
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
@@ -98,6 +97,14 @@ export default function ChampionshipsManager() {
     reload: reloadGroupDetails,
   } = useChampionshipGroupDetails(selectedGroupId)
   const loading = catalogLoading || groupLoading
+  const {
+    changeStatus,
+    infoSaving,
+    saveMatchInfo: persistMatchInfo,
+    saveResult: persistResult,
+    savingResult: savingMatchResult,
+    statusUpdating,
+  } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails })
 
   useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
@@ -217,32 +224,6 @@ export default function ChampionshipsManager() {
     setInfoModalOpen(true)
   }
 
-  const saveMatchInfo = async () => {
-    if (!infoEditingMatch) return
-    setInfoSaving(true)
-    try {
-      const payload = {
-        match_date: infoForm.match_date || null,
-        start_time: infoForm.start_time ? `${infoForm.start_time}:00` : null,
-        location_text: infoForm.location_text || null
-      }
-      const { error } = await supabase
-        .from('championship_matches')
-        .update(payload)
-        .eq('id', infoEditingMatch.id)
-      if (error) throw error
-      toast.success('Info gara aggiornate')
-      setInfoModalOpen(false)
-      setInfoEditingMatch(null)
-      if (selectedGroupId) await reloadGroupDetails()
-    } catch (err) {
-      console.error('Errore aggiornamento info gara', err)
-      toast.error('Impossibile aggiornare le info gara')
-    } finally {
-      setInfoSaving(false)
-    }
-  }
-
   const parseResultInput = (input: string) => {
     if (!input.trim()) return []
     return input.split(',').map((part) => {
@@ -254,71 +235,32 @@ export default function ChampionshipsManager() {
     })
   }
 
-  const saveResult = async () => {
+  const saveResult = () => {
     if (!editingMatchId) return
-    let setsToSave: { home: number; away: number }[] = []
-    try {
-      setsToSave = parseResultInput(resultInput)
-    } catch (err: any) {
-      toast.error(err.message || 'Formato punteggio non valido')
-      return
-    }
-
-    setSavingResult(true)
-    try {
-      await supabase.from('championship_match_sets').delete().eq('match_id', editingMatchId)
-
-      if (setsToSave.length > 0) {
-        const payload = setsToSave.map((s, idx) => ({
-          match_id: editingMatchId,
-          set_number: idx + 1,
-          home_points: s.home,
-          away_points: s.away
-        }))
-        const { error: insertError } = await supabase.from('championship_match_sets').insert(payload)
-        if (insertError) throw insertError
-      }
-
-      const newStatus = setsToSave.length > 0 ? 'completed' : 'scheduled'
-      const { error: statusError } = await supabase
-        .from('championship_matches')
-        .update({ status: newStatus })
-        .eq('id', editingMatchId)
-
-      if (statusError) throw statusError
-
-      toast.success('Risultato salvato e classifica aggiornata')
-      setEditingMatchId(null)
-      setResultEditingMatch(null)
-      setResultModalOpen(false)
-      setResultInput('')
-      if (selectedGroupId) {
-        await reloadGroupDetails()
-      }
-    } catch (error) {
-      console.error('Errore salvataggio risultato', error)
-      toast.error('Impossibile salvare il risultato')
-    } finally {
-      setSavingResult(false)
-    }
+    void persistResult({
+      matchId: editingMatchId,
+      result: resultInput,
+      onSuccess: () => {
+        setEditingMatchId(null)
+        setResultEditingMatch(null)
+        setResultModalOpen(false)
+        setResultInput('')
+      },
+    })
   }
 
-  const changeStatus = async (matchId: string, status: string) => {
-    setStatusUpdating(matchId)
-    try {
-      const { error } = await supabase
-        .from('championship_matches')
-        .update({ status })
-        .eq('id', matchId)
-      if (error) throw error
-      toast.success('Stato partita aggiornato')
-      if (selectedGroupId) await reloadGroupDetails()
-    } catch (err) {
-      console.error('Errore aggiornamento stato', err)
-      toast.error('Impossibile aggiornare lo stato')
-    } finally {
-      setStatusUpdating(null)
-    }
+  const saveMatchInfo = () => {
+    if (!infoEditingMatch) return
+    void persistMatchInfo({
+      matchId: infoEditingMatch.id,
+      matchDate: infoForm.match_date,
+      startTime: infoForm.start_time,
+      locationText: infoForm.location_text,
+      onSuccess: () => {
+        setInfoModalOpen(false)
+        setInfoEditingMatch(null)
+      },
+    })
   }
 
   const handleCreateChampionship = async () => {
@@ -1278,8 +1220,8 @@ export default function ChampionshipsManager() {
                     setResultEditingMatch(null)
                     setResultInput('')
                   }}>Annulla</Button>
-                  <Button onClick={saveResult} disabled={savingResult}>
-                    {savingResult ? 'Salvataggio...' : 'Salva'}
+              <Button onClick={saveResult} disabled={savingMatchResult}>
+                {savingMatchResult ? 'Salvataggio...' : 'Salva'}
                   </Button>
                 </div>
               </div>
