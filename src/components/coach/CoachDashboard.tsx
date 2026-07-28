@@ -12,7 +12,7 @@ import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
 interface User {
   id: string
-  email: string
+  email?: string
 }
 
 interface Profile {
@@ -39,7 +39,25 @@ interface Event {
   end_date: string
   location?: string
   event_type: string
+  event_kind?: 'training' | 'match' | 'meeting' | 'other'
   teams?: string
+  description?: string
+}
+
+interface CoachCalendarEvent {
+  id: string
+  title: string
+  description?: string | null
+  location?: string | null
+  start_time?: string | null
+  end_time?: string | null
+  is_recurring?: boolean
+  event_kind?: Event['event_kind']
+  teams?: string[] | string | null
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
+  return Array.isArray(value) ? value[0] : value ?? undefined
 }
 
 interface Message {
@@ -182,8 +200,8 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     }
 
     const teamRecords = data
-      .map((row) => row.teams)
-      .filter(Boolean) as Team[]
+      .map((row) => firstRelation(row.teams))
+      .filter(Boolean) as Array<{ id: string; name: string; code: string; activity_id?: string }>
 
     const activityIds = [...new Set(teamRecords.map(team => team.activity_id).filter(Boolean))]
     let activities: any[] = []
@@ -202,82 +220,47 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       activity: activities.find((activity: any) => activity.id === team.activity_id) || { name: 'N/A' }
     }))
 
-    setTeams(teamsWithActivities)
+    setTeams(teamsWithActivities as Team[])
     return teamsWithActivities.map(team => team.id)
   }
 
   const loadUpcomingEvents = async (teamIds: string[]) => {
-    console.log('Loading events for team IDs:', teamIds)
-    
     if (teamIds.length === 0) {
-      console.log('No teams assigned to coach, setting empty events')
-      setUpcomingEvents([])
-      return
-    }
-    
-    // Query alternativa: prima trova gli event IDs per le squadre, poi carica gli eventi
-    const { data: eventRelations, error: relationError } = await supabase
-      .from('event_teams')
-      .select('event_id')
-      .in('team_id', teamIds)
-      .order('created_at', { ascending: false })
-
-    if (relationError) {
-      console.error('Error loading event relations:', relationError)
-      return
-    }
-
-    if (!eventRelations || eventRelations.length === 0) {
-      console.log('No event relations found for coach teams')
       setUpcomingEvents([])
       return
     }
 
-    const eventIds = [...new Set(eventRelations.map(er => er.event_id))]
-    
-    // Carica gli eventi futuri per gli IDs trovati
-    const { data: events, error } = await supabase
-      .from('events')
-      .select('id, title, start_date, end_date, location, event_type')
-      .in('id', eventIds)
-      .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
-      .order('start_date', { ascending: true })
-      .limit(3)
+    try {
+      // Use the same-origin API so the browser does not call Supabase REST
+      // directly and trigger a local CORS preflight.
+      const response = await fetch('/api/coach/calendar')
+      const result = await response.json().catch(() => ({}))
 
-    if (error) {
-      console.error('Error loading events:', error)
-      return
-    }
+      if (!response.ok) {
+        console.error('Error loading coach calendar:', result.error || response.status)
+        setUpcomingEvents([])
+        return
+      }
 
-    console.log('Coach upcoming events:', events)
+      const events = (result.events || []) as CoachCalendarEvent[]
+      const normalizedEvents = events
+        .slice(0, 3)
+        .filter((event) => event.start_time && event.end_time)
+        .map((event): Event => ({
+          id: event.id,
+          title: event.title,
+          start_date: event.start_time!,
+          end_date: event.end_time!,
+          location: event.location ?? undefined,
+          event_type: event.is_recurring ? 'recurring' : 'one_time',
+          event_kind: event.event_kind,
+          description: event.description ?? undefined,
+          teams: Array.isArray(event.teams) ? event.teams.join(', ') : event.teams ?? '',
+        }))
 
-    if (events && events.length > 0) {
-      // Per ogni evento, carica i nomi delle squadre associate
-      const eventsWithTeamNames = await Promise.all(
-        events.map(async (event) => {
-          const { data: eventTeams } = await supabase
-            .from('event_teams')
-            .select('team_id')
-            .eq('event_id', event.id)
-            .in('team_id', teamIds)
-          
-          const teamNames = eventTeams 
-            ? eventTeams
-                .map(et => teams.find(t => t.id === et.team_id)?.name)
-                .filter(Boolean)
-                .join(', ')
-            : ''
-          
-          return {
-            ...event,
-            teams: teamNames
-          }
-        })
-      )
-      
-      setUpcomingEvents(eventsWithTeamNames)
-    } else {
-      console.log('No upcoming events found for coach teams')
+      setUpcomingEvents(normalizedEvents)
+    } catch (error) {
+      console.error('Error loading coach calendar:', error)
       setUpcomingEvents([])
     }
   }
@@ -399,14 +382,14 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       const detail: TeamDetailData = {
         name: teamData.name,
         code: teamData.code,
-        activity: teamData.activities ? { name: teamData.activities.name } : undefined,
+        activity: firstRelation(teamData.activities) ? { name: firstRelation(teamData.activities)!.name } : undefined,
         training_schedules: schedules?.map(s => ({
           day_of_week: s.day_of_week,
           start_time: s.start_time,
           end_time: s.end_time,
           gym: {
-            name: s.gyms?.name || 'N/D',
-            city: s.gyms?.city
+            name: firstRelation(s.gyms)?.name || 'N/D',
+            city: firstRelation(s.gyms)?.city
           }
         })) || [],
         coaches: coachesData?.map(c => {

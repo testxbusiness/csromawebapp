@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { loginPayloadSchema } from '@/lib/validation/auth'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
-
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email e password sono obbligatori' }, { status: 400 })
+    const parsed = loginPayloadSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Email e password non validi' }, { status: 400 })
     }
+    const { email, password } = parsed.data
 
     const supabase = await createClient()
 

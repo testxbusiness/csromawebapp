@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { userPatchPayloadSchema, userPayloadSchema } from '@/lib/validation/users'
 
 type Role = 'admin' | 'coach' | 'athlete'
 
-const DEFAULT_TEMP_PASSWORD = 'csroma2025!'
+const AUTH_CALLBACK_URL = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`
 
 function normalizeTeamAssignments(teamIds?: unknown): string[] {
   if (!Array.isArray(teamIds)) return []
@@ -22,33 +23,24 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
+    const parsed = userPayloadSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Dati utente non validi' }, { status: 400 })
+    }
 
     const {
-      email,
-      first_name,
-      last_name,
-      role,
-      phone,
-      birth_date,
-      team_ids,
-      team_assignments,
-      athlete_profile: rawAthleteProfile,
-      coach_profile: rawCoachProfile,
-      membership_number,
-      medical_certificate_expiry,
-      personal_notes,
-      coach_level,
-      coach_specialization,
-      coach_started_on
-    } = body as Record<string, any>
+      email, first_name, last_name, role, phone, birth_date, team_ids,
+      team_assignments, athlete_profile: rawAthleteProfile, coach_profile: rawCoachProfile,
+      membership_number, medical_certificate_expiry, personal_notes,
+      coach_level, coach_specialization, coach_started_on
+    } = parsed.data
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -79,18 +71,9 @@ export async function POST(request: NextRequest) {
       userId = existingUser.id
     } else {
       wasCreated = true
-      const { data: authCreate, error: createError } = await adminClient.auth.admin.createUser({
-        email,
-        password: DEFAULT_TEMP_PASSWORD,
-        email_confirm: true,
-        user_metadata: {
-          first_name,
-          last_name,
-          role: targetRole,
-          must_change_password: true,
-          temp_password_set_at: new Date().toISOString(),
-          temp_password_expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString()
-        }
+      const { data: authCreate, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+        redirectTo: AUTH_CALLBACK_URL,
+        data: { first_name, last_name }
       })
 
       if (createError || !authCreate.user) {
@@ -108,6 +91,14 @@ export async function POST(request: NextRequest) {
       }
 
       userId = authCreate.user.id
+
+      const { error: metadataError } = await adminClient.auth.admin.updateUserById(userId, {
+        app_metadata: { role: targetRole, must_change_password: true }
+      })
+      if (metadataError) {
+        console.error('Errore aggiornamento metadati auth:', metadataError)
+        return NextResponse.json({ error: 'Errore configurazione invito utente' }, { status: 400 })
+      }
 
       const { error: profileError } = await adminClient
         .from('profiles')
@@ -258,10 +249,10 @@ export async function POST(request: NextRequest) {
       await adminClient.from('team_coaches').delete().eq('coach_id', userId)
     }
 
-    return NextResponse.json({
+      return NextResponse.json({
       success: true,
       user_id: userId,
-      message: wasCreated ? 'Utente creato con successo. Password iniziale impostata.' : 'Utente aggiornato con successo'
+      message: wasCreated ? 'Utente creato. È stato inviato un link per impostare la password.' : 'Utente aggiornato con successo'
     })
   } catch (error) {
     console.error('Errore API creazione/aggiornamento utente:', error)
@@ -279,7 +270,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -366,17 +357,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const body = await request.json()
-    const { userId, action, roles } = body
-
-    if (!userId || !action) {
-      return NextResponse.json({ error: 'Parametri mancanti' }, { status: 400 })
+    const parsed = userPatchPayloadSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
     }
+    const { userId, action } = parsed.data
 
     switch (action) {
       case 'toggle_active':
@@ -408,9 +398,7 @@ export async function PATCH(request: NextRequest) {
 
       case 'update_roles':
         // Aggiorna ruoli multipli
-        if (!Array.isArray(roles)) {
-          return NextResponse.json({ error: 'Ruoli non validi' }, { status: 400 })
-        }
+        const roles = parsed.data.roles
 
         // Elimina ruoli esistenti
         await adminClient.from('user_roles').delete().eq('profile_id', userId)
@@ -468,7 +456,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

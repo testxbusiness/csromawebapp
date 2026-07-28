@@ -222,8 +222,8 @@ async function processEventReminders(supabase: any, today: string) {
 
   for (const event of upcomingEvents) {
     // Get all team members for this event
-    const teamMembers = event.event_teams.flatMap(et => 
-      et.team.team_members.map(tm => ({
+    const teamMembers = event.event_teams.flatMap((et: { team: { name: string; team_members: Array<{ profile: Record<string, unknown> }> } }) =>
+      et.team.team_members.map((tm: { profile: Record<string, unknown> }) => ({
         ...tm.profile,
         team_name: et.team.name
       }))

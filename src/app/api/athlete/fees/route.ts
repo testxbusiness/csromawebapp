@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'athlete') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -46,14 +46,15 @@ export async function GET(request: NextRequest) {
       ? await supabase.from('teams').select('id, name, code, activity_id').in('id', teamIds)
       : { data: [] as any[] }
 
-    const activityIds = [...new Set(teams.map((t: any) => t.activity_id).filter(Boolean))]
+    const safeTeams = teams || []
+    const activityIds = [...new Set(safeTeams.map((t: any) => t.activity_id).filter(Boolean))]
     const { data: activities = [] } = activityIds.length
       ? await supabase.from('activities').select('id, name').in('id', activityIds)
       : { data: [] as any[] }
 
     const feeMap = new Map((fees || []).map((f: any) => [f.id, f]))
-    const teamMap = new Map(teams.map((t: any) => [t.id, t]))
-    const activityMap = new Map(activities.map((a: any) => [a.id, a]))
+    const teamMap = new Map((teams || []).map((t: any) => [t.id, t]))
+    const activityMap = new Map((activities || []).map((a: any) => [a.id, a]))
 
     const composed = (base || []).map((row: any) => {
       const fee = feeMap.get(row.membership_fee_id)

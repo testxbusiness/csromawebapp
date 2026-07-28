@@ -87,7 +87,7 @@ export default function AthletesManager() {
       // Carica stagioni
       const { data: seasonsData } = await supabase
         .from('seasons')
-        .select('id, name, is_active')
+        .select('id, name, start_date, end_date, is_active')
         .order('created_at', { ascending: false })
 
       // Carica attività

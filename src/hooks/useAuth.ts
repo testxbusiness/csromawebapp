@@ -9,11 +9,21 @@ type ProfileRow = {
   email: string
   first_name: string
   last_name: string
+  date_of_birth?: string | null
+  avatar_url?: string | null
   role: 'admin' | 'coach' | 'athlete' | string
   must_change_password: boolean | null
   created_at: string | null
   updated_at: string | null
+  athlete_profile?: {
+    membership_number?: string | null
+    medical_certificate_expiry?: string | null
+    personal_notes?: string | null
+  } | null
 }
+
+const PROFILE_CACHE_KEY = 'csroma_profile_cache'
+const PROFILE_CACHE_DURATION = 5 * 60 * 1000
 
 interface UseAuthReturn {
   user: User | null
@@ -43,9 +53,6 @@ export function useAuth(): UseAuthReturn {
   const mounted = useRef(true)
   const currentUserIdRef = useRef<string | null>(null)
   const loadingWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const PROFILE_CACHE_KEY = 'csroma_profile_cache'
-  const PROFILE_CACHE_DURATION = 5 * 60 * 1000
 
   useEffect(() => {
     mounted.current = true
@@ -167,9 +174,8 @@ export function useAuth(): UseAuthReturn {
 
   const role = useMemo(() => {
     const raw =
-      profile?.role ??
       (user as any)?.app_metadata?.role ??
-      (user as any)?.user_metadata?.role ??
+      profile?.role ??
       null
     if (raw == null) return null
     return String(raw).trim().toLowerCase()

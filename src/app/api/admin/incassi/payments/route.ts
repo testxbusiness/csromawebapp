@@ -1,24 +1,20 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { incassiPaymentSchema } from '@/lib/validation/bulk'
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
-    const body = await request.json()
-
-    const {
-      installmentIds,
-      paymentDate,
-      paymentMethod
-    } = body
-
-    if (!installmentIds || !Array.isArray(installmentIds) || installmentIds.length === 0) {
-      return NextResponse.json({ error: 'Nessuna rata selezionata' }, { status: 400 })
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    if (!paymentDate || !paymentMethod) {
-      return NextResponse.json({ error: 'Data e metodo di pagamento sono obbligatori' }, { status: 400 })
+    if ((user as any).app_metadata?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const parsed = incassiPaymentSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Dati pagamento non validi' }, { status: 400 })
+    const { installmentIds, paymentDate, paymentMethod } = parsed.data
 
     // Get installments to process (only those assigned to athletes)
     const { data: installments, error: fetchError } = await supabase

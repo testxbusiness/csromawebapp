@@ -11,7 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -80,7 +80,7 @@ export async function GET() {
 
     // Formatta i dati per il frontend
     const formattedAthletes = athletes.map(athlete => {
-      const athleteProfile = athleteProfiles?.find(ap => ap.profile_id === athlete.id) || {}
+      const athleteProfile = athleteProfiles?.find(ap => ap.profile_id === athlete.id)
       const athleteTeamMembers = teamMembers?.filter(tm => tm.profile_id === athlete.id) || []
 
       const teamsWithDetails = athleteTeamMembers.map(membership => {
@@ -100,9 +100,9 @@ export async function GET() {
         last_name: athlete.last_name,
         phone: athlete.phone,
         birth_date: athlete.birth_date,
-        membership_number: athleteProfile.membership_number,
-        medical_certificate_expiry: athleteProfile.medical_certificate_expiry,
-        personal_notes: athleteProfile.personal_notes,
+        membership_number: athleteProfile?.membership_number ?? null,
+        medical_certificate_expiry: athleteProfile?.medical_certificate_expiry ?? null,
+        personal_notes: athleteProfile?.personal_notes ?? null,
         created_at: athlete.created_at,
         updated_at: athlete.updated_at,
         teams: teamsWithDetails.filter(team => team.id)

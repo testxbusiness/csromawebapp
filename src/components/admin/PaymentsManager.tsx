@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import PaymentModal from '@/components/admin/PaymentModal'
@@ -86,7 +86,7 @@ export default function PaymentsManager() {
   const [showModal, setShowModal] = useState(false)
   const [filterType, setFilterType] = useState<'all' | 'general_cost' | 'coach_payment'>('all')
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid'>('all')
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     loadPayments()
@@ -729,7 +729,7 @@ function PaymentForm({
   const supabase = createClient()
 
   // Load coach's teams when coach is selected
-  const loadCoachTeams = async (coachId: string) => {
+  const loadCoachTeams = useCallback(async (coachId: string) => {
     if (!coachId) {
       setCoachTeams([])
       return
@@ -753,13 +753,13 @@ function PaymentForm({
         return
       }
 
-      const teams = data?.map(item => item.teams).filter(Boolean) as Team[] || []
+      const teams = (data || []).map(item => Array.isArray(item.teams) ? item.teams[0] : item.teams).filter(Boolean) as Team[]
       setCoachTeams(teams)
     } catch (error) {
       console.error('Error loading coach teams:', error)
       setCoachTeams([])
     }
-  }
+  }, [supabase])
 
   // Effect to load coach teams when coach_id changes
   useEffect(() => {
@@ -768,19 +768,22 @@ function PaymentForm({
     } else {
       setCoachTeams([])
     }
-  }, [formData.coach_id, formData.type])
+  }, [formData.coach_id, formData.type, loadCoachTeams])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
     // Clean up empty foreign keys
-    const submitData = { ...formData }
-    if (!submitData.gym_id) delete submitData.gym_id
-    if (!submitData.activity_id) delete submitData.activity_id
-    if (!submitData.team_id) delete submitData.team_id
-    if (!submitData.coach_id) delete submitData.coach_id
-    if (!submitData.recurrence_pattern) delete submitData.recurrence_pattern
-    if (!submitData.due_date) delete submitData.due_date
+    const submitData: Omit<Payment, 'id'> = {
+      ...formData,
+      status: formData.status as Payment['status'],
+      gym_id: formData.gym_id || undefined,
+      activity_id: formData.activity_id || undefined,
+      team_id: formData.team_id || undefined,
+      coach_id: formData.coach_id || undefined,
+      recurrence_pattern: formData.recurrence_pattern || undefined,
+      due_date: formData.due_date || undefined,
+    }
     
     onSubmit(submitData)
   }
@@ -880,10 +883,10 @@ function PaymentForm({
             </label>
             <select
               value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value as 'to_pay' | 'paid' })}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value as 'pending' | 'paid' })}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="to_pay">Da pagare</option>
+              <option value="pending">Da pagare</option>
               <option value="paid">Pagato</option>
             </select>
           </div>

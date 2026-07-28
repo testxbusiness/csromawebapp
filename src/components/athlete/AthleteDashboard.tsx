@@ -12,7 +12,7 @@ import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 
 interface User {
   id: string
-  email: string
+  email?: string
 }
 
 interface AthleteProfileExtras {
@@ -51,6 +51,7 @@ interface Event {
   end_time: string
   location?: string
   description?: string
+  event_kind?: 'training' | 'match' | 'meeting' | 'other'
 }
 
 interface ChampionshipMatch {
@@ -69,6 +70,7 @@ interface Message {
   content: string
   created_at: string
   is_read: boolean
+  created_by_profile?: { first_name?: string | null; last_name?: string | null }
 }
 
 interface FeeInstallment {
@@ -76,7 +78,7 @@ interface FeeInstallment {
   installment_number: number
   due_date: string
   amount: number
-  status: string
+  status: 'not_due' | 'due_soon' | 'overdue' | 'paid' | 'partially_paid'
   membership_fee: {
     name: string
     team: {
@@ -88,6 +90,10 @@ interface FeeInstallment {
 interface AthleteDashboardProps {
   user: User
   profile: Profile
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
+  return Array.isArray(value) ? value[0] : value ?? undefined
 }
 
 export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
@@ -375,7 +381,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       .order('due_date', { ascending: true })
       .limit(5)
 
-    if (data) setFeeInstallments(data)
+    if (data) setFeeInstallments(data as unknown as FeeInstallment[])
   }
 
   const loadTeamDetail = async (teamId: string) => {
@@ -433,14 +439,14 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       const detail: TeamDetailData = {
         name: teamData.name,
         code: teamData.code,
-        activity: teamData.activities ? { name: teamData.activities.name } : undefined,
+        activity: firstRelation(teamData.activities) ? { name: firstRelation(teamData.activities)!.name } : undefined,
         training_schedules: schedules?.map(s => ({
           day_of_week: s.day_of_week,
           start_time: s.start_time,
           end_time: s.end_time,
           gym: {
-            name: s.gyms?.name || 'N/D',
-            city: s.gyms?.city
+            name: firstRelation(s.gyms)?.name || 'N/D',
+            city: firstRelation(s.gyms)?.city
           }
         })) || [],
         coaches: coachesData?.map(c => {
@@ -498,7 +504,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     }
   }
 
-  const getMedicalCertificateStatus = (expiryDate?: string) => {
+  const getMedicalCertificateStatus = (expiryDate?: string | null) => {
     if (!expiryDate) return { text: 'Non specificato', color: 'bg-gray-100 text-gray-800' }
     
     const expiry = new Date(expiryDate)

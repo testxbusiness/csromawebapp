@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Team {
@@ -52,13 +52,7 @@ export default function TeamAssignmentModal({
   const [membershipFees, setMembershipFees] = useState<MembershipFee[]>([])
   const [selectedMembershipFeeId, setSelectedMembershipFeeId] = useState<string>('')
   const [loadingFees, setLoadingFees] = useState(false)
-  const supabase = createClient()
-
-  useEffect(() => {
-    if (isOpen) {
-      loadTeams()
-    }
-  }, [isOpen])
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     // Per gli atleti, carica i piani di pagamento solo se è selezionata una squadra
@@ -71,7 +65,7 @@ export default function TeamAssignmentModal({
     }
   }, [selectedTeamIds, userType])
 
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     try {
       const { data } = await supabase
         .from('teams')
@@ -82,7 +76,13 @@ export default function TeamAssignmentModal({
     } catch (error) {
       console.error('Errore caricamento squadre:', error)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    if (isOpen) {
+      void loadTeams()
+    }
+  }, [isOpen, loadTeams])
 
   const loadMembershipFees = async (teamId: string) => {
     setLoadingFees(true)

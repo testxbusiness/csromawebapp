@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportTeams } from '@/lib/utils/excelExport'
 import TeamModal from '@/components/admin/TeamModal'
@@ -56,16 +56,9 @@ export default function TeamsManager() {
   const [loading, setLoading] = useState(true)
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    loadTeams()
-    loadActivities()
-    loadCoaches()
-    loadGyms()
-  }, [])
-
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     const { data: teamsData } = await supabase
       .from('teams')
       .select('id, name, code, activity_id, created_at, updated_at')
@@ -130,11 +123,11 @@ export default function TeamsManager() {
       }
     })
 
-    setTeams(teamsWithRelations)
+    setTeams(teamsWithRelations as Team[])
     setLoading(false)
-  }
+  }, [supabase])
 
-  const loadActivities = async () => {
+  const loadActivities = useCallback(async () => {
     const { data: activitiesData } = await supabase
       .from('activities')
       .select('*')
@@ -164,9 +157,9 @@ export default function TeamsManager() {
     } else {
       setActivities([])
     }
-  }
+  }, [supabase])
 
-  const loadCoaches = async () => {
+  const loadCoaches = useCallback(async () => {
     const { data } = await supabase
       .from('profiles')
       .select('id, first_name, last_name, email')
@@ -174,9 +167,9 @@ export default function TeamsManager() {
       .order('first_name')
 
     setCoaches(data || [])
-  }
+  }, [supabase])
 
-  const loadGyms = async () => {
+  const loadGyms = useCallback(async () => {
     const { data } = await supabase
       .from('gyms')
       .select('id, name, city, address')
@@ -184,7 +177,14 @@ export default function TeamsManager() {
       .order('name')
 
     setGyms(data || [])
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    void loadTeams()
+    void loadActivities()
+    void loadCoaches()
+    void loadGyms()
+  }, [loadActivities, loadCoaches, loadGyms, loadTeams])
 
   const generateTeamCode = (teamName: string, activityName: string): string => {
     const teamInitials = teamName

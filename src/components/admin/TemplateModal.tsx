@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
+import { sanitizeHtml } from '@/lib/utils/sanitizeHtml'
 import type { DocumentTemplate } from './DocumentsManager'
 
 export default function TemplateModal({
@@ -16,7 +16,6 @@ export default function TemplateModal({
   onClose: () => void
   onSaved: () => Promise<void> | void
 }) {
-  const supabase = createClient()
   const [name, setName] = useState('')
   const [targetType, setTargetType] = useState<'user'|'team'>('team')
   const [includeLogo, setIncludeLogo] = useState<boolean>(true)
@@ -49,43 +48,23 @@ export default function TemplateModal({
   async function handleSubmit() {
     if (!name.trim()) { toast.error('Inserisci un nome'); return }
     if (!contentHtml.trim()) { toast.error('Inserisci il contenuto HTML'); return }
+    const safeContentHtml = sanitizeHtml(contentHtml)
 
-    // Necessario per la policy: created_by = auth.uid() AND is_admin()
-    const { data: auth } = await supabase.auth.getUser()
-    const createdBy = auth?.user?.id
-    if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
-
-    if (mode === 'create') {
-      const { error } = await supabase.from('document_templates').insert({
-        name,
-        target_type: targetType,
-        // Mapping corretto: la colonna è has_logo
-        has_logo: includeLogo,
-        logo_position: logoPosition,
-        type: docType,
-        // Satisfy schemas that use either `content` or `content_html`
-        content: contentHtml,
-        content_html: contentHtml,
-        created_by: createdBy,
-      })
-      if (error) { toast.error('Errore creazione template'); return }
-    } else {
-      const { error } = await supabase
-        .from('document_templates')
-        .update({
-          name,
-          target_type: targetType,
-          // Mapping corretto: la colonna è has_logo
-          has_logo: includeLogo,
-          logo_position: logoPosition,
-          type: docType,
-          // Satisfy schemas that use either `content` or `content_html`
-          content: contentHtml,
-          content_html: contentHtml,
-        })
-        .eq('id', initialTemplate!.id)
-      if (error) { toast.error('Errore salvataggio template'); return }
+    const payload = {
+      name,
+      target_type: targetType,
+      has_logo: includeLogo,
+      logo_position: logoPosition,
+      type: docType,
+      content_html: safeContentHtml,
     }
+    const response = await fetch('/api/admin/document-templates', {
+      method: mode === 'create' ? 'POST' : 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mode === 'create' ? payload : { ...payload, id: initialTemplate!.id }),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) { toast.error(result.error || 'Errore salvataggio template'); return }
     await onSaved()
   }
 

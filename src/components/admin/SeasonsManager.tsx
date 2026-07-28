@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportSeasons } from '@/lib/utils/excelExport'
 import { SeasonsModal } from './SeasonsModal'
@@ -21,13 +21,9 @@ export default function SeasonsManager() {
   const [loading, setLoading] = useState(true)
   const [editingSeason, setEditingSeason] = useState<Season | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    loadSeasons()
-  }, [])
-
-  const loadSeasons = async () => {
+  const loadSeasons = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('*')
@@ -35,7 +31,11 @@ export default function SeasonsManager() {
 
     setSeasons(data || [])
     setLoading(false)
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    void loadSeasons()
+  }, [loadSeasons])
 
   const handleCreateSeason = async (seasonData: Omit<Season, 'id'>) => {
     const { error } = await supabase

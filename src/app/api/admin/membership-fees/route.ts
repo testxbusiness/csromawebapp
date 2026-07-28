@@ -1,23 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { membershipActionSchema, membershipFeeSchema, membershipFeeUpdateSchema } from '@/lib/validation/membershipFees'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    
-    const {
-      team_id,
-      name,
-      description,
-      enrollment_fee,
-      insurance_fee,
-      monthly_fee,
-      months_count,
-      installments_count,
-      installments
-    } = body
+    const parsed = membershipFeeSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Dati quota associativa non validi' }, { status: 400 })
+    const { team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
 
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -25,15 +16,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Calcola importo totale
-    const total_amount = (parseFloat(enrollment_fee) || 0) + 
-                        (parseFloat(insurance_fee) || 0) + 
-                        ((parseFloat(monthly_fee) || 0) * (parseFloat((months_count || '0').toString().replace(',', '.')) || 0))
+    const total_amount = (Number(enrollment_fee) || 0) +
+                        (Number(insurance_fee) || 0) +
+                        ((Number(monthly_fee) || 0) * (Number(months_count) || 0))
 
     // Crea la quota associativa
     const { data: fee, error: feeError } = await adminClient
@@ -43,11 +34,11 @@ export async function POST(request: NextRequest) {
         name,
         description: description || null,
         total_amount,
-        enrollment_fee: parseFloat(enrollment_fee) || 0,
-        insurance_fee: parseFloat(insurance_fee) || 0,
-        monthly_fee: parseFloat(monthly_fee) || 0,
-        months_count: parseFloat((months_count || '0').toString().replace(',', '.')) || 0,
-        installments_count: parseInt(installments_count) || 1,
+        enrollment_fee: Number(enrollment_fee) || 0,
+        insurance_fee: Number(insurance_fee) || 0,
+        monthly_fee: Number(monthly_fee) || 0,
+        months_count: Number(months_count) || 0,
+        installments_count: Number(installments_count) || 1,
         created_by: user.id
       })
       .select('id')
@@ -108,7 +99,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -209,20 +200,9 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    
-    const {
-      id,
-      team_id,
-      name,
-      description,
-      enrollment_fee,
-      insurance_fee,
-      monthly_fee,
-      months_count,
-      installments_count,
-      installments
-    } = body
+    const parsed = membershipFeeUpdateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Dati aggiornamento quota non validi' }, { status: 400 })
+    const { id, team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
 
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -230,19 +210,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (!id) {
-      return NextResponse.json({ error: 'ID quota richiesto' }, { status: 400 })
-    }
-
     // Calcola importo totale
-    const total_amount = (parseFloat(enrollment_fee) || 0) + 
-                        (parseFloat(insurance_fee) || 0) + 
-                        ((parseFloat(monthly_fee) || 0) * (parseFloat((months_count || '0').toString().replace(',', '.')) || 0))
+    const total_amount = (Number(enrollment_fee) || 0) +
+                        (Number(insurance_fee) || 0) +
+                        ((Number(monthly_fee) || 0) * (Number(months_count) || 0))
 
     // Aggiorna la quota associativa
     const { error: feeError } = await adminClient
@@ -252,11 +228,11 @@ export async function PUT(request: NextRequest) {
         name,
         description: description || null,
         total_amount,
-        enrollment_fee: parseFloat(enrollment_fee) || 0,
-        insurance_fee: parseFloat(insurance_fee) || 0,
-        monthly_fee: parseFloat(monthly_fee) || 0,
-        months_count: parseFloat((months_count || '0').toString().replace(',', '.')) || 0,
-        installments_count: parseInt(installments_count) || 1
+        enrollment_fee: Number(enrollment_fee) || 0,
+        insurance_fee: Number(insurance_fee) || 0,
+        monthly_fee: Number(monthly_fee) || 0,
+        months_count: Number(months_count) || 0,
+        installments_count: Number(installments_count) || 1
       })
       .eq('id', id)
 
@@ -320,7 +296,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -370,11 +346,11 @@ export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    
-    console.log('PATCH request body:', body)
-    
-    const { fee_id, action } = body
+    const parsed = membershipActionSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Parametri quota non validi' }, { status: 400 })
+    const body = parsed.data
+    const { action } = body
+    const fee_id = 'fee_id' in body ? body.fee_id : undefined
 
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -382,17 +358,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Richiedi fee_id solo per azioni che lo necessitano esplicitamente
-    const requiresFeeId = action === 'generate_installments'
-    if (requiresFeeId && !fee_id) {
-      return NextResponse.json({ error: 'ID quota richiesto' }, { status: 400 })
-    }
-
     if (action === 'generate_installments') {
       // Ottieni i dettagli della quota
       const { data: fee, error: feeError } = await adminClient
@@ -466,15 +437,11 @@ export async function PATCH(request: NextRequest) {
 
     if (action === 'update_installment_status') {
       const { installment_id, status } = body
-      
-      if (!installment_id || !status) {
-        return NextResponse.json({ error: 'ID rata e stato richiesti' }, { status: 400 })
-      }
 
       const updateData: any = { status }
       if (status === 'paid') {
         updateData.paid_at = new Date().toISOString()
-      } else if (status !== 'paid' && body.paid_at) {
+      } else if (body.paid_at) {
         updateData.paid_at = null
       }
 
@@ -507,7 +474,7 @@ export async function PATCH(request: NextRequest) {
         .from('fee_installments')
         .update({ status: 'overdue' })
         .lte('due_date', todayStr)
-        .neq('status', 'paid')
+        .neq('status', 'paid' as never)
         .neq('status', 'overdue')
 
       if (errOverdue) {
@@ -521,7 +488,7 @@ export async function PATCH(request: NextRequest) {
         .update({ status: 'due_soon' })
         .gt('due_date', todayStr)
         .lte('due_date', in30Str)
-        .neq('status', 'paid')
+        .neq('status', 'paid' as never)
         .neq('status', 'due_soon')
 
       if (errDueSoon) {
@@ -534,7 +501,7 @@ export async function PATCH(request: NextRequest) {
         .from('fee_installments')
         .update({ status: 'not_due' })
         .gt('due_date', in30Str)
-        .neq('status', 'paid')
+        .neq('status', 'paid' as never)
         .neq('status', 'not_due')
 
       if (errNotDue) {
@@ -546,13 +513,10 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (action === 'bulk_update_installments') {
-      const { installment_ids, status } = body as any
-      if (!Array.isArray(installment_ids) || installment_ids.length === 0 || !status) {
-        return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
-      }
+      const { installment_ids, status } = body
       const updateData: any = { status }
       if (status === 'paid') updateData.paid_at = new Date().toISOString()
-      else if (status !== 'paid') updateData.paid_at = null
+      else updateData.paid_at = null
 
       const { error: updErr } = await adminClient
         .from('fee_installments')
@@ -569,18 +533,10 @@ export async function PATCH(request: NextRequest) {
 
     if (action === 'update_installment_details') {
       const { installment_id, due_date, amount } = body
-      
-      if (!installment_id) {
-        return NextResponse.json({ error: 'ID rata richiesto' }, { status: 400 })
-      }
 
       const updateData: any = {}
       if (due_date) updateData.due_date = due_date
-      if (amount !== undefined) updateData.amount = parseFloat(amount)
-
-      if (Object.keys(updateData).length === 0) {
-        return NextResponse.json({ error: 'Nessun dato da aggiornare' }, { status: 400 })
-      }
+      if (amount !== undefined) updateData.amount = Number(amount)
 
       const { error: updateError } = await adminClient
         .from('fee_installments')

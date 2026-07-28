@@ -63,7 +63,7 @@ export default function CoachesManager() {
       // Carica stagioni
       const { data: seasonsData } = await supabase
         .from('seasons')
-        .select('id, name, is_active')
+        .select('id, name, start_date, end_date, is_active')
         .order('created_at', { ascending: false })
 
       // Carica attività
@@ -131,7 +131,7 @@ export default function CoachesManager() {
 
       return true
     })
-  }, [coaches, selectedSeason, selectedActivity, selectedTeam, searchTerm])
+  }, [activities, coaches, selectedSeason, selectedActivity, selectedTeam, searchTerm])
 
   // Gestione selezione multipla
   const toggleCoachSelection = (coachId: string) => {

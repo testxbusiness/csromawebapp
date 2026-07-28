@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { athleteAttendanceSchema } from '@/lib/validation/events'
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'athlete') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const body = await req.json().catch(() => ({}))
-    const { event_id, status, note } = body || {}
-    if (!event_id || !['going','maybe','declined'].includes(status)) {
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
-    }
+    const parsed = athleteAttendanceSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    const { event_id, status, note } = parsed.data
 
     const { error } = await supabase
       .from('event_attendances')
@@ -26,4 +25,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

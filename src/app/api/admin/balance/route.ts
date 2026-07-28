@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -147,8 +147,8 @@ export async function GET(request: NextRequest) {
       const gymActivityIds = gymActivities?.map(a => a.id) || []
       
       // Filter fees to only include those where team's activity is in the gym
-      filteredFeesData = feesData?.filter(fee => 
-        fee.teams && gymActivityIds.includes(fee.teams.activity_id)
+      filteredFeesData = feesData?.filter(fee =>
+        fee.teams && gymActivityIds.includes((Array.isArray(fee.teams) ? fee.teams[0] : fee.teams)?.activity_id)
       ) || []
     }
 
@@ -203,9 +203,9 @@ export async function GET(request: NextRequest) {
       const gymActivityIds = gymActivities?.map(a => a.id) || []
       
       // Filter installments to only include those where team's activity is in the gym
-      filteredInstallments = installments?.filter(installment => 
-        installment.membership_fees?.teams && 
-        gymActivityIds.includes(installment.membership_fees.teams.activity_id)
+      filteredInstallments = installments?.filter(installment =>
+        (installment.membership_fees as any)?.[0]?.teams?.[0] &&
+        gymActivityIds.includes((installment.membership_fees as any)[0].teams[0].activity_id)
       ) || []
     }
 

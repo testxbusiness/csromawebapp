@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     // Auth: only admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const teamId = searchParams.get('team_id') || undefined
@@ -105,4 +105,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
-

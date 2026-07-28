@@ -124,6 +124,10 @@ type Activity = { id: string; name: string; season_id: string }
 type Team = { id: string; name: string; code?: string | null }
 type ClubTeamOption = ClubTeam
 
+function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
+  return Array.isArray(value) ? value[0] : value ?? undefined
+}
+
 type ManagerMode = 'admin' | 'coach' | 'athlete'
 
 interface ChampionshipsManagerProps {
@@ -292,7 +296,17 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       )
     }
 
-    setChampionships(filtered)
+    const normalizedChampionships = (filtered as any[]).map((championship) => ({
+      ...championship,
+      championship_groups: (championship.championship_groups || []).map((group: any) => ({
+        ...group,
+        championship_group_teams: (group.championship_group_teams || []).map((groupTeam: any) => ({
+          ...groupTeam,
+          championship_club_teams: firstRelation(groupTeam.championship_club_teams)
+        }))
+      }))
+    })) as Championship[]
+    setChampionships(normalizedChampionships)
     if (!selectedChampionshipId && data && data.length > 0) {
       setSelectedChampionshipId(filtered[0]?.id ?? null)
     }
@@ -398,7 +412,11 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         toast.error('Impossibile caricare la classifica')
       }
 
-      setMatches(matchesData || [])
+      setMatches((matchesData || []).map((match: any) => ({
+        ...match,
+        home_club_team: firstRelation(match.home_club_team),
+        away_club_team: firstRelation(match.away_club_team)
+      })) as Match[])
       setStandings(standingsData || [])
     } finally {
       setLoading(false)
@@ -892,7 +910,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       setConvocationTeamMembers([])
       return
     }
-    setConvocationTeamMembers(data || [])
+    setConvocationTeamMembers((data || []).map((member: any) => ({ ...member, profiles: firstRelation(member.profiles) })) as TeamMember[])
   }
 
   const loadConvocationData = async (m: Match, clubTeamId: string, teamId: string | null) => {
@@ -915,7 +933,16 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
 
       if (error && error.code !== 'PGRST116') throw error
 
-      setConvocation(data || {
+      const normalizedConvocation = data ? {
+        ...data,
+        championship_club_teams: firstRelation((data as any).championship_club_teams),
+        championship_match_convocation_members: ((data as any).championship_match_convocation_members || []).map((member: any) => ({
+          ...member,
+          profiles: firstRelation(member.profiles),
+          team_members: firstRelation(member.team_members)
+        }))
+      } as Convocation : null
+      setConvocation(normalizedConvocation || {
         match_id: m.id,
         championship_club_team_id: clubTeamId,
         team_id: teamId

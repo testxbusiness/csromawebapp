@@ -67,7 +67,7 @@ export default function TeamModal({
   onUpdate,
   onGenerateCode,
 }: Props) {
-  const supabase = createClient()
+  const supabase = React.useMemo(() => createClient(), [])
   const [saving, setSaving] = React.useState(false)
   const [loadingSchedules, setLoadingSchedules] = React.useState(false)
   const [trainingSchedules, setTrainingSchedules] = React.useState<TrainingSchedule[]>([])
@@ -78,23 +78,7 @@ export default function TeamModal({
     coach_id: team?.coach_id ?? '',
   })
 
-  React.useEffect(() => {
-    setForm({
-      name: team?.name ?? '',
-      code: team?.code ?? '',
-      activity_id: team?.activity_id ?? '',
-      coach_id: team?.coach_id ?? '',
-    })
-
-    // Carica orari se in modifica, altrimenti resetta
-    if (team?.id) {
-      loadTrainingSchedules(team.id)
-    } else {
-      setTrainingSchedules([])
-    }
-  }, [team])
-
-  const loadTrainingSchedules = async (teamId: string) => {
+  const loadTrainingSchedules = React.useCallback(async (teamId: string) => {
     setLoadingSchedules(true)
     try {
       const { data, error } = await supabase
@@ -111,7 +95,22 @@ export default function TeamModal({
     } finally {
       setLoadingSchedules(false)
     }
-  }
+  }, [supabase])
+
+  React.useEffect(() => {
+    setForm({
+      name: team?.name ?? '',
+      code: team?.code ?? '',
+      activity_id: team?.activity_id ?? '',
+      coach_id: team?.coach_id ?? '',
+    })
+
+    if (team?.id) {
+      void loadTrainingSchedules(team.id)
+    } else {
+      setTrainingSchedules([])
+    }
+  }, [loadTrainingSchedules, team])
 
   const handleGenerate = () => {
     const a = activities.find(x => x.id === form.activity_id)

@@ -1,9 +1,6 @@
 'use client'
 import * as React from 'react'
 import clsx from 'clsx'
-import { Teko } from 'next/font/google'   // puoi usare Anton, Bebas Neue, Jersey_10, etc.
-
-const jerseyFont = Teko({ subsets: ['latin'], weight: ['700'] })
 
 type JerseyCardProps = {
   number: string | number
@@ -28,7 +25,7 @@ export function JerseyCard({
       <img src="/images/maglia_back.png" alt="Maglia CS Roma" className="block w-full h-auto" />
 
       <span
-        className={clsx('jersey-number', fontClassName ?? jerseyFont.className)}
+        className={clsx('jersey-number', fontClassName)}
         style={{
           left: 0, right: 0, bottom: '34%', position: 'absolute', textAlign: 'center',
           fontSize: 'clamp(28px, 10vw, 72px)', lineHeight: 1,

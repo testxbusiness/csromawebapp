@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Button, Card, CardTitle, CardMeta, Stat } from '@/components/ui'
 import { List, ListItem } from '@/components/ui/List'
@@ -30,7 +30,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
   const [activeSeason, setActiveSeason] = useState<Season | null>(null)
   const [lastSignIn, setLastSignIn] = useState<string>('—')
   const [metrics, setMetrics] = useState({ activities: 0, teams: 0, athletes: 0, coaches: 0 })
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const checkFirstAccess = useCallback(async () => {
     const { data: seasonsData } = await supabase
@@ -70,7 +70,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
     }
 
     loadInitialData()
-  }, []) // Dipendenze vuote - carica solo al mount
+  }, [checkFirstAccess, loadSeasons, supabase])
 
   // Carica stagione attiva e calcola metriche dipendenti
   useEffect(() => {

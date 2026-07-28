@@ -35,7 +35,9 @@ services:
     environment:
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgresql://postgres:postgres@supabase-db:5432/postgres
+      API_EXTERNAL_URL: http://localhost:9999
       GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_URI_ALLOW_LIST: http://localhost:3000/auth/callback
       GOTRUE_JWT_SECRET: your-super-secret-jwt
       GOTRUE_DISABLE_SIGNUP: "false"
     ports:

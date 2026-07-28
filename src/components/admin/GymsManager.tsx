@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import GymModal from '@/components/admin/GymModal'
@@ -32,14 +32,9 @@ export default function GymsManager() {
   const [loading, setLoading] = useState(true)
   const [editingGym, setEditingGym] = useState<Gym | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    loadGyms()
-    loadSeasons()
-  }, [])
-
-  const loadGyms = async () => {
+  const loadGyms = useCallback(async () => {
     const { data: gymsData } = await supabase
       .from('gyms')
       .select('*')
@@ -70,16 +65,21 @@ export default function GymsManager() {
       setGyms([])
     }
     setLoading(false)
-  }
+  }, [supabase])
 
-  const loadSeasons = async () => {
+  const loadSeasons = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('id, name, is_active')
       .order('start_date', { ascending: false })
 
     setSeasons(data || [])
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    void loadGyms()
+    void loadSeasons()
+  }, [loadGyms, loadSeasons])
 
   const handleCreateGym = async (gymData: Omit<Gym, 'id'>) => {
     const { error } = await supabase

@@ -16,7 +16,7 @@ type Payment = {
   amount: number
   frequency: 'one_time' | 'recurring'
   recurrence_pattern?: string
-  status: 'to_pay' | 'paid'
+  status: 'pending' | 'paid'
   due_date?: string
   gym_id?: string
   activity_id?: string
@@ -62,7 +62,7 @@ export default function PaymentModal({
     amount: payment?.amount ?? 0,
     frequency: payment?.frequency ?? 'one_time',
     recurrence_pattern: payment?.recurrence_pattern ?? '',
-    status: payment?.status ?? 'to_pay',
+    status: payment?.status ?? 'pending',
     due_date: payment?.due_date ?? '',
     gym_id: payment?.gym_id ?? '',
     activity_id: payment?.activity_id ?? '',
@@ -77,7 +77,7 @@ export default function PaymentModal({
       amount: payment?.amount ?? 0,
       frequency: payment?.frequency ?? 'one_time',
       recurrence_pattern: payment?.recurrence_pattern ?? '',
-      status: payment?.status ?? 'to_pay',
+      status: payment?.status ?? 'pending',
       due_date: payment?.due_date ?? '',
       gym_id: payment?.gym_id ?? '',
       activity_id: payment?.activity_id ?? '',
@@ -221,7 +221,7 @@ export default function PaymentModal({
                 value={form.status}
                 onChange={(e) => setForm({ ...form, status: e.target.value as Payment['status'] })}
               >
-                <option value="to_pay">Da pagare</option>
+              <option value="pending">Da pagare</option>
                 <option value="paid">Pagato</option>
               </select>
             </div>

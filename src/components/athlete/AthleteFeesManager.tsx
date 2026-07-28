@@ -11,7 +11,7 @@ interface FeeInstallment {
   installment_number: number
   due_date: string
   amount: number
-  status: string
+  status: 'not_due' | 'due_soon' | 'overdue' | 'partially_paid' | 'paid'
   paid_at?: string
   membership_fee: {
     id: string
@@ -103,15 +103,15 @@ export default function AthleteFeesManager() {
   }, [userId, loadInstallments])
 
   useEffect(() => {
-    filterInstallments()
-  }, [installments, filter])
-
-  function filterInstallments() {
-    if (filter === 'pending') setFilteredInstallments(installments.filter(i => i.status !== 'paid'))
-    else if (filter === 'paid') setFilteredInstallments(installments.filter(i => i.status === 'paid'))
-    else if (filter === 'overdue') setFilteredInstallments(installments.filter(i => i.status === 'overdue'))
-    else setFilteredInstallments(installments)
-  }
+    const filtered = filter === 'pending'
+      ? installments.filter(i => i.status !== 'paid')
+      : filter === 'paid'
+        ? installments.filter(i => i.status === 'paid')
+        : filter === 'overdue'
+          ? installments.filter(i => i.status === 'overdue')
+          : installments
+    setFilteredInstallments(filtered)
+  }, [filter, installments])
 
   const getStatusText = (status: string) =>
     status === 'paid' ? '✅ Pagata'

@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -62,8 +62,8 @@ export async function GET(request: NextRequest) {
       months_count: fee.months_count,
       installments_count: fee.installments_count,
       team_id: fee.team_id,
-      team_name: fee.teams?.name,
-      team_code: fee.teams?.code
+      team_name: (fee.teams as any)?.[0]?.name ?? (fee.teams as any)?.name,
+      team_code: (fee.teams as any)?.[0]?.code ?? (fee.teams as any)?.code
     })) || []
 
     return NextResponse.json({

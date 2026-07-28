@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sendToUser } from '@/lib/utils/push'
 import { createClient } from '@/lib/supabase/server'
+import { pushTestSchema } from '@/lib/validation/messages'
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,7 +9,9 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const payload = await req.json().catch(() => ({}))
+    const parsed = pushTestSchema.safeParse(await req.json().catch(() => ({})))
+    if (!parsed.success) return NextResponse.json({ error: 'Notifica non valida' }, { status: 400 })
+    const payload = parsed.data
     await sendToUser(user.id, {
       title: payload?.title || 'Notifica di test',
       body: payload?.body || 'Le push sono attive su questo dispositivo',
@@ -22,4 +25,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

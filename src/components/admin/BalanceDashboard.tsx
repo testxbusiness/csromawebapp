@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface BalanceSummary {
@@ -62,14 +62,9 @@ export default function BalanceDashboard() {
     startDate: '',
     endDate: ''
   })
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    loadFilterOptions()
-    loadBalanceData()
-  }, [filters])
-
-  const loadFilterOptions = async () => {
+  const loadFilterOptions = useCallback(async () => {
     try {
       const [activitiesRes, teamsRes, gymsRes, coachesRes] = await Promise.all([
         supabase.from('activities').select('id, name').order('name'),
@@ -87,9 +82,9 @@ export default function BalanceDashboard() {
     } catch (error) {
       console.error('Error loading filter options:', error)
     }
-  }
+  }, [supabase])
 
-  const loadBalanceData = async () => {
+  const loadBalanceData = useCallback(async () => {
     try {
       setLoading(true)
       const queryParams = new URLSearchParams()
@@ -111,7 +106,15 @@ export default function BalanceDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters])
+
+  useEffect(() => {
+    void loadFilterOptions()
+  }, [loadFilterOptions])
+
+  useEffect(() => {
+    void loadBalanceData()
+  }, [loadBalanceData])
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))

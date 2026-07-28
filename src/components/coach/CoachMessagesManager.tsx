@@ -58,7 +58,7 @@ export default function CoachMessagesManager() {
       .eq('coach_id', userId)
 
     const list = (data || [])
-      .map((row) => row.teams)
+      .map((row) => Array.isArray(row.teams) ? row.teams[0] : row.teams)
       .filter(Boolean) as Team[]
 
     setTeams(list.sort((a, b) => a.name.localeCompare(b.name)))

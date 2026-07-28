@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 
@@ -51,73 +51,45 @@ export default function BalanceReport() {
     start_date: '',
     end_date: ''
   })
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    loadSeasons()
-    loadGyms()
-    loadActivities()
-    loadTeams()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (seasons.length > 0) {
-      // Set default to active season
-      const activeSeason = seasons.find(s => s.is_active)
-      if (activeSeason) {
-        setFilters(prev => ({
-          ...prev,
-          season_id: activeSeason.id,
-          start_date: activeSeason.start_date,
-          end_date: activeSeason.end_date
-        }))
-      }
-    }
-  }, [seasons])
-
-  useEffect(() => {
-    if (filters.season_id || filters.start_date) {
-      loadFinancialData()
-    }
-  }, [filters])
-
-  const loadSeasons = async () => {
+  const loadSeasons = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('*')
       .order('start_date', { ascending: false })
 
     setSeasons(data || [])
-  }
+  }, [supabase])
 
-  const loadGyms = async () => {
+  const loadGyms = useCallback(async () => {
     const { data } = await supabase
       .from('gyms')
       .select('id, name')
       .order('name')
 
     setGyms(data || [])
-  }
+  }, [supabase])
 
-  const loadActivities = async () => {
+  const loadActivities = useCallback(async () => {
     const { data } = await supabase
       .from('activities')
       .select('id, name')
       .order('name')
 
     setActivities(data || [])
-  }
+  }, [supabase])
 
-  const loadTeams = async () => {
+  const loadTeams = useCallback(async () => {
     const { data } = await supabase
       .from('teams')
       .select('id, name, code')
       .order('name')
 
     setTeams(data || [])
-  }
+  }, [supabase])
 
-  const loadFinancialData = async () => {
+  const loadFinancialData = useCallback(async () => {
     setLoading(true)
     
     try {
@@ -182,7 +154,7 @@ export default function BalanceReport() {
 
       // For revenue, we can categorize by team
       const revenueByTeam = revenueData?.reduce((acc, fee) => {
-        const teamName = fee.teams?.name || 'Sconosciuto'
+        const teamName = (fee.teams as any)?.[0]?.name || (fee.teams as any)?.name || 'Sconosciuto'
         acc[teamName] = (acc[teamName] || 0) + (fee.total_amount || 0)
         return acc
       }, {} as Record<string, number>) || {}
@@ -210,7 +182,34 @@ export default function BalanceReport() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters, seasons, supabase])
+
+  useEffect(() => {
+    void loadSeasons()
+    void loadGyms()
+    void loadActivities()
+    void loadTeams()
+  }, [loadSeasons, loadGyms, loadActivities, loadTeams])
+
+  useEffect(() => {
+    if (seasons.length > 0) {
+      const activeSeason = seasons.find(s => s.is_active)
+      if (activeSeason) {
+        setFilters(prev => ({
+          ...prev,
+          season_id: activeSeason.id,
+          start_date: activeSeason.start_date,
+          end_date: activeSeason.end_date
+        }))
+      }
+    }
+  }, [seasons])
+
+  useEffect(() => {
+    if (filters.season_id || filters.start_date) {
+      void loadFinancialData()
+    }
+  }, [filters, loadFinancialData])
 
   const handleFilterChange = (field: keyof FilterOptions, value: string) => {
     setFilters(prev => ({

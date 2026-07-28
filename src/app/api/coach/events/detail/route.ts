@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Verify access: event belongs to teams coached by user

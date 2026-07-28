@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
-import MessageModal from '@/components/admin/MessageModal'
+import MessageModal, { type Message as MessageForm } from '@/components/admin/MessageModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 
 interface Message {
@@ -12,10 +12,12 @@ interface Message {
   subject: string
   content: string
   attachment_url?: string
-  attachments?: { id: string; file_name: string; mime_type?: string; file_size?: number; download_url?: string | null }[]
+  attachments?: { id?: string; file_path?: string; file_name: string; mime_type?: string; file_size?: number; download_url?: string | null }[]
   created_by?: string
   created_at?: string
   updated_at?: string
+  selected_teams?: string[]
+  selected_users?: string[]
   
   // Joined data
   created_by_profile?: {
@@ -235,11 +237,11 @@ export default function MessagesManager() {
       <MessageModal
   open={showModal}
   onClose={() => { setShowModal(false); setEditingMessage(null) }}
-  message={editingMessage}
+  message={editingMessage as MessageForm | null}
   teams={teams}
   users={users}
-  onCreate={handleCreateMessage}
-  onUpdate={handleUpdateMessage}
+  onCreate={(data) => handleCreateMessage(data as Omit<Message, 'id'>)}
+  onUpdate={(id, data) => handleUpdateMessage(id, data as Partial<Message>)}
 />
 
       {selectedMessage && (

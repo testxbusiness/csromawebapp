@@ -35,7 +35,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
         .single()
 
       const mustChange =
-        session.user.user_metadata?.must_change_password === true ||
+        session.user.app_metadata?.must_change_password === true ||
         profile?.must_change_password === true
 
       setIsMandatoryChange(mustChange)

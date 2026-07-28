@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface AthleteDetailDrawerProps {
@@ -64,20 +64,9 @@ export default function AthleteDetailDrawer({
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'installments' | 'payments'>('overview')
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    if (isOpen && athleteId) {
-      loadAthleteData()
-    } else {
-      setProfile(null)
-      setTeams([])
-      setInstallments([])
-      setPaymentHistory([])
-    }
-  }, [isOpen, athleteId])
-
-  const loadAthleteData = async () => {
+  const loadAthleteData = useCallback(async () => {
     if (!athleteId) return
 
     setLoading(true)
@@ -99,7 +88,7 @@ export default function AthleteDetailDrawer({
         `)
         .eq('profile_id', athleteId)
 
-      setTeams(teamsData?.map(tm => tm.teams) || [])
+      setTeams((teamsData || []).map(tm => Array.isArray(tm.teams) ? tm.teams[0] : tm.teams).filter(Boolean) as Team[])
 
       // Load installments
       const { data: installmentsData } = await supabase
@@ -142,7 +131,18 @@ export default function AthleteDetailDrawer({
     } finally {
       setLoading(false)
     }
-  }
+  }, [athleteId, supabase])
+
+  useEffect(() => {
+    if (isOpen && athleteId) {
+      void loadAthleteData()
+    } else {
+      setProfile(null)
+      setTeams([])
+      setInstallments([])
+      setPaymentHistory([])
+    }
+  }, [athleteId, isOpen, loadAthleteData])
 
   const getStatusColor = (status: string) => {
     switch (status) {

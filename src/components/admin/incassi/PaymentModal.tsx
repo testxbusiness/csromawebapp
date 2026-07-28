@@ -5,6 +5,7 @@ import { toast } from '@/components/ui'
 
 interface Installment {
   id: string
+  profile_id?: string
   amount: number
   status: string
   profile?: {

@@ -74,10 +74,11 @@ export default function UserFormModal({
 
     const run = async () => {
       try {
-        const { data } = await supabase
+        const { data: rawData } = await supabase
           .from('team_members')
-          .select<{ team_id: string; jersey_number: number | null }>('team_id, jersey_number')
+          .select('team_id, jersey_number')
           .eq('profile_id', user.id)
+        const data = (rawData || []) as { team_id: string; jersey_number: number | null }[]
 
         const jerseyRecord: Record<string, number | ''> = {}
         const teamIds: string[] = []

@@ -1,26 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { eventCreateSchema, eventUpdateSchema } from '@/lib/validation/eventCrud'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    
+    const parsed = eventCreateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Dati evento non validi' }, { status: 400 })
     const {
-      title,
-      description,
-      start_date,
-      end_date,
-      location,
-      gym_id,
-      activity_id,
-      event_type,
-      event_kind,
-      recurrence_rule, // { frequency: 'daily'|'weekly'|'monthly', interval?: number }
-      recurrence_end_date,
-      selected_teams
-    } = body
+      title, description, start_date, end_date, location, gym_id, activity_id,
+      event_type, event_kind, recurrence_rule, recurrence_end_date, selected_teams,
+      requires_confirmation, confirmation_deadline
+    } = parsed.data
 
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -28,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -132,8 +124,8 @@ export async function POST(request: NextRequest) {
           activity_id: activity_id || null,
           event_type: event_type || 'one_time',
           event_kind: event_kind || 'training',
-          requires_confirmation: !!body.requires_confirmation,
-          confirmation_deadline: body.requires_confirmation && body.confirmation_deadline ? body.confirmation_deadline : null,
+          requires_confirmation: !!requires_confirmation,
+          confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
           created_by: user.id,
           // Legacy required fields
           name: title,
@@ -229,7 +221,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -386,21 +378,12 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    
+    const parsed = eventUpdateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Dati aggiornamento evento non validi' }, { status: 400 })
     const {
-      id,
-      title,
-      description,
-      start_date,
-      end_date,
-      location,
-      gym_id,
-      activity_id,
-      event_type,
-      event_kind,
-      selected_teams
-    } = body
+      id, title, description, start_date, end_date, location, gym_id, activity_id,
+      event_type, event_kind, selected_teams, requires_confirmation, confirmation_deadline
+    } = parsed.data
 
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -408,13 +391,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID evento richiesto' }, { status: 400 })
     }
 
     // Aggiorna l'evento (retry senza event_kind se colonna assente)
@@ -431,6 +410,8 @@ export async function PUT(request: NextRequest) {
         activity_id: activity_id || null,
         event_type,
         event_kind: event_kind || 'training',
+        requires_confirmation: !!requires_confirmation,
+        confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
         // Legacy fields kept in sync
         name: title,
         start_time: start_date,
@@ -452,6 +433,8 @@ export async function PUT(request: NextRequest) {
           gym_id: gym_id || null,
           activity_id: activity_id || null,
           event_type,
+          requires_confirmation: !!requires_confirmation,
+          confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
           // Legacy fields kept in sync
           name: title,
           start_time: start_date,
@@ -495,17 +478,6 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Allow update of RSVP flags too
-    if (typeof (body as any).requires_confirmation !== 'undefined' || typeof (body as any).confirmation_deadline !== 'undefined') {
-      await adminClient
-        .from('events')
-        .update({
-          requires_confirmation: !!(body as any).requires_confirmation,
-          confirmation_deadline: (body as any).requires_confirmation && (body as any).confirmation_deadline ? (body as any).confirmation_deadline : null,
-        })
-        .eq('id', id)
-    }
-
     return NextResponse.json({ 
       success: true, 
       message: 'Evento aggiornato con successo'
@@ -528,7 +500,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

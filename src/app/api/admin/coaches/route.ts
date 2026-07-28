@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { coachBulkSchema } from '@/lib/validation/bulk'
 
 export async function GET() {
   try {
@@ -11,7 +12,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -80,7 +81,7 @@ export async function GET() {
 
     // Formatta i dati per il frontend
     const formattedCoaches = coaches.map(coach => {
-      const coachProfile = coachProfiles?.find(cp => cp.profile_id === coach.id) || {}
+      const coachProfile = coachProfiles?.find(cp => cp.profile_id === coach.id)
       const coachTeamAssignments = teamCoaches?.filter(tc => tc.coach_id === coach.id) || []
 
       const teamsWithDetails = coachTeamAssignments.map(assignment => {
@@ -101,9 +102,9 @@ export async function GET() {
         last_name: coach.last_name,
         phone: coach.phone,
         birth_date: coach.birth_date,
-        level: coachProfile.level,
-        specialization: coachProfile.specialization,
-        started_on: coachProfile.started_on,
+        level: coachProfile?.level ?? null,
+        specialization: coachProfile?.specialization ?? null,
+        started_on: coachProfile?.started_on ?? null,
         created_at: coach.created_at,
         updated_at: coach.updated_at,
         teams: teamsWithDetails.filter(team => team.id)
@@ -130,17 +131,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const body = await request.json()
-    const { operation, coachIds, parameters } = body
-
-    if (!operation || !coachIds || !Array.isArray(coachIds)) {
-      return NextResponse.json({ error: 'Parametri mancanti o non validi' }, { status: 400 })
-    }
+    const parsed = coachBulkSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
+    const { operation, coachIds, parameters } = parsed.data
 
     // Gestione operazioni massive
     switch (operation) {
