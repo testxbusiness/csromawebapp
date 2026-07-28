@@ -27,6 +27,7 @@ import { useChampionshipCatalog } from '@/components/championship/useChampionshi
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
 import { useImportedClubTeam } from '@/components/championship/useImportedClubTeam'
+import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
 import { MatchInfoModal, MatchResultModal } from '@/components/championship/ChampionshipMatchModals'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime, parseMatchResult } from '@/components/championship/formatters'
 import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
@@ -80,11 +81,6 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
   const [athleteTeamIds, setAthleteTeamIds] = useState<Set<string>>(new Set())
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
   const [convocationModalOpen, setConvocationModalOpen] = useState(false)
-  const [convocationLoading, setConvocationLoading] = useState(false)
-  const [convocationSaving, setConvocationSaving] = useState(false)
-  const [convocation, setConvocation] = useState<Convocation | null>(null)
-  const [convocationSelection, setConvocationSelection] = useState<Set<string>>(new Set())
-  const [convocationTeamMembers, setConvocationTeamMembers] = useState<TeamMember[]>([])
   const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
   const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
 
@@ -112,6 +108,18 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     statusUpdating,
   } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails })
   const { ensureClubTeam } = useImportedClubTeam({ championshipId: selectedChampionshipId, teams })
+  const {
+    convocation,
+    convocationLoading,
+    convocationSaving,
+    convocationSelection,
+    convocationTeamMembers,
+    loadConvocationData,
+    saveConvocation: persistConvocation,
+    setConvocation,
+    setConvocationSelection,
+    setConvocationTeamMembers,
+  } = useChampionshipConvocations()
 
   useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
@@ -611,78 +619,6 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     return null
   }
 
-  const loadTeamMembers = async (teamId: string | null) => {
-    if (!teamId) {
-      setConvocationTeamMembers([])
-      return
-    }
-    const { data, error } = await supabase
-      .from('team_members')
-      .select('id, profile_id, jersey_number, profiles ( first_name, last_name )')
-      .eq('team_id', teamId)
-      .eq('role', 'athlete')
-      .order('id', { ascending: true })
-    if (error) {
-      console.error('Errore caricamento atleti squadra', error)
-      toast.error('Impossibile caricare gli atleti della squadra')
-      setConvocationTeamMembers([])
-      return
-    }
-    setConvocationTeamMembers((data || []).map((member: any) => ({
-      ...member,
-      profiles: firstRelation(member.profiles)
-    })) as TeamMember[])
-  }
-
-  const loadConvocationData = async (m: Match, clubTeamId: string, teamId: string | null) => {
-    setConvocationLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('championship_match_convocations')
-        .select(`
-          id, match_id, championship_club_team_id, team_id, notes,
-          championship_club_teams ( id, name, is_home_club, team_id ),
-          championship_match_convocation_members (
-            team_member_id, profile_id,
-            profiles ( first_name, last_name ),
-            team_members ( profile_id, jersey_number, profiles ( first_name, last_name ) )
-          )
-        `)
-        .eq('match_id', m.id)
-        .eq('championship_club_team_id', clubTeamId)
-        .maybeSingle()
-
-      if (error && error.code !== 'PGRST116') throw error
-
-      const normalizedConvocation = data ? {
-        ...data,
-        championship_club_teams: firstRelation((data as any).championship_club_teams),
-        championship_match_convocation_members: ((data as any).championship_match_convocation_members || []).map((member: any) => ({
-          ...member,
-          profiles: firstRelation(member.profiles),
-          team_members: firstRelation(member.team_members)
-        }))
-      } as Convocation : null
-      setConvocation(normalizedConvocation || {
-        match_id: m.id,
-        championship_club_team_id: clubTeamId,
-        team_id: teamId
-      })
-
-      const selectedIds = new Set<string>()
-      data?.championship_match_convocation_members?.forEach((cm) => cm.team_member_id && selectedIds.add(cm.team_member_id))
-      setConvocationSelection(selectedIds)
-      await loadTeamMembers(teamId)
-    } catch (err) {
-      console.error('Errore caricamento convocazioni', err)
-      toast.error('Impossibile caricare le convocazioni')
-      setConvocation(null)
-      setConvocationSelection(new Set())
-    } finally {
-      setConvocationLoading(false)
-    }
-  }
-
   const openConvocationModal = async (m: Match) => {
     const candidate = pickUserClubTeamForMatch(m)
     const csrTeams = matchCSRClubTeams(m)
@@ -699,59 +635,15 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     }
   }
 
-  const saveConvocation = async () => {
+  const saveConvocation = () => {
     if (!convocationMatch || !convocationClubTeamId) return
-    const match = convocationMatch
-    const csrTeam = matchCSRClubTeams(match).find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam
-    const teamId = csrTeam?.team_id || null
+    const teamId = matchCSRClubTeams(convocationMatch)
+      .find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam.team_id
     if (!teamId) {
       toast.error('Seleziona una squadra CSRoma')
       return
     }
-    setConvocationSaving(true)
-    try {
-      const { data: upserted, error: upsertError } = await supabase
-        .from('championship_match_convocations')
-        .upsert({
-          id: convocation?.id,
-          match_id: match.id,
-          championship_club_team_id: convocationClubTeamId,
-          team_id: teamId
-        }, { onConflict: 'match_id,championship_club_team_id' })
-        .select('id')
-        .single()
-      if (upsertError) throw upsertError
-      const convocationId = upserted.id
-
-      await supabase
-        .from('championship_match_convocation_members')
-        .delete()
-        .eq('convocation_id', convocationId)
-
-      if (convocationSelection.size > 0) {
-        const tmById = new Map(convocationTeamMembers.map((tm) => [tm.id, tm]))
-        const payload = Array.from(convocationSelection).map((tmId) => {
-          const tm = tmById.get(tmId)
-          return {
-            convocation_id: convocationId,
-            team_member_id: tmId,
-            profile_id: tm?.profile_id || null
-          }
-        })
-        const { error: insErr } = await supabase
-          .from('championship_match_convocation_members')
-          .insert(payload)
-        if (insErr) throw insErr
-      }
-
-      toast.success('Convocazioni salvate')
-      await loadConvocationData(match, convocationClubTeamId, teamId)
-    } catch (err) {
-      console.error('Errore salvataggio convocazioni', err)
-      toast.error('Impossibile salvare le convocazioni')
-    } finally {
-      setConvocationSaving(false)
-    }
+    void persistConvocation({ match: convocationMatch, clubTeamId: convocationClubTeamId, teamId })
   }
 
   const handleDeleteCalendar = async (scope: 'group' | 'championship') => {

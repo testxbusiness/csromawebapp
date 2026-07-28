@@ -26,6 +26,7 @@ import {
 import { useChampionshipCatalog } from '@/components/championship/useChampionshipCatalog'
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
+import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
 
 interface ChampionshipsManagerProps {
@@ -71,11 +72,6 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
   const [showSchedule, setShowSchedule] = useState(false)
   const [convocationModalOpen, setConvocationModalOpen] = useState(false)
-  const [convocationLoading, setConvocationLoading] = useState(false)
-  const [convocationSaving, setConvocationSaving] = useState(false)
-  const [convocation, setConvocation] = useState<Convocation | null>(null)
-  const [convocationSelection, setConvocationSelection] = useState<Set<string>>(new Set())
-  const [convocationTeamMembers, setConvocationTeamMembers] = useState<TeamMember[]>([])
   const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
   const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
 
@@ -100,6 +96,18 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     savingResult: savingMatchResult,
     statusUpdating,
   } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails })
+  const {
+    convocation,
+    convocationLoading,
+    convocationSaving,
+    convocationSelection,
+    convocationTeamMembers,
+    setConvocationLoading,
+    saveConvocation: persistConvocation,
+    setConvocation,
+    setConvocationSelection,
+    setConvocationTeamMembers,
+  } = useChampionshipConvocations()
 
   useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
@@ -596,7 +604,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     }
   }
 
-  const saveConvocation = async () => {
+  const saveConvocation = () => {
     if (!convocationMatch || !convocationClubTeamId) return
     const match = convocationMatch
     const csrTeam = matchCSRClubTeams(match).find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam
@@ -605,50 +613,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       toast.error('Seleziona una squadra CSRoma')
       return
     }
-    setConvocationSaving(true)
-    try {
-      const { data: upserted, error: upsertError } = await supabase
-        .from('championship_match_convocations')
-        .upsert({
-          id: convocation?.id,
-          match_id: match.id,
-          championship_club_team_id: convocationClubTeamId,
-          team_id: teamId
-        }, { onConflict: 'match_id,championship_club_team_id' })
-        .select('id')
-        .single()
-      if (upsertError) throw upsertError
-      const convocationId = upserted.id
-
-      await supabase
-        .from('championship_match_convocation_members')
-        .delete()
-        .eq('convocation_id', convocationId)
-
-      if (convocationSelection.size > 0) {
-        const tmById = new Map(convocationTeamMembers.map((tm) => [tm.id, tm]))
-        const payload = Array.from(convocationSelection).map((tmId) => {
-          const tm = tmById.get(tmId)
-          return {
-            convocation_id: convocationId,
-            team_member_id: tmId,
-            profile_id: tm?.profile_id || null
-          }
-        })
-        const { error: insErr } = await supabase
-          .from('championship_match_convocation_members')
-          .insert(payload)
-        if (insErr) throw insErr
-      }
-
-      toast.success('Convocazioni salvate')
-      await loadConvocationData(match, convocationClubTeamId, teamId)
-    } catch (err) {
-      console.error('Errore salvataggio convocazioni', err)
-      toast.error('Impossibile salvare le convocazioni')
-    } finally {
-      setConvocationSaving(false)
-    }
+    void persistConvocation({ match, clubTeamId: convocationClubTeamId, teamId })
   }
 
   const handleDeleteCalendar = async (scope: 'group' | 'championship') => {
