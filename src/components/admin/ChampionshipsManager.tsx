@@ -36,6 +36,7 @@ import { matchImportColumns, resultImportColumns } from '@/components/championsh
 import { ChampionshipCalendarImportModal, ChampionshipResultsImportModal } from '@/components/championship/ChampionshipImportModals'
 import { ChampionshipConvocationModal } from '@/components/championship/ChampionshipConvocationModal'
 import { ChampionshipGroupModal } from '@/components/championship/ChampionshipGroupModal'
+import { ChampionshipGroupTeamsModal, type GroupTeamsSelection, type NewClubTeam } from '@/components/championship/ChampionshipGroupTeamsModal'
 
 interface ChampionshipsManagerProps {
   mode?: ManagerMode
@@ -71,11 +72,11 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
   const [importResultsGroupId, setImportResultsGroupId] = useState<string | null>(null)
   const [importResultsFile, setImportResultsFile] = useState<File | null>(null)
   const [importingResults, setImportingResults] = useState(false)
-  const [groupTeamsSelection, setGroupTeamsSelection] = useState<Record<string, { selected: boolean; is_home_club: boolean }>>({})
+  const [groupTeamsSelection, setGroupTeamsSelection] = useState<GroupTeamsSelection>({})
   const [teamSearch, setTeamSearch] = useState('')
   const [groupTeamsSaving, setGroupTeamsSaving] = useState(false)
   const [clubTeams, setClubTeams] = useState<ClubTeamOption[]>([])
-  const [newClubTeam, setNewClubTeam] = useState({ code: '', name: '', is_home_club: false, team_id: '' })
+  const [newClubTeam, setNewClubTeam] = useState<NewClubTeam>({ code: '', name: '', is_home_club: false, team_id: '' })
   const [resultModalOpen, setResultModalOpen] = useState(false)
   const [resultEditingMatch, setResultEditingMatch] = useState<Match | null>(null)
   const [infoModalOpen, setInfoModalOpen] = useState(false)
@@ -683,6 +684,68 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     }
   }, [championships, initGroupTeamsSelection, selectedChampionshipId])
 
+  const handleAddClubTeam = async () => {
+    if (!selectedChampionshipId) {
+      toast.error('Seleziona un campionato')
+      return
+    }
+    if (!newClubTeam.code || !newClubTeam.name) {
+      toast.error('Codice e nome sono obbligatori')
+      return
+    }
+    try {
+      const payload = {
+        championship_id: selectedChampionshipId,
+        code: newClubTeam.code.trim().toUpperCase(),
+        name: newClubTeam.name.trim(),
+        is_home_club: newClubTeam.is_home_club || !!newClubTeam.team_id,
+        team_id: newClubTeam.team_id || null,
+      }
+      const { error } = await supabase.from('championship_club_teams').upsert(payload, { onConflict: 'championship_id,code' }).select('id').single()
+      if (error) throw error
+      toast.success('Squadra aggiunta')
+      setNewClubTeam({ code: '', name: '', is_home_club: false, team_id: '' })
+      await loadClubTeams(selectedChampionshipId)
+      initGroupTeamsSelection(selectedGroupId)
+    } catch (err) {
+      console.error('Errore creazione squadra campionato', err)
+      toast.error('Impossibile creare la squadra')
+    }
+  }
+
+  const handleSaveGroupTeams = async () => {
+    if (!selectedGroupId) {
+      toast.error('Seleziona un girone')
+      return
+    }
+    setGroupTeamsSaving(true)
+    try {
+      const current = currentGroups.find((g) => g.id === selectedGroupId)?.championship_group_teams || []
+      const currentIds = new Set(current.map((t) => t.championship_club_team_id))
+      const selectedEntries = Object.entries(groupTeamsSelection).filter(([, value]) => value.selected)
+      const selectedIds = new Set(selectedEntries.map(([id]) => id))
+      const toUpsert = selectedEntries.map(([clubTeamId, value]) => ({ championship_group_id: selectedGroupId, championship_club_team_id: clubTeamId, is_home_club: value.is_home_club }))
+      const toDelete = Array.from(currentIds).filter((id) => !selectedIds.has(id))
+      if (toUpsert.length > 0) {
+        const { error } = await supabase.from('championship_group_teams').upsert(toUpsert, { onConflict: 'championship_group_id,championship_club_team_id' })
+        if (error) throw error
+      }
+      if (toDelete.length > 0) {
+        const { error } = await supabase.from('championship_group_teams').delete().eq('championship_group_id', selectedGroupId).in('championship_club_team_id', toDelete)
+        if (error) throw error
+      }
+      toast.success('Squadre aggiornate')
+      setShowTeamsModal(false)
+      await reloadChampionships()
+      await reloadGroupDetails()
+    } catch (err) {
+      console.error('Errore aggiornamento squadre', err)
+      toast.error('Impossibile aggiornare le squadre')
+    } finally {
+      setGroupTeamsSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card variant="primary" className="overflow-hidden">
@@ -1141,8 +1204,10 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
       <ChampionshipCalendarImportModal open={showImportModal} onOpenChange={setShowImportModal} groups={currentGroups} groupId={importGroupId} onGroupChange={setImportGroupId} onFileChange={setImportFile} importing={importing} onImport={handleImportMatches} disabled={mode === 'athlete'} />
       <ChampionshipResultsImportModal open={showImportResultsModal} onOpenChange={setShowImportResultsModal} groups={currentGroups} groupId={importResultsGroupId} onGroupChange={setImportResultsGroupId} onFileChange={setImportResultsFile} importing={importingResults} onImport={handleImportResults} disabled={mode === 'athlete'} />
 
+      <ChampionshipGroupTeamsModal open={showTeamsModal} onOpenChange={setShowTeamsModal} clubTeams={clubTeams} teams={teams} selection={groupTeamsSelection} onSelectionChange={setGroupTeamsSelection} search={teamSearch} onSearchChange={setTeamSearch} newClubTeam={newClubTeam} onNewClubTeamChange={setNewClubTeam} saving={groupTeamsSaving} onAddClubTeam={handleAddClubTeam} onSave={handleSaveGroupTeams} />
+
       {/* Modal gestione squadre girone */}
-      {mode !== 'athlete' && (
+      {false && mode !== 'athlete' && (
         <Modal
           fullscreenOnMobile
           open={showTeamsModal}
