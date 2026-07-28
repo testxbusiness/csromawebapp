@@ -25,15 +25,13 @@ import {
   type TeamMember,
 } from '@/components/championship/types'
 import { useChampionshipCatalog } from '@/components/championship/useChampionshipCatalog'
+import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
 
 export default function ChampionshipsManager() {
   let mode = 'coach' as ManagerMode
   const supabase = createClient()
-  const [detailsLoading, setDetailsLoading] = useState(false)
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
-  const [matches, setMatches] = useState<Match[]>([])
-  const [standings, setStandings] = useState<Standing[]>([])
   const [savingResult, setSavingResult] = useState(false)
   const [resultInput, setResultInput] = useState<string>('')
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null)
@@ -93,7 +91,13 @@ export default function ChampionshipsManager() {
     loading: catalogLoading,
     reload: reloadChampionships,
   } = useChampionshipCatalog({ mode, coachTeamIds, athleteTeamIds })
-  const loading = catalogLoading || detailsLoading
+  const {
+    matches,
+    standings,
+    loading: groupLoading,
+    reload: reloadGroupDetails,
+  } = useChampionshipGroupDetails(selectedGroupId)
+  const loading = catalogLoading || groupLoading
 
   useEffect(() => {
     if (mode === 'coach') void loadCoachTeams()
@@ -127,15 +131,6 @@ export default function ChampionshipsManager() {
       setImportGroupId(null)
     }
   }, [selectedChampionshipId, championships])
-
-  useEffect(() => {
-    if (selectedGroupId) {
-      loadGroupDetails(selectedGroupId)
-    } else {
-      setMatches([])
-      setStandings([])
-    }
-  }, [selectedGroupId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Allinea importGroupId al girone selezionato di default
   useEffect(() => {
@@ -203,51 +198,6 @@ export default function ChampionshipsManager() {
       return
     }
     setClubTeams(data || [])
-  }
-
-  const loadGroupDetails = async (groupId: string) => {
-    setDetailsLoading(true)
-    try {
-      const [{ data: matchesData, error: matchesError }, { data: standingsData, error: standingsError }] = await Promise.all([
-        supabase
-          .from('championship_matches')
-          .select(`
-            id, match_day, round_label, match_date, start_time, status, location_text, event_id,
-            home_club_team_id, away_club_team_id,
-            championship_match_sets ( id, set_number, home_points, away_points ),
-            home_club_team:home_club_team_id ( id, code, name, is_home_club, team_id, teams ( id, name, code ) ),
-            away_club_team:away_club_team_id ( id, code, name, is_home_club, team_id, teams ( id, name, code ) )
-          `)
-          .eq('championship_group_id', groupId)
-          .order('match_day', { ascending: true })
-          .order('match_date', { ascending: true }),
-        supabase
-          .from('championship_standings_mv')
-          .select('*')
-          .eq('championship_group_id', groupId)
-      ])
-
-      if (matchesError) {
-        console.error('Errore caricamento partite', matchesError)
-        toast.error('Impossibile caricare le partite')
-        setDetailsLoading(false)
-        return
-      }
-
-      if (standingsError) {
-        console.error('Errore classifica', standingsError)
-        toast.error('Impossibile caricare la classifica')
-      }
-
-      setMatches((matchesData || []).map((match: any) => ({
-        ...match,
-        home_club_team: firstRelation(match.home_club_team),
-        away_club_team: firstRelation(match.away_club_team)
-      })) as Match[])
-      setStandings(standingsData || [])
-    } finally {
-      setDetailsLoading(false)
-    }
   }
 
   const currentGroups = useMemo(() => {
@@ -326,7 +276,7 @@ export default function ChampionshipsManager() {
       toast.success('Info gara aggiornate')
       setInfoModalOpen(false)
       setInfoEditingMatch(null)
-      if (selectedGroupId) await loadGroupDetails(selectedGroupId)
+      if (selectedGroupId) await reloadGroupDetails()
     } catch (err) {
       console.error('Errore aggiornamento info gara', err)
       toast.error('Impossibile aggiornare le info gara')
@@ -385,7 +335,7 @@ export default function ChampionshipsManager() {
       setResultModalOpen(false)
       setResultInput('')
       if (selectedGroupId) {
-        await loadGroupDetails(selectedGroupId)
+        await reloadGroupDetails()
       }
     } catch (error) {
       console.error('Errore salvataggio risultato', error)
@@ -404,7 +354,7 @@ export default function ChampionshipsManager() {
         .eq('id', matchId)
       if (error) throw error
       toast.success('Stato partita aggiornato')
-      if (selectedGroupId) await loadGroupDetails(selectedGroupId)
+      if (selectedGroupId) await reloadGroupDetails()
     } catch (err) {
       console.error('Errore aggiornamento stato', err)
       toast.error('Impossibile aggiornare lo stato')
@@ -644,7 +594,7 @@ export default function ChampionshipsManager() {
       setShowImportModal(false)
       setImportFile(null)
       await loadClubTeams(selectedChampionshipId)
-      await loadGroupDetails(groupId)
+      await reloadGroupDetails()
     } catch (err) {
       console.error('Errore import calendario', err)
       toast.error('Impossibile importare il calendario')
@@ -769,7 +719,7 @@ export default function ChampionshipsManager() {
 
       setShowImportResultsModal(false)
       setImportResultsFile(null)
-      await loadGroupDetails(groupId)
+      await reloadGroupDetails()
     } catch (err) {
       console.error('Errore import risultati', err)
       toast.error('Impossibile importare i risultati')
@@ -1089,7 +1039,7 @@ export default function ChampionshipsManager() {
       await reloadChampionships()
       if (scope === 'group' && selectedGroupId) {
         setSelectedGroupId(null)
-        await loadGroupDetails('')
+        await reloadGroupDetails()
       }
     } catch (err) {
       console.error('Errore eliminazione calendario', err)
@@ -1964,7 +1914,7 @@ export default function ChampionshipsManager() {
                   toast.success('Squadre aggiornate')
                   setShowTeamsModal(false)
                   await reloadChampionships()
-                  if (selectedGroupId) await loadGroupDetails(selectedGroupId)
+                  if (selectedGroupId) await reloadGroupDetails()
                 } catch (err) {
                   console.error('Errore aggiornamento squadre', err)
                   toast.error('Impossibile aggiornare le squadre')
