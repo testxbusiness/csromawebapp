@@ -397,7 +397,7 @@ function WeekTimeGrid({
     }
 
     return byDay
-  }, [events, weekDays])
+  }, [events, totalMins, weekDays])
 
   const onMouseDown = React.useCallback(
     (dayIdx: number, e: React.MouseEvent) => {

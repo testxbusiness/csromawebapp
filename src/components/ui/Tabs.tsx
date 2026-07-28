@@ -20,12 +20,14 @@ export function Tabs({ tabs, value, defaultValue, onValueChange, className }: Ta
   }
 
   return (
-    <div className={`cs-tabs ${className ?? ''}`}>
+    <div className={`cs-tabs ${className ?? ''}`} role="tablist">
       {tabs.map(t => (
         <button
           key={t.id}
           className="cs-tab"
+          role="tab"
           aria-selected={current === t.id}
+          tabIndex={current === t.id ? 0 : -1}
           onClick={() => set(t.id)}
           onKeyDown={(e) => {
             if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {

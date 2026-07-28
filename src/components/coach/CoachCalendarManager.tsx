@@ -32,7 +32,7 @@ interface Activity { id: string; name: string }
 export default function CoachCalendarManager() {
   const { user } = useAuth()
   const userId = user?.id || null
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [events, setEvents] = useState<Event[]>([])
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
@@ -121,13 +121,7 @@ export default function CoachCalendarManager() {
   }, [loadData])
 
   // Lazy load gyms/activities solo quando il form si apre
-  useEffect(() => {
-    if (showForm && gyms.length === 0 && activities.length === 0) {
-      loadSelectOptions()
-    }
-  }, [showForm])
-
-  const loadSelectOptions = async () => {
+  const loadSelectOptions = useCallback(async () => {
     setLoadingSelects(true)
     try {
       const [{ data: gymsData }, { data: activitiesData }] = await Promise.all([
@@ -141,7 +135,13 @@ export default function CoachCalendarManager() {
     } finally {
       setLoadingSelects(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    if (showForm && gyms.length === 0 && activities.length === 0) {
+      void loadSelectOptions()
+    }
+  }, [activities.length, gyms.length, loadSelectOptions, showForm])
 
   const saveEvent = async (eventData: Event) => {
     try {
