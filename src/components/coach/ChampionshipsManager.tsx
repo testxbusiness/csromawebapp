@@ -29,6 +29,7 @@ import { useChampionshipMatchMutations } from '@/components/championship/useCham
 import { useImportedClubTeam } from '@/components/championship/useImportedClubTeam'
 import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
 import { useChampionshipCalendarDeletion } from '@/components/championship/useChampionshipCalendarDeletion'
+import { persistImportedMatches, persistImportedResults } from '@/components/championship/championshipImportPersistence'
 import { MatchInfoModal, MatchResultModal } from '@/components/championship/ChampionshipMatchModals'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime, parseMatchResult } from '@/components/championship/formatters'
 import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
@@ -402,20 +403,7 @@ export default function ChampionshipsManager() {
         return
       }
 
-      const { error } = await supabase
-        .from('championship_matches')
-        .upsert(payload, { onConflict: 'championship_group_id,match_day,home_club_team_id,away_club_team_id' })
-      if (error) throw error
-
-      if (groupClubTeams.size > 0) {
-        const upsertGroupTeams = Array.from(groupClubTeams).map((cctId) => ({
-          championship_group_id: groupId,
-          championship_club_team_id: cctId
-        }))
-        await supabase
-          .from('championship_group_teams')
-          .upsert(upsertGroupTeams, { onConflict: 'championship_group_id,championship_club_team_id' })
-      }
+      await persistImportedMatches(supabase, payload, groupClubTeams)
 
       toast.success(`Importate ${payload.length} partite`)
       setShowImportModal(false)
@@ -515,26 +503,8 @@ export default function ChampionshipsManager() {
         }
       }
 
-      let updated = 0
-      for (const item of updates) {
-        await supabase.from('championship_match_sets').delete().eq('match_id', item.matchId)
-        if (item.sets.length > 0) {
-          const payload = item.sets.map((s, idx) => ({
-            match_id: item.matchId,
-            set_number: idx + 1,
-            home_points: s.home,
-            away_points: s.away
-          }))
-          const { error: insertError } = await supabase.from('championship_match_sets').insert(payload)
-          if (insertError) throw insertError
-        }
-        const { error: statusError } = await supabase
-          .from('championship_matches')
-          .update({ status: item.sets.length > 0 ? 'completed' : 'scheduled' })
-          .eq('id', item.matchId)
-        if (statusError) throw statusError
-        updated += 1
-      }
+      await persistImportedResults(supabase, updates)
+      const updated = updates.length
 
       if (errors.length > 0) {
         console.error('Errori import risultati:', errors)
