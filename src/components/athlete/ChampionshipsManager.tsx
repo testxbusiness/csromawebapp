@@ -18,7 +18,6 @@ import {
   type GroupTeam,
   type ManagerMode,
   type Match,
-  type MatchSet,
   type Season,
   type Standing,
   type Team,
@@ -26,6 +25,7 @@ import {
 } from '@/components/championship/types'
 import { useChampionshipCatalog } from '@/components/championship/useChampionshipCatalog'
 import { useChampionshipGroupDetails } from '@/components/championship/useChampionshipGroupDetails'
+import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
 
 interface ChampionshipsManagerProps {
   mode?: ManagerMode
@@ -186,21 +186,6 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
 
   const clubTeamPlainName = (clubTeamId: string) => {
     return clubTeamName(clubTeamId).replace(/\s*\([^)]*\)\s*$/, '')
-  }
-
-  const formatScore = (sets?: MatchSet[]) => {
-    if (!sets || sets.length === 0) return '—'
-    const home = sets.filter((s) => s.home_points > s.away_points).length
-    const away = sets.filter((s) => s.home_points < s.away_points).length
-    return `${home}-${away}`
-  }
-
-  const formatSetsDetail = (sets?: MatchSet[]) => {
-    if (!sets || sets.length === 0) return ''
-    return sets
-      .sort((a, b) => a.set_number - b.set_number)
-      .map((s) => `${s.home_points}-${s.away_points}`)
-      .join(', ')
   }
 
   const openResultEditor = (match: Match) => {
@@ -536,57 +521,8 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const convocationClubTeam = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam || null
   const canEditConvocation = mode === 'admin' || (mode === 'coach' && !!(convocationClubTeam?.team_id && coachTeamIds.has(convocationClubTeam.team_id)))
 
-  const formatDate = (value?: string | null) => {
-    if (!value) return '—'
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return '—'
-    return d.toLocaleDateString('it-IT')
-  }
-
-  const normalizeTime = (raw?: string | null) => {
-    if (raw === undefined || raw === null || raw === '') return null
-    // Excel time as fraction of day (number)
-    if (typeof raw === 'number') {
-      const totalSeconds = Math.round(raw * 24 * 3600)
-      const h = Math.floor(totalSeconds / 3600) % 24
-      const m = Math.floor((totalSeconds % 3600) / 60)
-      const s = totalSeconds % 60
-      const hh = h.toString().padStart(2, '0')
-      const mm = m.toString().padStart(2, '0')
-      const ss = s.toString().padStart(2, '0')
-      return `${hh}:${mm}:${ss}`
-    }
-    // Numeric string (fractions like "0.8854")
-    const maybeNum = Number(raw)
-    if (!Number.isNaN(maybeNum) && raw.toString().trim() !== '') {
-      const totalSeconds = Math.round(maybeNum * 24 * 3600)
-      const h = Math.floor(totalSeconds / 3600) % 24
-      const m = Math.floor((totalSeconds % 3600) / 60)
-      const s = totalSeconds % 60
-      const hh = h.toString().padStart(2, '0')
-      const mm = m.toString().padStart(2, '0')
-      const ss = s.toString().padStart(2, '0')
-      return `${hh}:${mm}:${ss}`
-    }
-    const parts = raw.toString().trim().split(':')
-    if (parts.length < 2) return null
-    const [hh, mm, ss] = parts
-    const safeH = hh.padStart(2, '0')
-    const safeM = mm.padStart(2, '0')
-    const safeS = ss ? ss.padStart(2, '0') : '00'
-    return `${safeH}:${safeM}:${safeS}`
-  }
-
   function isCSRClubTeam(club?: ClubTeam | null) {
     return !!(club?.is_home_club || club?.team_id)
-  }
-
-  const matchDateTime = (m: Match) => {
-    if (!m.match_date) return null
-    const time = m.start_time ? m.start_time.slice(0, 8) : '00:00:00'
-    const iso = `${m.match_date}T${time}`
-    const d = new Date(iso)
-    return Number.isNaN(d.getTime()) ? null : d
   }
 
   function matchCSRClubTeams(m: Match) {
