@@ -34,6 +34,7 @@ import { MatchInfoModal, MatchResultModal } from '@/components/championship/Cham
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime, parseMatchResult } from '@/components/championship/formatters'
 import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
 import { ChampionshipCalendarImportModal, ChampionshipResultsImportModal } from '@/components/championship/ChampionshipImportModals'
+import { ChampionshipConvocationModal } from '@/components/championship/ChampionshipConvocationModal'
 
 interface ChampionshipsManagerProps {
   mode?: ManagerMode
@@ -967,8 +968,7 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
         </div>
       </div>
 
-      <Modal
-        fullscreenOnMobile
+      <ChampionshipConvocationModal
         open={convocationModalOpen}
         onOpenChange={(open) => {
           setConvocationModalOpen(open)
@@ -980,100 +980,32 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
             setConvocationMatch(null)
           }
         }}
-        title="Convocazioni"
-        description={convocationMatch ? `${clubTeamPlainName(convocationMatch.home_club_team_id)} vs ${clubTeamPlainName(convocationMatch.away_club_team_id)}` : ''}
-      >
-        {!convocationMatch && <div className="text-sm text-slate-500">Seleziona una partita</div>}
-        {convocationMatch && (
-          <div className="space-y-4">
-            {convocationCSRTeams.length > 1 && (
-              <div>
-                <label className="cs-label">Squadra CSR da convocare</label>
-                <Select
-                  value={convocationClubTeamId || ''}
-                  onChange={async (e) => {
-                    const id = e.target.value
-                    setConvocationClubTeamId(id || null)
-                    setConvocationSelection(new Set())
-                    setConvocation(null)
-                    const chosen = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === id)?.clubTeam
-                    if (id && convocationMatch) {
-                      await loadConvocationData(convocationMatch, id, chosen?.team_id || null)
-                    }
-                  }}
-                >
-                  {convocationCSRTeams.map(({ clubTeam }) => (
-                    <option key={clubTeam.id} value={clubTeam.id}>
-                      {clubTeam.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
-
-            <div className="text-sm text-slate-600">
-              {convocationClubTeam
-                ? `Rosa: ${convocationClubTeam.name}`
-                : 'Seleziona una squadra CSRoma'}
-            </div>
-
-            {convocationLoading && (
-              <div className="text-sm text-slate-500">Caricamento convocazioni...</div>
-            )}
-
-            {!convocationLoading && mode === 'athlete' && (
-              <>
-                <ConvocationPublishedList
-                  members={(convocation?.championship_match_convocation_members || []).map((cm) => {
-                    const labelFromProfile = cm.profiles?.first_name || cm.profiles?.last_name
-                      ? `${cm.profiles?.first_name || ''} ${cm.profiles?.last_name || ''}`.trim()
-                      : ''
-                    const labelFromTMProfile = cm.team_members?.profiles?.first_name || cm.team_members?.profiles?.last_name
-                      ? `${cm.team_members?.profiles?.first_name || ''} ${cm.team_members?.profiles?.last_name || ''}`.trim()
-                      : ''
-                    const label = labelFromProfile || labelFromTMProfile || 'Atleta'
-                    return {
-                      id: cm.team_member_id,
-                      label,
-                      jerseyNumber: cm.team_members?.jersey_number ? `#${cm.team_members.jersey_number}` : undefined,
-                    }
-                  })}
-                  emptyText="Le convocazioni non sono ancora state pubblicate"
-                />
-              </>
-            )}
-
-            {!convocationLoading && mode !== 'athlete' && (
-              <EditableConvocationList
-                members={convocationTeamMembers.map((tm) => ({
-                  id: tm.id,
-                  label: tm.profiles ? `${tm.profiles.first_name || ''} ${tm.profiles.last_name || ''}`.trim() : tm.id,
-                  jerseyNumber: tm.jersey_number ? `#${tm.jersey_number}` : undefined,
-                  selected: convocationSelection.has(tm.id),
-                }))}
-                canEdit={canEditConvocation}
-                onToggle={(memberId, checked) => {
-                  setConvocationSelection((prev) => {
-                    const next = new Set(prev)
-                    if (checked) next.add(memberId)
-                    else next.delete(memberId)
-                    return next
-                  })
-                }}
-              />
-            )}
-
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setConvocationModalOpen(false)}>Chiudi</Button>
-              {mode !== 'athlete' && (
-                <Button onClick={saveConvocation} disabled={!canEditConvocation || convocationSaving}>
-                  {convocationSaving ? 'Salvataggio...' : 'Salva convocazioni'}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </Modal>
+        match={convocationMatch}
+        clubTeamName={clubTeamPlainName}
+        clubTeams={convocationCSRTeams}
+        selectedClubTeamId={convocationClubTeamId}
+        onClubTeamChange={async (id, teamId) => {
+          setConvocationClubTeamId(id)
+          setConvocationSelection(new Set())
+          setConvocation(null)
+          if (id && convocationMatch) await loadConvocationData(convocationMatch, id, teamId)
+        }}
+        selectedClubTeam={convocationClubTeam}
+        loading={convocationLoading}
+        mode={mode}
+        convocation={convocation}
+        teamMembers={convocationTeamMembers}
+        selection={convocationSelection}
+        canEdit={canEditConvocation}
+        saving={convocationSaving}
+        onToggle={(memberId, checked) => setConvocationSelection((prev) => {
+          const next = new Set(prev)
+          if (checked) next.add(memberId)
+          else next.delete(memberId)
+          return next
+        })}
+        onSave={saveConvocation}
+      />
 
       {loading && (
         <div className="text-center text-slate-500">Caricamento...</div>
