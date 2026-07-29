@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportTeams } from '@/lib/utils/excelExport'
 import TeamModal from '@/components/admin/TeamModal'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface Team {
   id?: string
@@ -266,7 +267,7 @@ export default function TeamsManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento squadre...</div>
+    return <LoadingState label="Caricamento squadre..." />
   }
 
   return (
@@ -403,26 +404,11 @@ export default function TeamsManager() {
         </div>
 
         {teams.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-gray-500 mb-4">
-              <span className="text-4xl">👥</span>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Nessuna squadra creata
-            </h3>
-            <p className="text-gray-600 mb-4">
-              Crea la tua prima squadra per iniziare a organizzare gli atleti in gruppi di lavoro.
-            </p>
-            <button
-              onClick={() => {
-                setEditingTeam(null)
-                setShowModal(true)
-              }}
-              className="cs-btn cs-btn--primary"
-            >
-              Crea la tua prima squadra
-            </button>
-          </div>
+          <EmptyState
+            title="Nessuna squadra creata"
+            description="Crea la tua prima squadra per iniziare a organizzare gli atleti in gruppi di lavoro."
+            action={<button onClick={() => { setEditingTeam(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima squadra</button>}
+          />
         )}
       </div>
     </div>

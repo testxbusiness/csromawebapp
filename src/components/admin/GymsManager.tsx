@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import GymModal from '@/components/admin/GymModal'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface Gym {
   id?: string
@@ -138,19 +139,7 @@ export default function GymsManager() {
   }
 
   if (loading) {
-    return (
-      <div className="cs-card p-6">
-        <div className="cs-skeleton h-6 w-1/4 mb-4"></div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="cs-card p-4">
-              <div className="cs-skeleton h-5 w-2/3 mb-2"></div>
-              <div className="cs-skeleton h-4 w-1/2"></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+    return <LoadingState label="Caricamento palestre..." />
   }
 
   return (
@@ -278,24 +267,11 @@ export default function GymsManager() {
         </div>
 
         {gyms.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4">
-              <span className="text-4xl">🏢</span>
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Nessuna palestra creata</h3>
-            <p className="text-secondary mb-4">
-              Crea la tua prima palestra per iniziare a gestire i luoghi dove si svolgono le attività.
-            </p>
-            <button
-              onClick={() => {
-                setEditingGym(null)
-                setShowModal(true)
-              }}
-              className="cs-btn cs-btn--primary"
-            >
-              Crea la tua prima palestra
-            </button>
-          </div>
+          <EmptyState
+            title="Nessuna palestra creata"
+            description="Crea la tua prima palestra per iniziare a gestire i luoghi dove si svolgono le attività."
+            action={<button onClick={() => { setEditingGym(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima palestra</button>}
+          />
         )}
       </div>
     </div>

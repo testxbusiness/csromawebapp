@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import TemplateModal from './TemplateModal'
 import BulkGenerateModal from './BulkGenerateModal'
@@ -269,9 +269,9 @@ export default function DocumentsManager() {
         </div>
 
         {loading ? (
-          <div className="p-6 text-secondary">Caricamento…</div>
+          <LoadingState label="Caricamento template..." />
         ) : templates.length === 0 ? (
-          <div className="p-6 text-secondary">Nessun template creato.</div>
+          <EmptyState title="Nessun template creato" />
         ) : (
           <div className="cs-list">
             {templates.map((t) => (
@@ -312,9 +312,9 @@ export default function DocumentsManager() {
         </div>
 
         {loadingDocs ? (
-          <div className="p-6 text-secondary">Caricamento…</div>
+          <LoadingState label="Caricamento documenti..." />
         ) : documents.length === 0 ? (
-          <div className="p-6 text-secondary">Nessun documento generato.</div>
+          <EmptyState title="Nessun documento generato" />
         ) : (
           <div className="cs-list">
             {documents.map((d) => (

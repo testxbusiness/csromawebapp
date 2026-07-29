@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { exportSeasons } from '@/lib/utils/excelExport'
 import { SeasonsModal } from './SeasonsModal'
 import { Button } from '@/components/ui/Button'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface Season {
   id?: string
@@ -94,7 +95,7 @@ export default function SeasonsManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento stagioni...</div>
+    return <LoadingState label="Caricamento stagioni..." />
   }
 
   const handleSubmit = (data: Omit<Season, 'id'>) => {
@@ -208,7 +209,7 @@ export default function SeasonsManager() {
           ))}
         </div>
         {seasons.length === 0 && (
-          <div className="text-center text-secondary py-6">Nessuna stagione creata</div>
+          <EmptyState title="Nessuna stagione creata" />
         )}
       </div>
     </div>
