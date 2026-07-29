@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 type TrainingSchedule = {
   day_of_week: number
@@ -141,7 +142,7 @@ export default function TeamDetailModal({
         </div>
 
         {!data ? (
-          <div className="p-4 text-secondary text-sm">Caricamento…</div>
+          <LoadingState label="Caricamento squadra..." />
         ) : (
           <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr' }}>
 
@@ -227,7 +228,7 @@ export default function TeamDetailModal({
              (!data.coaches || data.coaches.length === 0) &&
              (!data.athletes || data.athletes.length === 0) && (
               <div className="text-secondary text-sm text-center py-8">
-                Nessuna informazione disponibile per questa squadra
+                <EmptyState title="Nessuna informazione disponibile per questa squadra" />
               </div>
             )}
 

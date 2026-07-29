@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { NextStepViewport } from 'nextstepjs'
+import { LoadingState } from '@/components/ui'
 
 type Recipient = {
   id: string
@@ -82,7 +83,7 @@ export default function MessageDetailModal({ open, onClose, data }: { open: bool
           </div>
 
           {!data ? (
-            <div className="p-4 text-secondary text-sm">Caricamento…</div>
+            <LoadingState label="Caricamento messaggio..." />
           ) : (
             <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
               {/* Mittente */}

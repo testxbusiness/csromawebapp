@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface FinancialData {
   period: string
@@ -261,7 +262,7 @@ export default function BalanceReport() {
   }
 
   if (loading && !financialData) {
-    return <div className="p-4">Caricamento report finanziario...</div>
+    return <LoadingState label="Caricamento report finanziario..." />
   }
 
   return (
@@ -492,7 +493,7 @@ export default function BalanceReport() {
             <span className="text-4xl">📊</span>
           </div>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            Nessun dato finanziario disponibile
+            <EmptyState title="Nessun dato finanziario disponibile" />
           </h3>
           <p className="text-gray-600">
             Seleziona i filtri e genera il report per visualizzare il bilancio finanziario.

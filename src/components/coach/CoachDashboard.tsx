@@ -9,6 +9,7 @@ import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface User {
   id: string
@@ -418,11 +419,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
   }, [loadTeamDetail, selectedTeamId])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
+    return <LoadingState label="Caricamento dashboard..." />
   }
 
   return (

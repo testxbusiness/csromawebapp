@@ -3,6 +3,7 @@
 import { ReactNode, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { LoadingState } from '@/components/ui'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -38,11 +39,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
   }, [user, loading, profile, requiredRole, router])
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Caricamento...</div>
-      </div>
-    )
+    return <LoadingState label="Verifica autenticazione..." />
   }
 
   if (!user) {

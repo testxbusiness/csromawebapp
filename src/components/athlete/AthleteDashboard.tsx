@@ -9,6 +9,7 @@ import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface User {
   id: string
@@ -522,11 +523,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   }, [loadAthleteData])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
+    return <LoadingState label="Caricamento dashboard..." />
   }
 
   return (
@@ -683,7 +680,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         <div className="cs-card cs-card--primary">
           <h3 id="athlete-fees" className="font-semibold mb-4">Quote Associative</h3>
           {feeInstallments.length === 0 ? (
-            <p className="text-secondary text-sm">Nessuna quota associativa</p>
+            <EmptyState title="Nessuna quota associativa" />
           ) : (
             <div className="cs-list">
               {feeInstallments.slice(0, 3).map((installment) => (
