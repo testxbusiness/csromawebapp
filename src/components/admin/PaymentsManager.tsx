@@ -4,6 +4,7 @@ import { useCallback, useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import PaymentModal from '@/components/admin/PaymentModal'
+import { LoadingState } from '@/components/ui'
 
 interface Payment {
   id?: string
@@ -388,7 +389,7 @@ export default function PaymentsManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento pagamenti...</div>
+    return <LoadingState label="Caricamento pagamenti..." />
   }
 
   const filteredPayments = filterPayments()

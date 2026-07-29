@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import ActivityModal from '@/components/admin/ActivityModal'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface Activity {
   id?: string
@@ -130,7 +131,7 @@ export default function ActivitiesManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento attività...</div>
+    return <LoadingState label="Caricamento attività..." />
   }
 
   return (
@@ -249,24 +250,11 @@ export default function ActivitiesManager() {
         </div>
 
         {activities.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4">
-              <span className="text-4xl">⚽</span>
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Nessuna attività creata</h3>
-            <p className="text-secondary mb-4">
-              Crea la tua prima attività sportiva per iniziare a organizzare le discipline della società.
-            </p>
-            <button
-              onClick={() => {
-                setEditingActivity(null)
-                setShowModal(true)
-              }}
-              className="cs-btn cs-btn--primary"
-            >
-              Crea la tua prima attività
-            </button>
-          </div>
+          <EmptyState
+            title="Nessuna attività creata"
+            description="Crea la tua prima attività sportiva per iniziare a organizzare le discipline della società."
+            action={<button onClick={() => { setEditingActivity(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima attività</button>}
+          />
         )}
       </div>
     </div>

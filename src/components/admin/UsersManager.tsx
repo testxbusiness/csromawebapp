@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { toast } from '@/components/ui'
+import { LoadingState, toast } from '@/components/ui'
 import { createClient, createRecoveryClient } from '@/lib/supabase/client'
 import { exportUsers } from '@/lib/utils/excelExport'
 import ImportManager from './ImportManager'
@@ -284,7 +284,7 @@ export default function UsersManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento account...</div>
+    return <LoadingState label="Caricamento account..." />
   }
 
   const handleExportUsers = () => {
