@@ -598,6 +598,16 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   }, [loadClubTeams, selectedChampionshipId])
 
   useEffect(() => {
+    if (championships.length === 0) {
+      setSelectedChampionshipId(null)
+      return
+    }
+    if (!selectedChampionshipId || !championships.some((championship) => championship.id === selectedChampionshipId)) {
+      setSelectedChampionshipId(championships[0].id)
+    }
+  }, [championships, selectedChampionshipId])
+
+  useEffect(() => {
     if (!selectedChampionshipId) return
     const championship = championships.find((c) => c.id === selectedChampionshipId)
     if (championship?.championship_groups && championship.championship_groups.length > 0) {
