@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 type Payment = {
   id: string
@@ -52,7 +53,7 @@ export default function CoachPaymentsManager() {
 
   const statusBadge = (status: Payment['status']) => status === 'paid' ? 'cs-badge cs-badge--success' : 'cs-badge cs-badge--warning'
 
-  if (loading) return <div className="p-4">Caricamento pagamenti...</div>
+  if (loading) return <LoadingState label="Caricamento pagamenti..." />
 
   return (
     <div className="space-y-6">
@@ -156,11 +157,7 @@ export default function CoachPaymentsManager() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="px-6 py-8 text-center">
-              <div className="text-secondary mb-4"><span className="text-4xl">💶</span></div>
-              <h3 className="text-lg font-semibold mb-2">Nessun pagamento</h3>
-              <p className="text-secondary">Qui vedrai i pagamenti a te assegnati dall'amministratore.</p>
-            </div>
+            <EmptyState title="Nessun pagamento" description="Qui vedrai i pagamenti a te assegnati dall'amministratore." />
           )}
         </div>
       </div>

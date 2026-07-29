@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import PageHeader from '@/components/shared/PageHeader' // se vuoi l'header qui, altrimenti toglilo
+import { EmptyState, LoadingState } from '@/components/ui'
 // import EventDetails from '@/components/.../EventDetails' // TODO: se lo usi davvero, importa il path corretto
 
 interface FeeInstallment {
@@ -146,11 +147,7 @@ export default function AthleteFeesManager() {
   })()
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    )
+    return <LoadingState label="Caricamento quote..." />
   }
 
   return (
@@ -232,14 +229,9 @@ export default function AthleteFeesManager() {
         </div>
 
         {installments.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Nessuna quota associativa trovata</p>
-            <p className="text-sm text-secondary">Contatta l'amministratore per informazioni sulle quote</p>
-          </div>
+          <EmptyState title="Nessuna quota associativa trovata" description="Contatta l'amministratore per informazioni sulle quote" />
         ) : filteredInstallments.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary">Nessuna rata trovata per il filtro selezionato</p>
-          </div>
+          <EmptyState title="Nessuna rata trovata per il filtro selezionato" />
         ) : (
           <div className="cs-card overflow-hidden">
             {/* Desktop */}

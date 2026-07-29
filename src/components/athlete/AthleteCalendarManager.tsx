@@ -8,6 +8,7 @@ import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 type EventKind = 'training'|'match'|'meeting'|'other'
 
@@ -104,11 +105,7 @@ export default function AthleteCalendarManager() {
   }, [events, filterEventKind])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--cs-primary)' }} />
-      </div>
-    )
+    return <LoadingState label="Caricamento calendario..." />
   }
 
   const calEvents: CalEvent[] = (filteredEvents||[]).map((e)=>({
@@ -173,14 +170,9 @@ export default function AthleteCalendarManager() {
             }}
           />
         ) : teamMemberships.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Non sei iscritto a nessuna squadra</p>
-            <p className="text-sm text-secondary">Contatta l'amministratore per essere aggiunto a una squadra</p>
-          </div>
+          <EmptyState title="Non sei iscritto a nessuna squadra" description="Contatta l'amministratore per essere aggiunto a una squadra" />
         ) : filteredEvents.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Nessun evento trovato</p>
-          </div>
+          <EmptyState title="Nessun evento trovato" />
         ) : (
           <>
             {/* Desktop Table View */}
