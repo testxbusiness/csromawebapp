@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
@@ -193,7 +193,7 @@ export default function CoachMessagesManager() {
     }
   }
 
-  if (loading) return <div className="cs-card" style={{ padding: 24 }}>Caricamento messaggi…</div>
+  if (loading) return <LoadingState label="Caricamento messaggi..." />
 
   return (
     <div className="space-y-6">
@@ -327,11 +327,7 @@ export default function CoachMessagesManager() {
             </div>
           ))}
           {messages.length === 0 && (
-            <div className="px-6 py-8 text-center">
-              <div className="text-secondary mb-4"><span className="text-4xl">✉️</span></div>
-              <h3 className="text-lg font-semibold mb-2">Nessun messaggio</h3>
-              <p className="text-secondary mb-4">Crea un messaggio per le tue squadre.</p>
-            </div>
+            <EmptyState title="Nessun messaggio" description="Crea un messaggio per le tue squadre." />
           )}
         </div>
       </div>

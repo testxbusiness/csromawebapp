@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 type Message = {
   id: string
@@ -45,7 +46,7 @@ export default function AthleteMessagesManager() {
     }
   }
 
-  if (loading) return <div className="p-4">Caricamento messaggi...</div>
+  if (loading) return <LoadingState label="Caricamento messaggi..." />
 
   return (
     <div className="space-y-6">
@@ -133,11 +134,7 @@ export default function AthleteMessagesManager() {
             </button>
           ))}
           {messages.length === 0 && (
-            <div className="px-6 py-8 text-center">
-              <div className="text-secondary mb-4"><span className="text-4xl">✉️</span></div>
-              <h3 className="text-lg font-semibold mb-2">Nessun messaggio</h3>
-              <p className="text-secondary">Qui troverai i messaggi indirizzati a te o alle tue squadre.</p>
-            </div>
+            <EmptyState title="Nessun messaggio" description="Qui troverai i messaggi indirizzati a te o alle tue squadre." />
           )}
         </div>
         

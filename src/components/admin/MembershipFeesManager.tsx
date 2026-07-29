@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useState, useEffect, useMemo } from 'react'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MembershipFeeModal from '@/components/admin/MembershipFeeModal'
@@ -438,7 +438,7 @@ export default function MembershipFeesManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento quote associative...</div>
+    return <LoadingState label="Caricamento quote associative..." />
   }
 
   return (
@@ -600,12 +600,11 @@ export default function MembershipFeesManager() {
         </div>
 
         {fees.length === 0 && (
-          <div className="text-center py-8">
-            <div className="text-secondary mb-3 text-3xl">💰</div>
-            <h3 className="text-lg font-semibold mb-1">Nessuna quota associativa creata</h3>
-            <p className="text-secondary mb-4">Crea la tua prima quota associativa per gestire i pagamenti delle squadre.</p>
-            <button onClick={() => { setEditingFee(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima quota</button>
-          </div>
+          <EmptyState
+            title="Nessuna quota associativa creata"
+            description="Crea la tua prima quota associativa per gestire i pagamenti delle squadre."
+            action={<button onClick={() => { setEditingFee(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima quota</button>}
+          />
         )}
       </div>
       ) : (
