@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MessageModal, { type Message as MessageForm } from '@/components/admin/MessageModal'
@@ -216,7 +216,7 @@ export default function MessagesManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento messaggi...</div>
+    return <LoadingState label="Caricamento messaggi..." />
   }
 
   return (
@@ -362,12 +362,11 @@ export default function MessagesManager() {
         </div>
 
         {messages.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4"><span className="text-4xl">✉️</span></div>
-            <h3 className="text-lg font-semibold mb-2">Nessun messaggio creato</h3>
-            <p className="text-secondary mb-4">Crea il tuo primo messaggio per iniziare a comunicare con squadre e utenti.</p>
-            <button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo messaggio</button>
-          </div>
+          <EmptyState
+            title="Nessun messaggio creato"
+            description="Crea il tuo primo messaggio per iniziare a comunicare con squadre e utenti."
+            action={<button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo messaggio</button>}
+          />
         )}
       </div>
     </div>

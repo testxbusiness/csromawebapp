@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import EventModal from '@/components/admin/EventModal'
@@ -381,7 +381,7 @@ export default function EventsManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento eventi...</div>
+    return <LoadingState label="Caricamento eventi..." />
   }
 
   return (
@@ -726,12 +726,11 @@ export default function EventsManager() {
             </div>
           ))}
           {events.length === 0 && (
-            <div className="px-6 py-8 text-center">
-              <div className="text-secondary mb-4"><span className="text-4xl">📅</span></div>
-              <h3 className="text-lg font-semibold mb-2">Nessun evento creato</h3>
-              <p className="text-secondary mb-4">Crea il tuo primo evento per iniziare a organizzare il calendario delle attività.</p>
-              <button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo evento</button>
-            </div>
+            <EmptyState
+              title="Nessun evento creato"
+              description="Crea il tuo primo evento per iniziare a organizzare il calendario delle attività."
+              action={<button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo evento</button>}
+            />
           )}
         </div>
       </div>
