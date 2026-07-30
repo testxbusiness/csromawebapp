@@ -70,3 +70,6 @@ SECURITY_AUDIT_*.md
 
 # Backup DB
 dbbackup/
+
+# Local production database backups: contain credentials, auth data and user data.
+/backup-prod-*/

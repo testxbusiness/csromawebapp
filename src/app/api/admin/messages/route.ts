@@ -8,7 +8,14 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
     const adminClient = createAdminClient()
     const parsed = adminMessageCreateSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json({ error: 'Dati messaggio non validi' }, { status: 400 })
+    if (!parsed.success) {
+      console.warn('Admin message validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati messaggio non validi' }, { status: 400 })
+    }
     const { subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
 
     // Verifica che l'utente corrente sia admin
@@ -148,7 +155,14 @@ export async function PUT(request: NextRequest) {
     const supabase = await createClient()
     const adminClient = createAdminClient()
     const parsed = adminMessageUpdateSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
+    if (!parsed.success) {
+      console.warn('Admin message update validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
+    }
     const { id, subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
 
     // Verifica che l'utente corrente sia admin

@@ -244,7 +244,14 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
     const adminClient = createAdminClient()
     const parsed = coachMessageCreateSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json({ error: 'Dati messaggio non validi' }, { status: 400 })
+    if (!parsed.success) {
+      console.warn('Coach message validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati messaggio non validi' }, { status: 400 })
+    }
     const body = parsed.data
 
     const { data: { user } } = await supabase.auth.getUser()
@@ -350,7 +357,14 @@ export async function PUT(request: NextRequest) {
     const supabase = await createClient()
     const adminClient = createAdminClient()
     const parsed = coachMessageUpdateSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
+    if (!parsed.success) {
+      console.warn('Coach message update validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
+    }
     const body = parsed.data
 
     const { data: { user } } = await supabase.auth.getUser()
