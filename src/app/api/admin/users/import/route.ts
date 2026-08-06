@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { importedUsersPayloadSchema } from '@/lib/validation/users'
 
-const AUTH_CALLBACK_URL = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`
+function getAuthCallbackUrl(request: NextRequest): string {
+  return new URL('/auth/callback', request.url).toString()
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +32,7 @@ const role = (user as any)?.app_metadata?.role
       try {
         // Create the account through Supabase's expiring invitation flow.
         const { data: authData, error: createErr } = await adminClient.auth.admin.inviteUserByEmail(u.email, {
-          redirectTo: AUTH_CALLBACK_URL,
+          redirectTo: getAuthCallbackUrl(request),
           data: {
             first_name: u.first_name,
             last_name: u.last_name,

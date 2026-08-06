@@ -4,7 +4,9 @@ import { userPatchPayloadSchema, userPayloadSchema } from '@/lib/validation/user
 
 type Role = 'admin' | 'coach' | 'athlete'
 
-const AUTH_CALLBACK_URL = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`
+function getAuthCallbackUrl(request: NextRequest): string {
+  return new URL('/auth/callback', request.url).toString()
+}
 
 function normalizeTeamAssignments(teamIds?: unknown): string[] {
   if (!Array.isArray(teamIds)) return []
@@ -72,7 +74,7 @@ const requesterRole = (user as any)?.app_metadata?.role
     } else {
       wasCreated = true
       const { data: authCreate, error: createError } = await adminClient.auth.admin.inviteUserByEmail(email, {
-        redirectTo: AUTH_CALLBACK_URL,
+        redirectTo: getAuthCallbackUrl(request),
         data: { first_name, last_name }
       })
 
