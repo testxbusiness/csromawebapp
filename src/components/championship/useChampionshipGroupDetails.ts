@@ -19,7 +19,7 @@ export function useChampionshipGroupDetails(groupId: string | null) {
 
     setLoading(true)
     try {
-      const [{ data: matchesData, error: matchesError }, { data: standingsData, error: standingsError }] = await Promise.all([
+      const [{ data: matchesData, error: matchesError }, standingsResponse] = await Promise.all([
         supabase
           .from('championship_matches')
           .select(`
@@ -32,21 +32,23 @@ export function useChampionshipGroupDetails(groupId: string | null) {
           .eq('championship_group_id', groupId)
           .order('match_day', { ascending: true })
           .order('match_date', { ascending: true }),
-        supabase
-          .from('championship_standings_mv')
-          .select('*')
-          .eq('championship_group_id', groupId),
+        fetch(`/api/championships/standings?group_id=${encodeURIComponent(groupId)}`, {
+          cache: 'no-store',
+        }),
       ])
 
       if (matchesError) throw matchesError
-      if (standingsError) console.error('Errore classifica', standingsError)
+
+      const standingsPayload = standingsResponse.ok
+        ? await standingsResponse.json() as { standings?: Standing[] }
+        : { standings: [] }
 
       setMatches((matchesData || []).map((match: any) => ({
         ...match,
         home_club_team: firstRelation(match.home_club_team),
         away_club_team: firstRelation(match.away_club_team),
       })) as Match[])
-      setStandings((standingsData || []) as Standing[])
+      setStandings(standingsPayload.standings ?? [])
     } catch (error) {
       console.error('Errore caricamento dettagli girone', error)
       setMatches([])
