@@ -600,6 +600,8 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   useEffect(() => {
     if (championships.length === 0) {
       setSelectedChampionshipId(null)
+      setSelectedGroupId(null)
+      setImportGroupId(null)
       return
     }
     if (!selectedChampionshipId || !championships.some((championship) => championship.id === selectedChampionshipId)) {

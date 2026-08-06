@@ -671,6 +671,8 @@ export default function ChampionshipsManager() {
   useEffect(() => {
     if (championships.length === 0) {
       setSelectedChampionshipId(null)
+      setSelectedGroupId(null)
+      setImportGroupId(null)
       return
     }
     if (!selectedChampionshipId || !championships.some((championship) => championship.id === selectedChampionshipId)) {

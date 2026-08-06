@@ -67,15 +67,31 @@ export function useChampionshipCatalog({
 
     let filtered = data || []
     const allowedTeamIds = mode === 'coach' ? coachTeamIds : athleteTeamIds
-    if ((mode === 'coach' || mode === 'athlete') && allowedTeamIds.size > 0) {
-      filtered = filtered.filter((championship: any) =>
-        championship.championship_groups?.some((group: any) =>
-          group.championship_group_teams?.some((groupTeam: any) => {
-            const teamId = groupTeam.championship_club_teams?.team_id
-            return teamId && allowedTeamIds.has(teamId)
+    if (mode === 'coach' || mode === 'athlete') {
+      if (allowedTeamIds.size === 0) {
+        filtered = []
+      } else {
+        filtered = (filtered as any[])
+          .map((championship) => {
+            const visibleGroups = (championship.championship_groups || [])
+              .map((group: any) => {
+                const visibleGroupTeams = (group.championship_group_teams || []).filter((groupTeam: any) => {
+                  const clubTeam = firstRelation(groupTeam.championship_club_teams)
+                  return clubTeam?.team_id && allowedTeamIds.has(clubTeam.team_id)
+                })
+
+                return visibleGroupTeams.length > 0
+                  ? { ...group, championship_group_teams: visibleGroupTeams }
+                  : null
+              })
+              .filter(Boolean)
+
+            return visibleGroups.length > 0
+              ? { ...championship, championship_groups: visibleGroups }
+              : null
           })
-        )
-      )
+          .filter(Boolean)
+      }
     }
 
     const normalized = (filtered as any[]).map((championship) => ({
