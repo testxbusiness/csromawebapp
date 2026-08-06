@@ -273,6 +273,19 @@ Componenti client con query dirette o ruolo singolo:
 `account_roles` ha PK composta `(auth_user_id, role)` e contiene solo
 `admin|coach|staff`. `athlete` non viene backfillato come ruolo globale.
 
+Il ruolo `coach` abilita l'area coach, ma non attribuisce accesso a nessuna squadra.
+L'unica catena autorevole per autorizzare una squadra è:
+
+```text
+app_accounts.owner_profile_id
+  -> team_coaches.coach_id
+  -> team_coaches.team_id
+```
+
+Non sono ammessi fallback su `teams.coach_id`, `team_members.role='coach'`,
+`profiles.role` o claim JWT. `is_athlete()` deriva esclusivamente dalla presenza della
+persona in `athlete_profiles` o `team_members`, non da `account_roles`.
+
 `profile_relationships` segue lo schema richiesto, con:
 
 - `valid_until IS NULL OR valid_until >= valid_from`;
@@ -281,8 +294,14 @@ Componenti client con query dirette o ruolo singolo:
   `ON DELETE SET NULL`, mentre l'audit immutabile conserva uno snapshot dell'attore;
 - nessuna cancellazione fisica dal flusso UI: `DELETE` applica `status='revoked'`;
 - nessuna relazione self;
-- nessuna unicità sul "contatto principale" finché non viene deciso se due genitori
-  possano essere co-principali.
+- un solo `is_primary_contact=true` attivo per target;
+- un solo `is_billing_contact=true` attivo per target;
+- più relazioni possono avere `can_receive_messages=true` o
+  `is_emergency_contact=true`.
+
+L'unicità dei contatti principali è protetta nel database, non solo nella UI. Una
+relazione scaduta non autorizza mai; il flusso amministrativo chiude/revoca il precedente
+contatto principale prima di assegnarne uno nuovo.
 
 ### 4.2 Helper di sicurezza
 
@@ -302,6 +321,21 @@ Quando serve bypass RLS, la funzione è `SECURITY DEFINER`, ha riferimenti quali
 temporaneamente come wrapper `SECURITY INVOKER` per non rompere tutte le policy nello
 stesso deploy.
 
+I grant dello schema `private` sono espliciti:
+
+- `REVOKE ALL ON SCHEMA private FROM PUBLIC`, `anon` e ruoli non necessari;
+- `GRANT USAGE ON SCHEMA private TO authenticated, service_role`; nessun `USAGE` ad
+  `anon`; eventuali ruoli ulteriori richiedono una migration esplicita;
+- nessun grant diretto sulle eventuali tabelle private ad `anon` o `authenticated`;
+- `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA private FROM PUBLIC` prima dei grant;
+- `GRANT EXECUTE` funzione per funzione, mai `ALL FUNCTIONS`;
+- gli helper RLS strettamente necessari sono eseguibili da `authenticated`; funzioni di
+  manutenzione o backfill sono eseguibili solo da `service_role`/owner database;
+- ogni funzione ha `search_path` fisso e usa nomi completamente qualificati;
+- i default privileges sono revocati per impedire esposizioni future involontarie;
+- test SQL automatici verificano `USAGE`, `EXECUTE`, assenza di accesso tabellare e
+  impossibilità di chiamare funzioni non concesse.
+
 `app_accounts` non usa `current_profile_id()` nella propria policy self, evitando
 ricorsione: il self-check è direttamente `auth_user_id = auth.uid()`.
 
@@ -317,6 +351,19 @@ Il contesto contiene `authUserId`, `ownerProfileId`, `accountStatus` e `roles[]`
 Ogni route chiama `supabase.auth.getUser()` e poi risolve il contesto dal database.
 Nessuna route si autorizza esclusivamente dal ruolo ricevuto dal client o dal JWT.
 
+Il percorso predefinito per dati applicativi è:
+
+```text
+client Supabase dell'utente autenticato + RLS
+```
+
+Il client admin è ammesso soltanto per Supabase Auth Admin, ciclo di vita account,
+operazioni amministrative strettamente circoscritte o casi documentati in cui RLS non è
+applicabile. Non viene usato genericamente dopo un controllo TypeScript per leggere o
+scrivere dati di dominio. Vive in un solo modulo `server-only`, indicativamente
+`src/server/supabase/admin-client.ts`; nessun barrel client lo riesporta e un test di
+dipendenze impedisce import da Client Components o moduli frontend.
+
 Il middleware resta responsabile di refresh sessione e presenza login, non di decisioni
 di dominio: lo stato account e i ruoli vengono verificati dalle route/server layer e da
 RLS. Questo evita di affidarsi a claim JWT non ancora aggiornati.
@@ -328,9 +375,9 @@ relazione familiare non ottiene automaticamente `SELECT *` sul profilo del figli
 
 - `/api/me/accessible-profiles` restituisce solo identità minima e permessi;
 - calendario, pagamenti, documenti, stato medico e contatti hanno controlli separati;
-- le route server-side usano il client admin solo dopo `require-profile-permission`;
+- le route server-side usano per default il client dell'utente e RLS;
 - le query client dirette verso dati sensibili vengono progressivamente spostate dietro
-  route tipizzate.
+  route tipizzate solo quando il controllo non può essere espresso correttamente in RLS.
 
 ### 4.5 Actor e subject
 
@@ -340,11 +387,50 @@ persona agisce per un'altra:
 - `subject_profile_id` identifica il soggetto;
 - `performed_by_auth_user_id` identifica l'account;
 - dove utile, `performed_by_profile_id` conserva la persona proprietaria dell'account;
-- firma e audit salvano snapshot di relazione/tipo per restare storici dopo revoca.
+- audit e future firme gestite da un provider esterno salvano snapshot di relazione/tipo
+  per restare storici dopo revoca.
 
-Per audit e firme, l'UUID Auth storico non deve bloccare la cancellazione dell'account:
+Per audit e future evidenze esterne, l'UUID Auth storico non deve bloccare la cancellazione dell'account:
 viene conservato come valore immutabile senza FK distruttiva, insieme a uno snapshot
 dell'attore. Le colonne operative non storiche possono usare `ON DELETE SET NULL`.
+
+### 4.6 Maggiore età e accesso familiare
+
+La minore età è calcolata da `profiles.birth_date`. Un override amministrativo è ammesso
+solo con motivazione obbligatoria, attore e timestamp; viene mantenuto in una struttura
+auditabile, non in un flag client.
+
+Un helper centralizzato, indicativamente `private.is_profile_minor(profile_id, at_date)`,
+applica questa precedenza:
+
+1. override amministrativo attivo e motivato;
+2. calcolo dalla data di nascita;
+3. dato mancante o incoerente: fail closed, nessun accesso parent automatico.
+
+La relazione `parent` resta nello storico, ma dal giorno del diciottesimo compleanno non
+concede più accesso operativo. L'accesso successivo richiede una relazione `delegate`
+attiva e verificata con i permessi necessari. Letture, audit ed eventuali evidenze esterne
+già registrate non vengono modificati retroattivamente.
+
+### 4.7 Fonti autorevoli dei dati persona/atleta/squadra
+
+Prima della Fase 4 viene completato un consolidamento esplicito:
+
+- `profiles`: anagrafica e contatti (`first_name`, `last_name`, `birth_date`, email e
+  telefono di contatto, avatar);
+- `athlete_profiles`: numero tessera, stato e scadenza del certificato medico;
+- `team_members`: dati specifici di squadra/stagione, incluso numero maglia.
+
+Le colonne duplicate non vengono eliminate finché una migration di confronto non ha:
+
+1. classificato valori uguali, null e conflitti;
+2. prodotto un report dei conflitti senza sovrascrittura automatica;
+3. backfillato solo valori mancanti dalla fonte scelta;
+4. migrato tutte le letture/scritture alla fonte autorevole;
+5. aggiunto test di non regressione e solo infine deprecato le copie legacy.
+
+Per i genitori, `can_view_medical_status` espone soltanto stato e scadenza del
+certificato; non concede accesso a note o dati sanitari dettagliati.
 
 ## 5. Piano delle migration
 
@@ -387,41 +473,159 @@ Migration 3: `decouple_profiles_from_auth`
 Migration 4: `account_authorization_helpers_and_rls`
 
 - crea schema/helper privati;
+- applica revoche, `USAGE` e `EXECUTE` puntuali definiti nella sezione 4.2, senza grant
+  diretti alle tabelle private;
 - riscrive `is_admin`, `is_coach`, `is_athlete`, helper team e visibilità profili;
+- `is_coach` verifica l'abilitazione area, gli helper team seguono esclusivamente
+  `owner_profile_id -> team_coaches`, e `is_athlete` legge solo dati sportivi;
 - crea policy self/admin sulle tre nuove tabelle;
 - impedisce agli utenti standard di mutare owner, ruoli, verifiche e permessi;
 - verifica RLS di `user_roles`, mantenuta solo in lettura compatibile;
+- aggiunge test automatici di grant/default privileges e `search_path`;
 - non concede ancora accesso famiglia ai domini operativi.
 
 Gate Fase 1: i 48 account esistenti devono continuare a operare; nessun profilo senza
 account viene creato finché Fase 3 non è deployata.
 
-### Fase 2 — risoluzione account e riscrittura autorizzazioni
+### Fase 2 — migrazione incrementale delle autorizzazioni
 
-Migration 5: `replace_auth_uid_profile_policies`
+Fase 2 non viene rilasciata in un unico deploy. Ogni sottofase ha una migration, un
+deploy applicativo indipendente e un gate di merge. Le policy non ancora migrate restano
+nel modello legacy finché arriva la loro sottofase; i 48 ID esistenti rendono possibile
+questa convivenza controllata.
 
-- sostituisce tutte le policy elencate nella sezione 3.2;
-- usa `current_profile_id()` per self/coach e `account_roles` per ruoli globali;
-- aggiunge sempre `USING` e `WITH CHECK` alle policy UPDATE;
-- rimuove policy duplicate/sovrapposte emerse dal dump;
-- non introduce ancora permessi parent su dati specifici.
+#### Fase 2A — account context, profilo personale e account status
 
-Codice:
+Migration 5: `account_context_and_personal_access_policies`
 
-- introduce il resolver account centralizzato;
-- migra middleware, login, reset password, dashboard e navigazione;
-- migra tutte le route admin, athlete, coach, notifications e attachments;
-- per compatibilità, continua a sincronizzare `profiles.role` e
-  `app_metadata.role` per gli account legacy fino alla Fase 6;
-- scrive nelle FK profilo `ownerProfileId`, non `authUserId`;
-- aggiunge test automatici di status account e BOLA/IDOR.
+- stabilizza `private.current_profile_id()` e il controllo status account;
+- migra solo policy self di `app_accounts`, `account_roles` e `profiles`;
+- introduce il resolver server `requireAccountContext` e migra login, reset password,
+  `useAuth`, dashboard base e profilo personale;
+- un account `suspended` o `disabled` non ottiene contesto, dati o mutazioni.
 
-Gate Fase 2: nessuna occorrenza applicativa può passare `user.id` a `profile_id`,
-`coach_id` o a una FK `created_by -> profiles`.
+Test SQL: active/invited/suspended/disabled, owner univoco, self SELECT/UPDATE e diniego
+cross-profile.
+
+Test API: login legacy, profilo personale, reset password, 401/403 per status non
+operativo e UUID manipolato.
+
+Query di verifica: conteggi Auth/profili/mapping, mapping senza owner, account non active
+che risolvono un profilo (atteso zero), policy self residue con confronto diretto
+`profiles.id = auth.uid()`.
+
+Gate di merge: login e profilo personale funzionano per tutti i 48 account; sospensione
+blocca API e RLS immediatamente; nessuna route migrata scrive `user.id` in una FK profilo.
+
+Rollback/roll-forward: rollback del codice al resolver legacy è possibile perché gli ID
+restano invariati; le tabelle additive restano. Se la migration policy è già applicata,
+si ripristinano soltanto le policy self precedenti con una migration forward correttiva.
+
+#### Fase 2B — Admin e Staff
+
+Migration 6: `admin_staff_account_role_policies`
+
+- migra le policy e le route admin dal singolo claim a `account_roles`;
+- `admin` conserva le operazioni globali esplicitamente elencate;
+- `staff` non equivale ad admin e non riceve accesso globale implicito;
+- ogni capacità staff è nominata e concessa solo alla policy/route necessaria; la prima
+  capacità prevista è la verifica relazioni in Fase 4;
+- centralizza il client Auth Admin nel modulo server-only e aggiunge il controllo
+  statico che ne vieta import frontend.
+
+Test SQL: matrice admin/staff/utente su profili, account e ruoli; grant dello schema
+`private`; tentativi staff su funzioni admin non concesse.
+
+Test API: tutte le route `/api/admin/**`, payload con ruolo falsificato, status
+disabilitato e import account.
+
+Query di verifica: policy admin ancora basate solo su JWT (atteso zero nel perimetro),
+grant eccessivi, funzioni `private` eseguibili da `PUBLIC`, route admin ancora prive del
+resolver centralizzato.
+
+Gate di merge: l'admin esistente conserva tutte le funzioni; staff vede soltanto
+capabilities allowlisted; il frontend non importa service role/admin client.
+
+Rollback/roll-forward: il codice admin precedente può essere ripristinato mentre il
+dual-write legacy è attivo; le policy vengono corrette con nuova migration, mai
+modificando una migration già applicata.
+
+#### Fase 2C — Coach e autorizzazioni squadra
+
+Migration 7: `coach_team_assignment_policies`
+
+- `account_roles.coach` abilita esclusivamente l'area coach;
+- tutte le policy team usano soltanto `current_profile_id() -> team_coaches.coach_id`;
+- elimina fallback autorizzativi su `teams.coach_id`, `team_members.role='coach'`,
+  `profiles.role` e claim JWT;
+- migra route coach, calendario, eventi, convocazioni, pagamenti coach e query UI.
+
+Test SQL: coach con zero/una/più squadre, due coach sulla stessa squadra, coach che è
+anche genitore/iscritto, tentativo di accesso a squadra non assegnata.
+
+Test API: ogni route coach con team ID valido, alterato e rimosso durante la sessione.
+
+Query di verifica: policy/funzioni contenenti `teams.coach_id = auth.uid()`,
+`team_members.role='coach'` o `team_coaches.coach_id = auth.uid()` (atteso zero);
+confronto squadre restituite dall'API con `team_coaches`.
+
+Gate di merge: aggiungere/rimuovere `account_roles.coach` cambia l'area, mentre
+aggiungere/rimuovere `team_coaches` cambia immediatamente le singole squadre accessibili.
+
+Rollback/roll-forward: si mantiene `team_coaches` come fonte dati; eventuali regressioni
+si correggono con policy forward. Nessun backfill autorizzativo usa le colonne fallback.
+
+#### Fase 2D — Iscritti e accesso personale
+
+Migration 8: `athlete_personal_access_policies`
+
+- riscrive `is_athlete()` usando `athlete_profiles` o `team_members`;
+- migra policy e route athlete per calendario, dashboard, presenze e quote personali;
+- non crea `account_roles.athlete`;
+- mantiene ancora fuori perimetro l'accesso parent, introdotto in Fase 4.
+
+Test SQL: atleta con/senza `athlete_profiles`, iscrizione a più squadre, persona non
+iscritta e compagno di squadra.
+
+Test API: tutte le route `/api/athlete/**`, self e IDOR.
+
+Query di verifica: record `account_roles.role='athlete'` (atteso zero), helper che
+leggono `profiles.role='athlete'` e route athlete che usano `user.id` come profilo.
+
+Gate di merge: i 44 atleti esistenti conservano accesso personale; una persona non
+iscritta non ottiene l'area atleta; revoca iscrizione aggiorna subito l'accesso.
+
+Rollback/roll-forward: le colonne legacy restano in dual-read fino a fine gate; eventuali
+correzioni policy sono forward e non modificano dati sportivi.
+
+#### Fase 2E — messaggi, notifiche, documenti e domini condivisi
+
+Migration 9: `shared_domain_actor_and_access_policies`
+
+- migra policy e route condivise di messaggi, allegati, notifiche, documenti, quote,
+  pagamenti, eventi e tabelle di supporto;
+- nelle FK persona scrive `ownerProfileId`, nelle colonne actor scrive `authUserId`;
+- rimuove duplicazioni di policy solo nel dominio migrato;
+- prepara, senza abilitarlo, il subject delegato della Fase 4.
+
+Test SQL: matrice self/admin/coach per ciascun dominio, `USING` + `WITH CHECK`, allegati
+storage e grant.
+
+Test API: messaggi, notifications, documents, shared routes, BOLA/IDOR e status account.
+
+Query di verifica: inventario completo della sezione 3.2, confronti diretti residui tra
+UUID Auth e FK profilo, policy duplicate e funzioni pubbliche con grant eccessivi.
+
+Gate di merge: nessuna occorrenza applicativa nel perimetro completo passa `user.id` a
+`profile_id`, `coach_id` o `created_by -> profiles`; tutti i domini mantengono il
+comportamento dei 48 account.
+
+Rollback/roll-forward: deploy applicativo reversibile grazie ai campi legacy; policy e
+grant vengono riparati con migration forward atomica per dominio.
 
 ### Fase 3 — persone e ciclo di vita account
 
-Migration 6: `person_and_account_audit_support`
+Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;
 - prepara audit delle operazioni account;
@@ -435,21 +639,41 @@ API nuove:
 - `POST /api/admin/profiles/:id/invite-account`;
 - `POST /api/admin/profiles/:id/suspend-account`;
 - `POST /api/admin/profiles/:id/reactivate-account`;
-- `DELETE /api/admin/profiles/:id/account`.
+- `DELETE /api/admin/profiles/:id/account`;
+- eventuale `DELETE /account` self-service, con la stessa semantica di revoca logica.
 
 Servizi server separati gestiscono persona e account. La creazione persona non invoca
 Auth. Il flusso account:
 
 1. blocca profili già collegati;
-2. crea/invita Auth lato server;
-3. inserisce `app_accounts`;
-4. assegna `account_roles`;
-5. se 3/4 falliscono, elimina l'utente Auth appena creato e registra la compensazione;
-6. non collega mai automaticamente un account esistente solo per uguaglianza email.
+2. crea l'utente Auth server-side senza inviare ancora accesso, se la combinazione di
+   Auth Admin API e mailer disponibile lo consente;
+3. crea `app_accounts` e `account_roles` tramite un'operazione DB atomica e circoscritta;
+4. rilegge e verifica mapping, owner, stato e ruoli;
+5. genera il link di attivazione e lo invia solo dopo la verifica;
+6. non usa password temporanee e non collega mai automaticamente un account esistente
+   per sola uguaglianza email.
 
-La cancellazione account imposta prima `disabled`, applica ban/revoca refresh token come
-difesa aggiuntiva e poi elimina/soft-delete Auth secondo la decisione di retention. Le
-policy basate su `app_accounts.status` bloccano subito anche un JWT già emesso.
+Prima dell'implementazione viene eseguito uno spike sul flusso supportato dalla versione
+Supabase in uso: `createUser` senza notifica seguito da `generateLink` e invio tramite
+mailer server. Se non è praticabile e si deve usare `inviteUserByEmail`, che invia subito,
+il codice registra lo stato `provisioning`, verifica l'esito del mapping e testa
+esplicitamente il caso "email inviata ma mapping fallito". In tale caso l'account viene
+immediatamente disabilitato/bannato, l'errore è auditato e l'admin riceve un'azione di
+riparazione; non si considera l'operazione riuscita.
+
+Per il primo rilascio ogni cancellazione account ordinaria, incluso
+`DELETE /api/admin/profiles/:id/account` e l'eventuale `DELETE /account`, è una revoca
+logica:
+
+- imposta `app_accounts.status='disabled'`;
+- blocca immediatamente API, helper e RLS;
+- applica un eventuale ban Auth come difesa aggiuntiva;
+- non elimina `auth.users` e non elimina mai `profiles`;
+- conserva mapping e audit per una possibile riattivazione controllata.
+
+La cancellazione fisica Auth è un'operazione amministrativa separata, fuori dal flusso
+normale e soggetta a retention, verifica dello storico e conferma esplicita.
 
 UI:
 
@@ -462,10 +686,25 @@ UI:
 
 ### Fase 4 — famiglie e profili accessibili
 
-Migration 7: `relationship_permissions_and_domain_helpers`
+Migration 11: `consolidate_profile_athlete_team_sources`
+
+- produce prima un report di confronto per numero tessera, certificato e numero maglia;
+- blocca la migration automatica se trova conflitti non classificati;
+- backfilla solo valori mancanti verso la fonte autorevole definita in 4.7;
+- mantiene le colonne duplicate in sola compatibilità con TODO di rimozione;
+- aggiunge query di verifica che dimostrano assenza di perdita dati.
+
+Gate pre-Fase 4: tutte le letture/scritture usano `profiles` per anagrafica/contatti,
+`athlete_profiles` per tessera/certificato e `team_members` per dati squadra/stagione.
+
+Migration 12: `relationship_permissions_age_and_domain_helpers`
 
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
+- aggiunge override amministrativo della minore età con motivo, attore e timestamp;
+- centralizza `is_profile_minor()` e disattiva l'accesso `parent` al compimento dei 18;
+- richiede una relazione `delegate` attiva/verificata per l'accesso successivo;
+- impone un solo contatto amministrativo e un solo contatto pagamenti attivi;
 - aggiunge audit verifica/revoca/modifica;
 - non concede una policy generica che esponga tutte le colonne di `profiles`.
 
@@ -482,12 +721,17 @@ Frontend:
 - provider account/profilo accessibile;
 - selettore persistente "Stai operando per";
 - persistenza solo UI (local storage o cookie non autorevole);
-- reset automatico della selezione quando relazione scade/revoca;
+- reset automatico della selezione quando relazione scade, viene revocata o il soggetto
+  compie 18 anni senza delega valida;
 - aree personale, famiglia, coach, amministrazione non mutuamente esclusive.
+
+Le relazioni familiari sono verificate inizialmente soltanto da Admin o Staff con la
+capability esplicita. Un parent con `can_view_medical_status` vede esclusivamente stato e
+scadenza del certificato.
 
 ### Fase 5 — domini collegati
 
-Migration 8: `account_message_reads_and_push_subscriptions`
+Migration 13: `account_message_reads_and_push_subscriptions`
 
 - crea `message_reads(message_id, auth_user_id, subject_profile_id, read_at)`;
 - mantiene `message_recipients.is_read/read_at` in dual-read temporaneo;
@@ -498,7 +742,7 @@ Migration 8: `account_message_reads_and_push_subscriptions`
   dual-write, nuova unique `(auth_user_id, endpoint)` e rimozione futura di `profile_id`;
 - fan-out notifiche a tutti gli account autorizzati con `can_receive_messages=true`.
 
-Migration 9: `attendance_rsvp_and_payment_actors`
+Migration 14: `attendance_rsvp_and_payment_actors`
 
 - `event_attendances`: `responded_by_auth_user_id`, `response_source`, `responded_at`;
 - `rsvp`: stessi campi per compatibilità, anche se oggi non usata dal codice;
@@ -508,14 +752,15 @@ Migration 9: `attendance_rsvp_and_payment_actors`
 - non usa `payment_subject_profile_id` su `payments` finché non viene chiarita la
   semantica, perché le quote atleta vivono in `fee_installments`.
 
-Migration 10: `document_signatures_and_activity_audit`
+Migration 15: `document_access_and_activity_audit`
 
-- crea `document_signatures` con account firmatario, profilo firmato, relationship,
-  versione, timestamp e snapshot del tipo relazione;
-- aggiunge letture/visualizzazioni per account se necessarie;
+- aggiunge letture/visualizzazioni documenti per account quando necessarie;
 - evolve `system_logs` in audit actor/subject/azione/timestamp;
-- preserva firme e audit dopo revoca relazione e cancellazione account;
-- applica `can_view_documents` e `can_sign_documents` separatamente.
+- preserva letture e audit dopo revoca relazione o revoca logica account;
+- applica `can_view_documents` in modo separato dagli altri permessi;
+- non implementa firme con valore legale, `document_signatures` o una firma applicativa
+  proprietaria: la firma resta fuori da questo refactoring finché non viene scelto e
+  progettato un provider dedicato.
 
 ### Fase 6 — rimozione legacy
 
@@ -587,7 +832,8 @@ roll-forward: si mantiene lo schema additivo e si disabilitano le nuove UI/API.
 Rollback applicativo:
 
 - Fase 1 è compatibile con il codice vecchio perché i 48 ID e i campi legacy restano;
-- Fase 2 mantiene dual-write dei ruoli legacy;
+- Fasi 2A-2E mantengono dual-write dei ruoli legacy e possono essere riportate indietro
+  indipendentemente nel codice; le policy già migrate ricevono correzioni roll-forward;
 - Fase 3 non cancella dati persona durante rollback;
 - Fase 4 revoca/oscura le relazioni senza cancellarle;
 - Fase 5 mantiene colonne legacy fino alla Fase 6.
@@ -600,12 +846,16 @@ registrato il checksum. Nessun rollback usa delete cascata su persone o storico.
 | Rischio | Mitigazione |
 | --- | --- |
 | Policy residue con `auth.uid() = profile_id` | inventario automatico `rg` sul dump e test SQL che fallisce se resta il pattern |
-| JWT valido dopo sospensione/delete | `app_accounts.status` verificato in ogni helper/RLS/API; ban Auth solo difesa aggiuntiva |
-| Creazione Auth riuscita e mapping fallito | compensazione server-side e audit; nessun retry cieco |
+| JWT valido dopo sospensione/revoca | `app_accounts.status` verificato in ogni helper/RLS/API; ban Auth solo difesa aggiuntiva |
+| Invito inviato prima del mapping | preferire create + mapping + verify + link; fallback immediato testato, disable/ban e riparazione auditata |
 | Email contatto uguale per più familiari | `profiles.email` nullable/non autorevole; login email gestita da Auth |
 | Parent vede colonne sensibili del figlio | niente `SELECT *` parent su `profiles`; endpoint/permessi per dominio |
+| Parent conserva accesso dopo i 18 anni | helper minore centralizzato; parent storico ma non operativo; nuova delega verificata |
 | Ruolo singolo in UI/middleware | context con `roles[]` e aree multiple; legacy dual-write temporaneo |
+| Ruolo coach interpretato come accesso globale | ruolo abilita solo area; team sempre risolti tramite `owner_profile_id -> team_coaches` |
+| Service role usata come bypass generico | user client + RLS di default; admin client server-only, allowlist e test import/grant |
 | Cancellazione persona elimina storico | nessuna delete persona dal flusso account; revisione futura delle FK cascade |
+| Campi atleta duplicati divergono | fonti autorevoli definite, report conflitti e consolidamento senza overwrite |
 | Due genitori condividono stato lettura | `message_reads` per account e soggetto |
 | Backfill letture team ambiguo | nessuna lettura individuale inventata; mantenimento flag legacy |
 | `payments` confuso con quote atleta | quote/subject su `fee_installments`; `payments` resta contabilità costi/coach |
@@ -616,30 +866,46 @@ registrato il checksum. Nessun rollback usa delete cascata su persone o storico.
 
 ## 9. Ordine esatto dei commit/PR
 
-Il piano raccomanda una PR per fase. Ordine dei commit:
+Il piano raccomanda PR separate per Fase 1, ciascuna Fase 2A-2E, Fase 3, Fase 4,
+Fase 5 e Fase 6. Ordine dei commit:
 
 1. `docs: plan optional accounts and family profiles`;
-2. `test(db): add account model baseline and invariant checks`;
-3. `feat(db): create account person and relationship tables`;
-4. `feat(db): backfill accounts roles and decouple profiles`;
-5. `feat(db): add private authorization helpers and initial rls`;
-6. `test(db): cover account mapping grants and rollback preconditions`;
-7. `refactor(auth): resolve account context and multiple global roles`;
-8. `refactor(api): replace auth user ids in admin and shared routes`;
-9. `refactor(api): replace auth user ids in athlete coach and notification routes`;
-10. `test(auth): cover suspended disabled and legacy account compatibility`;
-11. `feat(admin): add profile-only CRUD and account lifecycle services`;
-12. `feat(admin-ui): add people access states and person detail`;
-13. `test(admin): cover profile without account and account compensation`;
-14. `feat(family): add relationship APIs and permission helpers`;
-15. `feat(family-ui): add accessible profiles and persistent selector`;
-16. `test(family): cover multi-parent multi-child and permission isolation`;
-17. `feat(messages): add per-account reads and account push subscriptions`;
-18. `feat(attendance): add actor subject fields to attendance rsvp and fees`;
-19. `feat(documents): add signatures and immutable actor audit`;
-20. `test(domains): cover delegated actions reads signatures and audit history`;
-21. `refactor(legacy): remove profile role user_roles and compatibility fields`;
-22. `test(e2e): validate full migration and legacy removal`.
+2. `docs: incorporate approved authorization and lifecycle decisions`;
+3. `test(db): add account model baseline and invariant checks`;
+4. `feat(db): create account person and relationship tables`;
+5. `feat(db): backfill existing accounts and global roles`;
+6. `feat(db): decouple profiles from auth users`;
+7. `feat(db): add private helpers explicit grants and initial rls`;
+8. `test(db): cover account mapping grants and rollback preconditions`;
+9. `feat(db): migrate personal account context policies`;
+10. `refactor(auth): resolve owner profile and account status`;
+11. `test(auth): gate phase 2a personal access and account status`;
+12. `feat(db): migrate admin and staff role policies`;
+13. `refactor(admin): use account roles and scoped server-only admin client`;
+14. `test(admin): gate phase 2b admin staff routes and grants`;
+15. `feat(db): migrate coach team assignment policies`;
+16. `refactor(coach): authorize teams only through team coaches`;
+17. `test(coach): gate phase 2c team isolation`;
+18. `feat(db): migrate athlete personal access policies`;
+19. `refactor(athlete): derive athlete access from sports records`;
+20. `test(athlete): gate phase 2d personal athlete access`;
+21. `feat(db): migrate shared domain actor and access policies`;
+22. `refactor(domains): migrate messages notifications documents and shared routes`;
+23. `test(domains): gate phase 2e shared access and idor protection`;
+24. `feat(db): add person account lifecycle audit support`;
+25. `feat(admin): add profile-only crud and robust invite lifecycle`;
+26. `feat(admin-ui): add people access states and person detail`;
+27. `test(admin): cover logical revoke mapping verification and invite failure`;
+28. `feat(db): consolidate profile athlete and team member sources`;
+29. `feat(db): add age-aware relationship permissions`;
+30. `feat(family): add relationship APIs accessible profiles and selector`;
+31. `test(family): cover age boundary contacts delegates and permission isolation`;
+32. `feat(messages): add per-account reads and account push subscriptions`;
+33. `feat(attendance): add actor subject fields to attendance rsvp and fees`;
+34. `feat(documents): add document access and immutable actor audit`;
+35. `test(domains): cover delegated actions reads and audit history`;
+36. `refactor(legacy): remove profile role user_roles and compatibility fields`;
+37. `test(e2e): validate full migration and legacy removal`.
 
 ## 10. Test da aggiungere
 
@@ -647,13 +913,19 @@ Il piano raccomanda una PR per fase. Ordine dei commit:
 
 - assert schema, FK, indici, RLS e grants;
 - backfill eseguito due volte senza duplicati;
-- delete Auth non elimina profilo;
+- revoca logica account mantiene Auth, mapping e profilo;
+- cancellazione fisica Auth separata non elimina profilo;
 - delete profilo collegato è rifiutata;
 - status non active rende `current_profile_id()` nullo;
 - policy self/admin/coach/relationship con JWT simulati;
+- coach abilitato senza team non vede alcuna squadra;
+- atleta deriva da `athlete_profiles`/`team_members`, mai da ruolo account;
 - UPDATE sempre con `USING` e `WITH CHECK`;
 - relazione pending/revoked/expired non autorizza;
+- relazione parent smette di autorizzare esattamente a 18 anni e delegate continua;
+- un solo contatto principale amministrativo e pagamenti per target;
 - ogni permesso nega il dominio corrispondente;
+- `authenticated` non può leggere tabelle private e può eseguire solo helper concessi;
 - advisors security/performance senza nuovi errori critici;
 - query automatica che cerca policy/funzioni residue con confronti diretti
   `profile_id = auth.uid()` o `coach_id = auth.uid()`.
@@ -665,6 +937,8 @@ Il piano raccomanda una PR per fase. Ordine dei commit:
 - costruzione `AccessibleProfile` e matrice permessi;
 - scelta area per ruoli multipli;
 - compensazione create/invite account;
+- mapping verificato prima dell'invio link e gestione fallback invito già inviato;
+- calcolo minore, compleanno, override motivato e fail-closed senza `birth_date`;
 - selector che scarta un profilo non più accessibile;
 - source `self|parent|coach|admin|system` per attendance;
 - fan-out notifiche senza duplicati account/device.
@@ -673,12 +947,14 @@ Il piano raccomanda una PR per fase. Ordine dei commit:
 
 - persona atleta e coach senza account;
 - account aggiunto in un secondo momento;
-- suspend/reactivate/delete account senza perdere profilo;
+- suspend/reactivate/revoca logica account senza perdere profilo o Auth;
+- cancellazione fisica Auth disponibile solo nell'azione amministrativa separata;
 - admin non derivato da payload/JWT client;
 - `profileId` manipolato restituisce 403;
 - coach limitato ai team autorizzati;
 - relazioni create/modificate/revocate solo da admin/staff autorizzato;
-- firma mantiene snapshot dopo revoca;
+- parent maggiorenne negato e delegate verificato autorizzato;
+- genitore vede solo stato/scadenza certificato, non dettagli sanitari;
 - due parent hanno `message_reads` distinti.
 
 ### E2E Playwright
@@ -688,6 +964,7 @@ Tutti gli scenari obbligatori della specifica:
 - account/persona: 8 scenari;
 - famiglia: 12 scenari;
 - sicurezza: 10 scenari;
+- confine temporale prima/durante/dopo il diciottesimo compleanno;
 - navigazione multi-area e persistenza selector;
 - compatibilità login dei 48 account backfillati.
 
@@ -700,6 +977,7 @@ Nuovi moduli principali previsti:
 
 - `src/server/auth/require-account-context.ts`;
 - `src/server/auth/require-global-role.ts`;
+- `src/server/supabase/admin-client.ts` (`server-only`, unico punto Auth Admin);
 - `src/server/profiles/require-profile-permission.ts`;
 - `src/server/admin/profiles.ts`;
 - `src/server/admin/accounts.ts`;
@@ -707,6 +985,8 @@ Nuovi moduli principali previsti:
 - `src/lib/validation/profiles.ts`;
 - `src/lib/validation/accounts.ts`;
 - `src/lib/validation/relationships.ts`;
+- test di confine import che vieta `admin-client` da moduli client;
+- script/report di consolidamento `profiles`/`athlete_profiles`/`team_members`;
 - route `/api/admin/profiles/**`, `/api/admin/relationships/**`,
   `/api/me/accessible-profiles`;
 - componenti persone/account/relazioni e `ProfileSwitcher`;
@@ -724,30 +1004,29 @@ File esistenti prioritari:
   membership fees, attendance e pagamenti elencate nella sezione 3;
 - test/config: Jest, Playwright, script SQL RLS esistenti.
 
-## 12. Decisioni ancora da confermare
+## 12. Decisioni funzionali confermate e perimetro rinviato
 
-Le seguenti decisioni non bloccano Fase 1, ma devono essere chiuse prima della fase
-indicata:
+Default approvati e vincolanti:
 
-1. **Minore** (prima di Fase 3): calcolo dinamico sotto 18 anni da `birth_date` oppure
-   flag amministrativo esplicito. Raccomandazione: data di nascita + override motivato.
-2. **Staff** (prima di Fase 4): quali operazioni può compiere oltre a gestire relazioni.
-   Default sicuro: nessun accesso globale implicito.
-3. **Contatto principale** (prima di Fase 4): uno solo o più co-principali per figlio.
-4. **Creazione account** (prima di Fase 3): invito soltanto oppure anche password
-   temporanea consegnata fuori banda. Raccomandazione: invito; niente password admin.
-5. **Delete account** (prima di Fase 3): soft delete Auth o hard delete dopo retention.
-   Raccomandazione: disable immediato + soft delete, hard delete differito.
-6. **Verifica relazione** (prima di Fase 4): solo operatore interno o flusso di consenso
-   anche del genitore.
-7. **Firma documentale** (prima di Fase 5): valore legale richiesto, versione documento,
-   evidenze IP/user-agent e retention.
-8. **Pagamenti** (prima di Fase 5): integrazione futura con provider e significato esatto
-   di `paid_by_auth_user_id`; oggi non esiste un pagamento atleta separato dalla rata.
-9. **Dati medici** (prima di Fase 4): quali campi oltre alla scadenza certificato sono
-   visibili a parent/coach e con quale base autorizzativa.
-10. **Merge persone duplicate** (futuro): non viene incluso ora; un account esistente non
-    viene collegato automaticamente per email.
+1. minore calcolato da `birth_date`, con override amministrativo motivato e auditato;
+2. un solo contatto principale amministrativo per soggetto;
+3. un solo contatto principale pagamenti per soggetto;
+4. più contatti ammessi per messaggi ed emergenze;
+5. account creato tramite invito/link, senza password temporanee;
+6. relazione familiare verificata inizialmente solo da Admin o Staff autorizzato;
+7. accesso `parent` sospeso al compimento dei 18 anni; accesso successivo solo con
+   relazione `delegate` attiva e verificata;
+8. il parent può vedere soltanto stato e scadenza del certificato medico, non dettagli
+   sanitari;
+9. firma con valore legale esclusa dal refactoring finché non viene scelto il provider.
+
+Restano rinviati senza bloccare la Fase 1:
+
+- capability Staff ulteriori rispetto a quelle esplicitamente allowlisted;
+- retention e procedura della cancellazione fisica Auth separata;
+- provider pagamenti e semantica futura di `paid_by_auth_user_id`;
+- provider di firma legale e relativo modello probatorio;
+- merge persone duplicate, che non usa mai la sola uguaglianza email.
 
 ## 13. Gate operativo per iniziare Fase 1
 
