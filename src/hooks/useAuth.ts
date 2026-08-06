@@ -139,7 +139,9 @@ export function useAuth(): UseAuthReturn {
               if (!refreshError && refreshData.session) {
                 console.log('[useAuth] Session refreshed, retrying profile load...')
                 lastProfileFor.current = null
-                ({ response, payload } = await loadPersonalProfile())
+                const retryResult = await loadPersonalProfile()
+                response = retryResult.response
+                payload = retryResult.payload
 
                 if (response.ok && payload?.profile && mounted.current) {
                   console.log('[useAuth] Profile loaded after session refresh')
