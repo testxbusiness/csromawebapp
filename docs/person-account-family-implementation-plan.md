@@ -286,6 +286,13 @@ Non sono ammessi fallback su `teams.coach_id`, `team_members.role='coach'`,
 `profiles.role` o claim JWT. `is_athlete()` deriva esclusivamente dalla presenza della
 persona in `athlete_profiles` o `team_members`, non da `account_roles`.
 
+Decisione confermata: `team_coaches` è la fonte autorevole per l'accesso coach alle
+squadre e per il ruolo dell'assegnazione. `teams.coach_id` resta temporaneamente un
+campo legacy/compatibilità e non viene sincronizzato automaticamente, perché non può
+rappresentare più coach o ruoli distinti senza perdita di informazione. Nel dato
+attuale, `Amatoriale Mar-Gio` ha Daniele Politi come `head_coach` e Francesca Costantini
+come `assistant_coach`; `Maschile` ha Daniele Politi come `head_coach`.
+
 `profile_relationships` segue lo schema richiesto, con:
 
 - `valid_until IS NULL OR valid_until >= valid_from`;
@@ -1019,6 +1026,8 @@ Default approvati e vincolanti:
 8. il parent può vedere soltanto stato e scadenza del certificato medico, non dettagli
    sanitari;
 9. firma con valore legale esclusa dal refactoring finché non viene scelto il provider.
+10. `team_coaches` è la fonte autorevole per accesso e ruolo coach; `teams.coach_id`
+    resta legacy fino alla migrazione delle route e query coach della Fase 2C.
 
 Restano rinviati senza bloccare la Fase 1:
 

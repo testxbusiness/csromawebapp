@@ -6,11 +6,13 @@ import { createClient } from '@/lib/supabase/client'
 
 type ProfileRow = {
   id: string
-  email: string
+  email: string | null
   first_name: string
   last_name: string
   date_of_birth?: string | null
   avatar_url?: string | null
+  // Legacy UI components still require a string; the resolver remains authoritative
+  // for account access while this field is retained for dashboard compatibility.
   role: 'admin' | 'coach' | 'athlete' | string
   must_change_password: boolean | null
   created_at: string | null
@@ -112,42 +114,37 @@ export function useAuth(): UseAuthReturn {
       lastProfileFor.current = uid
       setProfileLoading(true)
 
-      console.log('[useAuth] Loading profile from database for', uid)
+      console.log('[useAuth] Loading personal profile from server for', uid)
 
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', uid)
-          .single()
+        const loadPersonalProfile = async () => {
+          const response = await fetch('/api/me/profile', { cache: 'no-store' })
+          const payload = (await response.json().catch(() => null)) as
+            | { profile?: ProfileRow; error?: string }
+            | null
+          return { response, payload }
+        }
+
+        let { response, payload } = await loadPersonalProfile()
 
         if (!mounted.current) return
 
-        if (error) {
-          console.warn('[useAuth] Profile load error', error)
+        if (!response.ok || !payload?.profile) {
+          console.warn('[useAuth] Profile load error', payload?.error ?? response.statusText)
 
-          const isAuthError =
-            error.message?.includes('JWT') ||
-            error.message?.includes('token') ||
-            error.code === 'PGRST301'
-
-          if (isAuthError) {
+          if (response.status === 401) {
             console.warn('[useAuth] Auth error, refreshing session...')
             try {
               const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
               if (!refreshError && refreshData.session) {
                 console.log('[useAuth] Session refreshed, retrying profile load...')
                 lastProfileFor.current = null
-                const { data: retryData, error: retryError } = await supabase
-                  .from('profiles')
-                  .select('*')
-                  .eq('id', uid)
-                  .single()
+                ({ response, payload } = await loadPersonalProfile())
 
-                if (!retryError && retryData && mounted.current) {
+                if (response.ok && payload?.profile && mounted.current) {
                   console.log('[useAuth] Profile loaded after session refresh')
-                  setProfile(retryData as ProfileRow)
-                  saveProfileToCache(uid, retryData as ProfileRow)
+                  setProfile(payload.profile)
+                  saveProfileToCache(uid, payload.profile)
                   return
                 }
               }
@@ -160,9 +157,9 @@ export function useAuth(): UseAuthReturn {
           return
         }
 
-        console.log('[useAuth] Profile loaded successfully from database')
-        setProfile(data as ProfileRow)
-        saveProfileToCache(uid, data as ProfileRow)
+        console.log('[useAuth] Personal profile loaded successfully')
+        setProfile(payload.profile)
+        saveProfileToCache(uid, payload.profile)
       } finally {
         if (mounted.current) {
           setProfileLoading(false)
