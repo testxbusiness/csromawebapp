@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { athleteBulkSchema } from '@/lib/validation/bulk'
 
 interface TeamAssignmentParameters {
-  teamIds: string[]
+  teamId: string
   jerseyNumber?: string
   membershipFeeId?: string
 }
@@ -21,7 +22,7 @@ interface MedicalExpiryParameters {
 }
 
 interface UserWithMetadata {
-  user_metadata?: {
+  app_metadata?: {
     role?: string
   }
 }
@@ -36,17 +37,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as UserWithMetadata)?.user_metadata?.role
+const requesterRole = (user as UserWithMetadata)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const body = await request.json()
-    const { operation, athleteIds, parameters, dryRun = false } = body
-
-    if (!operation || !athleteIds || !Array.isArray(athleteIds)) {
-      return NextResponse.json({ error: 'Parametri mancanti o non validi' }, { status: 400 })
-    }
+    const parsed = athleteBulkSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
+    const { operation, athleteIds, parameters, dryRun = false } = parsed.data
 
     // Gestione operazioni massive
     switch (operation) {
@@ -206,7 +204,7 @@ async function handleTeamAssignment(adminClient: ReturnType<typeof createAdminCl
             }, { status: 400 })
           }
         } else {
-          console.log('Installments created:', inserted?.length ?? 0)
+          console.log('Installments created:', (inserted as unknown[] | null)?.length ?? 0)
         }
       }
     } else {

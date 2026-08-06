@@ -1,19 +1,25 @@
 import * as XLSX from 'xlsx'
 
+type ExcelCellStyle = {
+  font?: { bold?: boolean; color?: { rgb?: string }; name?: string; sz?: number }
+  fill?: { fgColor?: { rgb?: string } }
+  alignment?: { horizontal?: string; vertical?: string }
+}
+
 export interface ExcelExportOptions {
   filename: string
   sheetName?: string
-  headerStyle?: Partial<XLSX.CellStyle>
-  dataStyle?: Partial<XLSX.CellStyle>
+  headerStyle?: Partial<ExcelCellStyle>
+  dataStyle?: Partial<ExcelCellStyle>
 }
 
-const defaultHeaderStyle: XLSX.CellStyle = {
+const defaultHeaderStyle: ExcelCellStyle = {
   font: { bold: true, color: { rgb: 'FFFFFF' } },
   fill: { fgColor: { rgb: '4472C4' } },
   alignment: { horizontal: 'center', vertical: 'center' }
 }
 
-const defaultDataStyle: XLSX.CellStyle = {
+const defaultDataStyle: ExcelCellStyle = {
   font: { name: 'Arial', sz: 11 },
   alignment: { vertical: 'center' }
 }
@@ -82,28 +88,28 @@ export const userExportColumns = [
   { key: 'email', title: 'Email', width: 25 },
   { key: 'role', title: 'Ruolo', width: 12 },
   { key: 'phone', title: 'Telefono', width: 15 },
-  { key: 'date_of_birth', title: 'Data Nascita', width: 12, format: (val) => val ? new Date(val).toLocaleDateString('it-IT') : '' },
+  { key: 'date_of_birth', title: 'Data Nascita', width: 12, format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString('it-IT') : '' },
   { key: 'jersey_number', title: 'N. Maglia', width: 10 },
   { key: 'membership_number', title: 'N. Tessera', width: 15 },
-  { key: 'medical_certificate_expiry', title: 'Scad. Cert. Medico', width: 15, format: (val) => val ? new Date(val).toLocaleDateString('it-IT') : '' },
-  { key: 'teams', title: 'Squadre', width: 20, format: (val) => val?.map((t: any) => t.name).join(', ') || '' },
-  { key: 'created_at', title: 'Data Creazione', width: 15, format: (val) => new Date(val).toLocaleDateString('it-IT') }
+  { key: 'medical_certificate_expiry', title: 'Scad. Cert. Medico', width: 15, format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString('it-IT') : '' },
+  { key: 'teams', title: 'Squadre', width: 20, format: (val: unknown) => Array.isArray(val) ? val.map((t: { name?: string }) => t.name || '').join(', ') : '' },
+  { key: 'created_at', title: 'Data Creazione', width: 15, format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString('it-IT') : '' }
 ]
 
 export const teamExportColumns = [
   { key: 'name', title: 'Nome Squadra', width: 20 },
   { key: 'code', title: 'Codice', width: 12 },
-  { key: 'activities', title: 'Attività', width: 15, format: (val) => val?.name || '' },
-  { key: 'coach', title: 'Allenatore', width: 20, format: (val) => val ? `${val.first_name} ${val.last_name}` : '' },
-  { key: 'created_at', title: 'Data Creazione', width: 15, format: (val) => new Date(val).toLocaleDateString('it-IT') }
+  { key: 'activities', title: 'Attività', width: 15, format: (val: unknown) => (val && typeof val === 'object' && 'name' in val) ? String(val.name) : '' },
+  { key: 'coach', title: 'Allenatore', width: 20, format: (val: unknown) => val && typeof val === 'object' && 'first_name' in val && 'last_name' in val ? `${String(val.first_name)} ${String(val.last_name)}` : '' },
+  { key: 'created_at', title: 'Data Creazione', width: 15, format: (val: unknown) => val ? new Date(String(val)).toLocaleDateString('it-IT') : '' }
 ]
 
 export const seasonExportColumns = [
   { key: 'name', title: 'Nome Stagione', width: 20 },
-  { key: 'start_date', title: 'Data Inizio', width: 12, format: (val) => new Date(val).toLocaleDateString('it-IT') },
-  { key: 'end_date', title: 'Data Fine', width: 12, format: (val) => new Date(val).toLocaleDateString('it-IT') },
-  { key: 'is_active', title: 'Stato', width: 10, format: (val) => val ? 'Attiva' : 'Inattiva' },
-  { key: 'created_at', title: 'Data Creazione', width: 15, format: (val) => new Date(val).toLocaleDateString('it-IT') }
+  { key: 'start_date', title: 'Data Inizio', width: 12, format: (val: unknown) => new Date(String(val)).toLocaleDateString('it-IT') },
+  { key: 'end_date', title: 'Data Fine', width: 12, format: (val: unknown) => new Date(String(val)).toLocaleDateString('it-IT') },
+  { key: 'is_active', title: 'Stato', width: 10, format: (val: unknown) => val ? 'Attiva' : 'Inattiva' },
+  { key: 'created_at', title: 'Data Creazione', width: 15, format: (val: unknown) => new Date(String(val)).toLocaleDateString('it-IT') }
 ]
 
 // Funzioni di export pronte all'uso
@@ -198,10 +204,10 @@ const eventExportColumns = [
   { key: 'title', title: 'Titolo', width: 25 },
   { key: 'description', title: 'Descrizione', width: 30 },
   { key: 'location', title: 'Luogo', width: 20 },
-  { key: 'start_time', title: 'Data/Ora Inizio', width: 18, format: (val) => new Date(val).toLocaleString('it-IT') },
-  { key: 'end_time', title: 'Data/Ora Fine', width: 18, format: (val) => new Date(val).toLocaleString('it-IT') },
-  { key: 'is_recurring', title: 'Ricorrente', width: 12, format: (val) => val ? 'Sì' : 'No' },
-  { key: 'teams', title: 'Squadre', width: 25, format: (val) => Array.isArray(val) ? val.join(', ') : val || '' }
+  { key: 'start_time', title: 'Data/Ora Inizio', width: 18, format: (val: unknown) => new Date(String(val)).toLocaleString('it-IT') },
+  { key: 'end_time', title: 'Data/Ora Fine', width: 18, format: (val: unknown) => new Date(String(val)).toLocaleString('it-IT') },
+  { key: 'is_recurring', title: 'Ricorrente', width: 12, format: (val: unknown) => val ? 'Sì' : 'No' },
+  { key: 'teams', title: 'Squadre', width: 25, format: (val: unknown) => Array.isArray(val) ? val.join(', ') : String(val || '') }
 ]
 
 export function exportEvents(events: any[], filename: string = 'eventi_csroma') {

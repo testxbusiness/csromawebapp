@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendToUsers } from '@/lib/utils/push'
+import { adminMessageCreateSchema, adminMessageUpdateSchema } from '@/lib/validation/messages'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    
-    const {
-      subject,
-      content,
-      attachment_url,
-      attachments,
-      selected_teams,
-      selected_users
-    } = body
+    const parsed = adminMessageCreateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      console.warn('Admin message validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati messaggio non validi' }, { status: 400 })
+    }
+    const { subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
 
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -153,17 +154,16 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    
-    const {
-      id,
-      subject,
-      content,
-      attachment_url,
-      attachments,
-      selected_teams,
-      selected_users
-    } = body
+    const parsed = adminMessageUpdateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      console.warn('Admin message update validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
+    }
+    const { id, subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
 
     // Verifica che l'utente corrente sia admin
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -171,13 +171,9 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    if (!id) {
-      return NextResponse.json({ error: 'ID messaggio richiesto' }, { status: 400 })
     }
 
     // Aggiorna il messaggio
@@ -303,7 +299,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -427,7 +423,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

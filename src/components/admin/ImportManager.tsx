@@ -418,7 +418,7 @@ export default function ImportManager({ type, onComplete }: ImportManagerProps) 
         
         {type === 'users' && (
           <div className="mt-3 text-sm text-blue-700">
-            <strong>Nota:</strong> Gli utenti importati riceveranno una password temporanea che dovranno cambiare al primo accesso.
+            <strong>Nota:</strong> Gli utenti importati riceveranno un invito via email e imposteranno la propria password tramite il link.
           </div>
         )}
       </div>

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'coach') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
     }
 
     const teamData = (coachTeams || [])
-      .map(row => row.teams)
-      .filter(Boolean) as { id: string; name: string; code: string }[]
+      .map(row => Array.isArray(row.teams) ? row.teams[0] : row.teams)
+      .filter((team): team is { id: string; name: string; code: string } => Boolean(team))
 
     if (teamData.length === 0) {
       return NextResponse.json({ events: [], teams: [] })

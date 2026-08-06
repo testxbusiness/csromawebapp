@@ -6,7 +6,9 @@ const ADMIN_ONLY = [/^\/admin(\/.*)?$/]
 const PUBLIC_ROUTES = [
   /^\/$/,
   /^\/login$/,
+  /^\/forgot-password$/,
   /^\/reset-password$/,
+  /^\/auth\/callback$/,
   /^\/unauthorized$/
 ]
 // esempio: const COACH_ONLY = [/^\/coach(\/.*)?$/]
@@ -18,6 +20,7 @@ function matchAny(pathname: string, patterns: RegExp[]) {
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl
   const { pathname } = url
+  const isRecoveryReset = pathname === '/reset-password' && url.searchParams.get('recovery') === '1'
 
   // Bypass non-GET methods like OPTIONS/HEAD to avoid preflight issues
   if (req.method === 'OPTIONS' || req.method === 'HEAD') {
@@ -35,7 +38,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  const res = NextResponse.next()
+  let res = NextResponse.next({ request: req })
 
   // Crea un client SSR solo per leggere il JWT/cookie (niente query DB!)
   const supabase = createServerClient(
@@ -43,9 +46,12 @@ export async function middleware(req: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (name) => req.cookies.get(name)?.value,
-        set: (name, value, options) => res.cookies.set(name, value, options),
-        remove: (name, options) => res.cookies.set(name, '', { ...options, maxAge: 0 }),
+        getAll: () => req.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value))
+          res = NextResponse.next({ request: req })
+          cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
+        },
       },
     }
   )
@@ -54,10 +60,9 @@ export async function middleware(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Enforce password change for logged-in users based on JWT user_metadata
+  // Enforce password change for logged-in users based on server-controlled app_metadata.
   if (user) {
-    // @ts-ignore – runtime field from Supabase JWT
-    const mustChange = user.user_metadata?.must_change_password === true
+    const mustChange = user.app_metadata?.must_change_password === true
 
     // Avoid interfering with API routes
     const isApiRoute = pathname.startsWith('/api')
@@ -65,7 +70,13 @@ export async function middleware(req: NextRequest) {
     const resetBypass = req.cookies.get('csr_pw_reset')?.value === '1'
 
     // If the user must change password, redirect to reset-password (except when already there)
-    if (mustChange && !isApiRoute && pathname !== '/reset-password' && !resetBypass) {
+    if (
+      mustChange &&
+      !isApiRoute &&
+      pathname !== '/reset-password' &&
+      pathname !== '/auth/callback' &&
+      !resetBypass
+    ) {
       const to = new URL('/reset-password', req.url)
       // Preserve original destination so we can return after reset
       to.searchParams.set('next', pathname)
@@ -77,7 +88,7 @@ export async function middleware(req: NextRequest) {
     }
 
     // If the user does not need to change password but is on reset-password, send to dashboard
-    if (!mustChange && pathname === '/reset-password') {
+    if (!mustChange && pathname === '/reset-password' && !isRecoveryReset) {
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
   }
@@ -104,8 +115,6 @@ export async function middleware(req: NextRequest) {
     const rawRole =
       // @ts-ignore – campi runtime dal JWT
       user.app_metadata?.role ??
-      // @ts-ignore
-      user.user_metadata?.role ??
       null
 
     const role = rawRole ? String(rawRole).trim().toLowerCase() : ''
@@ -118,7 +127,7 @@ export async function middleware(req: NextRequest) {
   // Esempio per future sezioni:
   // if (matchAny(pathname, COACH_ONLY)) {
   //   if (!user) return NextResponse.redirect(new URL('/login', req.url))
-  //   const role = (user.app_metadata?.role ?? user.user_metadata?.role ?? '').toString().trim().toLowerCase()
+  //   const role = (user.app_metadata?.role ?? '').toString().trim().toLowerCase()
   //   if (!['coach', 'admin'].includes(role)) {
   //     return NextResponse.redirect(new URL('/unauthorized', req.url))
   //   }

@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { toast } from '@/components/ui'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import TemplateModal from './TemplateModal'
 import BulkGenerateModal from './BulkGenerateModal'
@@ -28,7 +28,7 @@ export interface DocumentTemplate {
 }
 
 export default function DocumentsManager() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
   const [loading, setLoading] = useState(true)
@@ -108,10 +108,8 @@ export default function DocumentsManager() {
   }, [supabase])
 
   useEffect(() => { void loadTemplates() }, [loadTemplates])
-  useEffect(() => { void loadDocuments() }, [])
-  useEffect(() => { void bootstrapMessagingLookups() }, [])
 
-  async function loadDocuments() {
+  const loadDocuments = useCallback(async () => {
     setLoadingDocs(true)
     try {
       const { data, error } = await supabase
@@ -129,16 +127,19 @@ export default function DocumentsManager() {
     } finally {
       setLoadingDocs(false)
     }
-  }
+  }, [supabase])
 
-  async function bootstrapMessagingLookups() {
+  const bootstrapMessagingLookups = useCallback(async () => {
     const [{ data: t }, { data: u }] = await Promise.all([
       supabase.from('teams').select('id, name, code').order('name'),
       supabase.from('profiles').select('id, first_name, last_name, role').order('first_name'),
     ])
     setTeams(t || [])
     setUsers(u || [])
-  }
+  }, [supabase])
+
+  useEffect(() => { void loadDocuments() }, [loadDocuments])
+  useEffect(() => { void bootstrapMessagingLookups() }, [bootstrapMessagingLookups])
 
   const onCreateTemplate = () => {
     setEditingTemplate(null)
@@ -162,7 +163,7 @@ export default function DocumentsManager() {
       const pdf = await generatePDF({
         title: doc.title,
         content: doc.generated_content_html,
-        hasLogo: false,
+        hasLogo: true,
         hasDate: false,
         hasSignatureArea: false,
       })
@@ -268,9 +269,9 @@ export default function DocumentsManager() {
         </div>
 
         {loading ? (
-          <div className="p-6 text-secondary">Caricamento…</div>
+          <LoadingState label="Caricamento template..." />
         ) : templates.length === 0 ? (
-          <div className="p-6 text-secondary">Nessun template creato.</div>
+          <EmptyState title="Nessun template creato" />
         ) : (
           <div className="cs-list">
             {templates.map((t) => (
@@ -311,9 +312,9 @@ export default function DocumentsManager() {
         </div>
 
         {loadingDocs ? (
-          <div className="p-6 text-secondary">Caricamento…</div>
+          <LoadingState label="Caricamento documenti..." />
         ) : documents.length === 0 ? (
-          <div className="p-6 text-secondary">Nessun documento generato.</div>
+          <EmptyState title="Nessun documento generato" />
         ) : (
           <div className="cs-list">
             {documents.map((d) => (

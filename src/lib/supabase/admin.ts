@@ -1,3 +1,5 @@
+import 'server-only'
+
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 // Client admin per operazioni che richiedono bypass RLS

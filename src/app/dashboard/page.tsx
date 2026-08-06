@@ -63,7 +63,7 @@ export default function DashboardPage() {
 
       <section className="space-y-8">
         {displayRole === 'admin' ? (
-          <AdminDashboard user={displayUser} profile={displayProfile} />
+          <AdminDashboard profile={displayProfile} />
         ) : displayRole === 'coach' ? (
           <CoachDashboard user={displayUser} profile={displayProfile} />
         ) : displayRole === 'athlete' ? (
@@ -81,7 +81,7 @@ export default function DashboardPage() {
                   {
                     roleFromProfile: displayProfile?.role,
                     roleFromAppMeta: (displayUser as any)?.app_metadata?.role,
-                    roleFromUserMeta: (displayUser as any)?.user_metadata?.role,
+                    roleFromUserMeta: (displayUser as any)?.app_metadata?.role,
                     resolvedRole: displayRole,
                   },
                   null,

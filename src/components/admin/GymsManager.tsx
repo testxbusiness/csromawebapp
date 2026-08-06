@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import GymModal from '@/components/admin/GymModal'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface Gym {
   id?: string
@@ -32,14 +33,9 @@ export default function GymsManager() {
   const [loading, setLoading] = useState(true)
   const [editingGym, setEditingGym] = useState<Gym | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    loadGyms()
-    loadSeasons()
-  }, [])
-
-  const loadGyms = async () => {
+  const loadGyms = useCallback(async () => {
     const { data: gymsData } = await supabase
       .from('gyms')
       .select('*')
@@ -70,16 +66,21 @@ export default function GymsManager() {
       setGyms([])
     }
     setLoading(false)
-  }
+  }, [supabase])
 
-  const loadSeasons = async () => {
+  const loadSeasons = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('id, name, is_active')
       .order('start_date', { ascending: false })
 
     setSeasons(data || [])
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    void loadGyms()
+    void loadSeasons()
+  }, [loadGyms, loadSeasons])
 
   const handleCreateGym = async (gymData: Omit<Gym, 'id'>) => {
     const { error } = await supabase
@@ -138,19 +139,7 @@ export default function GymsManager() {
   }
 
   if (loading) {
-    return (
-      <div className="cs-card p-6">
-        <div className="cs-skeleton h-6 w-1/4 mb-4"></div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="cs-card p-4">
-              <div className="cs-skeleton h-5 w-2/3 mb-2"></div>
-              <div className="cs-skeleton h-4 w-1/2"></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+    return <LoadingState label="Caricamento palestre..." />
   }
 
   return (
@@ -278,24 +267,11 @@ export default function GymsManager() {
         </div>
 
         {gyms.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4">
-              <span className="text-4xl">🏢</span>
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Nessuna palestra creata</h3>
-            <p className="text-secondary mb-4">
-              Crea la tua prima palestra per iniziare a gestire i luoghi dove si svolgono le attività.
-            </p>
-            <button
-              onClick={() => {
-                setEditingGym(null)
-                setShowModal(true)
-              }}
-              className="cs-btn cs-btn--primary"
-            >
-              Crea la tua prima palestra
-            </button>
-          </div>
+          <EmptyState
+            title="Nessuna palestra creata"
+            description="Crea la tua prima palestra per iniziare a gestire i luoghi dove si svolgono le attività."
+            action={<button onClick={() => { setEditingGym(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima palestra</button>}
+          />
         )}
       </div>
     </div>

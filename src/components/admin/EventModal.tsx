@@ -91,7 +91,7 @@ export default function EventModal({
     setForm(prev => ({
       ...prev,
       selected_teams: prev.selected_teams.includes(teamId)
-        ? prev.selected_teams.filter((id) => id !== teamId)
+        ? prev.selected_teams.filter((id: string) => id !== teamId)
         : [...prev.selected_teams, teamId]
     }))
   }

@@ -6,17 +6,22 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  toast,
 } from '@/components/ui'
 
-type Message = {
+export type Message = {
   id?: string
   subject: string
   content: string
   attachment_url?: string
-  attachments?: { file_path: string; file_name: string; mime_type?: string; file_size?: number }[]
+  attachments?: { id?: string; file_path: string; file_name: string; mime_type?: string; file_size?: number; download_url?: string | null }[]
   // NB: il backend del tuo form inline usa questi campi
   selected_teams?: string[]
   selected_users?: string[]
+  message_recipients?: {
+    teams?: { id: string }
+    profiles?: { id: string }
+  }[]
 }
 
 type Team = { id: string; name: string; code: string }
@@ -47,9 +52,9 @@ export default function MessageModal({
     content: message?.content ?? '',
     attachment_url: message?.attachment_url ?? '',
     selected_teams: message?.selected_teams ??
-      (message?.['message_recipients'] as any)?.filter((mr: any) => mr.teams).map((mr: any) => mr.teams.id) ?? [],
+      message?.message_recipients?.filter((mr) => mr.teams).map((mr) => mr.teams!.id) ?? [],
     selected_users: message?.selected_users ??
-      (message?.['message_recipients'] as any)?.filter((mr: any) => mr.profiles).map((mr: any) => mr.profiles.id) ?? [],
+      message?.message_recipients?.filter((mr) => mr.profiles).map((mr) => mr.profiles!.id) ?? [],
   })
   const [uploading, setUploading] = React.useState(false)
   const [files, setFiles] = React.useState<{ file_path: string; file_name: string; mime_type?: string; file_size?: number }[]>([])

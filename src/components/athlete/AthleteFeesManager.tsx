@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import PageHeader from '@/components/shared/PageHeader' // se vuoi l'header qui, altrimenti toglilo
+import { EmptyState, LoadingState } from '@/components/ui'
 // import EventDetails from '@/components/.../EventDetails' // TODO: se lo usi davvero, importa il path corretto
 
 interface FeeInstallment {
@@ -11,7 +12,7 @@ interface FeeInstallment {
   installment_number: number
   due_date: string
   amount: number
-  status: string
+  status: 'not_due' | 'due_soon' | 'overdue' | 'partially_paid' | 'paid'
   paid_at?: string
   membership_fee: {
     id: string
@@ -103,15 +104,15 @@ export default function AthleteFeesManager() {
   }, [userId, loadInstallments])
 
   useEffect(() => {
-    filterInstallments()
-  }, [installments, filter])
-
-  function filterInstallments() {
-    if (filter === 'pending') setFilteredInstallments(installments.filter(i => i.status !== 'paid'))
-    else if (filter === 'paid') setFilteredInstallments(installments.filter(i => i.status === 'paid'))
-    else if (filter === 'overdue') setFilteredInstallments(installments.filter(i => i.status === 'overdue'))
-    else setFilteredInstallments(installments)
-  }
+    const filtered = filter === 'pending'
+      ? installments.filter(i => i.status !== 'paid')
+      : filter === 'paid'
+        ? installments.filter(i => i.status === 'paid')
+        : filter === 'overdue'
+          ? installments.filter(i => i.status === 'overdue')
+          : installments
+    setFilteredInstallments(filtered)
+  }, [filter, installments])
 
   const getStatusText = (status: string) =>
     status === 'paid' ? '✅ Pagata'
@@ -146,11 +147,7 @@ export default function AthleteFeesManager() {
   })()
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-      </div>
-    )
+    return <LoadingState label="Caricamento quote..." />
   }
 
   return (
@@ -232,14 +229,9 @@ export default function AthleteFeesManager() {
         </div>
 
         {installments.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Nessuna quota associativa trovata</p>
-            <p className="text-sm text-secondary">Contatta l'amministratore per informazioni sulle quote</p>
-          </div>
+          <EmptyState title="Nessuna quota associativa trovata" description="Contatta l'amministratore per informazioni sulle quote" />
         ) : filteredInstallments.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary">Nessuna rata trovata per il filtro selezionato</p>
-          </div>
+          <EmptyState title="Nessuna rata trovata per il filtro selezionato" />
         ) : (
           <div className="cs-card overflow-hidden">
             {/* Desktop */}

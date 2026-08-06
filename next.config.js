@@ -15,10 +15,6 @@ const nextConfig = {
 
   outputFileTracingRoot: process.cwd(),
 
-  // Sblocca la build anche se ci sono errori di lint/TS (potrai riattivare più avanti)
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true },
-
   images: {
     // se ti serve ancora caricare da localhost in dev, lascialo
     domains: ['localhost'],

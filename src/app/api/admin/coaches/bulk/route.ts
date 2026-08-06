@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { coachBulkSchema } from '@/lib/validation/bulk'
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,17 +12,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const requesterRole = (user as any)?.user_metadata?.role
+const requesterRole = (user as any)?.app_metadata?.role
     if (requesterRole !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const body = await request.json()
-    const { operation, coachIds, parameters, dryRun = false } = body
-
-    if (!operation || !coachIds || !Array.isArray(coachIds)) {
-      return NextResponse.json({ error: 'Parametri mancanti o non validi' }, { status: 400 })
-    }
+    const parsed = coachBulkSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
+    const { operation, coachIds, parameters, dryRun = false } = parsed.data
 
     // Gestione operazioni massive
     switch (operation) {
@@ -61,7 +59,7 @@ async function handleTeamAssignment(adminClient: any, coachIds: string[], parame
     return NextResponse.json({ error: 'Una o più squadre non trovate' }, { status: 404 })
   }
 
-  const teamNames = teams.map(team => team.name).join(', ')
+  const teamNames = teams.map((team: { name: string }) => team.name).join(', ')
 
   if (dryRun) {
     return NextResponse.json({
@@ -123,7 +121,7 @@ async function handleTeamRemoval(adminClient: any, coachIds: string[], parameter
     return NextResponse.json({ error: 'Una o più squadre non trovate' }, { status: 404 })
   }
 
-  const teamNames = teams.map(team => team.name).join(', ')
+  const teamNames = teams.map((team: { name: string }) => team.name).join(', ')
 
   if (dryRun) {
     return NextResponse.json({

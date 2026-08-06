@@ -135,7 +135,7 @@ function LoginPageInner() {
             </form>
 
             <div className="text-center" style={{ marginTop: 12 }}>
-              <Link href="/reset-password" className="text-sm text-secondary underline">
+              <Link href="/forgot-password" className="text-sm text-secondary underline">
                 Hai dimenticato la password?
               </Link>
             </div>

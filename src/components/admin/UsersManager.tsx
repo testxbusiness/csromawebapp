@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { toast } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
+import { LoadingState, toast } from '@/components/ui'
+import { createClient, createRecoveryClient } from '@/lib/supabase/client'
 import { exportUsers } from '@/lib/utils/excelExport'
 import ImportManager from './ImportManager'
 import type { User, UserFormData } from './userTypes'
@@ -24,6 +24,7 @@ export default function UsersManager() {
   const [showImport, setShowImport] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
   const supabase = createClient()
+  const recoveryClient = createRecoveryClient()
 
   // Filtri
   const [searchTerm, setSearchTerm] = useState('')
@@ -189,7 +190,7 @@ export default function UsersManager() {
   }
 
   const handleResetPassword = async (id: string) => {
-    if (!window.confirm('Resettare la password di questo utente alla password iniziale?')) return
+    if (!window.confirm('Inviare un nuovo link per reimpostare la password a questo utente?')) return
 
     try {
       const response = await fetch('/api/admin/users/reset-password', {
@@ -206,7 +207,17 @@ export default function UsersManager() {
         return
       }
 
-      toast.success('Password resettata. L\'utente dovrà cambiare la password al prossimo accesso.')
+      const { error: resetError } = await recoveryClient.auth.resetPasswordForEmail(result.email, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      })
+
+      if (resetError) {
+        console.error('Errore invio link reset password:', resetError)
+        toast.error('Impossibile inviare il link di reset')
+        return
+      }
+
+      toast.success('Link di reset inviato. L\'utente dovrà impostare una nuova password.')
     } catch (error) {
       console.error('Errore reset password:', error)
       toast.error('Errore di rete')
@@ -273,7 +284,7 @@ export default function UsersManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento account...</div>
+    return <LoadingState label="Caricamento account..." />
   }
 
   const handleExportUsers = () => {
@@ -347,7 +358,7 @@ export default function UsersManager() {
               id="status-filter"
               label="Stato"
               value={statusFilter}
-              onChange={setStatusFilter}
+              onChange={(value) => setStatusFilter(value as typeof statusFilter)}
               options={[
                 { value: 'all', label: 'Tutti' },
                 { value: 'active', label: 'Attivi' },
@@ -358,7 +369,7 @@ export default function UsersManager() {
               id="role-filter"
               label="Ruolo"
               value={roleFilter}
-              onChange={setRoleFilter}
+              onChange={(value) => setRoleFilter(value as typeof roleFilter)}
               options={[
                 { value: 'all', label: 'Tutti' },
                 { value: 'admin', label: 'Amministratore' },

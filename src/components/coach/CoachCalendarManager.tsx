@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface Event {
   id?: string
@@ -32,7 +33,7 @@ interface Activity { id: string; name: string }
 export default function CoachCalendarManager() {
   const { user } = useAuth()
   const userId = user?.id || null
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [events, setEvents] = useState<Event[]>([])
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
@@ -121,13 +122,7 @@ export default function CoachCalendarManager() {
   }, [loadData])
 
   // Lazy load gyms/activities solo quando il form si apre
-  useEffect(() => {
-    if (showForm && gyms.length === 0 && activities.length === 0) {
-      loadSelectOptions()
-    }
-  }, [showForm])
-
-  const loadSelectOptions = async () => {
+  const loadSelectOptions = useCallback(async () => {
     setLoadingSelects(true)
     try {
       const [{ data: gymsData }, { data: activitiesData }] = await Promise.all([
@@ -141,7 +136,13 @@ export default function CoachCalendarManager() {
     } finally {
       setLoadingSelects(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    if (showForm && gyms.length === 0 && activities.length === 0) {
+      void loadSelectOptions()
+    }
+  }, [activities.length, gyms.length, loadSelectOptions, showForm])
 
   const saveEvent = async (eventData: Event) => {
     try {
@@ -286,11 +287,7 @@ export default function CoachCalendarManager() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--cs-primary)' }} />
-      </div>
-    )
+    return <LoadingState label="Caricamento calendario..." />
   }
 
   return (
@@ -387,19 +384,12 @@ export default function CoachCalendarManager() {
             }}
           />
         ) : teams.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Non hai squadre assegnate</p>
-            <p className="text-sm text-secondary">Contatta l'amministratore per essere assegnato a una squadra</p>
-          </div>
+          <EmptyState title="Non hai squadre assegnate" description="Contatta l'amministratore per essere assegnato a una squadra" />
         ) : filteredEvents.length === 0 ? (
-          <div className="cs-card text-center py-12">
-            <p className="text-secondary mb-4">Nessun evento trovato</p>
-            {events.length === 0 && (
-              <button onClick={() => setShowForm(true)} className="cs-btn cs-btn--primary">
-                Crea il tuo primo evento
-              </button>
-            )}
-          </div>
+          <EmptyState
+            title="Nessun evento trovato"
+            action={events.length === 0 ? <button onClick={() => setShowForm(true)} className="cs-btn cs-btn--primary">Crea il tuo primo evento</button> : undefined}
+          />
         ) : (
           <div className="overflow-hidden">
             {/* Desktop */}

@@ -1,23 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import LayoutShell from "@/components/navigation/LayoutShell";
 import { ToastProvider } from "@/components/ui";
 import OnboardingProvider from "@/components/OnboardingProvider";
-
-const inter = Inter({
-  variable: "--cs-font-sans",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const poppins = Poppins({
-  variable: "--cs-font-heading",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "CSRoma - Gestione Società Sportiva",
@@ -39,7 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${inter.variable} ${poppins.variable} antialiased min-h-screen`}
+        className="antialiased min-h-screen"
       >
         <ThemeProvider>
           <ToastProvider>

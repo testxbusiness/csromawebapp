@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { adminResetPasswordPayloadSchema } from '@/lib/validation/auth'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
-    const { user_id } = body || {}
+    const parsed = adminResetPasswordPayloadSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'ID utente non valido' }, { status: 400 })
+    }
+    const { user_id } = parsed.data
 
     // AuthN/AuthZ: only admin can reset
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -14,28 +18,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    if (!user_id) {
-      return NextResponse.json({ error: 'user_id richiesto' }, { status: 400 })
+    const { data: profile, error: profileLookupError } = await adminClient
+      .from('profiles')
+      .select('email')
+      .eq('id', user_id)
+      .maybeSingle()
+
+    if (profileLookupError || !profile?.email) {
+      return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
     }
 
-    // Reset password via admin API
-    const { error: resetError } = await adminClient.auth.admin.updateUserById(user_id, {
-      password: 'csroma2025!',
-      user_metadata: {
-        must_change_password: true,
-        temp_password_set_at: new Date().toISOString(),
-        temp_password_expires_at: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString()
-      }
-    })
-
-    if (resetError) {
-      console.error('Errore reset password (auth):', resetError)
-      return NextResponse.json({ error: 'Errore reset password' }, { status: 400 })
+    const { data: authUserData, error: authUserLookupError } = await adminClient.auth.admin.getUserById(user_id)
+    const currentAppMetadata = authUserData?.user?.app_metadata || {}
+    const { error: metadataError } = authUserLookupError
+      ? { error: authUserLookupError }
+      : await adminClient.auth.admin.updateUserById(user_id, {
+          app_metadata: { ...currentAppMetadata, must_change_password: true },
+        })
+    if (metadataError) {
+      console.warn('Metadati auth non aggiornati:', metadataError)
     }
 
     // Mark profile to require password change
@@ -48,7 +54,14 @@ export async function POST(request: NextRequest) {
       console.warn('Profilo non aggiornato (must_change_password):', profileError)
     }
 
-    return NextResponse.json({ success: true, message: 'Password resettata e cambio password richiesto al prossimo accesso.' })
+    // The browser must initiate resetPasswordForEmail so Supabase can store the
+    // PKCE verifier locally. Starting it from this server route produces a code
+    // that the browser callback cannot exchange.
+    return NextResponse.json({
+      success: true,
+      email: profile.email,
+      message: 'Reset autorizzato: invio del link in corso.'
+    })
   } catch (error) {
     console.error('Errore API reset password:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })

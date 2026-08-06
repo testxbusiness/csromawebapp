@@ -128,7 +128,7 @@ const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps)
   const { profile, loading } = useAuth()
   const pathname = usePathname()
 
-  const items = useMemo(() => getItemsForRole(profile?.role), [profile?.role])
+  const items = useMemo(() => getItemsForRole(profile?.role as Role | undefined), [profile?.role])
 
   if (loading) {
     return (

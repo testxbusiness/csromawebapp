@@ -20,7 +20,13 @@ export default async function ResetPasswordPage({
   const pick = (val: string | undefined) => {
     if (!val) return '/dashboard'
     // allow only site-internal paths (start with single "/"), block //, http(s), _next, api
-    if (val.startsWith('/') && !val.startsWith('//') && !val.startsWith('/_next') && !val.startsWith('/api')) {
+    if (
+      val.startsWith('/') &&
+      !val.startsWith('//') &&
+      !val.startsWith('/_next') &&
+      !val.startsWith('/api') &&
+      val !== '/auth/callback'
+    ) {
       return val
     }
     return '/dashboard'

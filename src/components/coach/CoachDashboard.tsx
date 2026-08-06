@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNextStep } from 'nextstepjs'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
@@ -9,10 +9,11 @@ import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface User {
   id: string
-  email: string
+  email?: string
 }
 
 interface Profile {
@@ -39,7 +40,25 @@ interface Event {
   end_date: string
   location?: string
   event_type: string
+  event_kind?: 'training' | 'match' | 'meeting' | 'other'
   teams?: string
+  description?: string
+}
+
+interface CoachCalendarEvent {
+  id: string
+  title: string
+  description?: string | null
+  location?: string | null
+  start_time?: string | null
+  end_time?: string | null
+  is_recurring?: boolean
+  event_kind?: Event['event_kind']
+  teams?: string[] | string | null
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
+  return Array.isArray(value) ? value[0] : value ?? undefined
 }
 
 interface Message {
@@ -76,40 +95,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
   const [messageDetail, setMessageDetail] = useState<any>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
-  const supabase = createClient()
-
-  useEffect(() => {
-    loadCoachData()
-  }, [])
-
-  // Ricarica quando si torna alla tab / finestra (con debounce e throttling)
-  useEffect(() => {
-    let lastRefreshTime = 0
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      if (debounceTimer) clearTimeout(debounceTimer)
-
-      debounceTimer = setTimeout(() => {
-        // Throttle: ricarica solo se sono passati almeno 30 secondi dall'ultimo refresh
-        const now = Date.now()
-        const timeSinceLastRefresh = now - lastRefreshTime
-        if (timeSinceLastRefresh > 30000) {
-          loadCoachData()
-          lastRefreshTime = now
-        }
-      }, 1000) // Debounce di 1 secondo
-    }
-
-    window.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onVisible)
-    return () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      window.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onVisible)
-    }
-  }, [])
+  const supabase = useMemo(() => createClient(), [])
 
   // Enrich selected message on open
   useEffect(() => {
@@ -126,51 +112,16 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     loadDetail()
   }, [selectedMessage])
 
-  // Load team details when team is selected
-  useEffect(() => {
-    if (selectedTeamId) {
-      loadTeamDetail(selectedTeamId)
-    } else {
-      setTeamDetailData(null)
-    }
-  }, [selectedTeamId])
-
-  const loadCoachData = async () => {
-    setLoading(true)
-    
-    try {
-      // Carica in sequenza per evitare dipendenze circolari
-      await loadActiveSeason()
-      const teamIds = await loadCoachTeams() // Ottieni gli ID delle squadre
-      
-      if (teamIds.length > 0) {
-        await Promise.all([
-          loadUpcomingEvents(teamIds), // Passa gli ID direttamente
-          loadRecentMessages(teamIds),
-          loadPayments()
-        ])
-      } else {
-        // Se non ci sono squadre, svuota gli stati dipendenti
-        setUpcomingEvents([])
-        setRecentMessages([])
-      }
-    } catch (error) {
-      console.error('Error loading coach data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadActiveSeason = async () => {
+  const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('*')
       .eq('is_active', true)
       .single()
     if (data) setActiveSeason(data)
-  }
+  }, [supabase])
 
-  const loadCoachTeams = async () => {
+  const loadCoachTeams = useCallback(async () => {
     const { data } = await supabase
       .from('team_coaches')
       .select('team_id, teams(id, name, code, activity_id)')
@@ -182,8 +133,8 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     }
 
     const teamRecords = data
-      .map((row) => row.teams)
-      .filter(Boolean) as Team[]
+      .map((row) => firstRelation(row.teams))
+      .filter(Boolean) as Array<{ id: string; name: string; code: string; activity_id?: string }>
 
     const activityIds = [...new Set(teamRecords.map(team => team.activity_id).filter(Boolean))]
     let activities: any[] = []
@@ -202,87 +153,52 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       activity: activities.find((activity: any) => activity.id === team.activity_id) || { name: 'N/A' }
     }))
 
-    setTeams(teamsWithActivities)
+    setTeams(teamsWithActivities as Team[])
     return teamsWithActivities.map(team => team.id)
-  }
+  }, [supabase, user.id])
 
-  const loadUpcomingEvents = async (teamIds: string[]) => {
-    console.log('Loading events for team IDs:', teamIds)
-    
+  const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
     if (teamIds.length === 0) {
-      console.log('No teams assigned to coach, setting empty events')
-      setUpcomingEvents([])
-      return
-    }
-    
-    // Query alternativa: prima trova gli event IDs per le squadre, poi carica gli eventi
-    const { data: eventRelations, error: relationError } = await supabase
-      .from('event_teams')
-      .select('event_id')
-      .in('team_id', teamIds)
-      .order('created_at', { ascending: false })
-
-    if (relationError) {
-      console.error('Error loading event relations:', relationError)
-      return
-    }
-
-    if (!eventRelations || eventRelations.length === 0) {
-      console.log('No event relations found for coach teams')
       setUpcomingEvents([])
       return
     }
 
-    const eventIds = [...new Set(eventRelations.map(er => er.event_id))]
-    
-    // Carica gli eventi futuri per gli IDs trovati
-    const { data: events, error } = await supabase
-      .from('events')
-      .select('id, title, start_date, end_date, location, event_type')
-      .in('id', eventIds)
-      .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
-      .order('start_date', { ascending: true })
-      .limit(3)
+    try {
+      // Use the same-origin API so the browser does not call Supabase REST
+      // directly and trigger a local CORS preflight.
+      const response = await fetch('/api/coach/calendar')
+      const result = await response.json().catch(() => ({}))
 
-    if (error) {
-      console.error('Error loading events:', error)
-      return
-    }
+      if (!response.ok) {
+        console.error('Error loading coach calendar:', result.error || response.status)
+        setUpcomingEvents([])
+        return
+      }
 
-    console.log('Coach upcoming events:', events)
+      const events = (result.events || []) as CoachCalendarEvent[]
+      const normalizedEvents = events
+        .slice(0, 3)
+        .filter((event) => event.start_time && event.end_time)
+        .map((event): Event => ({
+          id: event.id,
+          title: event.title,
+          start_date: event.start_time!,
+          end_date: event.end_time!,
+          location: event.location ?? undefined,
+          event_type: event.is_recurring ? 'recurring' : 'one_time',
+          event_kind: event.event_kind,
+          description: event.description ?? undefined,
+          teams: Array.isArray(event.teams) ? event.teams.join(', ') : event.teams ?? '',
+        }))
 
-    if (events && events.length > 0) {
-      // Per ogni evento, carica i nomi delle squadre associate
-      const eventsWithTeamNames = await Promise.all(
-        events.map(async (event) => {
-          const { data: eventTeams } = await supabase
-            .from('event_teams')
-            .select('team_id')
-            .eq('event_id', event.id)
-            .in('team_id', teamIds)
-          
-          const teamNames = eventTeams 
-            ? eventTeams
-                .map(et => teams.find(t => t.id === et.team_id)?.name)
-                .filter(Boolean)
-                .join(', ')
-            : ''
-          
-          return {
-            ...event,
-            teams: teamNames
-          }
-        })
-      )
-      
-      setUpcomingEvents(eventsWithTeamNames)
-    } else {
-      console.log('No upcoming events found for coach teams')
+      setUpcomingEvents(normalizedEvents)
+    } catch (error) {
+      console.error('Error loading coach calendar:', error)
       setUpcomingEvents([])
     }
-  }
+  }, [])
 
-  const loadRecentMessages = async (teamIds: string[]) => {
+  const loadRecentMessages = useCallback(async (teamIds: string[]) => {
     // Get recent messages sent to coach's teams
     if (teamIds.length === 0) {
       setRecentMessages([])
@@ -329,9 +245,9 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       console.error('Error in loadRecentMessages:', error)
       setRecentMessages([])
     }
-  }
+  }, [])
 
-  const loadPayments = async () => {
+  const loadPayments = useCallback(async () => {
     // Get coach payments
     const { data } = await supabase
       .from('payments')
@@ -342,9 +258,9 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       .limit(5)
 
     if (data) setPayments(data)
-  }
+  }, [supabase, user.id])
 
-  const loadTeamDetail = async (teamId: string) => {
+  const loadTeamDetail = useCallback(async (teamId: string) => {
     try {
       // 1. Team basic info
       const { data: teamData } = await supabase
@@ -399,14 +315,14 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       const detail: TeamDetailData = {
         name: teamData.name,
         code: teamData.code,
-        activity: teamData.activities ? { name: teamData.activities.name } : undefined,
+        activity: firstRelation(teamData.activities) ? { name: firstRelation(teamData.activities)!.name } : undefined,
         training_schedules: schedules?.map(s => ({
           day_of_week: s.day_of_week,
           start_time: s.start_time,
           end_time: s.end_time,
           gym: {
-            name: s.gyms?.name || 'N/D',
-            city: s.gyms?.city
+            name: firstRelation(s.gyms)?.name || 'N/D',
+            city: firstRelation(s.gyms)?.city
           }
         })) || [],
         coaches: coachesData?.map(c => {
@@ -434,14 +350,76 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
       console.error('Error loading team details:', error)
       setTeamDetailData(null)
     }
-  }
+  }, [supabase])
+
+  const loadCoachData = useCallback(async () => {
+    setLoading(true)
+
+    try {
+      // Carica in sequenza per evitare dipendenze circolari
+      await loadActiveSeason()
+      const teamIds = await loadCoachTeams()
+
+      if (teamIds.length > 0) {
+        await Promise.all([
+          loadUpcomingEvents(teamIds),
+          loadRecentMessages(teamIds),
+          loadPayments()
+        ])
+      } else {
+        setUpcomingEvents([])
+        setRecentMessages([])
+      }
+    } catch (error) {
+      console.error('Error loading coach data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [loadActiveSeason, loadCoachTeams, loadPayments, loadRecentMessages, loadUpcomingEvents])
+
+  useEffect(() => {
+    void loadCoachData()
+  }, [loadCoachData])
+
+  // Ricarica quando si torna alla tab / finestra (con debounce e throttling)
+  useEffect(() => {
+    let lastRefreshTime = 0
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      if (debounceTimer) clearTimeout(debounceTimer)
+
+      debounceTimer = setTimeout(() => {
+        const now = Date.now()
+        const timeSinceLastRefresh = now - lastRefreshTime
+        if (timeSinceLastRefresh > 30000) {
+          void loadCoachData()
+          lastRefreshTime = now
+        }
+      }, 1000)
+    }
+
+    window.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      window.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [loadCoachData])
+
+  // Load team details when team is selected
+  useEffect(() => {
+    if (selectedTeamId) {
+      void loadTeamDetail(selectedTeamId)
+    } else {
+      setTeamDetailData(null)
+    }
+  }, [loadTeamDetail, selectedTeamId])
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
+    return <LoadingState label="Caricamento dashboard..." />
   }
 
   return (

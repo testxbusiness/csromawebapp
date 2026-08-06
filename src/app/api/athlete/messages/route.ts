@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'athlete') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -98,8 +98,10 @@ export async function GET(request: NextRequest) {
         const minimalMsg: any = { ...m }
         if (m.created_by && creatorsMap.has(m.created_by)) {
           const creator = creatorsMap.get(m.created_by)
-          minimalMsg.created_by_profile = creator
-          minimalMsg.from = `${creator.first_name || ''} ${creator.last_name || ''}`.trim()
+          if (creator) {
+            minimalMsg.created_by_profile = creator
+            minimalMsg.from = `${creator.first_name || ''} ${creator.last_name || ''}`.trim()
+          }
         }
         return minimalMsg
       })

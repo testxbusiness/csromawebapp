@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import type { Coach, Team, Activity, Season } from './coachTypes'
 import BulkOperationsModal from './BulkOperationsModal'
@@ -63,7 +63,7 @@ export default function CoachesManager() {
       // Carica stagioni
       const { data: seasonsData } = await supabase
         .from('seasons')
-        .select('id, name, is_active')
+        .select('id, name, start_date, end_date, is_active')
         .order('created_at', { ascending: false })
 
       // Carica attività
@@ -131,7 +131,7 @@ export default function CoachesManager() {
 
       return true
     })
-  }, [coaches, selectedSeason, selectedActivity, selectedTeam, searchTerm])
+  }, [activities, coaches, selectedSeason, selectedActivity, selectedTeam, searchTerm])
 
   // Gestione selezione multipla
   const toggleCoachSelection = (coachId: string) => {
@@ -226,12 +226,7 @@ export default function CoachesManager() {
   }
 
   if (loading) {
-    return (
-      <div className="p-8 text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Caricamento collaboratori...</p>
-      </div>
-    )
+    return <LoadingState label="Caricamento collaboratori..." />
   }
 
   return (
@@ -403,7 +398,7 @@ export default function CoachesManager() {
             </tbody>
           </table>
 
-          {filteredCoaches.length === 0 && (<div className="p-8 text-center text-secondary">Nessun collaboratore trovato con i filtri selezionati</div>)}
+          {filteredCoaches.length === 0 && (<EmptyState title="Nessun collaboratore trovato con i filtri selezionati" />)}
         </div>
 
         {/* Mobile cards */}

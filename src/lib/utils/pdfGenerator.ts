@@ -1,4 +1,5 @@
 "use client"
+import { sanitizeHtml } from './sanitizeHtml'
 // PDF generation utility using jsPDF
 // Note: You'll need to install jsPDF and html2canvas
 // npm install jspdf html2canvas
@@ -54,10 +55,15 @@ export async function generatePDF(options: PDFGenerationOptions): Promise<Genera
     wrapper.style.top = '0'
     wrapper.style.width = '794px' // ~A4 at 96dpi
     wrapper.style.background = '#fff'
-    wrapper.innerHTML = createHTMLDocument(options)
+    wrapper.innerHTML = createHTMLDocument({ ...options, content: sanitizeHtml(options.content) })
     document.body.appendChild(wrapper)
 
-    const canvas = await html2canvas(wrapper, { scale: 2, useCORS: true })
+    const canvas = await html2canvas(wrapper, {
+      scale: 2,
+      useCORS: true,
+      imageTimeout: 10000,
+      logging: false,
+    })
     document.body.removeChild(wrapper)
     const imgData = canvas.toDataURL('image/jpeg', 0.95)
 
@@ -88,7 +94,7 @@ export async function generatePDF(options: PDFGenerationOptions): Promise<Genera
     return { blob, url, filename }
   } catch (e) {
     console.warn('Falling back to HTML document for PDF generation:', e)
-    const htmlContent = createHTMLDocument(options)
+    const htmlContent = createHTMLDocument({ ...options, content: sanitizeHtml(options.content) })
     const blob = new Blob([htmlContent], { type: 'text/html' })
     const url = URL.createObjectURL(blob)
     const filename = `${options.title.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}.html`
@@ -102,6 +108,10 @@ function createHTMLDocument(options: PDFGenerationOptions): string {
     month: 'long',
     day: 'numeric'
   })
+  const contentHasLogo = /(?:src|href)=["'][^"']*\/images\/logo_CSRoma\.png/i.test(options.content)
+  const logoMarkup = options.hasLogo && !contentHasLogo
+    ? '<div class="logo"><img src="/images/logo_CSRoma.png" alt="CS Roma"></div>'
+    : '<div></div>'
 
   return `
 <!DOCTYPE html>
@@ -128,9 +138,16 @@ function createHTMLDocument(options: PDFGenerationOptions): string {
             padding-bottom: 10px;
         }
         .logo {
-            font-size: 24px;
-            font-weight: bold;
-            color: #003366;
+            display: flex;
+            align-items: center;
+            min-height: 56px;
+        }
+        .logo img {
+            display: block;
+            width: 166px;
+            height: auto;
+            max-height: 56px;
+            object-fit: contain;
         }
         .date {
             font-size: 14px;
@@ -174,7 +191,7 @@ function createHTMLDocument(options: PDFGenerationOptions): string {
 </head>
 <body>
     <div class="header">
-        ${options.hasLogo ? `<div class="logo">CS ROMA</div>` : '<div></div>'}
+        ${logoMarkup}
         ${options.hasDate ? `<div class="date">${currentDate}</div>` : '<div></div>'}
     </div>
     

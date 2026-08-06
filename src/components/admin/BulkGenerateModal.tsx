@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import type { DocumentTemplate } from './DocumentsManager'
@@ -25,7 +25,7 @@ export default function BulkGenerateModal({
   onGenerated: () => Promise<void> | void
   onPreview?: (html: string) => void
 }) {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [loading, setLoading] = useState(true)
 
   // Team target
@@ -47,9 +47,7 @@ export default function BulkGenerateModal({
   const [coachName, setCoachName] = useState<string>('')
   const [seasonName, setSeasonName] = useState<string>('')
 
-  useEffect(() => { void bootstrap() }, [template.id])
-
-  async function bootstrap() {
+  const bootstrap = useCallback(async () => {
     setLoading(true)
     try {
       if (template.target_type === 'team') {
@@ -62,7 +60,9 @@ export default function BulkGenerateModal({
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, template.target_type])
+
+  useEffect(() => { void bootstrap() }, [bootstrap, template.id])
 
   // carica i membri quando scelgo il team
   useEffect(() => {
@@ -82,7 +82,7 @@ export default function BulkGenerateModal({
       })).filter(Boolean)
       setMembers(mapped)
     })()
-  }, [template.target_type, selectedTeamId])
+  }, [supabase, template.target_type, selectedTeamId])
 
   // Carica eventi di tipo partita per la squadra selezionata
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function BulkGenerateModal({
       setEvents(evs || [])
       setSelectedEventId(''); setMatchDatetime(''); setVenue(''); setMatchInfo('')
     })()
-  }, [template.target_type, selectedTeamId])
+  }, [supabase, template.target_type, selectedTeamId])
 
   // Prefill al cambio evento
   useEffect(() => {
@@ -186,18 +186,24 @@ export default function BulkGenerateModal({
     }
   }
 
+  async function saveGeneratedDocument(payload: Record<string, unknown>) {
+    const response = await fetch('/api/admin/documents/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(result.error || 'Errore salvataggio documento')
+  }
+
   async function handleGenerate() {
-    if (template.target_type === 'team') {
+    try {
+      if (template.target_type === 'team') {
       if (!selectedTeamId) { toast.error('Seleziona una squadra'); return }
 
       const team = teams.find(t => t.id === selectedTeamId)
       const chosen = members.filter(m => m.selected)
       if (chosen.length === 0) { toast.error('Seleziona almeno un atleta'); return }
-
-      // created_by richiesto dal DB
-      const { data: auth } = await supabase.auth.getUser()
-      const createdBy = auth?.user?.id
-      if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
 
       if (isTeamListTemplate) {
         // 1 solo documento per squadra con elenco atleti nel testo
@@ -220,12 +226,11 @@ export default function BulkGenerateModal({
         const html = withOptionalLogo(replaceTemplateVariables(template.content_html, vars), template.include_logo)
         onPreview?.(html)
 
-        const { error } = await supabase.from('documents').insert({
+        await saveGeneratedDocument({
           // campi richiesti
           name: template.name,
           title: `${template.name} - ${team?.name || ''} - ${todayStr}`,
           type: template.type || 'team_convocation',
-          created_by: createdBy,
           // lookup / destinatari (duplicati per compatibilità con policy)
           template_id: template.id,
           team_id: selectedTeamId,
@@ -236,13 +241,9 @@ export default function BulkGenerateModal({
           status: 'generated',
           generation_date: new Date().toISOString(),
           document_type: template.type || 'team_convocation',
-        } as any)
-        if (error) { toast.error('Errore salvataggio documento'); return }
+        })
       } else {
         // N documenti, uno per ciascun atleta selezionato
-        const { data: auth } = await supabase.auth.getUser()
-        const createdBy = auth?.user?.id
-        if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
         for (const m of chosen) {
           const fullVars = {
             today: todayStr,
@@ -259,32 +260,30 @@ export default function BulkGenerateModal({
           }
           const html = withOptionalLogo(replaceTemplateVariables(template.content_html, fullVars), template.include_logo)
           onPreview?.(html)
-          await supabase.from('documents').insert({
+          await saveGeneratedDocument({
             name: template.name,
             title: template.name,
             type: template.type || 'team_convocation',
-            created_by: createdBy,
             template_id: template.id,
             // destinatari
             profile_id: m.id,
             team_id: selectedTeamId,
             target_user_id: m.id,           // documento personale
-            target_team_id: selectedTeamId, // riferimento squadra
+            // `target_user_id` e `target_team_id` sono alternativi per il vincolo DB;
+            // la squadra resta disponibile in `team_id`.
+            target_team_id: null,
             // contenuto
             generated_content_html: html,
             status: 'generated',
             generation_date: new Date().toISOString(),
             document_type: template.type || 'team_convocation',
-          } as any)
+          })
         }
       }
-    } else {
+      } else {
       // target user – N documenti per gli utenti selezionati
       const chosen = users.filter(u => u.selected)
       if (chosen.length === 0) { toast.error('Seleziona almeno un utente'); return }
-      const { data: auth } = await supabase.auth.getUser()
-      const createdBy = auth?.user?.id
-      if (!createdBy) { toast.error('Sessione non valida: utente non autenticato'); return }
       for (const u of chosen) {
         const vars = {
           today: todayStr,
@@ -294,11 +293,10 @@ export default function BulkGenerateModal({
         }
         const html = withOptionalLogo(replaceTemplateVariables(template.content_html, vars), template.include_logo)
         onPreview?.(html)
-        await supabase.from('documents').insert({
+        await saveGeneratedDocument({
           name: template.name,
           title: template.name,
-          type: template.type || (template.target_type === 'team' ? 'team_convocation' : 'enrollment_form'),
-          created_by: createdBy,
+          type: template.type || 'enrollment_form',
           template_id: template.id,
           profile_id: u.id,
           target_user_id: u.id,
@@ -307,11 +305,15 @@ export default function BulkGenerateModal({
           status: 'generated',
           generation_date: new Date().toISOString(),
           document_type: template.type || 'enrollment_form',
-        } as any)
+        })
       }
     }
 
-    await onGenerated()
+      await onGenerated()
+    } catch (error) {
+      console.error('Errore generazione documento:', error)
+      toast.error(error instanceof Error ? error.message : 'Errore generazione documento')
+    }
   }
 
   const filteredMembers = useMemo(() => {

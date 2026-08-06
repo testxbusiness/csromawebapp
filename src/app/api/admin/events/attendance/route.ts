@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { eventIdQuerySchema } from '@/lib/validation/events'
 
 export async function GET(req: NextRequest) {
   try {
@@ -7,12 +8,13 @@ export async function GET(req: NextRequest) {
     const admin = createAdminClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(req.url)
-    const eventId = searchParams.get('event_id')
-    if (!eventId) return NextResponse.json({ error: 'Missing event_id' }, { status: 400 })
+    const parsed = eventIdQuerySchema.safeParse({ event_id: searchParams.get('event_id') })
+    if (!parsed.success) return NextResponse.json({ error: 'Missing event_id' }, { status: 400 })
+    const eventId = parsed.data.event_id
 
     // Fetch teams attached to event
     const { data: links } = await admin.from('event_teams').select('team_id').eq('event_id', eventId)
@@ -48,4 +50,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

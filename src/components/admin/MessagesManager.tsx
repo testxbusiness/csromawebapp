@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
-import MessageModal from '@/components/admin/MessageModal'
+import MessageModal, { type Message as MessageForm } from '@/components/admin/MessageModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 
 interface Message {
@@ -12,10 +12,12 @@ interface Message {
   subject: string
   content: string
   attachment_url?: string
-  attachments?: { id: string; file_name: string; mime_type?: string; file_size?: number; download_url?: string | null }[]
+  attachments?: { id?: string; file_path?: string; file_name: string; mime_type?: string; file_size?: number; download_url?: string | null }[]
   created_by?: string
   created_at?: string
   updated_at?: string
+  selected_teams?: string[]
+  selected_users?: string[]
   
   // Joined data
   created_by_profile?: {
@@ -214,7 +216,7 @@ export default function MessagesManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento messaggi...</div>
+    return <LoadingState label="Caricamento messaggi..." />
   }
 
   return (
@@ -235,11 +237,11 @@ export default function MessagesManager() {
       <MessageModal
   open={showModal}
   onClose={() => { setShowModal(false); setEditingMessage(null) }}
-  message={editingMessage}
+  message={editingMessage as MessageForm | null}
   teams={teams}
   users={users}
-  onCreate={handleCreateMessage}
-  onUpdate={handleUpdateMessage}
+  onCreate={(data) => handleCreateMessage(data as Omit<Message, 'id'>)}
+  onUpdate={(id, data) => handleUpdateMessage(id, data as Partial<Message>)}
 />
 
       {selectedMessage && (
@@ -360,12 +362,11 @@ export default function MessagesManager() {
         </div>
 
         {messages.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4"><span className="text-4xl">✉️</span></div>
-            <h3 className="text-lg font-semibold mb-2">Nessun messaggio creato</h3>
-            <p className="text-secondary mb-4">Crea il tuo primo messaggio per iniziare a comunicare con squadre e utenti.</p>
-            <button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo messaggio</button>
-          </div>
+          <EmptyState
+            title="Nessun messaggio creato"
+            description="Crea il tuo primo messaggio per iniziare a comunicare con squadre e utenti."
+            action={<button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo messaggio</button>}
+          />
         )}
       </div>
     </div>

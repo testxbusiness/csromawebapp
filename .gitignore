@@ -36,11 +36,14 @@ yarn-error.log*
 .vercel
 
 # typescript
-*.tsbuild.info
+*.tsbuildinfo
 next-env.d.ts
 
 # local supabase
 /supabase/
+
+# Production database backups are local-only and must never be committed.
+/backups/
 
 # local development files
 cookies.txt
@@ -71,3 +74,5 @@ SECURITY_AUDIT_*.md
 # Backup DB
 dbbackup/
 
+# Local production database backups: contain credentials, auth data and user data.
+/backup-prod-*/

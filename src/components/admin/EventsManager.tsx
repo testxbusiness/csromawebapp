@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
-import { toast } from '@/components/ui'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import EventModal from '@/components/admin/EventModal'
@@ -41,6 +41,7 @@ interface Event {
   created_by?: string
   created_at?: string
   updated_at?: string
+  selected_teams?: string[]
   
   // Joined data
   gyms?: {
@@ -102,7 +103,7 @@ export default function EventsManager() {
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const teamDropdownRef = useRef<HTMLDivElement | null>(null)
   const eventKindDropdownRef = useRef<HTMLDivElement | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const selectedTeamsLabel = (() => {
     if (filterTeams.length === 0) return 'Tutte le squadre'
@@ -126,13 +127,6 @@ export default function EventsManager() {
     loadEvents()
     loadTeams()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Lazy load gyms/activities solo quando il modal si apre
-  useEffect(() => {
-    if (showModal && gyms.length === 0 && activities.length === 0) {
-      loadSelectOptions()
-    }
-  }, [showModal])
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -188,7 +182,7 @@ export default function EventsManager() {
 
       console.log('Eventi caricati:', result.events)
       // Assicurati che i dati correlati siano sempre oggetti validi
-      let eventsWithSafeData = (result.events || []).map(event => ({
+      let eventsWithSafeData = (result.events || []).map((event: Event) => ({
         ...event,
         gyms: event.gyms || null,
         activities: event.activities || null,
@@ -199,7 +193,7 @@ export default function EventsManager() {
       // Filtro locale per event_kind
       if (selectedEventKinds.length > 0) {
         eventsWithSafeData = eventsWithSafeData.filter(
-          (e) => !!e.event_kind && selectedEventKinds.includes(e.event_kind)
+          (e: Event) => !!e.event_kind && selectedEventKinds.includes(e.event_kind)
         )
       }
 
@@ -212,7 +206,7 @@ export default function EventsManager() {
     }
   }
 
-  const loadSelectOptions = async () => {
+  const loadSelectOptions = useCallback(async () => {
     setLoadingSelects(true)
     try {
       const [{ data: gymsData }, { data: activitiesData }] = await Promise.all([
@@ -226,7 +220,14 @@ export default function EventsManager() {
     } finally {
       setLoadingSelects(false)
     }
-  }
+  }, [supabase])
+
+  // Lazy load gyms/activities solo quando il modal si apre
+  useEffect(() => {
+    if (showModal && gyms.length === 0 && activities.length === 0) {
+      void loadSelectOptions()
+    }
+  }, [activities.length, gyms.length, loadSelectOptions, showModal])
 
   const loadTeams = async () => {
     const { data } = await supabase
@@ -380,7 +381,7 @@ export default function EventsManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento eventi...</div>
+    return <LoadingState label="Caricamento eventi..." />
   }
 
   return (
@@ -725,12 +726,11 @@ export default function EventsManager() {
             </div>
           ))}
           {events.length === 0 && (
-            <div className="px-6 py-8 text-center">
-              <div className="text-secondary mb-4"><span className="text-4xl">📅</span></div>
-              <h3 className="text-lg font-semibold mb-2">Nessun evento creato</h3>
-              <p className="text-secondary mb-4">Crea il tuo primo evento per iniziare a organizzare il calendario delle attività.</p>
-              <button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo evento</button>
-            </div>
+            <EmptyState
+              title="Nessun evento creato"
+              description="Crea il tuo primo evento per iniziare a organizzare il calendario delle attività."
+              action={<button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo evento</button>}
+            />
           )}
         </div>
       </div>

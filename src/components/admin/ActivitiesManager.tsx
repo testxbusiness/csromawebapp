@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import ActivityModal from '@/components/admin/ActivityModal'
+import { EmptyState, LoadingState } from '@/components/ui'
 
 interface Activity {
   id?: string
@@ -29,14 +30,9 @@ export default function ActivitiesManager() {
   const [loading, setLoading] = useState(true)
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  useEffect(() => {
-    loadActivities()
-    loadSeasons()
-  }, [])
-
-  const loadActivities = async () => {
+  const loadActivities = useCallback(async () => {
     const { data: activitiesData } = await supabase
       .from('activities')
       .select('*')
@@ -67,16 +63,21 @@ export default function ActivitiesManager() {
       setActivities([])
     }
     setLoading(false)
-  }
+  }, [supabase])
 
-  const loadSeasons = async () => {
+  const loadSeasons = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
       .select('id, name, is_active')
       .order('start_date', { ascending: false })
 
     setSeasons(data || [])
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    void loadActivities()
+    void loadSeasons()
+  }, [loadActivities, loadSeasons])
 
   const handleCreateActivity = async (activityData: Omit<Activity, 'id'>) => {
     const { error } = await supabase
@@ -130,7 +131,7 @@ export default function ActivitiesManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento attività...</div>
+    return <LoadingState label="Caricamento attività..." />
   }
 
   return (
@@ -249,24 +250,11 @@ export default function ActivitiesManager() {
         </div>
 
         {activities.length === 0 && (
-          <div className="px-6 py-8 text-center">
-            <div className="text-secondary mb-4">
-              <span className="text-4xl">⚽</span>
-            </div>
-            <h3 className="text-lg font-semibold mb-2">Nessuna attività creata</h3>
-            <p className="text-secondary mb-4">
-              Crea la tua prima attività sportiva per iniziare a organizzare le discipline della società.
-            </p>
-            <button
-              onClick={() => {
-                setEditingActivity(null)
-                setShowModal(true)
-              }}
-              className="cs-btn cs-btn--primary"
-            >
-              Crea la tua prima attività
-            </button>
-          </div>
+          <EmptyState
+            title="Nessuna attività creata"
+            description="Crea la tua prima attività sportiva per iniziare a organizzare le discipline della società."
+            action={<button onClick={() => { setEditingActivity(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima attività</button>}
+          />
         )}
       </div>
     </div>

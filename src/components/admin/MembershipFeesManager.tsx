@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { toast } from '@/components/ui'
+import { useCallback, useState, useEffect, useMemo } from 'react'
+import { EmptyState, LoadingState, toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MembershipFeeModal from '@/components/admin/MembershipFeeModal'
@@ -11,7 +11,7 @@ interface MembershipFee {
   team_id: string
   name: string
   description?: string
-  total_amount: number
+  total_amount?: number
   enrollment_fee: number
   insurance_fee: number
   monthly_fee: number
@@ -92,7 +92,7 @@ export default function MembershipFeesManager() {
   const [teamAthletes, setTeamAthletes] = useState<{ id: string; first_name: string; last_name: string }[]>([])
   const [flatInstallments, setFlatInstallments] = useState<any[]>([])
   const [selectedInstallments, setSelectedInstallments] = useState<Set<string>>(new Set())
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     // All'apertura, ricalcola stati e poi carica dati
@@ -438,7 +438,7 @@ export default function MembershipFeesManager() {
   }
 
   if (loading) {
-    return <div className="p-4">Caricamento quote associative...</div>
+    return <LoadingState label="Caricamento quote associative..." />
   }
 
   return (
@@ -523,7 +523,7 @@ export default function MembershipFeesManager() {
                 </td>
                 <td>
                   <div className="font-semibold">
-                    €{fee.total_amount.toFixed(2)}
+                    €{(fee.total_amount ?? 0).toFixed(2)}
                   </div>
                 </td>
                 <td>
@@ -571,7 +571,7 @@ export default function MembershipFeesManager() {
 
               <div className="mt-2 grid gap-2 text-sm">
                 <div><strong>Squadra:</strong> {fee.teams?.name} <span className="text-secondary">{fee.teams?.code}</span></div>
-                <div><strong>Importo:</strong> €{fee.total_amount.toFixed(2)}</div>
+                <div><strong>Importo:</strong> €{(fee.total_amount ?? 0).toFixed(2)}</div>
                 <div>
                   <strong>Dettagli:</strong>
                   <div>Iscrizione: €{fee.enrollment_fee.toFixed(2)}</div>
@@ -600,12 +600,11 @@ export default function MembershipFeesManager() {
         </div>
 
         {fees.length === 0 && (
-          <div className="text-center py-8">
-            <div className="text-secondary mb-3 text-3xl">💰</div>
-            <h3 className="text-lg font-semibold mb-1">Nessuna quota associativa creata</h3>
-            <p className="text-secondary mb-4">Crea la tua prima quota associativa per gestire i pagamenti delle squadre.</p>
-            <button onClick={() => { setEditingFee(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima quota</button>
-          </div>
+          <EmptyState
+            title="Nessuna quota associativa creata"
+            description="Crea la tua prima quota associativa per gestire i pagamenti delle squadre."
+            action={<button onClick={() => { setEditingFee(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima quota</button>}
+          />
         )}
       </div>
       ) : (
@@ -704,7 +703,7 @@ export default function MembershipFeesManager() {
               <div key={row.id} className="cs-card">
                 <div className="flex items-start gap-3">
                   <input type="checkbox" checked={selectedInstallments.has(row.id)} onChange={(e)=>{
-                    setSelectedInstallments((prev:any) => { const n = new Set(prev); if (e.target.checked) n.add(row.id); else n.delete(row.id); return n })
+                    setSelectedInstallments((prev) => { const n = new Set<string>(prev); if (e.target.checked) n.add(row.id); else n.delete(row.id); return n })
                   }} />
                   <div className="flex-1">
                     <div className="font-semibold">{row.profile ? `${row.profile.first_name} ${row.profile.last_name}` : '—'}</div>
@@ -918,29 +917,31 @@ function FeeForm({
     ))
   }
 
-  const recalculateInstallments = () => {
+  const recalculateInstallments = useCallback(() => {
     if (formData.installments_count > 0 && calculatedTotal > 0) {
       const today = new Date()
 
-      const newInstallments = Array.from({ length: formData.installments_count }, (_, i) => {
-        const existing = installments[i]
-        const dueDate = new Date(today)
-        dueDate.setMonth(today.getMonth() + i + 1)
+      setInstallments((currentInstallments) => {
+        const newInstallments = Array.from({ length: formData.installments_count }, (_, i) => {
+          const existing = currentInstallments[i]
+          const dueDate = new Date(today)
+          dueDate.setMonth(today.getMonth() + i + 1)
 
-        return {
-          installment_number: i + 1,
-          due_date: existing?.due_date || dueDate.toISOString().split('T')[0],
-          amount: existing?.amount || 0
-        }
+          return {
+            installment_number: i + 1,
+            due_date: existing?.due_date || dueDate.toISOString().split('T')[0],
+            amount: existing?.amount || 0
+          }
+        })
+
+        return newInstallments
       })
-
-      setInstallments(newInstallments)
     }
-  }
+  }, [calculatedTotal, formData.installments_count])
 
   useEffect(() => {
     recalculateInstallments()
-  }, [formData.installments_count])
+  }, [formData.installments_count, recalculateInstallments])
 
   return (
     <div className="bg-white rounded-lg shadow p-6">

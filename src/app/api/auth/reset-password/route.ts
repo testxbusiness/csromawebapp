@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { resetPasswordPayloadSchema } from '@/lib/validation/auth'
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}))
-    const password: string | undefined = body?.password
-    if (!password || typeof password !== 'string' || password.length < 6) {
+    const parsed = resetPasswordPayloadSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) {
       return NextResponse.json({ error: 'Password non valida' }, { status: 400 })
     }
+    const { password } = parsed.data
 
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -18,14 +19,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
     }
 
-    // Aggiorna password e metadati via Admin API per evitare blocchi client-side
+    // Aggiorna password e metadati server-controlled via Admin API.
     const admin = createAdminClient()
     const { error: updErr } = await admin.auth.admin.updateUserById(user.id, {
       password,
-      user_metadata: {
+      app_metadata: {
+        ...user.app_metadata,
         must_change_password: false,
-        temp_password_set_at: null,
-        temp_password_expires_at: null,
       },
     })
     if (updErr) {
@@ -45,4 +45,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || 'Errore inatteso' }, { status: 500 })
   }
 }
-

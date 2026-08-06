@@ -33,6 +33,11 @@ export default function BulkOperationsModal({
   const [selectedOperation, setSelectedOperation] = useState<string>('')
   const [parameters, setParameters] = useState<Record<string, unknown>>({})
 
+  const getStringParameter = (key: string, fallback = '') => {
+    const value = parameters[key]
+    return typeof value === 'string' ? value : fallback
+  }
+
   const operations = userType === 'athletes' ? [
     { value: 'assign_to_team', label: 'Assegna a Squadra' },
     { value: 'remove_from_team', label: 'Rimuovi da Squadra' },
@@ -44,7 +49,7 @@ export default function BulkOperationsModal({
     { value: 'update_staff_role', label: 'Aggiorna Ruolo Staff' }
   ]
 
-  const handleParameterChange = (key: string, value: string) => {
+  const handleParameterChange = (key: string, value: unknown) => {
     setParameters(prev => ({
       ...prev,
       [key]: value
@@ -88,7 +93,10 @@ export default function BulkOperationsModal({
 
         // Per i coach, permette selezione multipla; per gli atleti, selezione singola
         const isMultiSelect = userType === 'coaches'
-        const selectedTeamIds = parameters.teamIds || []
+        const selectedTeamIds = Array.isArray(parameters.teamIds)
+          ? parameters.teamIds.filter((id): id is string => typeof id === 'string')
+          : []
+        const selectedTeamId = getStringParameter('teamId')
 
         return (
           <div>
@@ -121,7 +129,7 @@ export default function BulkOperationsModal({
                 ) : (
                   // Selezione singola per atleti
                   <select
-                    value={parameters.teamId || ''}
+                    value={selectedTeamId}
                     onChange={(e) => handleParameterChange('teamId', e.target.value)}
                     className="cs-select"
                   >
@@ -134,7 +142,7 @@ export default function BulkOperationsModal({
                   </select>
                 )}
 
-                {((isMultiSelect && selectedTeamIds.length > 0) || (!isMultiSelect && parameters.teamId)) && (
+                {((isMultiSelect && selectedTeamIds.length > 0) || (!isMultiSelect && selectedTeamId)) && (
                   <div className="mt-4 cs-alert cs-alert--warning text-sm">
                     <p>
                       <strong>Attenzione:</strong> Verranno rimossi {selectedCount} {userType === 'athletes' ? 'atleti' : 'collaboratori'} da
@@ -147,7 +155,7 @@ export default function BulkOperationsModal({
                             .join(', ')}
                         </>
                       ) : (
-                        <> la squadra &quot;{uniqueTeams.find(t => t.id === parameters.teamId)?.name}&quot;</>
+                        <> la squadra &quot;{uniqueTeams.find(t => t.id === selectedTeamId)?.name}&quot;</>
                       )}
                     </p>
                   </div>
@@ -174,7 +182,7 @@ export default function BulkOperationsModal({
             <div>
               <label className="cs-field__label">Seleziona Squadra</label>
               <select
-                value={parameters.teamId || ''}
+                value={getStringParameter('teamId')}
                 onChange={(e) => handleParameterChange('teamId', e.target.value)}
                 className="cs-select"
               >
@@ -190,16 +198,16 @@ export default function BulkOperationsModal({
               <label className="cs-field__label">Nuovo Numero Maglia</label>
               <input
                 type="text"
-                value={parameters.jerseyNumber || ''}
+                value={getStringParameter('jerseyNumber')}
                 onChange={(e) => handleParameterChange('jerseyNumber', e.target.value)}
                 className="cs-input"
                 placeholder="Numero maglia"
               />
             </div>
-            {parameters.teamId && (
+            {getStringParameter('teamId') && (
               <div className="cs-alert cs-alert--neutral text-sm">
                 <p>
-                  Verrà aggiornato il numero maglia per {selectedCount} atlet{selectedCount > 1 ? 'i' : 'o'} nella squadra &quot;{uniqueJerseyTeams.find(t => t.id === parameters.teamId)?.name}&quot;
+                  Verrà aggiornato il numero maglia per {selectedCount} atlet{selectedCount > 1 ? 'i' : 'o'} nella squadra &quot;{uniqueJerseyTeams.find(t => t.id === getStringParameter('teamId'))?.name}&quot;
                 </p>
               </div>
             )}
@@ -212,7 +220,7 @@ export default function BulkOperationsModal({
             <label className="cs-field__label">Nuova Data Scadenza (YYYY-MM-DD)</label>
             <input
               type="date"
-              value={parameters.expiryDate || ''}
+              value={getStringParameter('expiryDate')}
               onChange={(e) => handleParameterChange('expiryDate', e.target.value)}
               className="cs-input"
             />
@@ -224,7 +232,7 @@ export default function BulkOperationsModal({
           <div>
             <label className="cs-field__label">Nuovo Ruolo</label>
             <select
-              value={parameters.role || 'assistant_coach'}
+              value={getStringParameter('role', 'assistant_coach')}
               onChange={(e) => handleParameterChange('role', e.target.value)}
               className="cs-select"
             >

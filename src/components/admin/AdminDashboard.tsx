@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Button, Card, CardTitle, CardMeta, Stat } from '@/components/ui'
+import { Button, Card, CardTitle, CardMeta, EmptyState, LoadingState, Stat } from '@/components/ui'
 import { List, ListItem } from '@/components/ui/List'
 import { Badge } from '@/components/ui/Badge'
 
@@ -30,7 +30,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
   const [activeSeason, setActiveSeason] = useState<Season | null>(null)
   const [lastSignIn, setLastSignIn] = useState<string>('—')
   const [metrics, setMetrics] = useState({ activities: 0, teams: 0, athletes: 0, coaches: 0 })
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const checkFirstAccess = useCallback(async () => {
     const { data: seasonsData } = await supabase
@@ -70,7 +70,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
     }
 
     loadInitialData()
-  }, []) // Dipendenze vuote - carica solo al mount
+  }, [checkFirstAccess, loadSeasons, supabase])
 
   // Carica stagione attiva e calcola metriche dipendenti
   useEffect(() => {
@@ -151,7 +151,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
     }
   }, [loadSeasons, supabase])
 
-  if (loading) return <div className="cs-card" style={{ padding: 24 }}>Caricamento dashboard…</div>
+  if (loading) return <LoadingState label="Caricamento dashboard..." />
 
   if (isFirstAccess) {
     return (
@@ -231,7 +231,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
               ))}
             </List>
           ) : (
-            <div className="text-secondary" style={{ padding: 12 }}>Nessuna stagione creata.</div>
+            <EmptyState title="Nessuna stagione creata" />
           )}
         </Card>
 

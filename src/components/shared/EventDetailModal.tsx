@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { NextStepViewport } from 'nextstepjs'
+import { LoadingState } from '@/components/ui'
 
 type TeamLike = { id?: string; name: string } | string
 
@@ -90,7 +91,7 @@ export default function EventDetailModal({ open, onClose, data }: { open: boolea
           </div>
 
           {!data ? (
-            <div className="p-4 text-secondary text-sm">Caricamento…</div>
+            <LoadingState label="Caricamento evento..." />
           ) : (
             <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
               {/* Orario */}

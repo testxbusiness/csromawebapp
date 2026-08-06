@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { pushSubscriptionSchema } from '@/lib/validation/messages'
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,11 +8,9 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const body = await req.json().catch(() => ({}))
-    const { endpoint, keys, user_agent, device_label } = body || {}
-    if (!endpoint || !keys?.p256dh || !keys?.auth) {
-      return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 })
-    }
+    const parsed = pushSubscriptionSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Invalid subscription' }, { status: 400 })
+    const { endpoint, keys, user_agent, device_label } = parsed.data
 
     const { error } = await supabase.from('push_subscriptions').upsert({
       profile_id: user.id,
@@ -31,4 +30,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-

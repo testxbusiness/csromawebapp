@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendToUsers } from '@/lib/utils/push'
+import { coachMessageCreateSchema, coachMessageUpdateSchema } from '@/lib/validation/messages'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify user is a coach
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'coach') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -104,8 +105,10 @@ export async function GET(request: NextRequest) {
         const minimalMsg: any = { ...msg }
         if (msg.created_by && creatorsMap.has(msg.created_by)) {
           const creator = creatorsMap.get(msg.created_by)
-          minimalMsg.created_by_profile = creator
-          minimalMsg.from = `${creator.first_name || ''} ${creator.last_name || ''}`.trim()
+          if (creator) {
+            minimalMsg.created_by_profile = creator
+            minimalMsg.from = `${creator.first_name || ''} ${creator.last_name || ''}`.trim()
+          }
         }
         return minimalMsg
       })
@@ -240,18 +243,24 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
+    const parsed = coachMessageCreateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      console.warn('Coach message validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati messaggio non validi' }, { status: 400 })
+    }
+    const body = parsed.data
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const { subject, content, attachment_url, attachments, selected_teams } = body || {}
-    if (!subject || !content) {
-      return NextResponse.json({ error: 'Dati messaggio incompleti' }, { status: 400 })
-    }
+    const { subject, content, attachment_url, attachments, selected_teams } = body
 
     // Get coach teams to validate recipients
     const { data: coachTeams } = await supabase
@@ -347,15 +356,23 @@ export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
-    const body = await request.json()
+    const parsed = coachMessageUpdateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      console.warn('Coach message update validation failed:', parsed.error.issues.map((issue) => ({
+        path: issue.path,
+        code: issue.code,
+        message: issue.message,
+      })))
+      return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
+    }
+    const body = parsed.data
 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const { id, subject, content, attachment_url, attachments, selected_teams } = body || {}
-    if (!id) return NextResponse.json({ error: 'ID messaggio richiesto' }, { status: 400 })
+    const { id, subject, content, attachment_url, attachments, selected_teams } = body
 
     // Ensure the message belongs to the coach
     const { data: ownedMsg } = await supabase
@@ -447,7 +464,7 @@ export async function DELETE(request: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    const role = (user as any)?.user_metadata?.role
+const role = (user as any)?.app_metadata?.role
     if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
