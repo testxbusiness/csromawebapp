@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 // GET /api/admin/installments?team_id=&profile_id=&status=&from=&to=&limit=&offset=
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const admin = createAdminClient()
     const { searchParams } = new URL(request.url)
-
-    // Auth: only admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const teamId = searchParams.get('team_id') || undefined
     const profileId = searchParams.get('profile_id') || undefined
@@ -100,8 +97,12 @@ const role = (user as any)?.app_metadata?.role
     })
 
     return NextResponse.json({ items, total })
-  } catch (e) {
-    console.error('Admin installments GET error:', e)
+  } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    console.error('Admin installments GET error:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
