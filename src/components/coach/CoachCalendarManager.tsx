@@ -31,8 +31,8 @@ interface Gym { id: string; name: string; city?: string }
 interface Activity { id: string; name: string }
 
 export default function CoachCalendarManager() {
-  const { user } = useAuth()
-  const userId = user?.id || null
+  const { account } = useAuth()
+  const ownerProfileId = account?.ownerProfileId || null
   const supabase = useMemo(() => createClient(), [])
 
   const [events, setEvents] = useState<Event[]>([])
@@ -54,7 +54,7 @@ export default function CoachCalendarManager() {
   const fetchControllerRef = useRef<AbortController | null>(null)
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
-    if (!userId) {
+    if (!ownerProfileId) {
       setEvents([])
       setTeams([])
       setLoading(false)
@@ -82,10 +82,10 @@ export default function CoachCalendarManager() {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [ownerProfileId])
 
   useEffect(() => {
-    if (!userId) {
+    if (!ownerProfileId) {
       fetchControllerRef.current?.abort()
       fetchControllerRef.current = null
       setEvents([])
@@ -102,7 +102,7 @@ export default function CoachCalendarManager() {
     return () => {
       controller.abort()
     }
-  }, [userId, loadData])
+  }, [ownerProfileId, loadData])
 
   useEffect(() => {
     let next = events
@@ -196,7 +196,7 @@ export default function CoachCalendarManager() {
             end_date: o.end_date,
             event_type: 'recurring',
             event_kind: (eventData as any).event_kind || 'training',
-            created_by: user?.id,
+            created_by: ownerProfileId,
             // Legacy columns required by DB schema
             name: eventData.title,
             start_time: o.start_date,
@@ -226,7 +226,7 @@ export default function CoachCalendarManager() {
               end_date: eventData.end_time,
               event_type: 'one_time',
               event_kind: (eventData as any).event_kind || 'training',
-              created_by: user?.id,
+              created_by: ownerProfileId,
               // Legacy columns required by DB schema
               name: eventData.title,
               start_time: eventData.start_time,

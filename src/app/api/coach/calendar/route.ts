@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') {
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -20,7 +15,7 @@ const role = (user as any)?.app_metadata?.role
     const { data: coachTeams, error: coachTeamsErr } = await supabase
       .from('team_coaches')
       .select('team_id, teams(id, name, code)')
-      .eq('coach_id', user.id)
+      .eq('coach_id', account.ownerProfileId)
 
     if (coachTeamsErr) {
       console.error('Error loading coach teams:', coachTeamsErr)
@@ -145,6 +140,9 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Coach calendar API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

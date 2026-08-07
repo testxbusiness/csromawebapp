@@ -125,7 +125,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     const { data } = await supabase
       .from('team_coaches')
       .select('team_id, teams(id, name, code, activity_id)')
-      .eq('coach_id', user.id)
+      .eq('coach_id', profile.id)
 
     if (!data || data.length === 0) {
       setTeams([])
@@ -155,7 +155,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
     setTeams(teamsWithActivities as Team[])
     return teamsWithActivities.map(team => team.id)
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
     if (teamIds.length === 0) {
@@ -252,13 +252,13 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     const { data } = await supabase
       .from('payments')
       .select('*')
-      .eq('coach_id', user.id)
+      .eq('coach_id', profile.id)
       .eq('type', 'coach_payment')
       .order('due_date', { ascending: true })
       .limit(5)
 
     if (data) setPayments(data)
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadTeamDetail = useCallback(async (teamId: string) => {
     try {

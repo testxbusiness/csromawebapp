@@ -29,8 +29,8 @@ interface Message {
 interface Team { id: string; name: string; code: string }
 
 export default function CoachMessagesManager() {
-  const { user } = useAuth()
-  const userId = user?.id || null
+  const { account } = useAuth()
+  const ownerProfileId = account?.ownerProfileId || null
   const supabase = useMemo(() => createClient(), [])
   const [messages, setMessages] = useState<Message[]>([])
   const [teams, setTeams] = useState<Team[]>([])
@@ -47,7 +47,7 @@ export default function CoachMessagesManager() {
   const fetchControllerRef = useRef<AbortController | null>(null)
 
   const loadTeams = useCallback(async () => {
-    if (!userId) {
+    if (!ownerProfileId) {
       setTeams([])
       return
     }
@@ -55,17 +55,17 @@ export default function CoachMessagesManager() {
     const { data } = await supabase
       .from('team_coaches')
       .select('team_id, teams(id, name, code)')
-      .eq('coach_id', userId)
+      .eq('coach_id', ownerProfileId)
 
     const list = (data || [])
       .map((row) => Array.isArray(row.teams) ? row.teams[0] : row.teams)
       .filter(Boolean) as Team[]
 
     setTeams(list.sort((a, b) => a.name.localeCompare(b.name)))
-  }, [supabase, userId])
+  }, [ownerProfileId, supabase])
 
   const loadMessages = useCallback(async (signal?: AbortSignal) => {
-    if (!userId) {
+    if (!ownerProfileId) {
       setMessages([])
       setLoading(false)
       return
@@ -88,10 +88,10 @@ export default function CoachMessagesManager() {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [ownerProfileId])
 
   useEffect(() => {
-    if (!userId) {
+    if (!ownerProfileId) {
       setTeams([])
       setMessages([])
       setLoading(false)
@@ -110,9 +110,9 @@ export default function CoachMessagesManager() {
     return () => {
       controller.abort()
     }
-  }, [userId, loadTeams, loadMessages])
+  }, [ownerProfileId, loadTeams, loadMessages])
 
-  const canEdit = (m: Message) => m.created_by === user?.id
+  const canEdit = (m: Message) => m.created_by === ownerProfileId
 
   const openCreate = () => {
     setEditingMessage(null)
