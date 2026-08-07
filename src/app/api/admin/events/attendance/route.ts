@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { eventIdQuerySchema } from '@/lib/validation/events'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const admin = createAdminClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(req.url)
     const parsed = eventIdQuerySchema.safeParse({ event_id: searchParams.get('event_id') })
@@ -47,6 +46,9 @@ const role = (user as any)?.app_metadata?.role
       counts: { going: going.length, maybe: maybe.length, declined: declined.length, no_response: noResp.length }
     })
   } catch (e) {
+    if (e instanceof AccountContextError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
