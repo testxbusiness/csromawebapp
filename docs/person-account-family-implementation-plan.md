@@ -52,7 +52,9 @@ Database:
   migration admin,
   `20260807084132_admin_staff_account_role_policies.sql`, verificando che l'accesso
   amministrativo a `predefined_installments` usi `private.has_account_role('admin')`.
-  Le altre migration admin restano non applicate.
+  È stata poi applicata `20260807084314_admin_events_account_role_policy.sql` e verificata
+  la policy `events_admin_all` con lo stesso helper account-based. Le altre migration
+  admin restano non applicate.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
