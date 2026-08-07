@@ -750,6 +750,15 @@ basate sugli helper privati e sostituendo i controlli admin con
 applicazione, staging espone solo le policy account-based attese e il dry-run è aggiornato.
 Produzione non è stata modificata.
 
+Fase 2E, slice 4: la migration
+`20260807165000_shared_event_support_account_policies.sql` normalizza le policy di
+`rsvp`, `event_attendances` e `team_training_schedules`, usando
+`private.current_profile_id()`, `private.is_athlete()`, `private.is_coach_of_team()` e
+`private.has_account_role('coach')`. I dati locali restano invariati: 0 RSVP, 0 presenze e
+4 orari squadra. Dopo backup `/tmp/csroma_staging_before_2e_event_support_schema.sql`,
+dry-run e applicazione, staging espone solo le policy attese e il dry-run è aggiornato.
+Produzione non è stata modificata.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
