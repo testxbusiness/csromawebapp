@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function GET() {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Carica atleti con dettagli base
     const { data: athletes, error } = await adminClient
@@ -113,6 +106,10 @@ const requesterRole = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ athletes: formattedAthletes })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API lista atleti:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
