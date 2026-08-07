@@ -119,7 +119,13 @@ export function useAuth(): UseAuthReturn {
 
       if (!skipCache) {
         const cachedProfile = loadProfileFromCache(uid)
-        if (cachedProfile) {
+        // Coach/admin pages require the account resolver. Older cache entries
+        // (created while /api/me/profile was failing) may contain only the
+        // legacy profile and account: null; do not let those entries suppress
+        // the server refresh indefinitely. Athletes can legitimately rely on
+        // the legacy profile fallback when no app account exists.
+        const cacheHasRequiredAccount = Boolean(cachedProfile?.account) || cachedProfile?.profile.role === 'athlete'
+        if (cachedProfile && cacheHasRequiredAccount) {
           console.log('[useAuth] Profile loaded from cache for', uid)
           setProfile(cachedProfile.profile)
           setAccount(cachedProfile.account)
