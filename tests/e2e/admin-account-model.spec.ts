@@ -25,25 +25,29 @@ test.describe('admin authenticated smoke test', () => {
     'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run authenticated checks.'
   )
 
-  test.beforeEach(async ({ page }) => {
+  test('loads the main admin pages for an admin account', async ({ page }) => {
     await page.goto('/login')
     await page.getByLabel('Email').fill(adminEmail as string)
     await page.getByLabel('Password').fill(adminPassword as string)
+
+    const loginResponsePromise = page.waitForResponse((response) =>
+      response.url().endsWith('/api/auth/login')
+    )
     await page.getByRole('button', { name: 'Accedi' }).click()
+    const loginResponse = await loginResponsePromise
+    expect(loginResponse.status(), 'E2E login request failed').toBe(200)
 
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 })
-  })
 
-  for (const [path, heading] of [
-    ['/admin/users', 'Gestione Utenti'],
-    ['/admin/messages', 'Gestione Messaggi'],
-    ['/admin/calendar', 'Gestione Calendario'],
-    ['/admin/membership-fees', 'Gestione Quote Associative'],
-    ['/admin/teams', 'Gestione Squadre'],
-  ] as const) {
-    test(`loads ${path} for an admin account`, async ({ page }) => {
+    for (const [path, heading] of [
+      ['/admin/users', 'Gestione Utenti'],
+      ['/admin/messages', 'Gestione Messaggi'],
+      ['/admin/calendar', 'Gestione Calendario'],
+      ['/admin/membership-fees', 'Gestione Quote Associative'],
+      ['/admin/teams', 'Gestione Squadre'],
+    ] as const) {
       await page.goto(path)
       await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 15_000 })
-    })
-  }
+    }
+  })
 })
