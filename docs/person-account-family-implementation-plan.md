@@ -30,7 +30,11 @@ Database:
   quattro versioni baseline locali fino a `20260729170829` sono state marcate `applied`.
   Il successivo `supabase db push --linked --dry-run` elenca esclusivamente le migration
   del nuovo modello e le policy admin del 6–7 agosto. Nessun dato o oggetto applicativo è
-  stato modificato da questa rebaseline; prod non è stata interrogata né modificata.
+  stato modificato da questa rebaseline; prod non è stata interrogata né modificata. In
+  seguito è stata applicata sullo staging, come primo step separato, la migration
+  `20260806180000_create_account_person_model.sql`; il dump di verifica conferma le tre
+  nuove tabelle, i vincoli, gli indici, i trigger e RLS. La migration 2 e tutte le
+  successive restano non applicate.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
