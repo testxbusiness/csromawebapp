@@ -736,7 +736,10 @@ document recipients, document templates e le policy Storage dei PDF generati. Le
 persona (`profile_id`, `target_user_id`, `created_by`) restano basate sul profilo
 proprietario; `document_recipients.user_id` resta intenzionalmente un identificatore Auth
 del destinatario. Il slice è applicato e verificato in locale; il passaggio staging resta
-da eseguire dopo il commit.
+da eseguire dopo il commit. Dopo backup `/tmp/csroma_staging_before_2e_documents_schema.sql`,
+dry-run e applicazione, staging espone solo le policy documentali account-based attese e
+`supabase db push --linked --dry-run` conferma `Remote database is up to date`. Produzione
+non è stata modificata.
 
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
