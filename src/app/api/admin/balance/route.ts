@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 interface BalanceFilters {
   activityId?: string
@@ -14,14 +16,7 @@ export async function GET(request: NextRequest) {
   try {
     // AuthZ: admin only
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
     const { searchParams } = new URL(request.url)
     const filters: BalanceFilters = {
       activityId: searchParams.get('activityId') || undefined,
@@ -287,6 +282,10 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json(balanceData)
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Error in balance API:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
