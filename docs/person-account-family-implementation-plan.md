@@ -33,8 +33,11 @@ Database:
   stato modificato da questa rebaseline; prod non è stata interrogata né modificata. In
   seguito è stata applicata sullo staging, come primo step separato, la migration
   `20260806180000_create_account_person_model.sql`; il dump di verifica conferma le tre
-  nuove tabelle, i vincoli, gli indici, i trigger e RLS. La migration 2 e tutte le
-  successive restano non applicate.
+  nuove tabelle, i vincoli, gli indici, i trigger e RLS. Come secondo step è stata
+  applicata `20260806180001_backfill_existing_accounts_and_roles.sql`: sul dataset
+  sintetico di staging risultano 4 `app_accounts`, 2 `account_roles` (`admin` e `coach`)
+  e nessuna relazione familiare preesistente. La migration 3 e tutte le successive
+  restano non applicate.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
