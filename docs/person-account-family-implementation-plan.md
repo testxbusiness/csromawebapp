@@ -79,8 +79,11 @@ Database:
   pagamenti e RSVP ora usano gli helper `private.*` e non i fallback
   `team_members.role`/`teams.coach_id`; il dry-run staging conferma che la history è
   aggiornata. Le route e i componenti coach principali sono stati aggiornati per usare
-  `ownerProfileId`. Restano da migrare nel perimetro coach le policy e route condivise di
-  eventi e messaggi, che saranno completate prima del Preview funzionale complessivo.
+  `ownerProfileId`. La migration forward
+  `20260807134729_coach_event_access_policies.sql` è stata applicata in locale e staging:
+  le policy `events_coach_*` usano `private.current_profile_id()` e
+  `private.is_coach_of_team()`. Restano da migrare nel perimetro coach le policy e route
+  condivise di messaggi, che saranno completate prima del Preview funzionale complessivo.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
