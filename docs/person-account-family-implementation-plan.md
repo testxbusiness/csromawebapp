@@ -706,6 +706,11 @@ applicata e verificata su staging; il dump successivo non contiene più quelle p
 dry-run è aggiornato. L'applicazione locale resta da eseguire quando il daemon Docker sarà
 nuovamente disponibile.
 
+La successiva verifica coach ha evidenziato un secondo gruppo di policy legacy su
+`messages` e `message_recipients`; è stata quindi applicata anche
+`20260807143216_drop_legacy_message_policies.sql`. Le policy storiche sono state rimosse,
+il dump staging non le contiene più e il dry-run è aggiornato.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
