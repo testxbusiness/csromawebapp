@@ -21,19 +21,16 @@ Database:
 - test: TypeScript, Jest, build Next.js, dry-run Supabase locale e suite E2E Playwright
   completati con esito positivo (6/6 test, Chromium e Firefox), usando uno `storageState`
   temporaneo non versionato;
-- staging: collegato in sola lettura il 7 agosto 2026, senza applicare migration. La
-  history diverge dal repository: staging contiene le versioni remote
-  `20260729171754`, `20260729171859` e `20260729172054`, assenti localmente, mentre non
-  contiene le migration locali del 6–7 agosto. Il dump di solo schema staging non mostra
-  ancora `app_accounts`, `account_roles` o `profile_relationships`. Il dry-run viene quindi
-  bloccato dal CLI. Il confronto degli schemi non mostra tabelle o funzioni presenti solo in
-  staging; le differenze osservate sono policy legacy su `profiles`
-  (`profiles_select_self_or_admin`, `profiles_update_self_or_admin` e la policy self)
-  basate su `app_metadata`, sostituite localmente dalle policy account-based e dagli helper
-  `private.*`. Supabase espone nella history le versioni ma non il contenuto SQL originale:
-  per recuperare esattamente le tre migration serve una copia del vecchio
-  repository/deploy. Prima di procedere servono decisione di riallineamento e nuovo
-  dry-run. Nessun `migration repair` automatico è stato eseguito;
+- staging: il 7 agosto 2026 è stato effettuato un backup preventivo di schema, dati e ruoli
+  in `/tmp/csroma_staging_before_rebaseline_*`. Il confronto con il dump di riferimento
+  mostra uno schema equivalente a quello di prod, senza ancora `app_accounts`,
+  `account_roles` o `profile_relationships`; non è stato quindi necessario ricreare lo
+  schema. È stata riallineata soltanto la migration history: le tre versioni remote
+  `20260729171754`, `20260729171859` e `20260729172054` sono state marcate `reverted`, e le
+  quattro versioni baseline locali fino a `20260729170829` sono state marcate `applied`.
+  Il successivo `supabase db push --linked --dry-run` elenca esclusivamente le migration
+  del nuovo modello e le policy admin del 6–7 agosto. Nessun dato o oggetto applicativo è
+  stato modificato da questa rebaseline; prod non è stata interrogata né modificata.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
