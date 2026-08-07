@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml'
 import { generatedDocumentSchema } from '@/lib/validation/documents'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
-  if (user.app_metadata?.role !== 'admin') return NextResponse.json({ error: 'Accesso negato' }, { status: 403 })
+  try {
+    const supabase = await createClient()
+    const account = await requireGlobalRole(supabase, 'admin')
 
   const parsed = generatedDocumentSchema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Dati documento non validi' }, { status: 400 })
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     .from('documents')
     .insert({
       ...input,
-      created_by: user.id,
+      created_by: account.ownerProfileId,
       generated_content_html: sanitizeHtml(input.generated_content_html),
       generation_date: input.generation_date || new Date().toISOString(),
     })
@@ -29,4 +30,11 @@ export async function POST(request: Request) {
     .single()
   if (error) return NextResponse.json({ error: 'Errore salvataggio documento' }, { status: 400 })
   return NextResponse.json({ data }, { status: 201 })
+  } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    console.error('Errore API generazione documento:', error)
+    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+  }
 }
