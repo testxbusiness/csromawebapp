@@ -168,7 +168,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     const { data: baseMemberships, error: tmError } = await supabase
       .from('team_members')
       .select('id, team_id, jersey_number')
-      .eq('profile_id', user.id)
+      .eq('profile_id', profile.id)
 
     if (tmError) {
       console.error('Error loading team memberships:', tmError)
@@ -228,7 +228,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
     setTeamMemberships(mapped)
     return mapped
-  }, [profile?.athlete_profile, supabase, user.id])
+  }, [profile?.athlete_profile, profile.id, supabase])
 
   const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
     if (!teamIds || teamIds.length === 0) return
@@ -279,7 +279,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     if (!teamIds || teamIds.length === 0) return
 
     const orClauses: string[] = []
-    orClauses.push(`profile_id.eq.${user.id}`)
+    orClauses.push(`profile_id.eq.${profile.id}`)
     if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
 
     const { data, error } = await supabase
@@ -324,7 +324,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       const uniq = Array.from(new Map(mapped.map((m:any) => [m.id, m])).values())
       setUnreadMessages(uniq)
     }
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadFeeInstallments = useCallback(async () => {
     const { data } = await supabase
@@ -340,12 +340,12 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           team:teams(name)
         )
       `)
-      .eq('profile_id', user.id)
+      .eq('profile_id', profile.id)
       .order('due_date', { ascending: true })
       .limit(5)
 
     if (data) setFeeInstallments(data as unknown as FeeInstallment[])
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadTeamDetail = useCallback(async (teamId: string) => {
     try {

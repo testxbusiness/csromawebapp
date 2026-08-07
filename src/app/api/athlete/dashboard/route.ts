@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') {
+    const account = await requireAthleteContext(supabase)
+    const athleteProfileId = account.ownerProfileId
+    if (!athleteProfileId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -29,7 +25,7 @@ const role = (user as any)?.app_metadata?.role
       supabase
         .from('team_members')
         .select('id, team_id, jersey_number')
-        .eq('profile_id', user.id),
+        .eq('profile_id', athleteProfileId),
 
       // 3. Get unread messages for this user
       supabase
@@ -47,7 +43,7 @@ const role = (user as any)?.app_metadata?.role
             created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
           )
         `)
-        .eq('profile_id', user.id)
+        .eq('profile_id', athleteProfileId)
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -55,7 +51,7 @@ const role = (user as any)?.app_metadata?.role
       supabase
         .from('fee_installments')
         .select('id, installment_number, due_date, amount, status, membership_fee_id')
-        .eq('profile_id', user.id)
+        .eq('profile_id', athleteProfileId)
         .limit(5)
     ])
 
@@ -241,6 +237,9 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Athlete dashboard API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

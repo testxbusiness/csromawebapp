@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') {
+    const account = await requireAthleteContext(supabase)
+    const athleteProfileId = account.ownerProfileId
+    if (!athleteProfileId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { data: base, error: baseErr } = await supabase
       .from('fee_installments')
       .select('id, installment_number, due_date, amount, status, paid_at, membership_fee_id')
-      .eq('profile_id', user.id)
+      .eq('profile_id', athleteProfileId)
       .order('due_date', { ascending: true })
 
     if (baseErr) {
@@ -88,6 +85,9 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ installments: composed })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Athlete fees API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

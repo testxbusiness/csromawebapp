@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,10 +10,9 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const account = await requireAthleteContext(supabase)
+    const athleteProfileId = account.ownerProfileId
+    if (!athleteProfileId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Verify membership to any team of event
     const { data: links } = await supabase
@@ -25,7 +25,7 @@ const role = (user as any)?.app_metadata?.role
       .from('team_members')
       .select('team_id')
       .in('team_id', teamIds)
-      .eq('profile_id', user.id)
+      .eq('profile_id', athleteProfileId)
     if (!member || member.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { data: ev } = await supabase
@@ -56,7 +56,7 @@ const role = (user as any)?.app_metadata?.role
       .from('event_attendances')
       .select('status, responded_at')
       .eq('event_id', id)
-      .eq('profile_id', user.id)
+      .eq('profile_id', athleteProfileId)
       .maybeSingle()
 
     return NextResponse.json({
@@ -75,6 +75,9 @@ const role = (user as any)?.app_metadata?.role
       creator,
     })
   } catch (e) {
+    if (e instanceof AccountContextError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

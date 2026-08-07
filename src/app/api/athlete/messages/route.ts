@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,21 +12,14 @@ export async function GET(request: NextRequest) {
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 10
 
-    // Auth + role
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const account = await requireAthleteContext(supabase)
+    const athleteProfileId = account.ownerProfileId
 
     // Get athlete team IDs
     const { data: memberships, error: tmErr } = await supabase
       .from('team_members')
       .select('team_id')
-      .eq('profile_id', user.id)
+      .eq('profile_id', athleteProfileId)
 
     if (tmErr) {
       console.error('Error loading athlete team memberships:', tmErr)
@@ -36,7 +30,7 @@ const role = (user as any)?.app_metadata?.role
 
     // Get message IDs from recipients (direct or team)
     const orClauses: string[] = []
-    orClauses.push(`profile_id.eq.${user.id}`)
+    orClauses.push(`profile_id.eq.${athleteProfileId}`)
     if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
 
     const { data: recips, error: recErr } = await supabase
@@ -222,6 +216,9 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ messages: enriched })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Athlete messages API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

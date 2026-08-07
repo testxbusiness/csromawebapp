@@ -1,26 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const account = await requireAthleteContext(supabase)
+    const athleteProfileId = account.ownerProfileId
 
     // 1. Get athlete's team memberships
     const { data: memberships, error: memberErr } = await supabase
       .from('team_members')
       .select('team_id')
-      .eq('profile_id', user.id)
+      .eq('profile_id', athleteProfileId)
 
     if (memberErr) {
       console.error('Error loading athlete team memberships:', memberErr)
@@ -141,6 +134,9 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Athlete calendar API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

@@ -684,6 +684,21 @@ iscritta non ottiene l'area atleta; revoca iscrizione aggiorna subito l'accesso.
 Rollback/roll-forward: le colonne legacy restano in dual-read fino a fine gate; eventuali
 correzioni policy sono forward e non modificano dati sportivi.
 
+Implementazione eseguita:
+
+- `20260807135515_athlete_personal_access_policies.sql` applicata in locale e staging;
+- `20260807135828_athlete_personal_access_policy_corrections.sql` applicata in locale e staging;
+- le policy atleta usano `private.current_profile_id()` e `private.is_in_same_team()`;
+- le API e i componenti atleta usano `ownerProfileId`/`profile.id`, mentre l'identità Auth
+  resta confinata alla risoluzione dell'account;
+- coperti accesso personale a profilo atleta, squadre, eventi, calendario, quote,
+  messaggi, RSVP e presenze; l'accesso parent resta fuori perimetro;
+- build Next.js, TypeScript ed E2E locale completati: 6 test su 6 passati;
+- backup staging pre-migration: `/tmp/csroma_staging_before_athlete_phase2d_schema.sql`,
+  `/tmp/csroma_staging_before_athlete_phase2d_data.sql`,
+  `/tmp/csroma_staging_before_athlete_phase2d_roles.sql`;
+- `supabase db push --linked --dry-run` staging: database aggiornato.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
@@ -1106,7 +1121,7 @@ Default approvati e vincolanti:
    sanitari;
 9. firma con valore legale esclusa dal refactoring finché non viene scelto il provider.
 10. `team_coaches` è la fonte autorevole per accesso e ruolo coach; `teams.coach_id`
-    resta legacy fino alla migrazione delle route e query coach della Fase 2C.
+    resta un campo legacy non usato dalle route e policy coach migrate nella Fase 2C.
 
 Restano rinviati senza bloccare la Fase 1:
 

@@ -79,3 +79,30 @@ export async function requireAccountContext(
     mustChangePassword: account.must_change_password === true,
   }
 }
+
+export async function requireAthleteContext(
+  client?: SupabaseClient
+): Promise<AccountContext> {
+  const context = await requireAccountContext(client)
+  const supabase = client ?? (await createClient())
+
+  const [{ data: athleteProfile }, { data: membership }] = await Promise.all([
+    supabase
+      .from('athlete_profiles')
+      .select('profile_id')
+      .eq('profile_id', context.ownerProfileId)
+      .maybeSingle(),
+    supabase
+      .from('team_members')
+      .select('profile_id')
+      .eq('profile_id', context.ownerProfileId)
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  if (!athleteProfile && !membership) {
+    throw new AccountContextError('Accesso atleta non abilitato', 403)
+  }
+
+  return context
+}

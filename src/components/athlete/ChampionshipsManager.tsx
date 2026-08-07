@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/useAuth'
 import { Card, CardTitle, CardMeta, Table, Button, Input, Select, toast, Modal } from '@/components/ui'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
 import { CalendarDays, ChevronDown, ChevronUp, Clock3, MapPin, Trophy, Users } from 'lucide-react'
@@ -35,6 +36,7 @@ interface ChampionshipsManagerProps {
 }
 
 export default function ChampionshipsManager({ mode = 'athlete' }: ChampionshipsManagerProps) {
+  const { account } = useAuth()
   const supabase = useMemo(() => createClient(), [])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
@@ -129,30 +131,29 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
 
   const loadCoachTeams = useCallback(async () => {
     try {
-      const userId = (await supabase.auth.getUser()).data.user?.id
-      if (!userId) return
+      const ownerProfileId = account?.ownerProfileId
+      if (!ownerProfileId) return
 
-      const [{ data: tc }, { data: direct }] = await Promise.all([
-        supabase.from('team_coaches').select('team_id').eq('coach_id', userId),
-        supabase.from('teams').select('id').eq('coach_id', userId)
-      ])
+      const { data: tc } = await supabase
+        .from('team_coaches')
+        .select('team_id')
+        .eq('coach_id', ownerProfileId)
       const ids = new Set<string>()
       tc?.forEach((t: any) => t.team_id && ids.add(t.team_id))
-      direct?.forEach((t: any) => t.id && ids.add(t.id))
       setCoachTeamIds(ids)
     } catch (err) {
       console.error('Errore caricamento squadre coach', err)
     }
-  }, [supabase])
+  }, [account?.ownerProfileId, supabase])
 
   const loadAthleteTeams = useCallback(async () => {
     try {
-      const userId = (await supabase.auth.getUser()).data.user?.id
-      if (!userId) return
+      const ownerProfileId = account?.ownerProfileId
+      if (!ownerProfileId) return
       const { data, error } = await supabase
         .from('team_members')
         .select('team_id')
-        .eq('profile_id', userId)
+        .eq('profile_id', ownerProfileId)
       if (error) throw error
       const ids = new Set<string>()
       data?.forEach((row: any) => row.team_id && ids.add(row.team_id))
@@ -160,7 +161,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     } catch (err) {
       console.error('Errore caricamento squadre atleta', err)
     }
-  }, [supabase])
+  }, [account?.ownerProfileId, supabase])
 
   const loadClubTeams = useCallback(async (championshipId: string) => {
     const { data, error } = await supabase
