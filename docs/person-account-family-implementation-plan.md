@@ -729,6 +729,15 @@ passata. Dopo backup `/tmp/csroma_staging_before_2e_push_schema.sql`, dry-run e
 applicazione, staging mostra esclusivamente le due policy account-based attese e il
 successivo dry-run è aggiornato. Produzione non è stata modificata.
 
+Fase 2E, slice 2: le migration
+`20260807162000_shared_document_account_policies.sql` e
+`20260807162100_shared_document_legacy_policy_cleanup.sql` aggiornano documents,
+document recipients, document templates e le policy Storage dei PDF generati. Le FK
+persona (`profile_id`, `target_user_id`, `created_by`) restano basate sul profilo
+proprietario; `document_recipients.user_id` resta intenzionalmente un identificatore Auth
+del destinatario. Il slice è applicato e verificato in locale; il passaggio staging resta
+da eseguire dopo il commit.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
