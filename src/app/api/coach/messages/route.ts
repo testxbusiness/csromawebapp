@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendToUsers } from '@/lib/utils/push'
 import { coachMessageCreateSchema, coachMessageUpdateSchema } from '@/lib/validation/messages'
+import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,15 +14,8 @@ export async function GET(request: NextRequest) {
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 3
     
-    // Get current user
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Verify user is a coach
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') {
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -29,7 +23,7 @@ const role = (user as any)?.app_metadata?.role
     const { data: coachTeams, error: teamsError } = await supabase
       .from('team_coaches')
       .select('team_id')
-      .eq('coach_id', user.id)
+      .eq('coach_id', account.ownerProfileId)
 
     if (teamsError) {
       console.error('Error loading coach teams:', teamsError)
@@ -42,7 +36,7 @@ const role = (user as any)?.app_metadata?.role
     // Build OR filter only with available clauses (avoid empty IN())
     const orClauses = [] as string[]
     if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
-    orClauses.push(`profile_id.eq.${user.id}`)
+    orClauses.push(`profile_id.eq.${account.ownerProfileId}`)
 
     const { data: messageRecipients, error: recipientsError } = await supabase
       .from('message_recipients')
@@ -234,6 +228,9 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ messages: enriched, team_count: teamIds.length })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Error in coach messages API:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -254,11 +251,9 @@ export async function POST(request: NextRequest) {
     }
     const body = parsed.data
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const ownerProfileId = account.ownerProfileId
 
     const { subject, content, attachment_url, attachments, selected_teams } = body
 
@@ -266,15 +261,15 @@ const role = (user as any)?.app_metadata?.role
     const { data: coachTeams } = await supabase
       .from('team_coaches')
       .select('team_id')
-      .eq('coach_id', user.id)
+      .eq('coach_id', ownerProfileId)
 
     const allowedTeamIds = new Set((coachTeams || []).map(t => t.team_id))
     const teamsToAssign: string[] = (selected_teams || []).filter((id: string) => allowedTeamIds.has(id))
 
-    // Create message (RLS: created_by must be user.id)
+    // Create message (RLS: created_by must be the owner profile id)
     const { data: created, error: createErr } = await supabase
       .from('messages')
-      .insert({ subject, content, attachment_url: attachment_url || null, created_by: user.id })
+      .insert({ subject, content, attachment_url: attachment_url || null, created_by: ownerProfileId })
       .select('id')
       .single()
 
@@ -291,7 +286,7 @@ const role = (user as any)?.app_metadata?.role
         file_name: f.file_name,
         mime_type: f.mime_type,
         file_size: f.file_size,
-        created_by: user.id,
+        created_by: ownerProfileId,
       }))
       const { error: attErr } = await adminClient.from('message_attachments').insert(rows)
       if (attErr) {
@@ -323,12 +318,12 @@ const role = (user as any)?.app_metadata?.role
           .from('team_members')
           .select('profile_id')
           .in('team_id', body.selected_teams)
-        members?.forEach((m: any) => m.profile_id && m.profile_id !== user.id && recipientIds.add(m.profile_id))
+        members?.forEach((m: any) => m.profile_id && m.profile_id !== ownerProfileId && recipientIds.add(m.profile_id))
         const { data: coaches } = await adminClient
           .from('team_coaches')
           .select('coach_id')
           .in('team_id', body.selected_teams)
-        coaches?.forEach((c: any) => c.coach_id && c.coach_id !== user.id && recipientIds.add(c.coach_id))
+        coaches?.forEach((c: any) => c.coach_id && c.coach_id !== ownerProfileId && recipientIds.add(c.coach_id))
       }
       const ids = Array.from(recipientIds)
       if (ids.length) {
@@ -347,6 +342,9 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ success: true, message_id: created.id })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Error in coach messages POST:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -367,10 +365,9 @@ export async function PUT(request: NextRequest) {
     }
     const body = parsed.data
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const ownerProfileId = account.ownerProfileId
 
     const { id, subject, content, attachment_url, attachments, selected_teams } = body
 
@@ -379,7 +376,7 @@ const role = (user as any)?.app_metadata?.role
       .from('messages')
       .select('id, created_by')
       .eq('id', id)
-      .eq('created_by', user.id)
+      .eq('created_by', ownerProfileId)
       .maybeSingle()
 
     if (!ownedMsg) {
@@ -428,7 +425,7 @@ const role = (user as any)?.app_metadata?.role
           file_name: f.file_name,
           mime_type: f.mime_type,
           file_size: f.file_size,
-          created_by: user.id,
+          created_by: ownerProfileId,
         }))
         const { error: insErr } = await adminClient.from('message_attachments').insert(rows)
         if (insErr) console.error('Coach insert new attachments:', insErr)
@@ -454,6 +451,9 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ success: true })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Error in coach messages PUT:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -462,10 +462,8 @@ const role = (user as any)?.app_metadata?.role
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -481,6 +479,9 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ success: true })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Error in coach messages DELETE:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

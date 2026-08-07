@@ -83,7 +83,10 @@ Database:
   `20260807134729_coach_event_access_policies.sql` è stata applicata in locale e staging:
   le policy `events_coach_*` usano `private.current_profile_id()` e
   `private.is_coach_of_team()`. Restano da migrare nel perimetro coach le policy e route
-  condivise di messaggi, che saranno completate prima del Preview funzionale complessivo.
+  condivise di messaggi. La migration forward
+  `20260807134952_coach_message_access_policies.sql` è stata applicata in locale e
+  staging; le policy `messages_coach_*` e `message_recipients_coach_*` usano gli helper
+  account-based e il dry-run staging è nuovamente `Remote database is up to date`.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
