@@ -48,8 +48,11 @@ Database:
   è stata applicata e verificata: le policy legacy di accesso personale a `profiles` sono
   state rimosse e sostituite da policy basate su `private.current_profile_id()` e
   `private.has_account_role('admin')`. Le policy `app_metadata` sulle altre tabelle
-  restano previste fino alle successive migration admin. La migration 6 e tutte le
-  successive restano non applicate.
+  restano previste fino alle successive migration admin. È stata quindi applicata la prima
+  migration admin,
+  `20260807084132_admin_staff_account_role_policies.sql`, verificando che l'accesso
+  amministrativo a `predefined_installments` usi `private.has_account_role('admin')`.
+  Le altre migration admin restano non applicate.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
