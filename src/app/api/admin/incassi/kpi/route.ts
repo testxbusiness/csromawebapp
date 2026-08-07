@@ -1,16 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function GET() {
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    if ((user as any).app_metadata?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
 
     // Get current date for status calculations
     const today = new Date()
@@ -92,6 +88,10 @@ export async function GET() {
 
     return NextResponse.json({ data: kpiData })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API KPI:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
