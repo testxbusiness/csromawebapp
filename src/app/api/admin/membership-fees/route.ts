@@ -1,25 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { membershipActionSchema, membershipFeeSchema, membershipFeeUpdateSchema } from '@/lib/validation/membershipFees'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = membershipFeeSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Dati quota associativa non validi' }, { status: 400 })
     const { team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
-
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Calcola importo totale
     const total_amount = (Number(enrollment_fee) || 0) +
@@ -39,7 +31,7 @@ const role = (user as any)?.app_metadata?.role
         monthly_fee: Number(monthly_fee) || 0,
         months_count: Number(months_count) || 0,
         installments_count: Number(installments_count) || 1,
-        created_by: user.id
+        created_by: account.ownerProfileId
       })
       .select('id')
       .single()
@@ -83,6 +75,10 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API creazione quota associativa:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -91,19 +87,9 @@ const role = (user as any)?.app_metadata?.role
 export async function GET() {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     // Prima ottieni solo le quote base
     const { data: feesData, error } = await adminClient
       .from('membership_fees')
@@ -191,6 +177,10 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ fees: enrichedFees })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API lista quote associative:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -199,21 +189,11 @@ const role = (user as any)?.app_metadata?.role
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = membershipFeeUpdateSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Dati aggiornamento quota non validi' }, { status: 400 })
     const { id, team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
-
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Calcola importo totale
     const total_amount = (Number(enrollment_fee) || 0) +
@@ -280,6 +260,10 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API aggiornamento quota associativa:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -288,19 +272,9 @@ const role = (user as any)?.app_metadata?.role
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     const { searchParams } = new URL(request.url)
     const feeId = searchParams.get('id')
     
@@ -337,6 +311,10 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API eliminazione quota associativa:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -345,23 +323,13 @@ const role = (user as any)?.app_metadata?.role
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = membershipActionSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Parametri quota non validi' }, { status: 400 })
     const body = parsed.data
     const { action } = body
     const fee_id = 'fee_id' in body ? body.fee_id : undefined
-
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Richiedi fee_id solo per azioni che lo necessitano esplicitamente
     if (action === 'generate_installments') {
@@ -557,6 +525,10 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ error: 'Azione non supportata' }, { status: 400 })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API generazione rate:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
