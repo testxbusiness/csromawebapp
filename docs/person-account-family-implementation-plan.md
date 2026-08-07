@@ -66,7 +66,9 @@ Database:
   applicata `20260807085332_admin_teams_account_role_policy.sql` e verificata la policy
   `teams_admin_all` tramite `private.has_account_role('admin')`. È stata poi applicata
   `20260807085513_admin_event_teams_account_role_policy.sql` e verificata
-  `event_teams_admin_all` tramite `private.has_account_role('admin')`.
+  `event_teams_admin_all` tramite `private.has_account_role('admin')`. È stata inoltre
+  applicata `20260807085639_admin_document_recipients_account_role_policy.sql` e
+  verificata `document_recipients_admin_all` tramite lo stesso helper account-based.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
