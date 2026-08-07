@@ -71,6 +71,9 @@ Database:
   verificata `document_recipients_admin_all` tramite lo stesso helper account-based. È
   stata poi applicata `20260807085912_admin_message_recipients_account_role_policy.sql`
   e verificata `message_recipients_admin_all` tramite `private.has_account_role('admin')`.
+  Infine è stata applicata `20260807090817_admin_team_training_schedules_account_role_policy.sql`
+  e verificata la policy `Admins can manage all training schedules` tramite lo stesso
+  helper. Il dry-run finale sullo staging conferma: `Remote database is up to date`.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
