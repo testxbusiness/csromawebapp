@@ -62,7 +62,9 @@ Database:
   applicata `20260807084903_admin_membership_fees_account_role_policy.sql` e verificata
   `membership_fees_admin_all` tramite `private.has_account_role('admin')`. È stata poi
   applicata `20260807085155_admin_fee_installments_account_role_policy.sql` e verificata
-  `fee_installments_admin_all` tramite lo stesso helper account-based.
+  `fee_installments_admin_all` tramite lo stesso helper account-based. È stata inoltre
+  applicata `20260807085332_admin_teams_account_role_policy.sql` e verificata la policy
+  `teams_admin_all` tramite `private.has_account_role('admin')`.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
