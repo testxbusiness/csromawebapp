@@ -2,15 +2,20 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { sanitizeHtml } from '@/lib/utils/sanitizeHtml'
 import { documentTemplateCreateSchema, documentTemplateUpdateSchema } from '@/lib/validation/documents'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 async function getAdmin() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { supabase, user: null, response: NextResponse.json({ error: 'Non autenticato' }, { status: 401 }) }
-  if (user.app_metadata?.role !== 'admin') {
-    return { supabase, user: null, response: NextResponse.json({ error: 'Accesso negato' }, { status: 403 }) }
+  try {
+    const account = await requireGlobalRole(supabase, 'admin')
+    return { supabase, account, response: null }
+  } catch (error) {
+    if (error instanceof AccountContextError) {
+      return { supabase, account: null, response: NextResponse.json({ error: error.message }, { status: error.status }) }
+    }
+    throw error
   }
-  return { supabase, user, response: null }
 }
 
 export async function POST(request: Request) {
@@ -30,7 +35,7 @@ export async function POST(request: Request) {
       has_logo: parsed.data.has_logo,
       content: safeHtml,
       content_html: safeHtml,
-      created_by: auth.user!.id,
+      created_by: auth.account!.ownerProfileId,
     })
     .select('id')
     .single()
