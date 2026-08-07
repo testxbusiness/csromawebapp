@@ -39,8 +39,13 @@ Database:
   e nessuna relazione familiare preesistente. È stata poi applicata
   `20260806180002_decouple_profiles_from_auth.sql`: `profiles` non ha più il vincolo
   diretto verso `auth.users`, mantiene gli ID esistenti, e non risultano trigger attivi
-  di sincronizzazione Auth→profiles; il mapping resta gestito da `app_accounts`. La
-  migration 4 e tutte le successive restano non applicate.
+  di sincronizzazione Auth→profiles; il mapping resta gestito da `app_accounts`. È stata
+  poi applicata `20260806180003_account_authorization_helpers_and_rls.sql`: risultano
+  presenti gli helper `private.*` per account, coach, atleta, relazioni e profilo corrente,
+  oltre alle policy account-based sulle tre nuove tabelle. Le policy legacy su `profiles`
+  basate su `app_metadata` restano intenzionalmente fino alla migration 5, che le
+  sostituirà in modo coordinato. La migration 5 e tutte le successive restano non
+  applicate.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
