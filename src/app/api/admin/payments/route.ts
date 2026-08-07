@@ -3,18 +3,13 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { sendToUser } from '@/lib/utils/push'
 import { paymentCreateSchema, paymentPatchSchema } from '@/lib/validation/payments'
 import { z } from 'zod'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function GET() {
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
     
     const { data, error } = await adminClient
@@ -53,6 +48,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json(data || [])
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -68,21 +67,14 @@ export async function POST(request: NextRequest) {
     }
     const paymentData = parsed.data
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
 
     // Normalize payload to DB vocabulary and add auditing fields
     const normalized: any = {
       ...paymentData,
       status: paymentData?.status === 'to_pay' || !paymentData?.status ? 'pending' : paymentData.status,
-      created_by: user.id,
+      created_by: account.ownerProfileId,
     }
 
     // Enforce DB check constraints for type/coach_id
@@ -107,6 +99,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json(data?.[0] || null)
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -122,14 +118,7 @@ export async function PATCH(request: NextRequest) {
     }
     const { id, ...rawUpdate } = parsed.data
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
 
     // Normalize incoming fields to satisfy DB constraints
@@ -185,6 +174,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -202,14 +195,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
 
     const { error } = await adminClient
@@ -223,6 +209,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
