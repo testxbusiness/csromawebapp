@@ -711,6 +711,12 @@ La successiva verifica coach ha evidenziato un secondo gruppo di policy legacy s
 `20260807143216_drop_legacy_message_policies.sql`. Le policy storiche sono state rimosse,
 il dump staging non le contiene più e il dry-run è aggiornato.
 
+La correzione definitiva è contenuta in
+`20260807143907_fix_message_recipient_coach_rls_recursion.sql`: usa
+`private.is_message_owner()` come funzione `SECURITY DEFINER` per il solo controllo di
+ownership, evitando il ciclo tra `messages` e `message_recipients`. Una verifica SQL
+read-only con il JWT coach di staging ha confermato 3 destinatari e 5 messaggi accessibili.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
