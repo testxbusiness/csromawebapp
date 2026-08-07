@@ -699,6 +699,13 @@ Implementazione eseguita:
   `/tmp/csroma_staging_before_athlete_phase2d_roles.sql`;
 - `supabase db push --linked --dry-run` staging: database aggiornato.
 
+Correzione post-staging: `20260807142346_drop_legacy_profile_message_policies.sql` rimuove
+le due policy legacy dei mittenti messaggi su `profiles`, che insieme alle nuove policy
+account-based del dominio messaggi causavano ricorsione RLS infinita. La correzione è stata
+applicata e verificata su staging; il dump successivo non contiene più quelle policy e il
+dry-run è aggiornato. L'applicazione locale resta da eseguire quando il daemon Docker sarà
+nuovamente disponibile.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
