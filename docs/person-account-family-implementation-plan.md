@@ -724,9 +724,10 @@ legacy di `push_subscriptions` con policy basate su `private.current_profile_id(
 `ownerProfileId` tramite il contesto account prima di leggere o scrivere le subscription.
 La migration è stata applicata manualmente in locale dopo una verifica dei grant dello
 schema `private` (il CLI locale si fermava su una migration coach già verificata); la
-history locale è stata riallineata con `supabase migration repair`. Build Next.js da
-eseguire prima dello staging; nessuna modifica a staging o produzione è ancora stata fatta
-per questo slice.
+history locale è stata riallineata con `supabase migration repair`. La build Next.js è
+passata. Dopo backup `/tmp/csroma_staging_before_2e_push_schema.sql`, dry-run e
+applicazione, staging mostra esclusivamente le due policy account-based attese e il
+successivo dry-run è aggiornato. Produzione non è stata modificata.
 
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
