@@ -58,7 +58,9 @@ Database:
   `20260807084449_admin_messages_account_role_policy.sql` e verificata la policy
   `messages_admin_all` tramite `private.has_account_role('admin')`. È stata infine
   applicata `20260807084644_admin_profiles_insert_account_role_policy.sql` e verificata
-  `profiles_insert_admin_only` con lo stesso controllo account-based.
+  `profiles_insert_admin_only` con lo stesso controllo account-based. È stata inoltre
+  applicata `20260807084903_admin_membership_fees_account_role_policy.sql` e verificata
+  `membership_fees_admin_all` tramite `private.has_account_role('admin')`.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
