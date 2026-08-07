@@ -1,6 +1,6 @@
 # Piano di implementazione: persone, account opzionali e relazioni familiari
 
-Stato del documento: implementazione incrementale in corso; migration applicate solo in locale.
+Stato del documento: implementazione incrementale in corso; Fase 2E avviata, migration applicate in locale e staging solo dopo verifica separata.
 
 Branch di lavoro: `codex/person-account-family-model`.
 
@@ -716,6 +716,17 @@ La correzione definitiva è contenuta in
 `private.is_message_owner()` come funzione `SECURITY DEFINER` per il solo controllo di
 ownership, evitando il ciclo tra `messages` e `message_recipients`. Una verifica SQL
 read-only con il JWT coach di staging ha confermato 3 destinatari e 5 messaggi accessibili.
+
+Fase 2E, slice 1: la migration
+`20260807160000_shared_push_subscription_account_policies.sql` sostituisce le policy
+legacy di `push_subscriptions` con policy basate su `private.current_profile_id()` e
+`private.has_account_role('admin')`. Le route subscribe, unsubscribe e test risolvono ora
+`ownerProfileId` tramite il contesto account prima di leggere o scrivere le subscription.
+La migration è stata applicata manualmente in locale dopo una verifica dei grant dello
+schema `private` (il CLI locale si fermava su una migration coach già verificata); la
+history locale è stata riallineata con `supabase migration repair`. Build Next.js da
+eseguire prima dello staging; nessuna modifica a staging o produzione è ancora stata fatta
+per questo slice.
 
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
