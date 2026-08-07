@@ -44,8 +44,12 @@ Database:
   presenti gli helper `private.*` per account, coach, atleta, relazioni e profilo corrente,
   oltre alle policy account-based sulle tre nuove tabelle. Le policy legacy su `profiles`
   basate su `app_metadata` restano intenzionalmente fino alla migration 5, che le
-  sostituirà in modo coordinato. La migration 5 e tutte le successive restano non
-  applicate.
+  sostituirà in modo coordinato. La migration 5 `20260806180004_account_context_and_personal_access_policies.sql`
+  è stata applicata e verificata: le policy legacy di accesso personale a `profiles` sono
+  state rimosse e sostituite da policy basate su `private.current_profile_id()` e
+  `private.has_account_role('admin')`. Le policy `app_metadata` sulle altre tabelle
+  restano previste fino alle successive migration admin. La migration 6 e tutte le
+  successive restano non applicate.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
