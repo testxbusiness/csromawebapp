@@ -26,9 +26,14 @@ Database:
   `20260729171754`, `20260729171859` e `20260729172054`, assenti localmente, mentre non
   contiene le migration locali del 6–7 agosto. Il dump di solo schema staging non mostra
   ancora `app_accounts`, `account_roles` o `profile_relationships`. Il dry-run viene quindi
-  bloccato dal CLI; prima di procedere servono confronto delle tre migration remote,
-  decisione di riallineamento e nuovo dry-run. Nessun `migration repair` automatico è stato
-  eseguito;
+  bloccato dal CLI. Il confronto degli schemi non mostra tabelle o funzioni presenti solo in
+  staging; le differenze osservate sono policy legacy su `profiles`
+  (`profiles_select_self_or_admin`, `profiles_update_self_or_admin` e la policy self)
+  basate su `app_metadata`, sostituite localmente dalle policy account-based e dagli helper
+  `private.*`. Supabase espone nella history le versioni ma non il contenuto SQL originale:
+  per recuperare esattamente le tre migration serve una copia del vecchio
+  repository/deploy. Prima di procedere servono decisione di riallineamento e nuovo
+  dry-run. Nessun `migration repair` automatico è stato eseguito;
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
