@@ -76,6 +76,15 @@ import { SupabaseClient } from '@supabase/supabase-js'
         return { success: false, error: 'Utente non autenticato' }
       }
 
+      const { data: account } = await supabase
+        .from('app_accounts')
+        .select('owner_profile_id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle()
+      if (!account?.owner_profile_id) {
+        return { success: false, error: 'Contesto account non disponibile' }
+      }
+
       for (const schedule of activeSchedules) {
         // Ottieni info palestra per location
         const { data: gym } = await supabase
@@ -116,7 +125,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
             event_kind: 'training',
             recurrence_rule: { frequency: 'weekly', interval: 1 },
             parent_event_id: null,
-            created_by: user.id,
+            created_by: account.owner_profile_id,
             requires_confirmation: false,
           }
         })

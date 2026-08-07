@@ -759,6 +759,14 @@ Fase 2E, slice 4: la migration
 dry-run e applicazione, staging espone solo le policy attese e il dry-run è aggiornato.
 Produzione non è stata modificata.
 
+Fase 2E, audit applicativo finale: `src/app/api/championships/standings/route.ts`,
+`src/app/api/messages/attachments/upload/route.ts` e
+`src/lib/utils/trainingScheduleEvents.ts` non usano più l’UUID Auth come profilo per
+classifiche, ownership dei messaggi o `events.created_by`. Le route risolvono il contesto
+account e usano `ownerProfileId`; i percorsi Storage e la pulizia dei draft mantengono
+`authUserId` perché sono identificatori tecnici dell’attore. Build Next.js e Jest passano
+(3 test su 3). Non è stata necessaria una nuova migration DB.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
