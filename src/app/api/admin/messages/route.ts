@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { sendToUsers } from '@/lib/utils/push'
 import { adminMessageCreateSchema, adminMessageUpdateSchema } from '@/lib/validation/messages'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = adminMessageCreateSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
@@ -18,17 +21,6 @@ export async function POST(request: NextRequest) {
     }
     const { subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
 
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     // Crea il messaggio
     const { data: message, error: messageError } = await adminClient
       .from('messages')
@@ -36,7 +28,7 @@ const role = (user as any)?.app_metadata?.role
         subject,
         content,
         attachment_url: attachment_url || null,
-        created_by: user.id
+        created_by: account.ownerProfileId
       })
       .select('id')
       .single()
@@ -54,7 +46,7 @@ const role = (user as any)?.app_metadata?.role
         file_name: f.file_name,
         mime_type: f.mime_type,
         file_size: f.file_size,
-        created_by: user.id,
+        created_by: account.ownerProfileId,
       }))
       const { error: attErr } = await adminClient.from('message_attachments').insert(rows)
       if (attErr) {
@@ -103,20 +95,20 @@ const role = (user as any)?.app_metadata?.role
     // Push notifications to recipients (athletes/coaches)
     try {
       const recipientIds = new Set<string>()
-      if (Array.isArray(selected_users)) selected_users.forEach((id: string) => id !== user.id && recipientIds.add(id))
+      if (Array.isArray(selected_users)) selected_users.forEach((id: string) => id !== account.ownerProfileId && recipientIds.add(id))
       if (Array.isArray(selected_teams) && selected_teams.length > 0) {
         // team members
         const { data: members } = await adminClient
           .from('team_members')
           .select('profile_id')
           .in('team_id', selected_teams)
-        members?.forEach((m: any) => m.profile_id && m.profile_id !== user.id && recipientIds.add(m.profile_id))
+        members?.forEach((m: any) => m.profile_id && m.profile_id !== account.ownerProfileId && recipientIds.add(m.profile_id))
         // team coaches
         const { data: coaches } = await adminClient
           .from('team_coaches')
           .select('coach_id')
           .in('team_id', selected_teams)
-        coaches?.forEach((c: any) => c.coach_id && c.coach_id !== user.id && recipientIds.add(c.coach_id))
+        coaches?.forEach((c: any) => c.coach_id && c.coach_id !== account.ownerProfileId && recipientIds.add(c.coach_id))
       }
       // Build role-based URLs
       if (recipientIds.size > 0) {
@@ -146,6 +138,9 @@ const role = (user as any)?.app_metadata?.role
 
   } catch (error) {
     console.error('Errore API creazione messaggio:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
@@ -153,6 +148,7 @@ const role = (user as any)?.app_metadata?.role
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = adminMessageUpdateSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
@@ -164,17 +160,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
     }
     const { id, subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
-
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Aggiorna il messaggio
     const { error: messageError } = await adminClient
@@ -226,7 +211,7 @@ const role = (user as any)?.app_metadata?.role
           file_name: f.file_name,
           mime_type: f.mime_type,
           file_size: f.file_size,
-          created_by: user.id,
+          created_by: account.ownerProfileId,
         }))
         const { error: insErr } = await adminClient.from('message_attachments').insert(rows)
         if (insErr) console.error('Errore inserimento nuovi allegati:', insErr)
@@ -284,6 +269,9 @@ const role = (user as any)?.app_metadata?.role
 
   } catch (error) {
     console.error('Errore API aggiornamento messaggio:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
@@ -291,18 +279,8 @@ const role = (user as any)?.app_metadata?.role
 export async function GET() {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-    
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Prima ottieni solo i messaggi base
     const { data: messagesData, error } = await adminClient
@@ -408,6 +386,9 @@ const role = (user as any)?.app_metadata?.role
 
   } catch (error) {
     console.error('Errore API lista messaggi:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
@@ -415,18 +396,8 @@ const role = (user as any)?.app_metadata?.role
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-    
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     const { searchParams } = new URL(request.url)
     const messageId = searchParams.get('id')
@@ -471,6 +442,9 @@ const role = (user as any)?.app_metadata?.role
 
   } catch (error) {
     console.error('Errore API eliminazione messaggio:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
