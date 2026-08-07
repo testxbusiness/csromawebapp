@@ -125,10 +125,10 @@ const NavItem = memo(
 NavItem.displayName = 'NavItem'
 
 const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps) => {
-  const { profile, loading } = useAuth()
+  const { role, loading } = useAuth()
   const pathname = usePathname()
 
-  const items = useMemo(() => getItemsForRole(profile?.role as Role | undefined), [profile?.role])
+  const items = useMemo(() => getItemsForRole(role as Role | undefined), [role])
 
   if (loading) {
     return (

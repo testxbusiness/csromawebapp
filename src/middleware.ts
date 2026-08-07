@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
-// Rotte protette / pubbliche
-const ADMIN_ONLY = [/^\/admin(\/.*)?$/]
+// Le decisioni di dominio restano nelle route/server layer e in RLS.
 const PUBLIC_ROUTES = [
   /^\/$/,
   /^\/login$/,
@@ -11,12 +10,6 @@ const PUBLIC_ROUTES = [
   /^\/auth\/callback$/,
   /^\/unauthorized$/
 ]
-// esempio: const COACH_ONLY = [/^\/coach(\/.*)?$/]
-
-function matchAny(pathname: string, patterns: RegExp[]) {
-  return patterns.some((re) => re.test(pathname))
-}
-
 export async function middleware(req: NextRequest) {
   const url = req.nextUrl
   const { pathname } = url
@@ -101,37 +94,6 @@ export async function middleware(req: NextRequest) {
     loginUrl.searchParams.set('next', pathname)
     return NextResponse.redirect(loginUrl)
   }
-
-  // Se la rotta è admin-only, applica i controlli
-  if (matchAny(pathname, ADMIN_ONLY)) {
-    // non loggato -> manda a login
-    if (!user) {
-      const loginUrl = new URL('/login', req.url)
-      loginUrl.searchParams.set('next', pathname) // per tornare dopo il login
-      return NextResponse.redirect(loginUrl)
-    }
-
-    // risolvi ruolo dal JWT (mai fare select su profiles in middleware!)
-    const rawRole =
-      // @ts-ignore – campi runtime dal JWT
-      user.app_metadata?.role ??
-      null
-
-    const role = rawRole ? String(rawRole).trim().toLowerCase() : ''
-
-    if (role !== 'admin') {
-      return NextResponse.redirect(new URL('/unauthorized', req.url))
-    }
-  }
-
-  // Esempio per future sezioni:
-  // if (matchAny(pathname, COACH_ONLY)) {
-  //   if (!user) return NextResponse.redirect(new URL('/login', req.url))
-  //   const role = (user.app_metadata?.role ?? '').toString().trim().toLowerCase()
-  //   if (!['coach', 'admin'].includes(role)) {
-  //     return NextResponse.redirect(new URL('/unauthorized', req.url))
-  //   }
-  // }
 
   return res
 }

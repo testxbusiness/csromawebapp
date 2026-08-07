@@ -11,11 +11,11 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, profile, loading } = useAuth()
+  const { user, profile, role, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    console.log('ProtectedRoute debug:', { loading, user: !!user, profileRole: profile?.role, requiredRole })
+    console.log('ProtectedRoute debug:', { loading, user: !!user, role, requiredRole })
     
     if (!loading && !user) {
       console.log('Redirecting to login: no user')
@@ -29,14 +29,14 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
       return
     }
     
-    if (!loading && user && requiredRole && profile?.role !== requiredRole) {
+    if (!loading && user && requiredRole && role !== requiredRole) {
       console.log('Redirecting to unauthorized: role mismatch', { 
-        userRole: profile?.role, 
+        userRole: role,
         requiredRole 
       })
       router.push('/unauthorized')
     }
-  }, [user, loading, profile, requiredRole, router])
+  }, [user, loading, profile, role, requiredRole, router])
 
   if (loading) {
     return <LoadingState label="Verifica autenticazione..." />
@@ -46,7 +46,7 @@ export default function ProtectedRoute({ children, requiredRole }: ProtectedRout
     return null
   }
 
-  if (requiredRole && profile?.role !== requiredRole) {
+  if (requiredRole && role !== requiredRole) {
     return null
   }
 

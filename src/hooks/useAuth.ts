@@ -24,6 +24,19 @@ type ProfileRow = {
   } | null
 }
 
+export type AccountSummary = {
+  authUserId: string
+  ownerProfileId: string
+  accountStatus: 'invited' | 'active' | 'suspended' | 'disabled'
+  roles: Array<'admin' | 'coach' | 'staff'>
+  mustChangePassword: boolean
+}
+
+type PersonalProfileData = {
+  profile: ProfileRow
+  account: AccountSummary | null
+}
+
 const PROFILE_CACHE_KEY = 'csroma_profile_cache'
 const PROFILE_CACHE_DURATION = 5 * 60 * 1000
 
@@ -31,6 +44,7 @@ interface UseAuthReturn {
   user: User | null
   session: Session | null
   profile: ProfileRow | null
+  account: AccountSummary | null
   role: string | null
   loading: boolean
   profileLoading: boolean
@@ -47,6 +61,7 @@ export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
+  const [account, setAccount] = useState<AccountSummary | null>(null)
 
   const [authInitialized, setAuthInitialized] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
@@ -63,7 +78,7 @@ export function useAuth(): UseAuthReturn {
     }
   }, [])
 
-  const loadProfileFromCache = useCallback((userId: string): ProfileRow | null => {
+  const loadProfileFromCache = useCallback((userId: string): PersonalProfileData | null => {
     try {
       const cached = sessionStorage.getItem(PROFILE_CACHE_KEY)
       if (!cached) return null
@@ -71,13 +86,14 @@ export function useAuth(): UseAuthReturn {
       const { data, timestamp, userId: cachedUserId } = JSON.parse(cached)
       if (cachedUserId !== userId) return null
       if (Date.now() - timestamp > PROFILE_CACHE_DURATION) return null
-      return data as ProfileRow
+      if (data?.profile) return data as PersonalProfileData
+      return { profile: data as ProfileRow, account: null }
     } catch {
       return null
     }
   }, [])
 
-  const saveProfileToCache = useCallback((userId: string, profileData: ProfileRow) => {
+  const saveProfileToCache = useCallback((userId: string, profileData: PersonalProfileData) => {
     try {
       sessionStorage.setItem(
         PROFILE_CACHE_KEY,
@@ -105,7 +121,8 @@ export function useAuth(): UseAuthReturn {
         const cachedProfile = loadProfileFromCache(uid)
         if (cachedProfile) {
           console.log('[useAuth] Profile loaded from cache for', uid)
-          setProfile(cachedProfile)
+          setProfile(cachedProfile.profile)
+          setAccount(cachedProfile.account)
           lastProfileFor.current = uid
           return
         }
@@ -120,7 +137,7 @@ export function useAuth(): UseAuthReturn {
         const loadPersonalProfile = async () => {
           const response = await fetch('/api/me/profile', { cache: 'no-store' })
           const payload = (await response.json().catch(() => null)) as
-            | { profile?: ProfileRow; error?: string }
+            | { profile?: ProfileRow; account?: AccountSummary; error?: string }
             | null
           return { response, payload }
         }
@@ -145,8 +162,10 @@ export function useAuth(): UseAuthReturn {
 
                 if (response.ok && payload?.profile && mounted.current) {
                   console.log('[useAuth] Profile loaded after session refresh')
-                  setProfile(payload.profile)
-                  saveProfileToCache(uid, payload.profile)
+                  const personalData = { profile: payload.profile, account: payload.account ?? null }
+                  setProfile(personalData.profile)
+                  setAccount(personalData.account)
+                  saveProfileToCache(uid, personalData)
                   return
                 }
               }
@@ -156,12 +175,15 @@ export function useAuth(): UseAuthReturn {
           }
 
           setProfile(null)
+          setAccount(null)
           return
         }
 
         console.log('[useAuth] Personal profile loaded successfully')
-        setProfile(payload.profile)
-        saveProfileToCache(uid, payload.profile)
+        const personalData = { profile: payload.profile, account: payload.account ?? null }
+        setProfile(personalData.profile)
+        setAccount(personalData.account)
+        saveProfileToCache(uid, personalData)
       } finally {
         if (mounted.current) {
           setProfileLoading(false)
@@ -172,13 +194,17 @@ export function useAuth(): UseAuthReturn {
   )
 
   const role = useMemo(() => {
-    const raw =
-      (user as any)?.app_metadata?.role ??
-      profile?.role ??
-      null
+    const accountRole = account?.roles.includes('admin')
+      ? 'admin'
+      : account?.roles.includes('coach')
+        ? 'coach'
+        : null
+    const raw = account
+      ? accountRole ?? (profile?.role === 'athlete' ? 'athlete' : null)
+      : profile?.role ?? (user as any)?.app_metadata?.role ?? null
     if (raw == null) return null
     return String(raw).trim().toLowerCase()
-  }, [profile?.role, user])
+  }, [account, profile?.role, user])
 
   const refreshProfile = useCallback(async () => {
     const uid = currentUserIdRef.current
@@ -206,6 +232,9 @@ export function useAuth(): UseAuthReturn {
       if (uid) {
         lastProfileFor.current = null
         await loadProfile(uid, true)
+      } else {
+        setProfile(null)
+        setAccount(null)
       }
     } finally {
       if (loadingWatchdog.current) {
@@ -227,6 +256,9 @@ export function useAuth(): UseAuthReturn {
 
       if (uid) {
         await loadProfile(uid, false)
+      } else {
+        setProfile(null)
+        setAccount(null)
       }
     } catch (e) {
       console.warn('[useAuth] Silent refresh error', e)
@@ -260,6 +292,7 @@ export function useAuth(): UseAuthReturn {
           await loadProfile(data.session.user.id, false)
         } else {
           setProfile(null)
+          setAccount(null)
           setProfileLoading(false)
         }
       } finally {
@@ -298,6 +331,7 @@ export function useAuth(): UseAuthReturn {
           setProfileLoading(false)
         } else {
           setProfile(null)
+          setAccount(null)
           setProfileLoading(false)
           try {
             sessionStorage.removeItem(PROFILE_CACHE_KEY)
@@ -371,6 +405,7 @@ export function useAuth(): UseAuthReturn {
     setUser(null)
     setSession(null)
     setProfile(null)
+    setAccount(null)
     lastProfileFor.current = null
     currentUserIdRef.current = null
 
@@ -383,6 +418,7 @@ export function useAuth(): UseAuthReturn {
     user,
     session,
     profile,
+    account,
     role,
     loading: !authInitialized,
     profileLoading,
