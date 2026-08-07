@@ -741,6 +741,15 @@ dry-run e applicazione, staging espone solo le policy documentali account-based 
 `supabase db push --linked --dry-run` conferma `Remote database is up to date`. Produzione
 non è stata modificata.
 
+Fase 2E, slice 3: la migration
+`20260807164000_shared_financial_account_policies.sql` rimuove le policy duplicate legacy
+da `payments`, `membership_fees` e `fee_installments`, mantenendo le policy coach/atleta
+basate sugli helper privati e sostituendo i controlli admin con
+`private.has_account_role('admin')`. I conteggi locali restano 17 pagamenti, 9 quote e
+120 rate. Dopo backup `/tmp/csroma_staging_before_2e_financial_schema.sql`, dry-run e
+applicazione, staging espone solo le policy account-based attese e il dry-run è aggiornato.
+Produzione non è stata modificata.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`
