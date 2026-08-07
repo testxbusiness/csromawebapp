@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { importedUsersPayloadSchema } from '@/lib/validation/users'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 function getAuthCallbackUrl(request: NextRequest): string {
   return new URL('/auth/callback', request.url).toString()
@@ -9,22 +11,14 @@ function getAuthCallbackUrl(request: NextRequest): string {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const adminClient = createAdminClient()
     const parsed = importedUsersPayloadSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Dati importazione non validi' }, { status: 400 })
     }
     const users = parsed.data.users
 
-    // AuthZ: only admin can import
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
+    const adminClient = createAdminClient()
 
     const results: { email: string; ok: boolean; error?: string }[] = []
 
@@ -79,6 +73,9 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ success: true, results })
   } catch (error) {
     console.error('Errore import utenti:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
