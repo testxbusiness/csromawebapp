@@ -63,7 +63,11 @@ export default function CoachCalendarManager() {
 
     setLoading(true)
     try {
-      const response = await fetch('/api/coach/calendar', { signal })
+      const response = await fetch('/api/coach/calendar', {
+        signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      })
       if (!response.ok) {
         console.error('Error loading coach calendar:', response.statusText)
         setEvents([])
@@ -71,9 +75,20 @@ export default function CoachCalendarManager() {
         return
       }
 
-      const result = await response.json()
-      setTeams(result.teams || [])
-      setEvents(result.events || [])
+      const result = await response.json() as {
+        teams?: unknown
+        events?: unknown
+      }
+
+      // Keep the page tolerant of Supabase/PostgREST returning a to-one
+      // relation as either an object or a one-item array.
+      const normalizedTeams = Array.isArray(result.teams)
+        ? result.teams.flatMap((team: any) => Array.isArray(team) ? team : [team])
+        : []
+      const normalizedEvents = Array.isArray(result.events) ? result.events : []
+
+      setTeams(normalizedTeams as Team[])
+      setEvents(normalizedEvents as Event[])
     } catch (error: any) {
       if (error?.name === 'AbortError') return
       console.error('Error loading coach calendar:', error)

@@ -52,14 +52,23 @@ export default function CoachMessagesManager() {
       return
     }
 
-    const { data } = await supabase
+    const { data: assignments } = await supabase
       .from('team_coaches')
-      .select('team_id, teams(id, name, code)')
+      .select('team_id')
       .eq('coach_id', ownerProfileId)
 
-    const list = (data || [])
-      .map((row) => Array.isArray(row.teams) ? row.teams[0] : row.teams)
-      .filter(Boolean) as Team[]
+    const ids = [...new Set((assignments || []).map(row => row.team_id))]
+    if (ids.length === 0) {
+      setTeams([])
+      return
+    }
+
+    const { data } = await supabase
+      .from('teams')
+      .select('id, name, code')
+      .in('id', ids)
+
+    const list = (data || []) as Team[]
 
     setTeams(list.sort((a, b) => a.name.localeCompare(b.name)))
   }, [ownerProfileId, supabase])
@@ -73,13 +82,17 @@ export default function CoachMessagesManager() {
 
     setLoading(true)
     try {
-      const res = await fetch('/api/coach/messages?view=full', { signal })
-      const result = await res.json()
+      const res = await fetch('/api/coach/messages?view=full', {
+        signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      })
+      const result = await res.json() as { messages?: unknown; error?: string }
       if (!res.ok) {
         console.error('Errore caricamento messaggi coach:', result.error)
         setMessages([])
       } else {
-        setMessages(result.messages || [])
+        setMessages(Array.isArray(result.messages) ? result.messages as Message[] : [])
       }
     } catch (e: any) {
       if (e?.name === 'AbortError') return

@@ -11,10 +11,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // 1. Get coach's teams via team_coaches join
+    // 1. Resolve assignments and team rows separately. Keeping the assignment
+    // query independent avoids losing teams when PostgREST cannot expand the
+    // relation under the current RLS policies.
     const { data: coachTeams, error: coachTeamsErr } = await supabase
       .from('team_coaches')
-      .select('team_id, teams(id, name, code)')
+      .select('team_id')
       .eq('coach_id', account.ownerProfileId)
 
     if (coachTeamsErr) {
@@ -22,9 +24,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events: [], teams: [] })
     }
 
-    const teamData = (coachTeams || [])
-      .map(row => Array.isArray(row.teams) ? row.teams[0] : row.teams)
-      .filter((team): team is { id: string; name: string; code: string } => Boolean(team))
+    const assignedTeamIds = [...new Set((coachTeams || []).map(row => row.team_id))]
+    if (assignedTeamIds.length === 0) {
+      return NextResponse.json({ events: [], teams: [] })
+    }
+
+    const { data: assignedTeams, error: assignedTeamsErr } = await supabase
+      .from('teams')
+      .select('id, name, code')
+      .in('id', assignedTeamIds)
+
+    if (assignedTeamsErr) {
+      console.error('Error loading assigned coach teams:', assignedTeamsErr)
+      return NextResponse.json({ events: [], teams: [] })
+    }
+
+    const teamData = (assignedTeams || []) as { id: string; name: string; code: string }[]
 
     if (teamData.length === 0) {
       return NextResponse.json({ events: [], teams: [] })
