@@ -1,6 +1,6 @@
 # Piano di implementazione: persone, account opzionali e relazioni familiari
 
-Stato del documento: pianificazione, nessuna migration applicata.
+Stato del documento: implementazione incrementale in corso; migration applicate solo in locale.
 
 Branch di lavoro: `codex/person-account-family-model`.
 
@@ -9,6 +9,22 @@ Database:
 - produzione: `qyiholnatsrvpoqoplje` (sola lettura durante analisi);
 - staging: `kibtvkuiedoxgppnnxkf` (prima destinazione delle future migration);
 - dump di riferimento: `backups/prod_db_20260806_164940_CEST_{schema,data,roles}.sql`.
+
+### Stato implementazione verificato al 7 agosto 2026
+
+- branch: `codex/person-account-family-model`;
+- locale: migration del modello account/person e policy account-based applicate e
+  verificate sul database Docker ripristinato dal backup; 48 account e 4 ruoli globali
+  presenti;
+- applicazione: resolver account-based e route admin migrate incrementalmente; nessun
+  controllo admin residuo basato solo su `app_metadata` nel perimetro `/api/admin/**`;
+- test: TypeScript, Jest, build Next.js, dry-run Supabase locale e suite E2E Playwright
+  completati con esito positivo (6/6 test, Chromium e Firefox), usando uno `storageState`
+  temporaneo non versionato;
+- staging: nessuna migration applicata. La history remota e il dry-run staging restano
+  pendenti finché non è disponibile un collegamento CLI al progetto staging e la relativa
+  password database;
+- produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
 
