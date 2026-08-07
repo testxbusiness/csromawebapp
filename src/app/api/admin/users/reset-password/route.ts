@@ -1,27 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { adminResetPasswordPayloadSchema } from '@/lib/validation/auth'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const adminClient = createAdminClient()
     const parsed = adminResetPasswordPayloadSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
       return NextResponse.json({ error: 'ID utente non valido' }, { status: 400 })
     }
     const { user_id } = parsed.data
 
-    // AuthN/AuthZ: only admin can reset
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
+    const adminClient = createAdminClient()
 
     const { data: profile, error: profileLookupError } = await adminClient
       .from('profiles')
@@ -63,6 +56,10 @@ const role = (user as any)?.app_metadata?.role
       message: 'Reset autorizzato: invio del link in corso.'
     })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API reset password:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
