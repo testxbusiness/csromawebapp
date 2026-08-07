@@ -36,8 +36,11 @@ Database:
   nuove tabelle, i vincoli, gli indici, i trigger e RLS. Come secondo step è stata
   applicata `20260806180001_backfill_existing_accounts_and_roles.sql`: sul dataset
   sintetico di staging risultano 4 `app_accounts`, 2 `account_roles` (`admin` e `coach`)
-  e nessuna relazione familiare preesistente. La migration 3 e tutte le successive
-  restano non applicate.
+  e nessuna relazione familiare preesistente. È stata poi applicata
+  `20260806180002_decouple_profiles_from_auth.sql`: `profiles` non ha più il vincolo
+  diretto verso `auth.users`, mantiene gli ID esistenti, e non risultano trigger attivi
+  di sincronizzazione Auth→profiles; il mapping resta gestito da `app_accounts`. La
+  migration 4 e tutte le successive restano non applicate.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
