@@ -21,9 +21,14 @@ Database:
 - test: TypeScript, Jest, build Next.js, dry-run Supabase locale e suite E2E Playwright
   completati con esito positivo (6/6 test, Chromium e Firefox), usando uno `storageState`
   temporaneo non versionato;
-- staging: nessuna migration applicata. La history remota e il dry-run staging restano
-  pendenti finché non è disponibile un collegamento CLI al progetto staging e la relativa
-  password database;
+- staging: collegato in sola lettura il 7 agosto 2026, senza applicare migration. La
+  history diverge dal repository: staging contiene le versioni remote
+  `20260729171754`, `20260729171859` e `20260729172054`, assenti localmente, mentre non
+  contiene le migration locali del 6–7 agosto. Il dump di solo schema staging non mostra
+  ancora `app_accounts`, `account_roles` o `profile_relationships`. Il dry-run viene quindi
+  bloccato dal CLI; prima di procedere servono confronto delle tre migration remote,
+  decisione di riallineamento e nuovo dry-run. Nessun `migration repair` automatico è stato
+  eseguito;
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
