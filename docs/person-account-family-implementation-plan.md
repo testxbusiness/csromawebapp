@@ -74,11 +74,13 @@ Database:
   Infine è stata applicata `20260807090817_admin_team_training_schedules_account_role_policy.sql`
   e verificata la policy `Admins can manage all training schedules` tramite lo stesso
   helper. Il dry-run finale sullo staging conferma: `Remote database is up to date`.
-  In locale è stata poi applicata `20260807134007_coach_team_assignment_policies.sql`:
+  In locale e sullo staging è stata poi applicata `20260807134007_coach_team_assignment_policies.sql`:
   le policy coach di squadre, membri, assegnazioni, eventi squadra, orari, quote, rate,
   pagamenti e RSVP ora usano gli helper `private.*` e non i fallback
-  `team_members.role`/`teams.coach_id`. Lo staging resta fermo alla fine della Fase 2B
-  finché non viene completato l'aggiornamento delle route e dei componenti coach.
+  `team_members.role`/`teams.coach_id`; il dry-run staging conferma che la history è
+  aggiornata. Le route e i componenti coach principali sono stati aggiornati per usare
+  `ownerProfileId`. Restano da migrare nel perimetro coach le policy e route condivise di
+  eventi e messaggi, che saranno completate prima del Preview funzionale complessivo.
 - produzione: non interrogata né modificata durante questa implementazione.
 
 ## 1. Confini e criteri di successo
