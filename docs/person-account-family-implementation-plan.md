@@ -767,6 +767,16 @@ account e usano `ownerProfileId`; i percorsi Storage e la pulizia dei draft mant
 `authUserId` perché sono identificatori tecnici dell’attore. Build Next.js e Jest passano
 (3 test su 3). Non è stata necessaria una nuova migration DB.
 
+Verifica staging successiva: i test manuali admin/coach/atleta hanno confermato i confini
+di visibilità per messaggi ed eventi, inclusi i casi negativi. È stata inoltre corretta la
+route `src/app/api/coach/messages/route.ts`: dopo che RLS ha autorizzato i messaggi,
+l’enrichment del mittente usa il client server-side per mostrare il profilo del creator
+anche quando è un admin. Questo non amplia la lettura dei messaggi né modifica le policy;
+risolve solo il precedente `N/D` nella colonna Mittente del coach. La build Next.js passa.
+La suite `tests/e2e/api-bola.spec.ts` copre i confini non autenticato e i casi BOLA/IDOR;
+il caso non autenticato passa, mentre i casi autenticati richiedono le credenziali e gli
+ID di record di test configurati in `.env.local`.
+
 #### Fase 2E — messaggi, notifiche, documenti e domini condivisi
 
 Migration 9: `shared_domain_actor_and_access_policies`

@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
     // 1. Get all creators
     const creatorIds = [...new Set((messages || []).filter(m => m.created_by).map(m => m.created_by))]
     const { data: creators } = creatorIds.length > 0
-      ? await supabase
+      ? await adminClient
           .from('profiles')
           .select('id, first_name, last_name')
           .in('id', creatorIds)
@@ -128,7 +128,7 @@ export async function GET(request: NextRequest) {
     // 2. Get all recipients for all messages
     const msgIds = (messages || []).map(m => m.id)
     const { data: allRecipients } = msgIds.length > 0
-      ? await supabase
+      ? await adminClient
           .from('message_recipients')
           .select('id, message_id, team_id, profile_id, is_read, read_at')
           .in('message_id', msgIds)

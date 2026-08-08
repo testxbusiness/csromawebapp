@@ -40,6 +40,11 @@ export default defineConfig({
       testMatch: /admin-account-model\.spec\.ts/,
       use: { ...devices['Desktop Firefox'], storageState: adminAuthFile },
     },
+    {
+      name: 'api-bola-chromium',
+      testMatch: /api-bola\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 
   globalSetup: require.resolve('./tests/e2e/global-setup'),
