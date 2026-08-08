@@ -804,6 +804,29 @@ grant vengono riparati con migration forward atomica per dominio.
 
 ### Fase 3 — persone e ciclo di vita account
 
+#### Decisione UI: percorsi distinti su modello persona condiviso
+
+La creazione resterà unica a livello di modello dati (`profiles`), ma sarà esposta con
+percorsi UI separati in base all'operatività:
+
+- **Atleti**: creazione singola e import massivo da file Excel/CSV;
+- **Coach**: creazione manuale della persona, assegnazione alle squadre e account
+  opzionale in un passaggio separato;
+- **Collaboratori**: creazione manuale della persona e account con ruolo `staff`;
+- **Admin**: creazione manuale e assegnazione esplicita del ruolo `admin`, con permessi
+  riservati.
+
+L'import degli atleti dovrà prevedere anteprima, validazione per riga, report degli errori
+e comportamento idempotente per evitare duplicati. La chiave di riconciliazione non dovrà
+essere l'email, che può essere condivisa da più familiari: verrà definito un identificativo
+stabile del file sorgente, come codice atleta o tessera federale. L'import non creerà
+automaticamente account Auth; l'eventuale attivazione dell'accesso resterà un'azione
+successiva e separata.
+
+Questa separazione riguarda esclusivamente UX e workflow: il backend manterrà un solo
+modello `profiles`, con `app_accounts` e `account_roles` opzionali secondo le regole già
+definite. Non viene avviata alcuna implementazione in questa fase.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;
