@@ -341,6 +341,22 @@ Componenti client con query dirette o ruolo singolo:
   `app_accounts.must_change_password`;
 - `is_active` assume il significato di anagrafica archiviata/attiva, non account sospeso.
 
+`profiles` non contiene un `season_id` singolo: la stessa persona può partecipare a più
+stagioni e deve conservare lo stesso `profile_id`. Ogni profilo operativo deve quindi
+essere collegato a una o più stagioni tramite una relazione dedicata, prevista come
+`season_profiles` (`profile_id`, `season_id`, stato e metadati di provenienza), con vincolo
+di unicità sulla coppia persona-stagione. La stagione attiva della UI determina quale
+relazione stagionale viene creata o modificata; non viene duplicata l’anagrafica quando
+una persona ritorna in una stagione successiva.
+
+Le iscrizioni sportive e le assegnazioni stagionali restano separate dalla persona:
+`athlete_profiles` conserva i dati sportivi propri dell’atleta, mentre corso e squadra
+sono risolti tramite le entità stagionali esistenti (`activities`, `teams` e
+`team_members`). Per i coach, `team_coaches` continua a determinare la squadra e la
+stagione attraverso il team. Il collegamento a una stagione non rende automaticamente
+stagionale il ruolo globale dell’account: `admin`, `coach` e `staff` restano in
+`account_roles`, secondo le regole di autorizzazione già definite.
+
 `app_accounts` segue lo schema richiesto, con questi dettagli:
 
 - PK `auth_user_id` con `ON DELETE CASCADE`;
@@ -816,11 +832,15 @@ percorsi UI separati in base all'operatività:
 - **Admin**: creazione manuale e assegnazione esplicita del ruolo `admin`, con permessi
   riservati.
 
-L'import degli atleti dovrà prevedere anteprima, validazione per riga, report degli errori
-e comportamento idempotente per evitare duplicati. La chiave di riconciliazione non dovrà
-essere l'email, che può essere condivisa da più familiari: verrà definito un identificativo
-stabile del file sorgente, come codice atleta o tessera federale. L'import non creerà
-automaticamente account Auth; l'eventuale attivazione dell'accesso resterà un'azione
+L’inserimento e l’import degli atleti avverranno nel contesto di una stagione selezionata.
+Dovranno prevedere anteprima, validazione per riga, report degli errori e comportamento
+idempotente per evitare duplicati. Se la persona esiste già, il flusso riutilizzerà lo
+stesso `profile_id` e creerà o aggiornerà solo il collegamento stagionale e le relative
+iscrizioni; se non esiste, creerà prima l’anagrafica e poi il collegamento alla stagione.
+La chiave di riconciliazione non dovrà essere l’email, che può essere condivisa da più
+familiari: verrà definito un identificativo stabile del file sorgente, come codice atleta
+o tessera federale, con revisione manuale dei conflitti. L’import non creerà
+automaticamente account Auth; l’eventuale attivazione dell’accesso resterà un’azione
 successiva e separata.
 
 Questa separazione riguarda esclusivamente UX e workflow: il backend manterrà un solo
@@ -900,6 +920,18 @@ API nuove:
 - `DELETE /api/admin/profiles/:id/account`;
 - eventuale `DELETE /account` self-service, con la stessa semantica di revoca logica.
 
+Migration 10B: `season_profile_memberships`
+
+- aggiunge la relazione unica `season_profiles(profile_id, season_id)` per collegare una
+  persona a una o più stagioni senza duplicare `profiles`;
+- conserva stato, identificativo esterno e metadati utili all’import stagionale;
+- impedisce duplicati della stessa persona nella stessa stagione e mantiene le FK verso
+  `profiles` e `seasons` con cancellazione esplicita e verificata;
+- definisce il controllo che ogni profilo operativo creato dalle UI abbia almeno una
+  relazione stagionale;
+- non trasforma `account_roles` in un ruolo stagionale: account e autorizzazioni globali
+  restano separati dalla partecipazione a una stagione.
+
 Servizi server separati gestiscono persona e account. La creazione persona non invoca
 Auth. Il flusso account:
 
@@ -953,7 +985,8 @@ Migration 11: `consolidate_profile_athlete_team_sources`
 - aggiunge query di verifica che dimostrano assenza di perdita dati.
 
 Gate pre-Fase 4: tutte le letture/scritture usano `profiles` per anagrafica/contatti,
-`athlete_profiles` per tessera/certificato e `team_members` per dati squadra/stagione.
+`season_profiles` per il collegamento persona/stagione, `athlete_profiles` per
+tessera/certificato e `team_members` per dati squadra/stagione.
 
 Migration 12: `relationship_permissions_age_and_domain_helpers`
 
@@ -1279,6 +1312,9 @@ Default approvati e vincolanti:
 9. firma con valore legale esclusa dal refactoring finché non viene scelto il provider.
 10. `team_coaches` è la fonte autorevole per accesso e ruolo coach; `teams.coach_id`
     resta un campo legacy non usato dalle route e policy coach migrate nella Fase 2C.
+11. `profiles` è un’identità unica e non contiene una stagione singola; ogni persona deve
+    avere il collegamento stagionale in `season_profiles`, anche se il relativo account
+    globale (`admin`, `coach` o `staff`) può avere permessi non limitati alla stagione.
 
 Restano rinviati senza bloccare la Fase 1:
 
