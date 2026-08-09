@@ -41,6 +41,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Dati account non validi' }, { status: 400 })
     }
 
+    if (parsed.data.role === 'athlete') {
+      return NextResponse.json({
+        error: 'Gli account atleta devono essere creati dalla sezione Iscritti, con iscrizione stagionale attiva.'
+      }, { status: 410 })
+    }
+
     const adminClient = createAdminClient()
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
@@ -53,27 +59,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     if (!profile) {
       return NextResponse.json({ error: 'Persona non trovata' }, { status: 404 })
-    }
-
-    if (parsed.data.role === 'athlete') {
-      const [{ data: athleteProfile }, { data: seasonMembership }] = await Promise.all([
-        adminClient
-          .from('athlete_profiles')
-          .select('profile_id')
-          .eq('profile_id', id)
-          .maybeSingle(),
-        adminClient
-          .from('season_profiles')
-          .select('profile_id')
-          .eq('profile_id', id)
-          .eq('status', 'active')
-          .limit(1)
-          .maybeSingle(),
-      ])
-
-      if (!athleteProfile || !seasonMembership) {
-        return NextResponse.json({ error: 'L’atleta deve avere un profilo atleta e un’iscrizione stagionale attiva' }, { status: 400 })
-      }
     }
 
     const { data: existingAccount, error: existingAccountError } = await adminClient

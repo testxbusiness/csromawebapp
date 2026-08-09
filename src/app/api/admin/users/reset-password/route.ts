@@ -47,6 +47,15 @@ export async function POST(request: NextRequest) {
       console.warn('Profilo non aggiornato (must_change_password):', profileError)
     }
 
+    const { error: accountError } = await adminClient
+      .from('app_accounts')
+      .update({ must_change_password: true })
+      .eq('owner_profile_id', user_id)
+
+    if (accountError) {
+      console.warn('Account non aggiornato (must_change_password):', accountError)
+    }
+
     // The browser must initiate resetPasswordForEmail so Supabase can store the
     // PKCE verifier locally. Starting it from this server route produces a code
     // that the browser callback cannot exchange.
