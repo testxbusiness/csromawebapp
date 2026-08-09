@@ -301,11 +301,20 @@ export async function GET() {
       authUsersMap.set(authUser.id, authUser)
     })
 
+    // La sezione Utenti gestisce account reali: escludi i profili anagrafici
+    // creati senza un utente Auth (visibili invece in /admin/profiles).
+    const accountUsers = users.filter(user => authUsersMap.has(user.id))
+
+    if (accountUsers.length === 0) {
+      return NextResponse.json({ users: [] })
+    }
+
     // Carica ruoli multipli da user_roles
+    const accountUserIds = accountUsers.map(user => user.id)
     const { data: userRoles } = await adminClient
       .from('user_roles')
       .select('profile_id, role')
-      .in('profile_id', userIds)
+      .in('profile_id', accountUserIds)
 
     // Raggruppa ruoli per utente
     const rolesByUser = new Map()
@@ -317,7 +326,7 @@ export async function GET() {
     })
 
     // Combina i dati
-    const usersWithDetails = users.map(user => {
+    const usersWithDetails = accountUsers.map(user => {
       const authUser = authUsersMap.get(user.id)
       const rawRoles: unknown[] = rolesByUser.get(user.id) || [user.role]
       const userRoles = rawRoles.filter(
