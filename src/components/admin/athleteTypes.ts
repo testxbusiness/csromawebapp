@@ -18,6 +18,7 @@ export interface Athlete {
 }
 
 export interface AthleteCreateData {
+  id?: string
   first_name: string
   last_name: string
   email?: string | null

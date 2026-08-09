@@ -299,6 +299,7 @@ export default function AthletesManager() {
   const openAthleteEdit = (athlete: AthleteWithDetails) => {
     const firstTeam = athlete.teams?.[0]
     setEditingAthlete({
+      id: athlete.id,
       first_name: athlete.first_name,
       last_name: athlete.last_name,
       email: athlete.email || null,

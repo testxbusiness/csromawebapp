@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle }
   from '@/components/ui/Dialog'
@@ -30,6 +31,9 @@ export default function DetailsDrawer({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       {/* nota la classe extra cs-modal--centered */}
       <DialogContent className={`cs-modal ${sizeClass} cs-modal--centered`}>
+        <DialogDescription className="sr-only">
+          {title ? `Dettagli: ${title}` : 'Dettagli'}
+        </DialogDescription>
         {(title || footer) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}
