@@ -953,6 +953,22 @@ modificare Auth, profili, password, sessioni, stato o ruoli esistenti. Non sono 
 rilevati casi ambigui nel database locale; eventuali casi non riconducibili con gli stessi
 criteri restano esclusi e richiedono revisione manuale.
 
+Il gate pre-staging della Fase 3A richiede inoltre:
+
+- completare la transizione controllata dell'account da `invited` ad `active` dopo il
+  primo set della password, senza consentire al link di attivazione di bypassare
+  `app_accounts.status`;
+- risolvere il ruolo applicativo da `account_roles`, includendo `athlete`, e mantenere
+  separati ruolo globale, `athlete_profiles` e iscrizione stagionale;
+- verificare l'iscrizione `season_profiles.status = 'active'` anche nel controllo di
+  accesso atleta, non solo durante la creazione dell'account;
+- creare Admin dalla sezione Collaboratori con relazione stagionale, lasciando Persone
+  come anagrafica generale;
+- rimuovere o rendere non operativi i percorsi legacy di creazione/import da Utenti,
+  che usano direttamente `profiles.role`, `user_roles` o cancellazioni fisiche;
+- completare una matrice E2E per creazione, invito, attivazione, accesso e revoca di
+  atleta, coach, staff e admin.
+
 Prima dello staging va introdotta una migration forward che estende il vincolo dei ruoli
 globali a `athlete` e aggiorna il provisioning per accettare anche questo ruolo. La nuova
 azione `Crea account atleta` sarà disponibile nella riga della sezione `/admin/atleti`;
