@@ -95,7 +95,7 @@ L'implementazione separa quattro concetti oggi sovrapposti:
 
 1. `profiles`: persona/anagrafica, anche senza login;
 2. `app_accounts`: mapping uno-a-uno opzionale tra account Auth e persona proprietaria;
-3. `account_roles`: ruoli globali dell'account (`admin`, `coach`, `staff`);
+3. `account_roles`: ruoli globali dell'account (`admin`, `coach`, `staff`, `athlete`);
 4. `profile_relationships`: deleghe e relazioni verso altre persone, con permessi granulari.
 
 Gli ID dei 48 profili esistenti non devono cambiare. Le tabelle sportive continuano a
@@ -683,7 +683,8 @@ Migration 8: `athlete_personal_access_policies`
 
 - riscrive `is_athlete()` usando `athlete_profiles` o `team_members`;
 - migra policy e route athlete per calendario, dashboard, presenze e quote personali;
-- non crea `account_roles.athlete`;
+- introduce `account_roles.athlete` come abilitazione globale dell’area atleta, senza
+  sostituire il controllo sportivo su `athlete_profiles`, `season_profiles` e iscrizioni;
 - mantiene ancora fuori perimetro l'accesso parent, introdotto in Fase 4.
 
 Test SQL: atleta con/senza `athlete_profiles`, iscrizione a più squadre, persona non
@@ -691,8 +692,9 @@ iscritta e compagno di squadra.
 
 Test API: tutte le route `/api/athlete/**`, self e IDOR.
 
-Query di verifica: record `account_roles.role='athlete'` (atteso zero), helper che
-leggono `profiles.role='athlete'` e route athlete che usano `user.id` come profilo.
+Query di verifica: coerenza tra `account_roles.role='athlete'`, mapping `app_accounts` e
+profilo operativo atleta; helper che leggono `profiles.role='athlete'` e route athlete
+che usano `user.id` come profilo.
 
 Gate di merge: i 44 atleti esistenti conservano accesso personale; una persona non
 iscritta non ottiene l'area atleta; revoca iscrizione aggiorna subito l'accesso.
@@ -936,9 +938,41 @@ e modificare Coach e Staff, con assegnazione opzionale a stagione, attività/squ
 ruolo head/assistant per i Coach. La rimozione è stagionale e archivia la persona solo
 quando non restano altre stagioni. Le azioni di creazione account e invio invito sono
 state portate nella riga del collaboratore; `Persone` resta il pannello centralizzato.
-Non viene introdotto `account_roles.athlete`: l’accesso atleta resta quello già previsto
-dalla Fase 2D. Build e test E2E CRUD locale passano; staging/produzione non sono stati
-toccati.
+La creazione account atleta è rinviata alla slice di riconciliazione descritta sotto;
+fino alla sua implementazione non vengono creati nuovi account atleta dal frontend.
+Build e test E2E CRUD locale passano; staging/produzione non sono stati toccati.
+
+#### Fase 3A — account atleta e riconciliazione degli account esistenti
+
+Prima dello staging va introdotta una migration forward che estende il vincolo dei ruoli
+globali a `athlete` e aggiorna il provisioning per accettare anche questo ruolo. La nuova
+azione `Crea account atleta` sarà disponibile nella riga della sezione `/admin/atleti`;
+creerà l’account Auth, il mapping `app_accounts` e `account_roles('athlete')` in modo
+atomico, senza inviare l’accesso prima della verifica del mapping. L’account atleta non
+darà accesso da solo: le route e le policy continueranno a richiedere anche un profilo
+atleta attivo e un collegamento stagionale valido.
+
+Gli account atleta già presenti saranno preservati con una procedura di riconciliazione
+prima del backfill:
+
+1. fotografare `auth.users`, `profiles`, `app_accounts`, `account_roles`,
+   `athlete_profiles` e `season_profiles`, producendo un report degli ID non riconciliati;
+2. riutilizzare sempre lo stesso `auth.users.id` e lo stesso `profiles.id`, senza
+   cancellare, ricreare o sostituire utenti Auth;
+3. riconoscere automaticamente solo i mapping già certi (`app_accounts`) o il legacy
+   mapping documentato e verificato; email uguali non bastano per collegare un account;
+4. per ogni atleta riconciliato, creare solo il mapping/ruolo mancante e aggiungere
+   `account_roles('athlete')`, lasciando invariati sessioni, password, stato e storico;
+5. lasciare in revisione manuale i casi ambigui o senza corrispondenza, senza modificare
+   i dati e senza inviare inviti;
+6. verificare che ogni ruolo atleta punti a un owner profile atleta e che nessun account
+   esistente perda i ruoli già posseduti: una persona può avere anche `coach`, `staff`
+   o `admin` se il caso operativo lo richiede.
+
+Il rollback non elimina utenti Auth né profili: al massimo rimuove il ruolo atleta
+aggiunto dalla migration, solo per gli ID registrati nel report di backfill. I mapping
+creati restano conservati per evitare ricreazioni o perdita di stato; eventuali correzioni
+successive sono forward-only.
 
 Migration 10: `person_and_account_audit_support`
 
@@ -1146,8 +1180,10 @@ where p.created_at < :migration_started_at
 Per la fotografia corrente i risultati attesi sono 48 account, 48 profili, 48 mapping,
 zero orfani e zero duplicati owner.
 
-Il backfill ruoli atteso è 2 admin + 2 coach. I 44 atleti non generano
-`account_roles('athlete')`.
+Il backfill ruoli atteso parte da 2 admin + 2 coach e aggiunge
+`account_roles('athlete')` solo per gli account atleta riconciliati con esito certo. Il
+conteggio finale deve essere prodotto dal report di riconciliazione; gli account ambigui
+restano invariati e richiedono revisione manuale.
 
 ## 7. Rollback
 
@@ -1360,9 +1396,13 @@ Default approvati e vincolanti:
     resta un campo legacy non usato dalle route e policy coach migrate nella Fase 2C.
 11. `profiles` è un’identità unica e non contiene una stagione singola; ogni persona deve
     avere il collegamento stagionale in `season_profiles`, anche se il relativo account
-    globale (`admin`, `coach` o `staff`) può avere permessi non limitati alla stagione.
+    globale (`admin`, `coach`, `staff` o `athlete`) può avere permessi non limitati alla
+    stagione.
 12. I pagamenti coach esistenti restano compatibili; i pagamenti a persone non legati a
     squadra, attività o palestra usano `person_payment` e `payee_profile_id`.
+13. Gli account atleta esistenti non vengono cancellati né ricreati: vengono riconciliati
+    conservando gli stessi ID Auth/profilo e ricevono `account_roles.athlete` solo quando
+    il mapping è certo; i casi ambigui restano in revisione manuale.
 
 Restano rinviati senza bloccare la Fase 1:
 
