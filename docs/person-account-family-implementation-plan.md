@@ -860,6 +860,18 @@ crea account Auth. La verifica UI autenticata locale ha confermato navigazione, 
 elenco e apertura del dialog con campi etichettati; nessuna persona di test è stata
 inserita. Build Next.js e Jest passano. Staging e produzione non sono stati toccati.
 
+Fase 3, slice provisioning senza invio: la migration
+`20260809130000_account_provisioning_mapping_function.sql` aggiunge la funzione server-role
+only `provision_account_mapping`, che crea mapping `app_accounts` e ruolo globale in modo
+atomico. La route `POST /api/admin/profiles/:id/create-account` crea Auth senza conferma
+email né notifica, esegue il mapping, verifica owner/stato/ruolo e registra gli eventi
+`account_provisioning_started`, `account_created` e `mapping_verified`; in caso di errore
+tenta la cancellazione compensativa dell’utente Auth e registra il problema. La UI mostra
+l’azione separata `Crea account` con ruolo esplicito `admin`, `coach` o `staff` e chiarisce
+che l’accesso non viene ancora inviato. Il test locale ha verificato mapping temporaneo e
+cleanup completo, oltre al guard 409 sui profili già collegati. Non è ancora stato inviato
+alcun accesso e staging/produzione non sono stati toccati.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;

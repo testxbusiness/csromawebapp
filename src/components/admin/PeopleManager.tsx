@@ -21,6 +21,11 @@ type Person = {
   } | null
 }
 
+type AccountForm = {
+  email: string
+  role: 'admin' | 'coach' | 'staff'
+}
+
 type PersonForm = {
   first_name: string
   last_name: string
@@ -37,12 +42,23 @@ const initialForm: PersonForm = {
   birth_date: '',
 }
 
+const initialAccountForm: AccountForm = {
+  email: '',
+  role: 'staff',
+}
+
 function accountLabel(person: Person) {
   if (!person.account) return 'Senza account'
   if (person.account.status === 'active') return 'Account attivo'
   if (person.account.status === 'invited') return 'Invito in attesa'
   if (person.account.status === 'suspended') return 'Account sospeso'
   return 'Account disabilitato'
+}
+
+function roleLabel(role: string) {
+  if (role === 'admin') return 'Amministratore'
+  if (role === 'coach') return 'Coach'
+  return 'Collaboratore'
 }
 
 function formatDate(value: string | null) {
@@ -56,8 +72,11 @@ export default function PeopleManager() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [accountDialogPerson, setAccountDialogPerson] = useState<Person | null>(null)
   const [saving, setSaving] = useState(false)
+  const [accountSaving, setAccountSaving] = useState(false)
   const [form, setForm] = useState<PersonForm>(initialForm)
+  const [accountForm, setAccountForm] = useState<AccountForm>(initialAccountForm)
 
   const loadPeople = useCallback(async () => {
     setLoading(true)
@@ -99,6 +118,17 @@ export default function PeopleManager() {
     setForm(initialForm)
   }
 
+  const openAccountDialog = (person: Person) => {
+    setAccountDialogPerson(person)
+    setAccountForm({ email: person.email || '', role: 'staff' })
+  }
+
+  const closeAccountDialog = () => {
+    if (accountSaving) return
+    setAccountDialogPerson(null)
+    setAccountForm(initialAccountForm)
+  }
+
   const createPerson = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSaving(true)
@@ -124,6 +154,29 @@ export default function PeopleManager() {
       toast.error(err instanceof Error ? err.message : 'Impossibile creare la persona')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const createAccount = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!accountDialogPerson) return
+    setAccountSaving(true)
+    try {
+      const response = await fetch(`/api/admin/profiles/${accountDialogPerson.id}/create-account`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(accountForm),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Impossibile creare l’account')
+
+      toast.success('Account creato. Nessun accesso è stato ancora inviato.')
+      closeAccountDialog()
+      await loadPeople()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Impossibile creare l’account')
+    } finally {
+      setAccountSaving(false)
     }
   }
 
@@ -186,6 +239,7 @@ export default function PeopleManager() {
                   <th scope="col" className="px-4 py-3 font-semibold">Data di nascita</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Accesso</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Stato</th>
+                  <th scope="col" className="px-4 py-3 text-right font-semibold">Azioni</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[color:var(--cs-border)]">
@@ -207,6 +261,13 @@ export default function PeopleManager() {
                       {person.account?.roles.length ? <div className="mt-1 text-xs text-[color:var(--cs-text-tertiary)]">{person.account.roles.join(', ')}</div> : null}
                     </td>
                     <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">{person.is_active ? 'Attiva' : 'Archiviata'}</td>
+                    <td className="px-4 py-4 text-right">
+                      {!person.account ? (
+                        <Button type="button" variant="outline" size="sm" onClick={() => openAccountDialog(person)}>
+                          Crea account
+                        </Button>
+                      ) : <span className="text-xs text-[color:var(--cs-text-tertiary)]">Già collegato</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -255,6 +316,52 @@ export default function PeopleManager() {
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={closeDialog} disabled={saving}>Annulla</Button>
               <Button type="submit" disabled={saving}>{saving ? 'Salvataggio…' : 'Crea persona'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(accountDialogPerson)} onOpenChange={(open) => { if (!open) closeAccountDialog() }}>
+        <DialogContent className="cs-modal--centered cs-modal--md">
+          <DialogHeader>
+            <DialogTitle>Crea account</DialogTitle>
+            <DialogDescription>
+              {accountDialogPerson ? `Collega un account Auth a ${accountDialogPerson.first_name} ${accountDialogPerson.last_name}.` : ''}
+              {' '}L’account sarà creato senza inviare ancora email o link di accesso.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={createAccount} className="space-y-4">
+            <div>
+              <label htmlFor="account-email" className="cs-field__label">Email account *</label>
+              <input
+                id="account-email"
+                type="email"
+                className="cs-input"
+                required
+                maxLength={320}
+                value={accountForm.email}
+                onChange={(event) => setAccountForm((current) => ({ ...current, email: event.target.value }))}
+                autoComplete="email"
+              />
+              <p className="mt-1 text-xs text-[color:var(--cs-text-tertiary)]">Non viene collegato automaticamente un account già esistente con la stessa email.</p>
+            </div>
+            <div>
+              <label htmlFor="account-role" className="cs-field__label">Ruolo account *</label>
+              <select
+                id="account-role"
+                className="cs-select"
+                value={accountForm.role}
+                onChange={(event) => setAccountForm((current) => ({ ...current, role: event.target.value as AccountForm['role'] }))}
+              >
+                <option value="staff">{roleLabel('staff')}</option>
+                <option value="coach">{roleLabel('coach')}</option>
+                <option value="admin">{roleLabel('admin')}</option>
+              </select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={closeAccountDialog} disabled={accountSaving}>Annulla</Button>
+              <Button type="submit" disabled={accountSaving}>{accountSaving ? 'Creazione…' : 'Crea account'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

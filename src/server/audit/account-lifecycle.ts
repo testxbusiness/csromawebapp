@@ -30,6 +30,23 @@ export type AccountLifecycleAuditInput = {
   details?: Record<string, unknown>
 }
 
+export async function getAccountActorSnapshot(
+  adminClient: SupabaseClient,
+  actorProfileId: string
+) {
+  const { data } = await adminClient
+    .from('profiles')
+    .select('email, first_name, last_name')
+    .eq('id', actorProfileId)
+    .maybeSingle()
+
+  return {
+    performedByEmail: data?.email ?? null,
+    performedByFirstName: data?.first_name ?? null,
+    performedByLastName: data?.last_name ?? null,
+  }
+}
+
 export async function recordAccountLifecycleAudit(
   adminClient: SupabaseClient,
   input: AccountLifecycleAuditInput

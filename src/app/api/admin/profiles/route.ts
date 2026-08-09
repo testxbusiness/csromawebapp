@@ -4,7 +4,7 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { profileCreateSchema } from '@/lib/validation/profiles'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
-import { recordAccountLifecycleAudit } from '@/server/audit/account-lifecycle'
+import { getAccountActorSnapshot, recordAccountLifecycleAudit } from '@/server/audit/account-lifecycle'
 
 type ProfileRow = {
   id: string
@@ -28,23 +28,6 @@ type AccountRow = {
   activated_at: string | null
   suspended_at: string | null
   disabled_at: string | null
-}
-
-async function getActorSnapshot(
-  adminClient: ReturnType<typeof createAdminClient>,
-  actorProfileId: string
-) {
-  const { data } = await adminClient
-    .from('profiles')
-    .select('email, first_name, last_name')
-    .eq('id', actorProfileId)
-    .maybeSingle()
-
-  return {
-    performedByEmail: data?.email ?? null,
-    performedByFirstName: data?.first_name ?? null,
-    performedByLastName: data?.last_name ?? null,
-  }
 }
 
 export async function GET() {
@@ -139,7 +122,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const actor = await getActorSnapshot(adminClient, account.ownerProfileId)
+      const actor = await getAccountActorSnapshot(adminClient, account.ownerProfileId)
       await recordAccountLifecycleAudit(adminClient, {
         eventType: 'profile_created',
         subjectProfileId: profile.id,
