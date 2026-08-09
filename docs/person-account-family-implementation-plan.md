@@ -943,6 +943,14 @@ La creazione account atleta è rinviata alla slice di riconciliazione descritta 
 fino alla sua implementazione non vengono creati nuovi account atleta dal frontend.
 Build e test E2E CRUD locale passano; staging/produzione non sono stati toccati.
 
+Correzione locale classifica: dopo il restore locale la materialized view
+`championship_standings_mv` risultava non popolata, pur avendo 62 righe nella vista
+sorgente e i trigger di refresh presenti. La migration forward
+`20260809150000_populate_championship_standings_mv.sql` esegue il popolamento iniziale;
+in locale la view è ora popolata e l’endpoint `/api/championships/standings` può leggerla.
+La stessa migration dovrà essere inclusa nel preflight staging; produzione non è stata
+interrogata né modificata.
+
 #### Fase 3A — account atleta e riconciliazione degli account esistenti
 
 Stato: implementazione locale in corso. La migration `20260809140000_account_role_athlete.sql`
