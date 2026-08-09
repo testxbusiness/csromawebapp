@@ -265,7 +265,11 @@ export default function UsersManager() {
   }, [users, searchTerm, statusFilter, roleFilter])
 
   // Utility functions
-  const getRoleBadge = (role: string) => {
+  const getRoleBadge = (role: string | null | undefined) => {
+    if (!role) {
+      return <span className="cs-badge cs-badge--neutral">NESSUN RUOLO</span>
+    }
+
     const variant = role === 'admin' ? 'danger' : role === 'coach' ? 'warning' : 'neutral'
     return <span className={`cs-badge cs-badge--${variant}`}>{role.toUpperCase()}</span>
   }
@@ -418,11 +422,11 @@ export default function UsersManager() {
                   </td>
                   <td>
                     <div className="flex flex-wrap gap-1">
-                      {user.roles?.map(role => (
+                      {user.roles?.length ? user.roles.map(role => (
                         <span key={role} className="inline-block">
                           {getRoleBadge(role)}
                         </span>
-                      ))}
+                      )) : getRoleBadge(null)}
                     </div>
                   </td>
                   <td className="text-sm text-secondary">
@@ -499,11 +503,11 @@ export default function UsersManager() {
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-[color:var(--cs-text-primary)]">Ruoli:</span>
                     <div className="flex flex-wrap gap-1">
-                      {user.roles?.map(role => (
+                      {user.roles?.length ? user.roles.map(role => (
                         <span key={role} className="inline-block">
                           {getRoleBadge(role)}
                         </span>
-                      ))}
+                      )) : getRoleBadge(null)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

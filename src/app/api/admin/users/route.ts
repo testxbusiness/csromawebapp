@@ -319,7 +319,10 @@ export async function GET() {
     // Combina i dati
     const usersWithDetails = users.map(user => {
       const authUser = authUsersMap.get(user.id)
-      const userRoles = rolesByUser.get(user.id) || [user.role]
+      const rawRoles: unknown[] = rolesByUser.get(user.id) || [user.role]
+      const userRoles = rawRoles.filter(
+        (role: unknown): role is string => typeof role === 'string' && role.length > 0
+      )
 
       return {
         ...user,
