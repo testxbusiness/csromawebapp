@@ -10,7 +10,7 @@ export type CollaboratorFormData = {
   email: string
   phone: string
   birth_date: string
-  collaborator_type: 'coach' | 'staff'
+  collaborator_type: 'coach' | 'staff' | 'admin'
   season_id: string
   level: string
   specialization: string
@@ -46,7 +46,7 @@ export default function CollaboratorModal({ isOpen, collaborator, seasons, activ
 
   return <AdminModal isOpen={isOpen} title={collaborator ? 'Modifica Collaboratore' : 'Nuovo Collaboratore'} onClose={onClose} sizeClassName="max-w-4xl">
     <form id="collaborator-form" onSubmit={submit} className="space-y-5">
-      <div className="cs-alert cs-alert--info">La persona viene collegata alla stagione selezionata. Lo Staff può restare senza squadra e attività.</div>
+      <div className="cs-alert cs-alert--info">La persona viene collegata alla stagione selezionata. Staff e Admin possono restare senza squadra e attività.</div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div><label htmlFor="collaborator-first-name" className="cs-field__label">Nome *</label><input id="collaborator-first-name" className="cs-input" required value={form.first_name} onChange={(e) => update('first_name', e.target.value)} /></div>
         <div><label htmlFor="collaborator-last-name" className="cs-field__label">Cognome *</label><input id="collaborator-last-name" className="cs-input" required value={form.last_name} onChange={(e) => update('last_name', e.target.value)} /></div>
@@ -58,7 +58,7 @@ export default function CollaboratorModal({ isOpen, collaborator, seasons, activ
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div><label htmlFor="collaborator-birth-date" className="cs-field__label">Data di nascita</label><input id="collaborator-birth-date" type="date" className="cs-input" value={form.birth_date} onChange={(e) => update('birth_date', e.target.value)} /></div>
         <div><label htmlFor="collaborator-season" className="cs-field__label">Stagione *</label><select id="collaborator-season" className="cs-select" required value={form.season_id} onChange={(e) => update('season_id', e.target.value)}>{seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}</select></div>
-        <div><label htmlFor="collaborator-type" className="cs-field__label">Tipo *</label><select id="collaborator-type" className="cs-select" required value={form.collaborator_type} onChange={(e) => update('collaborator_type', e.target.value as CollaboratorFormData['collaborator_type'])}><option value="coach">Coach</option><option value="staff">Staff</option></select></div>
+        <div><label htmlFor="collaborator-type" className="cs-field__label">Tipo *</label><select id="collaborator-type" className="cs-select" required value={form.collaborator_type} onChange={(e) => update('collaborator_type', e.target.value as CollaboratorFormData['collaborator_type'])}><option value="coach">Coach</option><option value="staff">Staff</option><option value="admin">Admin</option></select></div>
       </div>
       {form.collaborator_type === 'coach' && <>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

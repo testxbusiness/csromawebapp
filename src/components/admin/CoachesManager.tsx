@@ -10,7 +10,7 @@ import CollaboratorModal, { type CollaboratorFormData } from './CollaboratorModa
 import CollaboratorAccountActions from './CollaboratorAccountActions'
 
 interface CoachWithDetails extends Coach {
-  collaborator_type: 'coach' | 'staff'
+  collaborator_type: 'coach' | 'staff' | 'admin'
   season_ids: string[]
   account: { status: string; roles: string[] } | null
   teams: Array<{
@@ -157,7 +157,7 @@ export default function CoachesManager() {
     if (selectedCoaches.size === filteredCoaches.length) {
       setSelectedCoaches(new Set())
     } else {
-      setSelectedCoaches(new Set(filteredCoaches.map(c => c.id)))
+      setSelectedCoaches(new Set(filteredCoaches.filter(c => c.collaborator_type !== 'admin').map(c => c.id)))
     }
   }
 
@@ -400,6 +400,7 @@ export default function CoachesManager() {
                     <input
                       type="checkbox"
                       checked={selectedCoaches.has(coach.id)}
+                      disabled={coach.collaborator_type === 'admin'}
                       onChange={() => toggleCoachSelection(coach.id)}
                       className="rounded"
                     />
@@ -452,6 +453,7 @@ export default function CoachesManager() {
                 <input
                   type="checkbox"
                   checked={selectedCoaches.has(coach.id)}
+                  disabled={coach.collaborator_type === 'admin'}
                   onChange={() => toggleCoachSelection(coach.id)}
                   className="rounded mt-1"
                 />

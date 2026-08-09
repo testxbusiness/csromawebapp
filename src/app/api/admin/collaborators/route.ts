@@ -4,10 +4,10 @@ import { collaboratorCreateSchema, collaboratorUpdateSchema } from '@/lib/valida
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 
-type CollaboratorType = 'coach' | 'staff'
+type CollaboratorType = 'coach' | 'staff' | 'admin'
 
 function isCollaborator(type: string | null, role: string | null, hasCoachProfile: boolean) {
-  return type === 'coach' || type === 'staff' || role === 'coach' || hasCoachProfile
+  return type === 'coach' || type === 'staff' || type === 'admin' || role === 'coach' || role === 'admin' || hasCoachProfile
 }
 
 async function seasonTeamIds(adminClient: ReturnType<typeof createAdminClient>, seasonId: string) {
@@ -20,7 +20,7 @@ async function seasonTeamIds(adminClient: ReturnType<typeof createAdminClient>, 
 
 async function validateTeam(adminClient: ReturnType<typeof createAdminClient>, seasonId: string, type: CollaboratorType, teamId: string | null | undefined) {
   if (!teamId) return null
-  if (type !== 'coach') throw new Error('Lo Staff non può essere assegnato a una squadra')
+  if (type !== 'coach') throw new Error('Staff e Admin non possono essere assegnati a una squadra')
   const { data: team } = await adminClient.from('teams').select('id, activity_id').eq('id', teamId).maybeSingle()
   if (!team) throw new Error('Squadra non trovata')
   const { data: activity } = await adminClient.from('activities').select('season_id').eq('id', team.activity_id).maybeSingle()
@@ -71,7 +71,11 @@ export async function GET() {
         activity_id: teamById.get(assignment.team_id)?.activity_id,
       }))
       const types = typesByProfile.get(profile.id) || new Set<string>()
-      const type: CollaboratorType = types.has('staff') && !types.has('coach') && !coachById.has(profile.id) && profile.role !== 'coach' ? 'staff' : 'coach'
+      const type: CollaboratorType = types.has('admin') || profile.role === 'admin'
+        ? 'admin'
+        : types.has('staff') && !types.has('coach') && !coachById.has(profile.id) && profile.role !== 'coach'
+          ? 'staff'
+          : 'coach'
       return {
         ...profile,
         collaborator_type: type,
@@ -109,7 +113,7 @@ export async function POST(request: NextRequest) {
       email: payload.email ?? null,
       phone: payload.phone ?? null,
       birth_date: payload.birth_date ?? null,
-      role: payload.collaborator_type === 'coach' ? 'coach' : null,
+      role: payload.collaborator_type === 'coach' || payload.collaborator_type === 'admin' ? payload.collaborator_type : null,
     }).select('id').single()
     if (profileError || !profile) return NextResponse.json({ error: 'Impossibile creare il collaboratore' }, { status: 400 })
 
@@ -147,7 +151,7 @@ export async function PATCH(request: NextRequest) {
 
     const profileUpdate: Record<string, string | null> = {}
     for (const field of ['first_name', 'last_name', 'email', 'phone', 'birth_date'] as const) if (field in payload) profileUpdate[field] = payload[field] ?? null
-    if (payload.collaborator_type) profileUpdate.role = type === 'coach' ? 'coach' : null
+    if (payload.collaborator_type) profileUpdate.role = type === 'coach' || type === 'admin' ? type : null
     if (Object.keys(profileUpdate).length) {
       const { error } = await adminClient.from('profiles').update(profileUpdate).eq('id', payload.id)
       if (error) return NextResponse.json({ error: 'Impossibile aggiornare l’anagrafica' }, { status: 400 })

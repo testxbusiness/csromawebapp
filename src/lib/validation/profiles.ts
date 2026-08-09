@@ -81,7 +81,7 @@ export const athleteImportSchema = z.object({
 
 export type AthleteImportRow = z.infer<typeof athleteImportRowSchema>
 
-export const collaboratorTypeSchema = z.enum(['coach', 'staff'])
+export const collaboratorTypeSchema = z.enum(['coach', 'staff', 'admin'])
 export const collaboratorCreateSchema = profileCreateSchema.extend({
   collaborator_type: collaboratorTypeSchema,
   season_id: z.string().uuid('Stagione non valida'),
