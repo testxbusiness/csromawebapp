@@ -27,6 +27,14 @@ export type Message = {
 type Team = { id: string; name: string; code: string }
 type User = { id: string; first_name: string; last_name: string; role: string }
 
+function formatRole(role: string | null | undefined) {
+  if (role === 'athlete') return 'atleta'
+  if (role === 'admin') return 'admin'
+  if (role === 'coach') return 'coach'
+  if (role === 'staff') return 'staff'
+  return 'nessun ruolo'
+}
+
 type Props = {
   open: boolean
   onClose: () => void

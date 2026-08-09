@@ -292,6 +292,18 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
+    const [{ data: appAccounts }, { data: accountRoles }] = await Promise.all([
+      adminClient.from('app_accounts').select('owner_profile_id, auth_user_id'),
+      adminClient.from('account_roles').select('auth_user_id, role'),
+    ])
+    const authUserByProfile = new Map((appAccounts || []).map((account) => [account.owner_profile_id, account.auth_user_id]))
+    const rolesByAuthUser = new Map<string, string[]>()
+    for (const row of accountRoles || []) {
+      const roles = rolesByAuthUser.get(row.auth_user_id) || []
+      roles.push(row.role)
+      rolesByAuthUser.set(row.auth_user_id, roles)
+    }
+
     // Ora arricchisci con i dati correlati
     const enrichedMessages = await Promise.all(
       (messagesData || []).map(async (message) => {
@@ -341,12 +353,16 @@ export async function GET() {
             if (recipient.profile_id) {
               const { data: profileData } = await adminClient
                 .from('profiles')
-                .select('id, first_name, last_name, email')
+                .select('id, first_name, last_name, email, role')
                 .eq('id', recipient.profile_id)
                 .single()
               
               if (profileData) {
-                recipientData.profiles = profileData
+                const authUserId = authUserByProfile.get(profileData.id)
+                recipientData.profiles = {
+                  ...profileData,
+                  role: authUserId ? (rolesByAuthUser.get(authUserId) || [profileData.role]).filter(Boolean)[0] || null : profileData.role,
+                }
               }
             }
 

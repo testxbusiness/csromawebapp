@@ -37,6 +37,7 @@ interface Message {
       first_name: string
       last_name: string
       email: string
+      role?: string | null
     }
   }[]
 }
@@ -53,6 +54,14 @@ interface User {
   last_name: string
   email: string
   role: string
+}
+
+function formatRole(role: string | null | undefined) {
+  if (role === 'admin') return 'admin'
+  if (role === 'coach') return 'coach'
+  if (role === 'athlete') return 'atleta'
+  if (role === 'staff') return 'staff'
+  return 'nessun ruolo'
 }
 
 export default function MessagesManager() {
@@ -102,12 +111,23 @@ export default function MessagesManager() {
   }
 
   const loadUsers = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, email, role')
-      .order('first_name')
+    try {
+      const response = await fetch('/api/admin/users')
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Impossibile caricare gli utenti')
 
-    setUsers(data || [])
+      const accountUsers = (result.users || []).map((user: any) => ({
+        id: user.id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+        role: user.roles?.[0] || user.role || 'staff',
+      }))
+      setUsers(accountUsers)
+    } catch (error) {
+      console.error('Errore caricamento utenti destinatari:', error)
+      setUsers([])
+    }
   }
 
   const handleCreateMessage = async (messageData: Omit<Message, 'id'>) => {
@@ -205,7 +225,7 @@ export default function MessagesManager() {
       { key: 'message_recipients', title: 'Destinatari', width: 30, format: (val) => 
         val ? val.map((mr: any) => 
           mr.teams ? `Squadra: ${mr.teams.name}` : 
-          mr.profiles ? `Utente: ${mr.profiles.first_name} ${mr.profiles.last_name}` : ''
+          mr.profiles ? `Utente: ${mr.profiles.first_name} ${mr.profiles.last_name} (${formatRole(mr.profiles.role)})` : ''
         ).filter(Boolean).join(', ') : ''
       }
     ], {
@@ -303,7 +323,7 @@ export default function MessagesManager() {
                       <div className="flex flex-wrap gap-1">
                         {message.message_recipients.map((mr) => (
                           <span key={mr.id} className="cs-badge cs-badge--neutral">
-                            {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name}`}
+                            {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name} (${formatRole(mr.profiles?.role)})`}
                           </span>
                         ))}
                       </div>
@@ -344,7 +364,7 @@ export default function MessagesManager() {
                     {message.message_recipients && message.message_recipients.length > 0 ? (
                       message.message_recipients.map((mr) => (
                         <span key={mr.id} className="cs-badge cs-badge--neutral">
-                          {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name}`}
+                          {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name} (${formatRole(mr.profiles?.role)})`}
                         </span>
                       ))
                     ) : (
@@ -492,7 +512,7 @@ function MessageForm({
                 <label key={user.id} className="flex items-center">
                   <input type="checkbox" checked={formData.selected_users.includes(user.id)} onChange={() => handleUserSelection(user.id)} className="h-4 w-4" />
                   <span className="ml-2 text-sm">
-                    {user.first_name} {user.last_name} ({user.role})
+                    {user.first_name} {user.last_name} ({formatRole(user.role)})
                   </span>
                 </label>
               ))}
