@@ -872,14 +872,16 @@ che l’accesso non viene ancora inviato. Il test locale ha verificato mapping t
 cleanup completo, oltre al guard 409 sui profili già collegati. Non è ancora stato inviato
 alcun accesso e staging/produzione non sono stati toccati.
 
-Fase 3, slice invito: sono stati aggiunti `POST /api/admin/profiles/:id/invite-account` e
-il sender server-only `src/server/email/account-activation.ts`. Dopo il controllo dello
-stato `invited`, del mapping e del ruolo, la route genera il link Auth e lo passa a Resend.
-L’invio è fail-closed: senza `RESEND_API_KEY` e `EMAIL_FROM` risponde HTTP 503, registra
-`repair_required` e non restituisce né logga il link. Il progetto attuale non contiene un
-mailer configurato e quindi l’invio reale resta bloccato fino alla configurazione di queste
-variabili nell’ambiente target. La UI espone `Invia invito` solo per account `invited`, con
-conferma esplicita. Build e Jest passano; staging/produzione non sono stati toccati.
+Fase 3, slice invito: `POST /api/admin/profiles/:id/invite-account` usa il mailer nativo
+Supabase tramite `auth.admin.inviteUserByEmail`, dopo il controllo dello stato `invited`,
+del mapping e del ruolo. Supabase genera e invia il template Invite attraverso l’SMTP già
+configurato in staging e produzione; il codice verifica anche che l’utente restituito
+coincida con l’Auth mapping atteso. Gli eventi audit indicano
+`provider: supabase_auth_smtp`; in caso di errore l’account resta invitabile e viene
+registrato il fallimento, senza esporre link o token. La UI espone `Invia invito` solo per
+account `invited`, con conferma esplicita. Non sono necessarie variabili Resend né un
+provider email aggiuntivo. Build e Jest passano; staging/produzione non sono stati
+toccati.
 
 Migration 10: `person_and_account_audit_support`
 

@@ -4,7 +4,6 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 import { getAccountActorSnapshot, recordAccountLifecycleAudit } from '@/server/audit/account-lifecycle'
-import { sendAccountActivationEmail } from '@/server/email/account-activation'
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -69,13 +68,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const actor = await getAccountActorSnapshot(adminClient, account.ownerProfileId)
     const redirectTo = new URL('/auth/callback', request.url).toString()
-    const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
-      type: 'invite',
-      email,
-      options: { redirectTo },
+    const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: {
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+      },
     })
 
-    if (linkError || !linkData.properties?.action_link) {
+    if (inviteError || !inviteData.user || inviteData.user.id !== appAccount.auth_user_id) {
       await recordAuditBestEffort(adminClient, {
         eventType: 'provisioning_failed',
         subjectProfileId: id,
@@ -83,28 +84,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
         performedByAuthUserId: account.authUserId,
         performedByProfileId: account.ownerProfileId,
         ...actor,
-        details: { stage: 'generate_activation_link', reason: 'link_generation_failed' },
+        details: {
+          stage: 'send_activation_email',
+          provider: 'supabase_auth_smtp',
+          reason: inviteError?.message || 'invite_user_mismatch',
+        },
       })
-      return NextResponse.json({ error: 'Impossibile generare il link di attivazione' }, { status: 500 })
-    }
-
-    const mail = await sendAccountActivationEmail({
-      to: email,
-      firstName: profile.first_name,
-      activationLink: linkData.properties.action_link,
-    })
-
-    if (!mail.sent) {
-      await recordAuditBestEffort(adminClient, {
-        eventType: 'repair_required',
-        subjectProfileId: id,
-        subjectAuthUserId: appAccount.auth_user_id,
-        performedByAuthUserId: account.authUserId,
-        performedByProfileId: account.ownerProfileId,
-        ...actor,
-        details: { stage: 'send_activation_email', reason: mail.code },
-      })
-      return NextResponse.json({ error: mail.error }, { status: mail.code === 'not_configured' ? 503 : 502 })
+      return NextResponse.json({ error: 'Supabase non ha accettato l’invio dell’invito' }, { status: 502 })
     }
 
     const { error: updateError } = await adminClient
@@ -132,7 +118,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       performedByAuthUserId: account.authUserId,
       performedByProfileId: account.ownerProfileId,
       ...actor,
-      details: { role: roleRow.role, email_sent: true },
+      details: { role: roleRow.role, email_sent: true, provider: 'supabase_auth_smtp' },
     })
 
     return NextResponse.json({ sent: true, email })
