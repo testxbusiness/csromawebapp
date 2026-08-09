@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 
@@ -54,7 +54,7 @@ interface UseAuthReturn {
   silentRefresh: () => Promise<void>
 }
 
-export function useAuth(): UseAuthReturn {
+function useAuthState(): UseAuthReturn {
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
 
@@ -442,4 +442,19 @@ export function useAuth(): UseAuthReturn {
     forceRefresh,
     silentRefresh,
   }
+}
+
+const AuthContext = createContext<UseAuthReturn | null>(null)
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const auth = useAuthState()
+  return createElement(AuthContext.Provider, { value: auth }, children)
+}
+
+export function useAuth(): UseAuthReturn {
+  const auth = useContext(AuthContext)
+  if (!auth) {
+    throw new Error('useAuth deve essere utilizzato all’interno di AuthProvider')
+  }
+  return auth
 }
