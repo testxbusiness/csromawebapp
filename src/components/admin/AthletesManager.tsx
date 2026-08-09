@@ -3,10 +3,11 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
-import type { Athlete, Team, Activity, Season } from './athleteTypes'
+import type { Athlete, AthleteCreateData, Team, Activity, Season } from './athleteTypes'
 import BulkOperationsModal from './BulkOperationsModal'
 import TeamAssignmentModal from './TeamAssignmentModal'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import AthleteCreateModal from './AthleteCreateModal'
 
 interface AthleteWithDetails extends Athlete {
   teams: Array<{
@@ -28,6 +29,8 @@ export default function AthletesManager() {
   const [bulkLoading, setBulkLoading] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createSubmitting, setCreateSubmitting] = useState(false)
 
   const [showDetails, setShowDetails] = useState(false)
   const [detailsAthlete, setDetailsAthlete] = useState<AthleteWithDetails | null>(null)
@@ -108,6 +111,10 @@ export default function AthletesManager() {
         .order('name')
 
       setSeasons(seasonsData || [])
+      const activeSeason = seasonsData?.find((season) => season.is_active)
+      if (activeSeason) {
+        setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
+      }
       setActivities(activitiesData || [])
       setTeams(teamsData || [])
     } catch (error) {
@@ -125,7 +132,7 @@ export default function AthletesManager() {
     return athletes.filter(athlete => {
       // Filtro stagione
       if (selectedSeason !== 'all') {
-        // TODO: Implementare filtro stagione quando disponibile nel modello dati
+        if (!athlete.season_ids?.includes(selectedSeason)) return false
       }
 
       // Filtro attività
@@ -258,6 +265,32 @@ export default function AthletesManager() {
     setShowBulkModal(true)
   }
 
+  const handleCreateAthlete = async (data: AthleteCreateData) => {
+    setCreateSubmitting(true)
+    try {
+      const response = await fetch('/api/admin/athletes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        toast.error(`Errore: ${result.error || 'Impossibile creare l’atleta'}`)
+        return
+      }
+
+      toast.success('Atleta creato nella stagione selezionata')
+      setShowCreateModal(false)
+      await loadAthletes()
+    } catch (error) {
+      console.error('Errore creazione atleta:', error)
+      toast.error('Errore di rete')
+    } finally {
+      setCreateSubmitting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="cs-card p-6">
@@ -295,6 +328,9 @@ export default function AthletesManager() {
             <button className="cs-btn cs-btn--outline">
               Esporta CSV
             </button>
+            <button className="cs-btn cs-btn--primary" onClick={() => setShowCreateModal(true)}>
+              Nuovo Atleta
+            </button>
             <button
               onClick={handleOpenBulkModal}
               className="cs-btn cs-btn--primary"
@@ -304,6 +340,14 @@ export default function AthletesManager() {
           </div>
         </div>
       </section>
+
+      <AthleteCreateModal
+        isOpen={showCreateModal}
+        seasons={seasons}
+        isSubmitting={createSubmitting}
+        onSubmit={handleCreateAthlete}
+        onClose={() => setShowCreateModal(false)}
+      />
 
 <DetailsDrawer
   open={showDetails}

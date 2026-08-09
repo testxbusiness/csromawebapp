@@ -23,3 +23,12 @@ export const profileCreateSchema = z.object({
 }).strict()
 
 export type ProfileCreatePayload = z.infer<typeof profileCreateSchema>
+
+export const athleteCreateSchema = profileCreateSchema.extend({
+  season_id: z.string().uuid('Stagione non valida'),
+  membership_number: optionalNullableText(80),
+  medical_certificate_expiry: optionalNullableDate,
+  personal_notes: optionalNullableText(2000),
+}).strict()
+
+export type AthleteCreatePayload = z.infer<typeof athleteCreateSchema>

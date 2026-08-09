@@ -10,6 +10,19 @@ export interface Athlete {
   personal_notes?: string
   created_at: string
   updated_at: string
+  season_ids?: string[]
+}
+
+export interface AthleteCreateData {
+  first_name: string
+  last_name: string
+  email?: string | null
+  phone?: string | null
+  birth_date?: string | null
+  season_id: string
+  membership_number?: string | null
+  medical_certificate_expiry?: string | null
+  personal_notes?: string | null
 }
 
 export interface Team {

@@ -21,4 +21,20 @@ test.describe('admin authenticated smoke test', () => {
       await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 15_000 })
     }
   })
+
+  test('loads seasonal athlete management and the single-create form', async ({ page }) => {
+    await page.goto('/admin/atleti')
+    await expect(page.getByRole('heading', { name: 'Gestione Atleti' })).toBeVisible({ timeout: 15_000 })
+
+    const athletesResponse = await page.request.get('/api/admin/athletes')
+    expect(athletesResponse.status()).toBe(200)
+    const athletesPayload = await athletesResponse.json()
+    expect(athletesPayload.athletes.length).toBeGreaterThan(0)
+    expect(athletesPayload.athletes.every((athlete: { season_ids?: string[] }) => Array.isArray(athlete.season_ids))).toBe(true)
+
+    await page.getByRole('button', { name: 'Nuovo Atleta' }).click()
+    await expect(page.getByRole('heading', { name: 'Nuovo Atleta' })).toBeVisible()
+    await expect(page.getByLabel('Stagione *', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Nome *', { exact: true })).toBeVisible()
+  })
 })
