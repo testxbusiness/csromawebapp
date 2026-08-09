@@ -55,6 +55,7 @@ function LoginPageInner() {
             'csroma_profile_cache',
             JSON.stringify({
               data: j.profile,
+              account: j.account ?? null,
               timestamp: Date.now(),
               userId: j.user.id,
             })

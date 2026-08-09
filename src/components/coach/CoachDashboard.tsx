@@ -356,9 +356,11 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     setLoading(true)
 
     try {
-      // Carica in sequenza per evitare dipendenze circolari
-      await loadActiveSeason()
-      const teamIds = await loadCoachTeams()
+      // Stagione e squadre sono indipendenti: caricale in parallelo.
+      const [, teamIds] = await Promise.all([
+        loadActiveSeason(),
+        loadCoachTeams(),
+      ])
 
       if (teamIds.length > 0) {
         await Promise.all([
