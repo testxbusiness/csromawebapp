@@ -1,6 +1,8 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
+let recoveryClient: ReturnType<typeof createSupabaseClient> | null = null
+
 export function createClient() {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,15 +16,19 @@ export function createClient() {
 // verifier. The resulting tokens stay in the URL fragment and are consumed by
 // /auth/callback without being sent to the server.
 export function createRecoveryClient() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      auth: {
-        flowType: 'implicit',
-        detectSessionInUrl: false,
-        persistSession: false,
+  if (!recoveryClient) {
+    recoveryClient = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          flowType: 'implicit',
+          detectSessionInUrl: false,
+          persistSession: false,
+        },
       },
-    }
-  )
+    )
+  }
+
+  return recoveryClient
 }
