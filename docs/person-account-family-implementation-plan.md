@@ -827,6 +827,14 @@ Questa separazione riguarda esclusivamente UX e workflow: il backend manterrà u
 modello `profiles`, con `app_accounts` e `account_roles` opzionali secondo le regole già
 definite. Non viene avviata alcuna implementazione in questa fase.
 
+Spike Fase 3 completato in locale: con `@supabase/supabase-js 2.56.0` e lo stack
+Supabase Docker è stato verificato il flusso `auth.admin.createUser` senza invio seguito
+da `auth.admin.generateLink(type='invite')`. Entrambe le operazioni sono riuscite; il
+link è stato generato senza invio automatico e l’utente tecnico è stato eliminato subito
+dopo la prova. Il test non ha creato `profiles`, `app_accounts` o `account_roles` e non ha
+interessato staging o produzione. Il primo slice può quindi usare il flusso
+create-then-verify-then-link previsto dal piano.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;
