@@ -75,6 +75,7 @@ export default function PeopleManager() {
   const [accountDialogPerson, setAccountDialogPerson] = useState<Person | null>(null)
   const [saving, setSaving] = useState(false)
   const [accountSaving, setAccountSaving] = useState(false)
+  const [invitingId, setInvitingId] = useState<string | null>(null)
   const [form, setForm] = useState<PersonForm>(initialForm)
   const [accountForm, setAccountForm] = useState<AccountForm>(initialAccountForm)
 
@@ -180,6 +181,24 @@ export default function PeopleManager() {
     }
   }
 
+  const inviteAccount = async (person: Person) => {
+    if (!person.account || person.account.status !== 'invited') return
+    if (!window.confirm(`Inviare il link di attivazione a ${person.email || 'questa persona'}?`)) return
+
+    setInvitingId(person.id)
+    try {
+      const response = await fetch(`/api/admin/profiles/${person.id}/invite-account`, { method: 'POST' })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Impossibile inviare l’invito')
+      toast.success('Invito inviato')
+      await loadPeople()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Impossibile inviare l’invito')
+    } finally {
+      setInvitingId(null)
+    }
+  }
+
   return (
     <section className="space-y-5" aria-labelledby="people-section-title">
       <div className="cs-card cs-card--primary p-5 sm:p-6">
@@ -265,6 +284,10 @@ export default function PeopleManager() {
                       {!person.account ? (
                         <Button type="button" variant="outline" size="sm" onClick={() => openAccountDialog(person)}>
                           Crea account
+                        </Button>
+                      ) : person.account.status === 'invited' ? (
+                        <Button type="button" variant="outline" size="sm" onClick={() => inviteAccount(person)} disabled={invitingId === person.id}>
+                          {invitingId === person.id ? 'Invio…' : 'Invia invito'}
                         </Button>
                       ) : <span className="text-xs text-[color:var(--cs-text-tertiary)]">Già collegato</span>}
                     </td>
