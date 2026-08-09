@@ -34,3 +34,39 @@ export const athleteCreateSchema = profileCreateSchema.extend({
 }).strict()
 
 export type AthleteCreatePayload = z.infer<typeof athleteCreateSchema>
+
+const optionalNullableImportText = (max: number) =>
+  z.preprocess(
+    (value) => value === '' ? null : value,
+    z.string().trim().max(max).nullable().optional()
+  )
+
+const optionalNullableImportDate = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data non valida').nullable().optional()
+)
+
+export const athleteImportRowSchema = z.object({
+  first_name: z.string().trim().min(1).max(100),
+  last_name: z.string().trim().min(1).max(100),
+  membership_number: z.string().trim().min(1).max(80),
+  email: optionalNullableImportText(320),
+  phone: optionalNullableImportText(40),
+  birth_date: optionalNullableImportDate,
+  medical_certificate_expiry: optionalNullableImportDate,
+  personal_notes: optionalNullableImportText(2000),
+  activity_name: optionalNullableImportText(160),
+  team_code: optionalNullableImportText(120),
+  jersey_number: z.preprocess(
+    (value) => value === '' || value === null || value === undefined ? null : Number(value),
+    z.number().int().min(0).max(99).nullable().optional()
+  ),
+}).strict()
+
+export const athleteImportSchema = z.object({
+  season_id: z.string().uuid('Stagione non valida'),
+  rows: z.array(athleteImportRowSchema).min(1).max(1000),
+  dry_run: z.boolean().optional(),
+}).strict()
+
+export type AthleteImportRow = z.infer<typeof athleteImportRowSchema>

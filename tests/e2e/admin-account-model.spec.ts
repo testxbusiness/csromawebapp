@@ -40,6 +40,35 @@ test.describe('admin authenticated smoke test', () => {
     await expect(page.getByLabel('Squadra', { exact: true })).toBeVisible()
   })
 
+  test('previews an athlete CSV import in the selected season', async ({ page }) => {
+    await page.goto('/admin/atleti')
+    await expect(page.getByRole('heading', { name: 'Gestione Atleti' })).toBeVisible({ timeout: 15_000 })
+    await page.getByRole('button', { name: 'Importa Atleti' }).click()
+    await expect(page.getByRole('heading', { name: 'Importa Atleti' })).toBeVisible()
+
+    await page.locator('#athlete-import-file').setInputFiles({
+      name: 'atleti.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from('Nome,Cognome,Numero Tessera,Data Nascita\nMario,Rossi,TEST-IMPORT-001,2010-01-15\n'),
+    })
+
+    await expect(page.getByText('Valide: 1', { exact: true })).toBeVisible()
+    await expect(page.getByText('TEST-IMPORT-001', { exact: true })).toBeVisible()
+
+    const seasonId = await page.locator('#athlete-import-season').inputValue()
+    const dryRunResponse = await page.request.post('/api/admin/athletes/import', {
+      data: {
+        season_id: seasonId,
+        dry_run: true,
+        rows: [{ first_name: 'Mario', last_name: 'Rossi', membership_number: 'TEST-IMPORT-API-001' }],
+      },
+    })
+    expect(dryRunResponse.status()).toBe(200)
+    const dryRun = await dryRunResponse.json()
+    expect(dryRun.dryRun).toBe(true)
+    expect(dryRun.created + dryRun.updated).toBe(1)
+  })
+
   test('offers staff person payments without requiring a team', async ({ page }) => {
     await page.goto('/admin/payments')
     await expect(page.getByRole('heading', { name: 'Pagamenti' })).toBeVisible({ timeout: 15_000 })

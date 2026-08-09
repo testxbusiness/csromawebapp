@@ -904,14 +904,16 @@ account `invited`, con conferma esplicita. Non sono necessarie variabili Resend 
 provider email aggiuntivo. Build e Jest passano; staging/produzione non sono stati
 toccati.
 
-Fase 3, slice iscritti stagionale: la sezione `/admin/atleti` ora espone la creazione
-singola nel contesto di una stagione. `POST /api/admin/athletes` crea anagrafica,
+Fase 3, slice iscritti stagionale: la sezione `/admin/atleti` espone creazione singola e
+import massivo nel contesto di una stagione. `POST /api/admin/athletes` crea anagrafica,
 `athlete_profiles` e `season_profiles` senza account Auth; la lista usa la relazione
 stagionale per filtrare gli atleti e non dipende più dal ruolo legacy `profiles.role`.
-La creazione consente di selezionare l’attività e una squadra coerente con la stagione;
-l’assegnazione viene salvata in `team_members` dopo la validazione server-side. Il form
-non include ancora l’import massivo XLSX/CSV, che resta una slice successiva. Build, Jest
-e il nuovo E2E stagionale passano; due smoke test admin
+La creazione e l’import consentono di associare attività e squadra coerenti con la stagione;
+l’assegnazione viene salvata in `team_members` dopo la validazione server-side. Il nuovo
+endpoint `POST /api/admin/athletes/import` usa il numero tessera come chiave stabile,
+riutilizza il profilo esistente, aggiorna il collegamento stagionale e restituisce un
+report per riga; supporta anteprima XLSX/CSV e dry-run senza scritture. Build, Jest
+e gli E2E stagionali passano; due smoke test admin
 preesistenti hanno avuto timeout durante il caricamento di pagine pesanti, senza errori
 funzionali sul nuovo flusso.
 

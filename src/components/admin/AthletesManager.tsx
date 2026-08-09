@@ -8,6 +8,7 @@ import BulkOperationsModal from './BulkOperationsModal'
 import TeamAssignmentModal from './TeamAssignmentModal'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import AthleteCreateModal from './AthleteCreateModal'
+import AthleteImportModal from './AthleteImportModal'
 
 interface AthleteWithDetails extends Athlete {
   teams: Array<{
@@ -30,6 +31,7 @@ export default function AthletesManager() {
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
   const [createSubmitting, setCreateSubmitting] = useState(false)
 
   const [showDetails, setShowDetails] = useState(false)
@@ -328,6 +330,9 @@ export default function AthletesManager() {
             <button className="cs-btn cs-btn--outline">
               Esporta CSV
             </button>
+            <button className="cs-btn cs-btn--outline" onClick={() => setShowImportModal(true)}>
+              Importa Atleti
+            </button>
             <button className="cs-btn cs-btn--primary" onClick={() => setShowCreateModal(true)}>
               Nuovo Atleta
             </button>
@@ -349,6 +354,13 @@ export default function AthletesManager() {
         isSubmitting={createSubmitting}
         onSubmit={handleCreateAthlete}
         onClose={() => setShowCreateModal(false)}
+      />
+
+      <AthleteImportModal
+        isOpen={showImportModal}
+        seasons={seasons}
+        onComplete={() => { void loadAthletes() }}
+        onClose={() => setShowImportModal(false)}
       />
 
 <DetailsDrawer
