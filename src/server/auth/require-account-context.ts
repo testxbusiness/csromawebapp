@@ -3,7 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
-export type AccountRole = 'admin' | 'coach' | 'staff'
+export type AccountRole = 'admin' | 'coach' | 'staff' | 'athlete'
 export type AccountStatus = 'invited' | 'active' | 'suspended' | 'disabled'
 
 export type AccountContext = {
@@ -25,7 +25,7 @@ export class AccountContextError extends Error {
 }
 
 const accountStatuses = new Set<AccountStatus>(['invited', 'active', 'suspended', 'disabled'])
-const accountRoles = new Set<AccountRole>(['admin', 'coach', 'staff'])
+const accountRoles = new Set<AccountRole>(['admin', 'coach', 'staff', 'athlete'])
 
 export async function requireAccountContext(
   client?: SupabaseClient
@@ -86,22 +86,23 @@ export async function requireAthleteContext(
   const context = await requireAccountContext(client)
   const supabase = client ?? (await createClient())
 
-  const [{ data: athleteProfile }, { data: membership }] = await Promise.all([
+  const [{ data: athleteProfile }, { data: seasonMembership }] = await Promise.all([
     supabase
       .from('athlete_profiles')
       .select('profile_id')
       .eq('profile_id', context.ownerProfileId)
       .maybeSingle(),
     supabase
-      .from('team_members')
+      .from('season_profiles')
       .select('profile_id')
       .eq('profile_id', context.ownerProfileId)
+      .eq('status', 'active')
       .limit(1)
       .maybeSingle(),
   ])
 
-  if (!athleteProfile && !membership) {
-    throw new AccountContextError('Accesso atleta non abilitato', 403)
+  if (!athleteProfile || !seasonMembership) {
+    throw new AccountContextError('Accesso atleta non abilitato: profilo o iscrizione stagionale attiva mancanti', 403)
   }
 
   return context
