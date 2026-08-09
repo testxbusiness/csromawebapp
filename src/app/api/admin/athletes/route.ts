@@ -150,6 +150,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
     }
 
+    if (payload.team_id) {
+      const { data: team } = await adminClient
+        .from('teams')
+        .select('id, activity_id')
+        .eq('id', payload.team_id)
+        .maybeSingle()
+
+      if (!team) {
+        return NextResponse.json({ error: 'Squadra non trovata' }, { status: 404 })
+      }
+
+      const { data: activity } = await adminClient
+        .from('activities')
+        .select('id, season_id')
+        .eq('id', team.activity_id)
+        .maybeSingle()
+
+      if (!activity || activity.season_id !== payload.season_id) {
+        return NextResponse.json({ error: 'La squadra non appartiene alla stagione selezionata' }, { status: 400 })
+      }
+    }
+
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
       .insert({
@@ -183,9 +205,22 @@ export async function POST(request: NextRequest) {
           .from('season_profiles')
           .insert({ profile_id: profile.id, season_id: payload.season_id, source: 'admin_athlete_create' })
 
-    if (athleteProfileError || seasonProfileError) {
+    let teamMemberError: { message: string } | null = null
+    if (!athleteProfileError && !seasonProfileError && payload.team_id) {
+      const { error } = await adminClient
+        .from('team_members')
+        .insert({
+          profile_id: profile.id,
+          team_id: payload.team_id,
+          role: 'athlete',
+          jersey_number: payload.jersey_number ?? null,
+        })
+      teamMemberError = error
+    }
+
+    if (athleteProfileError || seasonProfileError || teamMemberError) {
       await adminClient.from('profiles').delete().eq('id', profile.id)
-      console.error('Errore completamento creazione atleta:', athleteProfileError || seasonProfileError)
+      console.error('Errore completamento creazione atleta:', athleteProfileError || seasonProfileError || teamMemberError)
       return NextResponse.json({ error: 'Impossibile completare la creazione dell’atleta' }, { status: 400 })
     }
 
@@ -209,7 +244,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Impossibile completare la creazione dell’atleta' }, { status: 500 })
     }
 
-    return NextResponse.json({ profile, season_id: payload.season_id, account: null }, { status: 201 })
+    return NextResponse.json({ profile, season_id: payload.season_id, team_id: payload.team_id ?? null, account: null }, { status: 201 })
   } catch (error) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })

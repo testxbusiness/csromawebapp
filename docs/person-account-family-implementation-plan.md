@@ -908,8 +908,10 @@ Fase 3, slice iscritti stagionale: la sezione `/admin/atleti` ora espone la crea
 singola nel contesto di una stagione. `POST /api/admin/athletes` crea anagrafica,
 `athlete_profiles` e `season_profiles` senza account Auth; la lista usa la relazione
 stagionale per filtrare gli atleti e non dipende più dal ruolo legacy `profiles.role`.
-Il form non include ancora assegnazione squadra né import massivo XLSX/CSV, che restano
-slice successive. Build, Jest e il nuovo E2E stagionale passano; due smoke test admin
+La creazione consente di selezionare l’attività e una squadra coerente con la stagione;
+l’assegnazione viene salvata in `team_members` dopo la validazione server-side. Il form
+non include ancora l’import massivo XLSX/CSV, che resta una slice successiva. Build, Jest
+e il nuovo E2E stagionale passano; due smoke test admin
 preesistenti hanno avuto timeout durante il caricamento di pagine pesanti, senza errori
 funzionali sul nuovo flusso.
 

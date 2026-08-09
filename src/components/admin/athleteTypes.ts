@@ -23,6 +23,8 @@ export interface AthleteCreateData {
   membership_number?: string | null
   medical_certificate_expiry?: string | null
   personal_notes?: string | null
+  team_id?: string | null
+  jersey_number?: number | null
 }
 
 export interface Team {
@@ -38,6 +40,7 @@ export interface Team {
 export interface Activity {
   id: string
   name: string
+  season_id?: string
 }
 
 export interface Season {

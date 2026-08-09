@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import AdminModal from './AdminModal'
-import type { AthleteCreateData, Season } from './athleteTypes'
+import type { Activity, AthleteCreateData, Season, Team } from './athleteTypes'
 
 interface AthleteCreateModalProps {
   isOpen: boolean
   seasons: Season[]
+  activities: Activity[]
+  teams: Team[]
   isSubmitting: boolean
   onSubmit: (data: AthleteCreateData) => void
   onClose: () => void
@@ -27,11 +29,22 @@ const emptyForm: AthleteCreateData = {
 export default function AthleteCreateModal({
   isOpen,
   seasons,
+  activities,
+  teams,
   isSubmitting,
   onSubmit,
   onClose,
 }: AthleteCreateModalProps) {
   const [formData, setFormData] = useState<AthleteCreateData>(emptyForm)
+
+  const availableActivities = useMemo(
+    () => activities.filter((activity) => activity.season_id === formData.season_id),
+    [activities, formData.season_id]
+  )
+  const availableTeams = useMemo(
+    () => teams.filter((team) => availableActivities.some((activity) => activity.id === team.activity_id)),
+    [teams, availableActivities]
+  )
 
   useEffect(() => {
     if (!isOpen) return
@@ -101,12 +114,71 @@ export default function AthleteCreateModal({
           </div>
           <div>
             <label htmlFor="athlete-season" className="cs-field__label">Stagione *</label>
-            <select id="athlete-season" className="cs-select" required value={formData.season_id} onChange={(event) => update('season_id', event.target.value)}>
+            <select
+              id="athlete-season"
+              className="cs-select"
+              required
+              value={formData.season_id}
+              onChange={(event) => setFormData((current) => ({
+                ...current,
+                season_id: event.target.value,
+                team_id: null,
+                jersey_number: null,
+              }))}
+            >
               <option value="" disabled>Seleziona una stagione</option>
               {seasons.map((season) => (
                 <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>
               ))}
             </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label htmlFor="athlete-activity" className="cs-field__label">Attività</label>
+            <select
+              id="athlete-activity"
+              className="cs-select"
+              value={formData.team_id ? teams.find((team) => team.id === formData.team_id)?.activity_id ?? '' : ''}
+              onChange={(event) => {
+                const firstTeam = availableTeams.find((team) => team.activity_id === event.target.value)
+                update('team_id', firstTeam?.id ?? null)
+              }}
+            >
+              <option value="">Seleziona attività</option>
+              {availableActivities.map((activity) => (
+                <option key={activity.id} value={activity.id}>{activity.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="athlete-team" className="cs-field__label">Squadra</label>
+            <select
+              id="athlete-team"
+              className="cs-select"
+              value={formData.team_id ?? ''}
+              onChange={(event) => update('team_id', event.target.value || null)}
+              disabled={availableTeams.length === 0}
+            >
+              <option value="">Nessuna squadra</option>
+              {availableTeams.map((team) => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="athlete-jersey-number" className="cs-field__label">Numero maglia</label>
+            <input
+              id="athlete-jersey-number"
+              type="number"
+              min={0}
+              max={99}
+              className="cs-input"
+              value={formData.jersey_number ?? ''}
+              onChange={(event) => update('jersey_number', event.target.value === '' ? null : Number(event.target.value))}
+              disabled={!formData.team_id}
+            />
           </div>
         </div>
 

@@ -36,5 +36,7 @@ test.describe('admin authenticated smoke test', () => {
     await expect(page.getByRole('heading', { name: 'Nuovo Atleta' })).toBeVisible()
     await expect(page.getByLabel('Stagione *', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Nome *', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Attività', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Squadra', { exact: true })).toBeVisible()
   })
 })

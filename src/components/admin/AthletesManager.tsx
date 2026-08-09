@@ -96,7 +96,7 @@ export default function AthletesManager() {
       // Carica attività
       const { data: activitiesData } = await supabase
         .from('activities')
-        .select('id, name')
+        .select('id, name, season_id')
         .order('name')
 
       // Carica squadre
@@ -344,6 +344,8 @@ export default function AthletesManager() {
       <AthleteCreateModal
         isOpen={showCreateModal}
         seasons={seasons}
+        activities={activities}
+        teams={teams}
         isSubmitting={createSubmitting}
         onSubmit={handleCreateAthlete}
         onClose={() => setShowCreateModal(false)}
