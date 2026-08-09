@@ -62,6 +62,29 @@ export async function GET() {
       return NextResponse.json({ error: 'Impossibile caricare le stagioni degli atleti' }, { status: 400 })
     }
 
+    const [{ data: accounts, error: accountsError }, { data: accountRoles, error: accountRolesError }] = await Promise.all([
+      adminClient
+        .from('app_accounts')
+        .select('auth_user_id, owner_profile_id, status')
+        .in('owner_profile_id', athleteProfileIds),
+      adminClient
+        .from('account_roles')
+        .select('auth_user_id, role'),
+    ])
+
+    if (accountsError || accountRolesError) {
+      console.error('Errore caricamento account atleti:', accountsError || accountRolesError)
+      return NextResponse.json({ error: 'Impossibile caricare lo stato account degli atleti' }, { status: 400 })
+    }
+
+    const rolesByAuthUser = new Map<string, string[]>()
+    for (const roleRow of accountRoles ?? []) {
+      const roles = rolesByAuthUser.get(roleRow.auth_user_id) ?? []
+      roles.push(roleRow.role)
+      rolesByAuthUser.set(roleRow.auth_user_id, roles)
+    }
+    const accountsByProfile = new Map((accounts ?? []).map((account) => [account.owner_profile_id, account]))
+
     const seasonalAthleteIds = new Set((seasonProfiles ?? []).map((seasonProfile) => seasonProfile.profile_id))
     const activeSeasonAthletes = athletes.filter((athlete) => seasonalAthleteIds.has(athlete.id))
 
@@ -91,6 +114,7 @@ export async function GET() {
       const athleteSeasonIds = (seasonProfiles ?? [])
         .filter((seasonProfile) => seasonProfile.profile_id === athlete.id)
         .map((seasonProfile) => seasonProfile.season_id)
+      const account = accountsByProfile.get(athlete.id)
 
       const teamsWithDetails = athleteTeamMembers.map(membership => {
         const team = teams?.find(t => t.id === membership.team_id)
@@ -115,6 +139,10 @@ export async function GET() {
         created_at: athlete.created_at,
         updated_at: athlete.updated_at,
         season_ids: athleteSeasonIds,
+        account: account ? {
+          status: account.status,
+          roles: rolesByAuthUser.get(account.auth_user_id) ?? [],
+        } : null,
         teams: teamsWithDetails.filter(team => team.id)
       }
 

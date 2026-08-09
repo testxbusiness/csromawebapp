@@ -55,6 +55,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Persona non trovata' }, { status: 404 })
     }
 
+    if (parsed.data.role === 'athlete') {
+      const [{ data: athleteProfile }, { data: seasonMembership }] = await Promise.all([
+        adminClient
+          .from('athlete_profiles')
+          .select('profile_id')
+          .eq('profile_id', id)
+          .maybeSingle(),
+        adminClient
+          .from('season_profiles')
+          .select('profile_id')
+          .eq('profile_id', id)
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle(),
+      ])
+
+      if (!athleteProfile || !seasonMembership) {
+        return NextResponse.json({ error: 'L’atleta deve avere un profilo atleta e un’iscrizione stagionale attiva' }, { status: 400 })
+      }
+    }
+
     const { data: existingAccount, error: existingAccountError } = await adminClient
       .from('app_accounts')
       .select('auth_user_id, status')

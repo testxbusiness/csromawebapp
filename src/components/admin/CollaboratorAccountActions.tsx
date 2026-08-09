@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, toast } from '@/components/ui'
 
-interface Props { id: string; name: string; email: string | null; account: { status: string; roles: string[] } | null; role: 'coach' | 'staff'; onChanged: () => void }
+interface Props { id: string; name: string; email: string | null; account: { status: string; roles: string[] } | null; role: 'coach' | 'staff' | 'athlete'; onChanged: () => void }
 
 export default function CollaboratorAccountActions({ id, name, email, account, role, onChanged }: Props) {
   const [open, setOpen] = useState(false)

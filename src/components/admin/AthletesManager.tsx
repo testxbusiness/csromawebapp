@@ -9,6 +9,7 @@ import TeamAssignmentModal from './TeamAssignmentModal'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import AthleteCreateModal from './AthleteCreateModal'
 import AthleteImportModal from './AthleteImportModal'
+import CollaboratorAccountActions from './CollaboratorAccountActions'
 
 interface AthleteWithDetails extends Athlete {
   teams: Array<{
@@ -159,7 +160,7 @@ export default function AthletesManager() {
       if (searchTerm) {
         const term = searchTerm.toLowerCase()
         const matchesName = `${athlete.first_name} ${athlete.last_name}`.toLowerCase().includes(term)
-        const matchesEmail = athlete.email.toLowerCase().includes(term)
+        const matchesEmail = athlete.email?.toLowerCase().includes(term) ?? false
         const matchesMembership = athlete.membership_number?.toLowerCase().includes(term)
 
         if (!matchesName && !matchesEmail && !matchesMembership) return false
@@ -627,6 +628,16 @@ export default function AthletesManager() {
                     <button className="cs-btn cs-btn--danger cs-btn--sm ml-2" onClick={() => void removeAthleteFromSeason(athlete)}>
                       Rimuovi
                     </button>
+                    <span className="ml-2">
+                      <CollaboratorAccountActions
+                        id={athlete.id}
+                        name={`${athlete.first_name} ${athlete.last_name}`}
+                        email={athlete.email}
+                        account={athlete.account ?? null}
+                        role="athlete"
+                        onChanged={() => void loadAthletes()}
+                      />
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -662,10 +673,18 @@ export default function AthletesManager() {
                   </div>
                 </div>
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-3 grid grid-cols-2 gap-2">
                 <button className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => openAthleteDetails(athlete)}>Dettagli</button>
                 <button className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => openAthleteEdit(athlete)}>Modifica</button>
                 <button className="cs-btn cs-btn--danger cs-btn--sm" onClick={() => void removeAthleteFromSeason(athlete)}>Rimuovi</button>
+                <CollaboratorAccountActions
+                  id={athlete.id}
+                  name={`${athlete.first_name} ${athlete.last_name}`}
+                  email={athlete.email}
+                  account={athlete.account ?? null}
+                  role="athlete"
+                  onChanged={() => void loadAthletes()}
+                />
               </div>
             </div>
           ))}

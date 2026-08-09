@@ -365,8 +365,9 @@ stagionale il ruolo globale dell’account: `admin`, `coach` e `staff` restano i
 - indice su `(status)` e trigger `updated_at`;
 - nessun `auth_user_id` duplicato anche in `profiles`.
 
-`account_roles` ha PK composta `(auth_user_id, role)` e contiene solo
-`admin|coach|staff`. `athlete` non viene backfillato come ruolo globale.
+`account_roles` ha PK composta `(auth_user_id, role)` e contiene i ruoli globali
+`admin|coach|staff|athlete`. Il ruolo `athlete` non sostituisce il profilo atleta né
+l'iscrizione stagionale attiva.
 
 Il ruolo `coach` abilita l'area coach, ma non attribuisce accesso a nessuna squadra.
 L'unica catena autorevole per autorizzare una squadra è:
@@ -943,6 +944,14 @@ fino alla sua implementazione non vengono creati nuovi account atleta dal fronte
 Build e test E2E CRUD locale passano; staging/produzione non sono stati toccati.
 
 #### Fase 3A — account atleta e riconciliazione degli account esistenti
+
+Stato: implementazione locale in corso. La migration `20260809140000_account_role_athlete.sql`
+abilita il ruolo e aggiorna il provisioning; la migration
+`20260809141000_reconcile_existing_athlete_accounts.sql` ha riconciliato in locale 44
+mapping già certi (`app_accounts` + `athlete_profiles` + `season_profiles` attiva), senza
+modificare Auth, profili, password, sessioni, stato o ruoli esistenti. Non sono stati
+rilevati casi ambigui nel database locale; eventuali casi non riconducibili con gli stessi
+criteri restano esclusi e richiedono revisione manuale.
 
 Prima dello staging va introdotta una migration forward che estende il vincolo dei ruoli
 globali a `athlete` e aggiorna il provisioning per accettare anche questo ruolo. La nuova
