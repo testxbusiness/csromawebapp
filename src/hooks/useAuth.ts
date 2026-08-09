@@ -67,6 +67,7 @@ export function useAuth(): UseAuthReturn {
   const [profileLoading, setProfileLoading] = useState(false)
 
   const lastProfileFor = useRef<string | null>(null)
+  const profileRef = useRef<ProfileRow | null>(null)
   const mounted = useRef(true)
   const currentUserIdRef = useRef<string | null>(null)
   const loadingWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -77,6 +78,10 @@ export function useAuth(): UseAuthReturn {
       mounted.current = false
     }
   }, [])
+
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
 
   const loadProfileFromCache = useCallback((userId: string): PersonalProfileData | null => {
     try {
@@ -328,7 +333,7 @@ export function useAuth(): UseAuthReturn {
         currentUserIdRef.current = nextUserId
 
         if (isRefresh && sameUser) {
-          if (nextUserId && !profile) {
+          if (nextUserId && !profileRef.current) {
             await loadProfile(nextUserId, false)
           }
           return
@@ -362,7 +367,7 @@ export function useAuth(): UseAuthReturn {
       unsub?.()
       if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
     }
-  }, [loadProfile, profile, supabase])
+  }, [loadProfile, supabase])
 
   const lastRefreshTimeRef = useRef<number>(0)
   const visibilityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
