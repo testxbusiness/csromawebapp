@@ -844,8 +844,9 @@ automaticamente account Auth; l’eventuale attivazione dell’accesso resterà 
 successiva e separata.
 
 Questa separazione riguarda esclusivamente UX e workflow: il backend manterrà un solo
-modello `profiles`, con `app_accounts` e `account_roles` opzionali secondo le regole già
-definite. Non viene avviata alcuna implementazione in questa fase.
+modello `profiles`, con `season_profiles`, `app_accounts` e `account_roles` opzionali
+secondo le regole già definite. L’implementazione procede per slice, partendo dalla
+relazione persona-stagione e dai suoi vincoli DB.
 
 Spike Fase 3 completato in locale: con `@supabase/supabase-js 2.56.0` e lo stack
 Supabase Docker è stato verificato il flusso `auth.admin.createUser` senza invio seguito
@@ -921,6 +922,11 @@ API nuove:
 - eventuale `DELETE /account` self-service, con la stessa semantica di revoca logica.
 
 Migration 10B: `season_profile_memberships`
+
+Implementazione locale: `20260809084503_season_profile_memberships.sql` crea la relazione
+e fa il backfill dei 48 profili locali verso l’unica stagione attiva. La correzione
+`20260809084717_season_profile_memberships_indexes.sql` rimuove un indice ordinario
+ridondante, lasciando l’indice univoco per identificativo esterno.
 
 - aggiunge la relazione unica `season_profiles(profile_id, season_id)` per collegare una
   persona a una o più stagioni senza duplicare `profiles`;
