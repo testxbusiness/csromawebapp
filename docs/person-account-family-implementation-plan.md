@@ -835,6 +835,14 @@ dopo la prova. Il test non ha creato `profiles`, `app_accounts` o `account_roles
 interessato staging o produzione. Il primo slice può quindi usare il flusso
 create-then-verify-then-link previsto dal piano.
 
+Migration 10, primo slice locale: `20260809120000_person_account_audit_support.sql`
+ha aggiunto `account_lifecycle_audit` come tabella append-only, con snapshot dell’attore,
+soggetto non distruttivo, dettagli JSON e timestamp. La tabella non è esposta ai ruoli
+`anon`/`authenticated`; i grant sono riservati al percorso server-side. Un trigger blocca
+UPDATE e DELETE: il test locale ha rifiutato la modifica e il conteggio finale è rimasto
+zero. La migration non è ancora stata applicata a staging e non è stata applicata in
+produzione.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;
