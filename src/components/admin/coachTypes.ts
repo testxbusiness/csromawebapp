@@ -25,6 +25,7 @@ export interface Team {
 export interface Activity {
   id: string
   name: string
+  season_id?: string
 }
 
 export interface Season {

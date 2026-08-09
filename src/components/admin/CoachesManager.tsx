@@ -6,8 +6,13 @@ import { createClient } from '@/lib/supabase/client'
 import type { Coach, Team, Activity, Season } from './coachTypes'
 import BulkOperationsModal from './BulkOperationsModal'
 import TeamAssignmentModal from './TeamAssignmentModal'
+import CollaboratorModal, { type CollaboratorFormData } from './CollaboratorModal'
+import CollaboratorAccountActions from './CollaboratorAccountActions'
 
 interface CoachWithDetails extends Coach {
+  collaborator_type: 'coach' | 'staff'
+  season_ids: string[]
+  account: { status: string; roles: string[] } | null
   teams: Array<{
     id: string
     name: string
@@ -28,6 +33,10 @@ export default function CoachesManager() {
   const [bulkLoading, setBulkLoading] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false)
+  const [showCollaboratorModal, setShowCollaboratorModal] = useState(false)
+  const [editingCollaborator, setEditingCollaborator] = useState<CollaboratorFormData | null>(null)
+  const [editingCollaboratorId, setEditingCollaboratorId] = useState<string | null>(null)
+  const [collaboratorSubmitting, setCollaboratorSubmitting] = useState(false)
 
   const supabase = createClient()
 
@@ -40,7 +49,7 @@ export default function CoachesManager() {
   const loadCoaches = useCallback(async () => {
     try {
       // Carica coach con dettagli completi
-      const response = await fetch('/api/admin/coaches')
+      const response = await fetch('/api/admin/collaborators')
       const result = await response.json()
 
       if (!response.ok) {
@@ -49,7 +58,7 @@ export default function CoachesManager() {
         return
       }
 
-      setCoaches(result.coaches || [])
+      setCoaches(result.collaborators || [])
     } catch (error) {
       console.error('Errore caricamento collaboratori:', error)
       setCoaches([])
@@ -101,7 +110,7 @@ export default function CoachesManager() {
     return coaches.filter(coach => {
       // Filtro stagione
       if (selectedSeason !== 'all') {
-        // TODO: Implementare filtro stagione quando disponibile nel modello dati
+        if (!coach.season_ids?.includes(selectedSeason)) return false
       }
 
       // Filtro attività
@@ -225,6 +234,34 @@ export default function CoachesManager() {
     setShowBulkModal(true)
   }
 
+  const handleCollaboratorSubmit = async (data: CollaboratorFormData) => {
+    setCollaboratorSubmitting(true)
+    try {
+      const response = await fetch('/api/admin/collaborators', { method: editingCollaboratorId ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editingCollaboratorId ? { ...data, id: editingCollaboratorId } : data) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Impossibile salvare il collaboratore')
+      toast.success(editingCollaborator ? 'Collaboratore aggiornato' : 'Collaboratore creato')
+      setShowCollaboratorModal(false); setEditingCollaborator(null); setEditingCollaboratorId(null); await loadCoaches()
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Impossibile salvare il collaboratore') } finally { setCollaboratorSubmitting(false) }
+  }
+
+  const openCollaboratorEdit = (coach: CoachWithDetails) => {
+    const team = coach.teams?.[0]
+    setEditingCollaboratorId(coach.id)
+    setEditingCollaborator({ first_name: coach.first_name, last_name: coach.last_name, email: coach.email || '', phone: coach.phone || '', birth_date: coach.birth_date || '', collaborator_type: coach.collaborator_type, season_id: selectedSeason !== 'all' ? selectedSeason : coach.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || '', level: coach.level || '', specialization: coach.specialization || '', started_on: coach.started_on || '', team_id: team?.id || '', team_role: team?.role === 'assistant_coach' ? 'assistant_coach' : 'head_coach' })
+    setShowCollaboratorModal(true)
+  }
+
+  const removeCollaborator = async (coach: CoachWithDetails) => {
+    if (selectedSeason === 'all') { toast.error('Seleziona una stagione prima di rimuovere un collaboratore'); return }
+    if (!window.confirm(`Rimuovere ${coach.first_name} ${coach.last_name} dalla stagione selezionata?`)) return
+    const response = await fetch('/api/admin/collaborators', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: coach.id, season_id: selectedSeason }) })
+    const result = await response.json()
+    if (!response.ok) { toast.error(result.error || 'Impossibile rimuovere il collaboratore'); return }
+    toast.success(result.archived ? 'Collaboratore archiviato' : 'Collaboratore rimosso dalla stagione')
+    await loadCoaches()
+  }
+
   if (loading) {
     return <LoadingState label="Caricamento collaboratori..." />
   }
@@ -243,6 +280,9 @@ export default function CoachesManager() {
           <div className="flex gap-3 mt-4 lg:mt-0">
             <button className="cs-btn cs-btn--outline">
               Esporta CSV
+            </button>
+            <button onClick={() => { setEditingCollaborator(null); setEditingCollaboratorId(null); setShowCollaboratorModal(true) }} className="cs-btn cs-btn--primary">
+              Nuovo Collaboratore
             </button>
             <button onClick={handleOpenBulkModal} className="cs-btn cs-btn--primary">
               Nuova Operazione Massiva
@@ -392,6 +432,9 @@ export default function CoachesManager() {
                     <button className="cs-btn cs-btn--outline cs-btn--sm">
                       Dettagli
                     </button>
+                    <button className="cs-btn cs-btn--outline cs-btn--sm ml-2" onClick={() => openCollaboratorEdit(coach)}>Modifica</button>
+                    <button className="cs-btn cs-btn--danger cs-btn--sm ml-2" onClick={() => void removeCollaborator(coach)}>Rimuovi</button>
+                    <span className="ml-2"><CollaboratorAccountActions id={coach.id} name={`${coach.first_name} ${coach.last_name}`} email={coach.email} account={coach.account} role={coach.collaborator_type} onChanged={() => void loadCoaches()} /></span>
                   </td>
                 </tr>
               ))}
@@ -431,7 +474,8 @@ export default function CoachesManager() {
               </div>
 
               <div className="mt-3">
-                <button className="cs-btn cs-btn--outline cs-btn--sm w-full">Dettagli</button>
+                <div className="grid grid-cols-2 gap-2"><button className="cs-btn cs-btn--outline cs-btn--sm">Dettagli</button><button className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => openCollaboratorEdit(coach)}>Modifica</button></div>
+                <div className="mt-2 flex gap-2"><button className="cs-btn cs-btn--danger cs-btn--sm flex-1" onClick={() => void removeCollaborator(coach)}>Rimuovi</button><CollaboratorAccountActions id={coach.id} name={`${coach.first_name} ${coach.last_name}`} email={coach.email} account={coach.account} role={coach.collaborator_type} onChanged={() => void loadCoaches()} /></div>
               </div>
             </div>
           ))}
@@ -477,6 +521,8 @@ export default function CoachesManager() {
         loading={bulkLoading}
         userType="coaches"
       />
+
+      <CollaboratorModal isOpen={showCollaboratorModal} collaborator={editingCollaborator} seasons={seasons} activities={activities} teams={teams} isSubmitting={collaboratorSubmitting} onSubmit={handleCollaboratorSubmit} onClose={() => { setShowCollaboratorModal(false); setEditingCollaborator(null); setEditingCollaboratorId(null) }} />
     </div>
   )
 }

@@ -928,6 +928,18 @@ flusso Staff; API e vincoli DB verificano che il destinatario sia effettivamente
 Staff. Build e test E2E locale del nuovo form passano; staging/produzione non sono stati
 toccati.
 
+Fase 3, slice ciclo di vita iscritti e collaboratori: `/admin/atleti` ora consente
+creazione, modifica e rimozione dell’iscrizione per stagione; la rimozione elimina solo
+il collegamento stagionale e le assegnazioni a squadre della stagione, conservando
+anagrafica, storico e account. `/admin/collaboratori` usa un endpoint dedicato per creare
+e modificare Coach e Staff, con assegnazione opzionale a stagione, attività/squadra e
+ruolo head/assistant per i Coach. La rimozione è stagionale e archivia la persona solo
+quando non restano altre stagioni. Le azioni di creazione account e invio invito sono
+state portate nella riga del collaboratore; `Persone` resta il pannello centralizzato.
+Non viene introdotto `account_roles.athlete`: l’accesso atleta resta quello già previsto
+dalla Fase 2D. Build e test E2E CRUD locale passano; staging/produzione non sono stati
+toccati.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;

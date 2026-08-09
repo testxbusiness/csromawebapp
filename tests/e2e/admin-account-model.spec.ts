@@ -86,4 +86,23 @@ test.describe('admin authenticated smoke test', () => {
     await expect(page.getByText('Persona destinataria *', { exact: true })).toBeVisible()
     await expect(page.getByText('Palestra, attività e squadra restano opzionali per questo pagamento.', { exact: true })).toBeVisible()
   })
+
+  test('exposes CRUD actions for athletes and collaborators', async ({ page }) => {
+    await page.goto('/admin/atleti')
+    await expect(page.getByRole('heading', { name: 'Gestione Atleti' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: 'Nuovo Atleta' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Importa Atleti' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Modifica' }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Rimuovi' }).first()).toBeVisible()
+
+    await page.goto('/admin/collaboratori')
+    await expect(page.getByRole('heading', { name: 'Gestione Collaboratori' })).toBeVisible({ timeout: 15_000 })
+    const collaboratorsResponse = await page.request.get('/api/admin/collaborators')
+    expect(collaboratorsResponse.status()).toBe(200)
+    const collaboratorsPayload = await collaboratorsResponse.json()
+    expect(Array.isArray(collaboratorsPayload.collaborators)).toBe(true)
+    await expect(page.getByRole('button', { name: 'Nuovo Collaboratore' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Modifica' }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Rimuovi' }).first()).toBeVisible()
+  })
 })

@@ -35,6 +35,11 @@ export const athleteCreateSchema = profileCreateSchema.extend({
 
 export type AthleteCreatePayload = z.infer<typeof athleteCreateSchema>
 
+export const athleteUpdateSchema = athleteCreateSchema.partial().extend({
+  id: z.string().uuid('Atleta non valido'),
+  season_id: z.string().uuid('Stagione non valida'),
+}).strict()
+
 const optionalNullableImportText = (max: number) =>
   z.preprocess(
     (value) => value === '' ? null : value,
@@ -70,3 +75,21 @@ export const athleteImportSchema = z.object({
 }).strict()
 
 export type AthleteImportRow = z.infer<typeof athleteImportRowSchema>
+
+export const collaboratorTypeSchema = z.enum(['coach', 'staff'])
+export const collaboratorCreateSchema = profileCreateSchema.extend({
+  collaborator_type: collaboratorTypeSchema,
+  season_id: z.string().uuid('Stagione non valida'),
+  level: optionalNullableText(120),
+  specialization: optionalNullableText(240),
+  started_on: optionalNullableDate,
+  team_id: z.string().uuid('Squadra non valida').nullable().optional(),
+  team_role: z.enum(['head_coach', 'assistant_coach']).nullable().optional(),
+}).strict()
+
+export const collaboratorUpdateSchema = collaboratorCreateSchema.partial().extend({
+  id: z.string().uuid('Collaboratore non valido'),
+  season_id: z.string().uuid('Stagione non valida'),
+}).strict()
+
+export type CollaboratorCreatePayload = z.infer<typeof collaboratorCreateSchema>

@@ -6,6 +6,7 @@ import type { Activity, AthleteCreateData, Season, Team } from './athleteTypes'
 
 interface AthleteCreateModalProps {
   isOpen: boolean
+  athlete?: AthleteCreateData | null
   seasons: Season[]
   activities: Activity[]
   teams: Team[]
@@ -28,6 +29,7 @@ const emptyForm: AthleteCreateData = {
 
 export default function AthleteCreateModal({
   isOpen,
+  athlete,
   seasons,
   activities,
   teams,
@@ -48,11 +50,11 @@ export default function AthleteCreateModal({
 
   useEffect(() => {
     if (!isOpen) return
-    setFormData((current) => ({
+    setFormData(athlete || {
       ...emptyForm,
-      season_id: current.season_id || seasons.find((season) => season.is_active)?.id || seasons[0]?.id || '',
-    }))
-  }, [isOpen, seasons])
+      season_id: seasons.find((season) => season.is_active)?.id || seasons[0]?.id || '',
+    })
+  }, [athlete, isOpen, seasons])
 
   const update = <K extends keyof AthleteCreateData>(key: K, value: AthleteCreateData[K]) => {
     setFormData((current) => ({ ...current, [key]: value }))
@@ -66,7 +68,7 @@ export default function AthleteCreateModal({
   return (
     <AdminModal
       isOpen={isOpen}
-      title="Nuovo Atleta"
+      title={athlete ? 'Modifica Atleta' : 'Nuovo Atleta'}
       onClose={onClose}
       sizeClassName="max-w-3xl"
       footer={(
@@ -75,7 +77,7 @@ export default function AthleteCreateModal({
             Annulla
           </button>
           <button type="submit" form="athlete-create-form" className="cs-btn cs-btn--primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Salvataggio...' : 'Crea Atleta'}
+            {isSubmitting ? 'Salvataggio...' : athlete ? 'Salva modifiche' : 'Crea Atleta'}
           </button>
         </>
       )}
