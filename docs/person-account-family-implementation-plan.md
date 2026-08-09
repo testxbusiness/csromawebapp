@@ -951,6 +951,13 @@ in locale la view è ora popolata e l’endpoint `/api/championships/standings` 
 La stessa migration dovrà essere inclusa nel preflight staging; produzione non è stata
 interrogata né modificata.
 
+Correzione RLS atleta: la migration
+`20260809160000_athlete_season_profile_select_policy.sql` consente a un account con
+`account_roles('athlete')` di leggere esclusivamente le proprie relazioni in
+`season_profiles`. Il controllo server `requireAthleteContext` verifica ora anche il
+ruolo globale atleta, oltre a `athlete_profiles` e a una relazione stagionale attiva;
+senza questi requisiti le API atleta continuano a rispondere `403`.
+
 #### Fase 3A — account atleta e riconciliazione degli account esistenti
 
 Stato: implementazione locale in corso. La migration `20260809140000_account_role_athlete.sql`

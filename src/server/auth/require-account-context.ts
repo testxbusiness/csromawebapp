@@ -86,6 +86,10 @@ export async function requireAthleteContext(
   const context = await requireAccountContext(client)
   const supabase = client ?? (await createClient())
 
+  if (!context.roles.includes('athlete')) {
+    throw new AccountContextError('Ruolo atleta non abilitato', 403)
+  }
+
   const [{ data: athleteProfile }, { data: seasonMembership }] = await Promise.all([
     supabase
       .from('athlete_profiles')
