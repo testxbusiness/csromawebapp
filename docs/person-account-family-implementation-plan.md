@@ -958,6 +958,12 @@ Correzione RLS atleta: la migration
 ruolo globale atleta, oltre a `athlete_profiles` e a una relazione stagionale attiva;
 senza questi requisiti le API atleta continuano a rispondere `403`.
 
+Preflight staging completato il 9 agosto 2026: backup schema, dati e ruoli salvati in
+`/tmp/csroma_staging_preflight_20260809/`; le 10 migration della Fase 3A sono state
+applicate al progetto staging `kibtvkuiedoxgppnnxkf`. Il dry-run successivo ha restituito
+`Remote database is up to date` e il lint remoto non ha rilevato errori di schema.
+Produzione non è stata modificata.
+
 #### Fase 3A — account atleta e riconciliazione degli account esistenti
 
 Stato: implementazione locale in corso. La migration `20260809140000_account_role_athlete.sql`
