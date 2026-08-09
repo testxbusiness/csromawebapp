@@ -915,6 +915,17 @@ e il nuovo E2E stagionale passano; due smoke test admin
 preesistenti hanno avuto timeout durante il caricamento di pagine pesanti, senza errori
 funzionali sul nuovo flusso.
 
+Fase 3, slice pagamenti collaboratori: la migration
+`20260809090904_collaborator_season_profile_type.sql` aggiunge la classificazione
+stagionale `athlete|coach|staff|admin`, distinta dai ruoli globali di accesso. La migration
+`20260809091419_person_payment_payee.sql` mantiene i pagamenti coach esistenti e aggiunge
+`person_payment` con `payee_profile_id`, consentendo di registrare pagamenti a coach o Staff
+anche senza squadra, attività o palestra. La UI `/admin/payments` carica i destinatari
+collaboratori da un endpoint admin dedicato, mantiene il flusso coach legacy e aggiunge il
+flusso Staff; API e vincoli DB verificano che il destinatario sia effettivamente coach o
+Staff. Build e test E2E locale del nuovo form passano; staging/produzione non sono stati
+toccati.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;
@@ -1056,9 +1067,13 @@ Migration 14: `attendance_rsvp_and_payment_actors`
 - `rsvp`: stessi campi per compatibilità, anche se oggi non usata dal codice;
 - `fee_installments`: soggetto resta `profile_id`; aggiunge attore del pagamento quando
   effettivamente registrato;
-- `payments`: conserva `coach_id`/costo generale e aggiunge solo actor audit dove serve;
-- non usa `payment_subject_profile_id` su `payments` finché non viene chiarita la
-  semantica, perché le quote atleta vivono in `fee_installments`.
+- `payments`: conserva `coach_id` per compatibilità con i pagamenti coach esistenti;
+- aggiunge `person_payment` con `payee_profile_id` per pagare qualsiasi collaboratore,
+  incluso Staff senza squadra, attività o palestra;
+- i riferimenti a palestra, attività e squadra restano opzionali per `person_payment`;
+- le notifiche applicative restano specifiche dei pagamenti coach finché lo Staff non
+  avrà un’area personale di consultazione;
+- mantiene `payments` distinto dalle quote atleta e dalle rate associative.
 
 Migration 15: `document_access_and_activity_audit`
 
@@ -1332,6 +1347,8 @@ Default approvati e vincolanti:
 11. `profiles` è un’identità unica e non contiene una stagione singola; ogni persona deve
     avere il collegamento stagionale in `season_profiles`, anche se il relativo account
     globale (`admin`, `coach` o `staff`) può avere permessi non limitati alla stagione.
+12. I pagamenti coach esistenti restano compatibili; i pagamenti a persone non legati a
+    squadra, attività o palestra usano `person_payment` e `payee_profile_id`.
 
 Restano rinviati senza bloccare la Fase 1:
 

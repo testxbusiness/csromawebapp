@@ -39,4 +39,22 @@ test.describe('admin authenticated smoke test', () => {
     await expect(page.getByLabel('Attività', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Squadra', { exact: true })).toBeVisible()
   })
+
+  test('offers staff person payments without requiring a team', async ({ page }) => {
+    await page.goto('/admin/payments')
+    await expect(page.getByRole('heading', { name: 'Pagamenti' })).toBeVisible({ timeout: 15_000 })
+
+    const payeesResponse = await page.request.get('/api/admin/payment-payees')
+    expect(payeesResponse.status()).toBe(200)
+    const payeesPayload = await payeesResponse.json()
+    expect(Array.isArray(payeesPayload.payees)).toBe(true)
+
+    await page.getByRole('button', { name: 'Nuovo Pagamento' }).click()
+    await expect(page.getByRole('heading', { name: 'Nuovo Pagamento' })).toBeVisible()
+
+    const typeSelect = page.locator('select').filter({ has: page.locator('option[value="person_payment"]') }).last()
+    await typeSelect.selectOption('person_payment')
+    await expect(page.getByText('Persona destinataria *', { exact: true })).toBeVisible()
+    await expect(page.getByText('Palestra, attività e squadra restano opzionali per questo pagamento.', { exact: true })).toBeVisible()
+  })
 })
