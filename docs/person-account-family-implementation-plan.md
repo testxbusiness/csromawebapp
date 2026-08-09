@@ -852,6 +852,14 @@ tentato il rollback del profilo appena creato. Il test autenticato locale ha ver
 GET con 48 profili e il rifiuto di un POST invalido con HTTP 400 senza inserimenti. Nessuna
 UI è stata modificata e staging/produzione non sono stati toccati.
 
+Fase 3, slice UI persone: sono stati aggiunti il menu admin `Persone`, la pagina
+`/admin/profiles` e `src/components/admin/PeopleManager.tsx`. La schermata separa
+anagrafica e accesso, mostra stato/account collegato, ricerca locale, stati loading/error/
+empty e il dialog accessibile `Nuova persona`. Il form invia solo dati anagrafici e non
+crea account Auth. La verifica UI autenticata locale ha confermato navigazione, caricamento
+elenco e apertura del dialog con campi etichettati; nessuna persona di test è stata
+inserita. Build Next.js e Jest passano. Staging e produzione non sono stati toccati.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;

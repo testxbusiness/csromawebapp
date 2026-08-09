@@ -42,6 +42,7 @@ const adminItems: NavItem[] = [
   { href: '/admin/teams', label: 'Squadre', icon: UsersRound },
   { href: '/admin/campionati', label: 'Campionati', icon: Trophy },
   { href: '/admin/users', label: 'Utenti', icon: ClipboardList },
+  { href: '/admin/profiles', label: 'Persone', icon: UsersRound },
   { href: '/admin/atleti', label: 'Iscritti', icon: User },
   { href: '/admin/collaboratori', label: 'Collaboratori', icon: UserCog },
   { href: '/admin/gyms', label: 'Palestre', icon: Building2 },
