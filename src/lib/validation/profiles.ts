@@ -11,6 +11,11 @@ const optionalNullableDate = z.preprocess(
   z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data non valida').nullable().optional()
 )
 
+const optionalNullableUuid = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string().uuid('Identificativo non valido').nullable().optional()
+)
+
 export const profileCreateSchema = z.object({
   first_name: z.string().trim().min(1).max(100),
   last_name: z.string().trim().min(1).max(100),
@@ -26,7 +31,7 @@ export type ProfileCreatePayload = z.infer<typeof profileCreateSchema>
 
 export const athleteCreateSchema = profileCreateSchema.extend({
   season_id: z.string().uuid('Stagione non valida'),
-  team_id: z.string().uuid('Squadra non valida').nullable().optional(),
+  team_id: optionalNullableUuid,
   jersey_number: z.number().int().min(0).max(99).nullable().optional(),
   membership_number: optionalNullableText(80),
   medical_certificate_expiry: optionalNullableDate,
@@ -83,7 +88,7 @@ export const collaboratorCreateSchema = profileCreateSchema.extend({
   level: optionalNullableText(120),
   specialization: optionalNullableText(240),
   started_on: optionalNullableDate,
-  team_id: z.string().uuid('Squadra non valida').nullable().optional(),
+  team_id: optionalNullableUuid,
   team_role: z.enum(['head_coach', 'assistant_coach']).nullable().optional(),
 }).strict()
 
