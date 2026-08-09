@@ -843,6 +843,15 @@ UPDATE e DELETE: il test locale ha rifiutato la modifica e il conteggio finale �
 zero. La migration non è ancora stata applicata a staging e non è stata applicata in
 produzione.
 
+Fase 3, slice API persone: sono stati aggiunti `GET/POST /api/admin/profiles`, lo schema
+`src/lib/validation/profiles.ts` e il servizio audit `src/server/audit/account-lifecycle.ts`.
+Il POST crea esclusivamente una persona anagrafica neutra, senza account Auth, ruolo legacy
+o invio email; il GET espone i profili all’admin con l’eventuale stato account e ruoli
+collegati. Ogni creazione valida registra `profile_created`; se l’audit fallisce viene
+tentato il rollback del profilo appena creato. Il test autenticato locale ha verificato
+GET con 48 profili e il rifiuto di un POST invalido con HTTP 400 senza inserimenti. Nessuna
+UI è stata modificata e staging/produzione non sono stati toccati.
+
 Migration 10: `person_and_account_audit_support`
 
 - separa semanticamente archiviazione persona e stato account;
