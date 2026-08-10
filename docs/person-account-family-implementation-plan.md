@@ -1118,6 +1118,13 @@ UI:
 Stato: da iniziare dopo il consolidamento della Fase 3A. Non sono autorizzate modifiche
 in produzione prima del completamento e dei test dell’intero piano.
 
+Fase 4, slice 1 completato in locale: `20260810160000_consolidate_profile_athlete_team_sources.sql`
+verifica i conflitti tra le colonne sportive legacy di `profiles` e le fonti autorevoli
+`athlete_profiles`/`team_members`, esegue backfill solo per valori mancanti e lascia le
+copie legacy in compatibilità. Il report locale ha rilevato 0 conflitti e 0 valori legacy
+non null; gli update hanno quindi modificato 0 righe. La migration non è stata applicata
+allo staging e produzione resta fuori perimetro.
+
 Migration 11: `consolidate_profile_athlete_team_sources`
 
 - produce prima un report di confronto per numero tessera, certificato e numero maglia;
