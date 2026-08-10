@@ -547,6 +547,8 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   }
   if (accessDenied) return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
 
+  const isDelegatedProfile = accountRole === 'family_member' && Boolean(selectedProfileId)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -638,13 +640,19 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                 return (
                   <div
                     key={membership.id}
-                    className="cs-list-item cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => setSelectedTeamId(membership.team.id)}
+                    className={`cs-list-item transition-shadow ${isDelegatedProfile ? '' : 'cursor-pointer hover:shadow-md'}`}
+                    onClick={isDelegatedProfile ? undefined : () => setSelectedTeamId(membership.team.id)}
+                    title={isDelegatedProfile ? 'I dettagli della squadra non sono disponibili per questo profilo' : undefined}
                   >
                     <div className="mb-2 flex w-full items-start justify-between">
                       <div>
                         <div className="font-medium">{membership.team.name}</div>
                         <div className="text-sm text-secondary">Attività: {membership.team.activity?.name}</div>
+                        {isDelegatedProfile && (
+                          <div className="mt-1 text-xs text-secondary">
+                            Dettagli squadra non disponibili per questo profilo
+                          </div>
+                        )}
                       </div>
                     </div>
                     
