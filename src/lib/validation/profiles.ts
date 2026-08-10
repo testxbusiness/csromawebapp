@@ -88,8 +88,8 @@ export const collaboratorCreateSchema = profileCreateSchema.extend({
   level: optionalNullableText(120),
   specialization: optionalNullableText(240),
   started_on: optionalNullableDate,
-  team_id: optionalNullableUuid,
-  team_role: z.enum(['head_coach', 'assistant_coach']).nullable().optional(),
+  team_ids: z.array(z.string().uuid('Squadra non valida')).default([]),
+  team_roles: z.record(z.string().uuid('Squadra non valida'), z.enum(['head_coach', 'assistant_coach'])).default({}),
 }).strict()
 
 export const collaboratorUpdateSchema = collaboratorCreateSchema.partial().extend({

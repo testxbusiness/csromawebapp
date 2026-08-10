@@ -18,14 +18,14 @@ async function seasonTeamIds(adminClient: ReturnType<typeof createAdminClient>, 
   return (teams || []).map((team) => team.id)
 }
 
-async function validateTeam(adminClient: ReturnType<typeof createAdminClient>, seasonId: string, type: CollaboratorType, teamId: string | null | undefined) {
-  if (!teamId) return null
+async function validateTeams(adminClient: ReturnType<typeof createAdminClient>, seasonId: string, type: CollaboratorType, teamIds: string[]) {
+  if (!teamIds.length) return
   if (type !== 'coach') throw new Error('Staff e Admin non possono essere assegnati a una squadra')
-  const { data: team } = await adminClient.from('teams').select('id, activity_id').eq('id', teamId).maybeSingle()
-  if (!team) throw new Error('Squadra non trovata')
-  const { data: activity } = await adminClient.from('activities').select('season_id').eq('id', team.activity_id).maybeSingle()
-  if (!activity || activity.season_id !== seasonId) throw new Error('La squadra non appartiene alla stagione selezionata')
-  return team
+  const { data: teams } = await adminClient.from('teams').select('id, activity_id').in('id', teamIds)
+  if (!teams || teams.length !== new Set(teamIds).size) throw new Error('Una o più squadre non sono state trovate')
+  const activityIds = teams.map((team) => team.activity_id)
+  const { data: activities } = await adminClient.from('activities').select('id, season_id').in('id', activityIds)
+  if (!activities || activities.some((activity) => activity.season_id !== seasonId)) throw new Error('Una o più squadre non appartengono alla stagione selezionata')
 }
 
 export async function GET() {
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     const adminClient = createAdminClient()
     const { data: season } = await adminClient.from('seasons').select('id').eq('id', payload.season_id).maybeSingle()
     if (!season) return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
-    try { await validateTeam(adminClient, payload.season_id, payload.collaborator_type, payload.team_id) } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadra non valida' }, { status: 400 }) }
+    try { await validateTeams(adminClient, payload.season_id, payload.collaborator_type, payload.team_ids) } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 }) }
 
     const { data: profile, error: profileError } = await adminClient.from('profiles').insert({
       first_name: payload.first_name,
@@ -124,8 +124,8 @@ export async function POST(request: NextRequest) {
     }
     const { error: seasonError } = await adminClient.from('season_profiles').insert({ profile_id: profile.id, season_id: payload.season_id, profile_type: payload.collaborator_type, source: 'admin_collaborator_create' })
     if (seasonError) { await cleanup(); return NextResponse.json({ error: 'Impossibile collegare il collaboratore alla stagione' }, { status: 400 }) }
-    if (payload.team_id) {
-      const { error } = await adminClient.from('team_coaches').insert({ coach_id: profile.id, team_id: payload.team_id, role: payload.team_role || 'head_coach' })
+    if (payload.team_ids.length) {
+      const { error } = await adminClient.from('team_coaches').insert(payload.team_ids.map((teamId) => ({ coach_id: profile.id, team_id: teamId, role: payload.team_roles[teamId] || 'head_coach' })))
       if (error) { await cleanup(); return NextResponse.json({ error: 'Impossibile assegnare la squadra' }, { status: 400 }) }
     }
     return NextResponse.json({ profile_id: profile.id, season_id: payload.season_id, collaborator_type: payload.collaborator_type }, { status: 201 })
@@ -147,7 +147,9 @@ export async function PATCH(request: NextRequest) {
     const { data: profile } = await adminClient.from('profiles').select('id, role').eq('id', payload.id).maybeSingle()
     if (!profile) return NextResponse.json({ error: 'Collaboratore non trovato' }, { status: 404 })
     const type = payload.collaborator_type || (profile.role === 'coach' ? 'coach' : 'staff')
-    try { await validateTeam(adminClient, payload.season_id, type, payload.team_id) } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadra non valida' }, { status: 400 }) }
+    const teamIdsPayload = payload.team_ids || []
+    const teamRolesPayload = payload.team_roles || {}
+    try { await validateTeams(adminClient, payload.season_id, type, teamIdsPayload) } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 }) }
 
     const profileUpdate: Record<string, string | null> = {}
     for (const field of ['first_name', 'last_name', 'email', 'phone', 'birth_date'] as const) if (field in payload) profileUpdate[field] = payload[field] ?? null
@@ -170,7 +172,7 @@ export async function PATCH(request: NextRequest) {
     if (seasonError) return NextResponse.json({ error: 'Impossibile aggiornare la stagione' }, { status: 400 })
     const teamIds = await seasonTeamIds(adminClient, payload.season_id)
     if (teamIds.length) await adminClient.from('team_coaches').delete().eq('coach_id', payload.id).in('team_id', teamIds)
-    if (payload.team_id) await adminClient.from('team_coaches').insert({ coach_id: payload.id, team_id: payload.team_id, role: payload.team_role || 'head_coach' })
+    if (teamIdsPayload.length) await adminClient.from('team_coaches').insert(teamIdsPayload.map((teamId) => ({ coach_id: payload.id, team_id: teamId, role: teamRolesPayload[teamId] || 'head_coach' })))
     return NextResponse.json({ success: true, profile_id: payload.id, season_id: payload.season_id })
   } catch (error) {
     if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })

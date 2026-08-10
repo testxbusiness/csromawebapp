@@ -248,9 +248,13 @@ export default function CoachesManager() {
   }
 
   const openCollaboratorEdit = (coach: CoachWithDetails) => {
-    const team = coach.teams?.[0]
+    const seasonId = selectedSeason !== 'all' ? selectedSeason : coach.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || ''
+    const seasonTeamIds = new Set(teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === seasonId)).map((team) => team.id))
+    const seasonAssignments = (coach.teams || []).filter((team) => seasonTeamIds.has(team.id))
+    const teamIds = seasonAssignments.map((team) => team.id)
+    const teamRoles: CollaboratorFormData['team_roles'] = Object.fromEntries(seasonAssignments.map((team) => [team.id, team.role === 'assistant_coach' ? 'assistant_coach' : 'head_coach']))
     setEditingCollaboratorId(coach.id)
-    setEditingCollaborator({ first_name: coach.first_name, last_name: coach.last_name, email: coach.email || '', phone: coach.phone || '', birth_date: coach.birth_date || '', collaborator_type: coach.collaborator_type, season_id: selectedSeason !== 'all' ? selectedSeason : coach.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || '', level: coach.level || '', specialization: coach.specialization || '', started_on: coach.started_on || '', team_id: team?.id || '', team_role: team?.role === 'assistant_coach' ? 'assistant_coach' : 'head_coach' })
+    setEditingCollaborator({ first_name: coach.first_name, last_name: coach.last_name, email: coach.email || '', phone: coach.phone || '', birth_date: coach.birth_date || '', collaborator_type: coach.collaborator_type, season_id: seasonId, level: coach.level || '', specialization: coach.specialization || '', started_on: coach.started_on || '', team_ids: teamIds, team_roles: teamRoles })
     setShowCollaboratorModal(true)
   }
 
