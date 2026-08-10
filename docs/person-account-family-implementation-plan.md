@@ -1115,7 +1115,7 @@ UI:
 
 ### Fase 4 — famiglie e profili accessibili
 
-Stato: da iniziare dopo il consolidamento della Fase 3A. Non sono autorizzate modifiche
+Stato: in implementazione incrementale dopo il consolidamento della Fase 3A. Non sono autorizzate modifiche
 in produzione prima del completamento e dei test dell’intero piano.
 
 Fase 4, slice 1 completato in locale: `20260810160000_consolidate_profile_athlete_team_sources.sql`
@@ -1124,6 +1124,16 @@ verifica i conflitti tra le colonne sportive legacy di `profiles` e le fonti aut
 copie legacy in compatibilità. Il report locale ha rilevato 0 conflitti e 0 valori legacy
 non null; gli update hanno quindi modificato 0 righe. La migration non è stata applicata
 allo staging e produzione resta fuori perimetro.
+
+Fase 4, slice 2 completata in locale: `20260810170000_relationship_permissions_age_and_audit.sql`
+crea gli override amministrativi dell’età e lo storico append-only delle relazioni,
+centralizza il calcolo della minore età con comportamento fail-closed per data mancante,
+applica le regole di accesso per permesso e richiede una relazione `delegate` attiva e
+verificata per i soggetti maggiorenni. La cancellazione diretta delle relazioni è stata
+rimossa dal ruolo `authenticated`: la revoca dovrà essere una modifica a `status = 'revoked'`.
+I test SQL locali, eseguiti in transazione con rollback, hanno verificato calcolo età,
+override/revoca, trigger di audit e privilegi. La migration non è stata applicata allo
+staging e produzione resta fuori perimetro.
 
 Migration 11: `consolidate_profile_athlete_team_sources`
 
@@ -1138,6 +1148,10 @@ Gate pre-Fase 4: tutte le letture/scritture usano `profiles` per anagrafica/cont
 tessera/certificato e `team_members` per dati squadra/stagione.
 
 Migration 12: `relationship_permissions_age_and_domain_helpers`
+
+La parte DB della Migration 12 è completata in locale; restano da implementare in slice
+successive le API, le policy operative di lettura dei profili accessibili e il frontend
+del soggetto delegato.
 
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
