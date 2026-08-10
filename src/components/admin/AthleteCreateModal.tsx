@@ -124,8 +124,8 @@ export default function AthleteCreateModal({
               onChange={(event) => setFormData((current) => ({
                 ...current,
                 season_id: event.target.value,
-                team_id: null,
-                jersey_number: null,
+                team_ids: [],
+                jersey_numbers: {},
               }))}
             >
               <option value="" disabled>Seleziona una stagione</option>
@@ -136,53 +136,27 @@ export default function AthleteCreateModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label htmlFor="athlete-activity" className="cs-field__label">Attività</label>
-            <select
-              id="athlete-activity"
-              className="cs-select"
-              value={formData.team_id ? teams.find((team) => team.id === formData.team_id)?.activity_id ?? '' : ''}
-              onChange={(event) => {
-                const firstTeam = availableTeams.find((team) => team.activity_id === event.target.value)
-                update('team_id', firstTeam?.id ?? null)
-              }}
-            >
-              <option value="">Seleziona attività</option>
-              {availableActivities.map((activity) => (
-                <option key={activity.id} value={activity.id}>{activity.name}</option>
-              ))}
-            </select>
+        <fieldset>
+          <legend className="cs-field__label">Squadre assegnate</legend>
+          <p className="text-sm text-secondary mb-3">Seleziona una o più squadre. Il numero di maglia può essere diverso per ogni squadra.</p>
+          <div className="space-y-2 rounded-lg border p-3">
+            {availableTeams.length === 0 ? <p className="text-sm text-secondary">Nessuna squadra disponibile per la stagione selezionata.</p> : availableTeams.map((team) => {
+              const selected = (formData.team_ids || []).includes(team.id)
+              return <div key={team.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={selected} onChange={(event) => {
+                    const teamIds = event.target.checked ? [...(formData.team_ids || []), team.id] : (formData.team_ids || []).filter((id) => id !== team.id)
+                    const jerseyNumbers = { ...(formData.jersey_numbers || {}) }
+                    if (!event.target.checked) delete jerseyNumbers[team.id]
+                    setFormData((current) => ({ ...current, team_ids: teamIds, jersey_numbers: jerseyNumbers }))
+                  }} />
+                  <span>{team.name}</span>
+                </label>
+                {selected && <input aria-label={`Numero maglia in ${team.name}`} type="number" min={0} max={99} className="cs-input sm:max-w-xs" placeholder="Numero maglia" value={formData.jersey_numbers?.[team.id] ?? ''} onChange={(event) => setFormData((current) => ({ ...current, jersey_numbers: { ...(current.jersey_numbers || {}), [team.id]: event.target.value === '' ? null : Number(event.target.value) } }))} />}
+              </div>
+            })}
           </div>
-          <div>
-            <label htmlFor="athlete-team" className="cs-field__label">Squadra</label>
-            <select
-              id="athlete-team"
-              className="cs-select"
-              value={formData.team_id ?? ''}
-              onChange={(event) => update('team_id', event.target.value || null)}
-              disabled={availableTeams.length === 0}
-            >
-              <option value="">Nessuna squadra</option>
-              {availableTeams.map((team) => (
-                <option key={team.id} value={team.id}>{team.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="athlete-jersey-number" className="cs-field__label">Numero maglia</label>
-            <input
-              id="athlete-jersey-number"
-              type="number"
-              min={0}
-              max={99}
-              className="cs-input"
-              value={formData.jersey_number ?? ''}
-              onChange={(event) => update('jersey_number', event.target.value === '' ? null : Number(event.target.value))}
-              disabled={!formData.team_id}
-            />
-          </div>
-        </div>
+        </fieldset>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>

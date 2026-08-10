@@ -28,8 +28,8 @@ export interface AthleteCreateData {
   membership_number?: string | null
   medical_certificate_expiry?: string | null
   personal_notes?: string | null
-  team_id?: string | null
-  jersey_number?: number | null
+  team_ids?: string[]
+  jersey_numbers?: Record<string, number | null>
 }
 
 export interface Team {

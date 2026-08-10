@@ -5,6 +5,15 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 import { getAccountActorSnapshot, recordAccountLifecycleAudit } from '@/server/audit/account-lifecycle'
 
+async function validateAthleteTeams(adminClient: ReturnType<typeof createAdminClient>, seasonId: string, teamIds: string[]) {
+  if (!teamIds.length) return
+  const uniqueTeamIds = [...new Set(teamIds)]
+  const { data: teams } = await adminClient.from('teams').select('id, activity_id').in('id', uniqueTeamIds)
+  if (!teams || teams.length !== uniqueTeamIds.length) throw new Error('Una o più squadre non sono state trovate')
+  const { data: activities } = await adminClient.from('activities').select('id, season_id').in('id', teams.map((team) => team.activity_id))
+  if (!activities || activities.some((activity) => activity.season_id !== seasonId)) throw new Error('Una o più squadre non appartengono alla stagione selezionata')
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -182,26 +191,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
     }
 
-    if (payload.team_id) {
-      const { data: team } = await adminClient
-        .from('teams')
-        .select('id, activity_id')
-        .eq('id', payload.team_id)
-        .maybeSingle()
-
-      if (!team) {
-        return NextResponse.json({ error: 'Squadra non trovata' }, { status: 404 })
-      }
-
-      const { data: activity } = await adminClient
-        .from('activities')
-        .select('id, season_id')
-        .eq('id', team.activity_id)
-        .maybeSingle()
-
-      if (!activity || activity.season_id !== payload.season_id) {
-        return NextResponse.json({ error: 'La squadra non appartiene alla stagione selezionata' }, { status: 400 })
-      }
+    try { await validateAthleteTeams(adminClient, payload.season_id, payload.team_ids) } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 })
     }
 
     const { data: profile, error: profileError } = await adminClient
@@ -238,15 +229,13 @@ export async function POST(request: NextRequest) {
           .insert({ profile_id: profile.id, season_id: payload.season_id, source: 'admin_athlete_create' })
 
     let teamMemberError: { message: string } | null = null
-    if (!athleteProfileError && !seasonProfileError && payload.team_id) {
-      const { error } = await adminClient
-        .from('team_members')
-        .insert({
-          profile_id: profile.id,
-          team_id: payload.team_id,
-          role: 'athlete',
-          jersey_number: payload.jersey_number ?? null,
-        })
+    if (!athleteProfileError && !seasonProfileError && payload.team_ids.length) {
+      const { error } = await adminClient.from('team_members').insert(payload.team_ids.map((teamId) => ({
+        profile_id: profile.id,
+        team_id: teamId,
+        role: 'athlete',
+        jersey_number: payload.jersey_numbers[teamId] ?? null,
+      })))
       teamMemberError = error
     }
 
@@ -276,7 +265,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Impossibile completare la creazione dell’atleta' }, { status: 500 })
     }
 
-    return NextResponse.json({ profile, season_id: payload.season_id, team_id: payload.team_id ?? null, account: null }, { status: 201 })
+    return NextResponse.json({ profile, season_id: payload.season_id, team_ids: payload.team_ids, account: null }, { status: 201 })
   } catch (error) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
@@ -302,12 +291,10 @@ export async function PATCH(request: NextRequest) {
     if (!profile || !athleteProfile) return NextResponse.json({ error: 'Atleta non trovato' }, { status: 404 })
     if (!season) return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
 
-    let teamId = payload.team_id
-    if (teamId) {
-      const { data: team } = await adminClient.from('teams').select('id, activity_id').eq('id', teamId).maybeSingle()
-      if (!team) return NextResponse.json({ error: 'Squadra non trovata' }, { status: 404 })
-      const { data: activity } = await adminClient.from('activities').select('id, season_id').eq('id', team.activity_id).maybeSingle()
-      if (!activity || activity.season_id !== payload.season_id) return NextResponse.json({ error: 'La squadra non appartiene alla stagione selezionata' }, { status: 400 })
+    const teamIdsPayload = payload.team_ids || []
+    const jerseyNumbersPayload = payload.jersey_numbers || {}
+    try { await validateAthleteTeams(adminClient, payload.season_id, teamIdsPayload) } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 })
     }
 
     const profileUpdate: Record<string, string | null> = {}
@@ -336,7 +323,7 @@ export async function PATCH(request: NextRequest) {
     }, { onConflict: 'profile_id,season_id' })
     if (seasonError) return NextResponse.json({ error: 'Impossibile aggiornare il collegamento stagionale' }, { status: 400 })
 
-    if ('team_id' in payload) {
+    if ('team_ids' in payload) {
       const { data: activities } = await adminClient.from('activities').select('id').eq('season_id', payload.season_id)
       const activityIds = (activities || []).map((activity) => activity.id)
       const { data: seasonTeams } = activityIds.length
@@ -344,18 +331,18 @@ export async function PATCH(request: NextRequest) {
         : { data: [] }
       const seasonTeamIds = (seasonTeams || []).map((team) => team.id)
       if (seasonTeamIds.length) await adminClient.from('team_members').delete().eq('profile_id', payload.id).in('team_id', seasonTeamIds)
-      if (teamId) {
-        const { error } = await adminClient.from('team_members').insert({
+      if (teamIdsPayload.length) {
+        const { error } = await adminClient.from('team_members').insert(teamIdsPayload.map((teamId) => ({
           profile_id: payload.id,
           team_id: teamId,
           role: 'athlete',
-          jersey_number: payload.jersey_number ?? null,
-        })
+          jersey_number: jerseyNumbersPayload[teamId] ?? null,
+        })))
         if (error) return NextResponse.json({ error: 'Impossibile aggiornare la squadra' }, { status: 400 })
       }
     }
 
-    return NextResponse.json({ success: true, profile_id: payload.id, season_id: payload.season_id, team_id: teamId ?? null })
+    return NextResponse.json({ success: true, profile_id: payload.id, season_id: payload.season_id, team_ids: teamIdsPayload })
   } catch (error) {
     if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })
     console.error('Errore API modifica atleta:', error)

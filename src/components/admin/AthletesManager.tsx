@@ -297,7 +297,9 @@ export default function AthletesManager() {
   }
 
   const openAthleteEdit = (athlete: AthleteWithDetails) => {
-    const firstTeam = athlete.teams?.[0]
+    const seasonId = selectedSeason !== 'all' ? selectedSeason : athlete.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || ''
+    const seasonTeamIds = new Set(teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === seasonId)).map((team) => team.id))
+    const seasonTeams = (athlete.teams || []).filter((team) => seasonTeamIds.has(team.id))
     setEditingAthlete({
       id: athlete.id,
       first_name: athlete.first_name,
@@ -305,12 +307,12 @@ export default function AthletesManager() {
       email: athlete.email || null,
       phone: athlete.phone || null,
       birth_date: athlete.birth_date || null,
-      season_id: selectedSeason !== 'all' ? selectedSeason : athlete.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || '',
+      season_id: seasonId,
       membership_number: athlete.membership_number || null,
       medical_certificate_expiry: athlete.medical_certificate_expiry || null,
       personal_notes: athlete.personal_notes || null,
-      team_id: firstTeam?.id || null,
-      jersey_number: firstTeam?.jersey_number ? Number(firstTeam.jersey_number) : null,
+      team_ids: seasonTeams.map((team) => team.id),
+      jersey_numbers: Object.fromEntries(seasonTeams.map((team) => [team.id, team.jersey_number == null ? null : Number(team.jersey_number)])),
     })
     setShowCreateModal(true)
   }
