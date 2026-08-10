@@ -542,12 +542,27 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     }
   }, [loadAthleteData])
 
+  const isDelegatedProfile = accountRole === 'family_member' && Boolean(selectedProfileId)
+  const permissions = isDelegatedProfile ? selectedProfile?.relationship.permissions : null
+  const canViewSchedule = !isDelegatedProfile || permissions?.view_schedule === true
+  const canReceiveMessages = !isDelegatedProfile || permissions?.receive_messages === true
+  const canViewPayments = !isDelegatedProfile || permissions?.view_payments === true
+
+  useEffect(() => {
+    if (!canViewSchedule) {
+      setSelectedEvent(null)
+      setSelectedTeamId(null)
+    }
+    if (!canReceiveMessages) {
+      setSelectedMessage(null)
+      setMessageDetail(null)
+    }
+  }, [canReceiveMessages, canViewSchedule])
+
   if (loading) {
     return <LoadingState label="Caricamento dashboard..." />
   }
   if (accessDenied) return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
-
-  const isDelegatedProfile = accountRole === 'family_member' && Boolean(selectedProfileId)
 
   return (
     <div className="space-y-6">
@@ -585,22 +600,28 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                   <div className="cs-card__meta">Squadre</div>
                   <div className="text-2xl font-extrabold" style={{color:'var(--cs-accent)'}}>{teamMemberships.length}</div>
                 </div>
-                <div className="cs-card cs-card--primary">
-                  <div className="cs-card__meta">Prossimi Eventi</div>
-                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
-                </div>
-                <div className="cs-card cs-card--primary">
-                  <div className="cs-card__meta">Ultimi Messaggi</div>
-                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
-                </div>
-                <div className="cs-card cs-card--primary">
-                  <div className="cs-card__meta">Rate Attive</div>
-                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
-                </div>
+                {canViewSchedule && (
+                  <div className="cs-card cs-card--primary">
+                    <div className="cs-card__meta">Prossimi Eventi</div>
+                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
+                  </div>
+                )}
+                {canReceiveMessages && (
+                  <div className="cs-card cs-card--primary">
+                    <div className="cs-card__meta">Ultimi Messaggi</div>
+                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
+                  </div>
+                )}
+                {canViewPayments && (
+                  <div className="cs-card cs-card--primary">
+                    <div className="cs-card__meta">Rate Attive</div>
+                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="cs-card cs-card--primary p-4 flex flex-col justify-between text-slate-900">
+            {canViewSchedule && <div className="cs-card cs-card--primary p-4 flex flex-col justify-between text-slate-900">
               <div className="text-sm font-bold uppercase text-[color:var(--cs-danger)]">Prossima partita</div>
               {!nextChampionshipMatch && (
                 <div className="text-sm text-slate-500 mt-2">NON CI SONO PARTITE IN PROGRAMMA</div>
@@ -622,7 +643,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
       </div>
@@ -691,7 +712,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         </div>
 
         {/* Unread Messages clean */}
-        <LatestMessagesPanel
+        {canReceiveMessages && <LatestMessagesPanel
           anchorId="athlete-messages"
           items={unreadMessages.slice(0,3).map(m => ({
             id: m.id,
@@ -703,10 +724,10 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           viewAllHref="/athlete/messages"
           onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
           showSenderText={false}
-        />
+        />}
 
         {/* Fee Installments */}
-        <div className="cs-card cs-card--primary">
+        {canViewPayments && <div className="cs-card cs-card--primary">
           <h3 id="athlete-fees" className="font-semibold mb-4">Quote Associative</h3>
           {feeInstallments.length === 0 ? (
             <EmptyState title="Nessuna quota associativa" />
@@ -738,10 +759,10 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
-      <UpcomingEventsPanel
+      {canViewSchedule && <UpcomingEventsPanel
         anchorId="athlete-events"
         items={upcomingEvents.map(ev => ({
           id: ev.id,
@@ -754,7 +775,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         }))}
         viewAllHref="/athlete/calendar"
         onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
-      />
+      />}
       {/* Modals dettagli */}
       {selectedEvent && (
         <EventDetailModal

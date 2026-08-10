@@ -24,6 +24,9 @@ test('preserves the selected athlete profile for a family account', async ({ pag
   await selector.selectOption(raffaellaId!)
   await expect(selector).toHaveValue(raffaellaId!)
   await expect(page.getByRole('heading', { name: 'Bentornato, Raffaella Scutieri' })).toBeVisible()
+  await expect(page.locator('#athlete-events')).toBeVisible()
+  await expect(page.locator('#athlete-messages')).toHaveCount(0)
+  await expect(page.locator('#athlete-fees')).toHaveCount(0)
 
   await page.goto('/athlete/calendar')
   await expect(page).toHaveURL(/\/athlete\/calendar/)
