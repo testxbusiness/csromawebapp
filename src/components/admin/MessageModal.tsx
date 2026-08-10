@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   toast,
@@ -142,6 +143,7 @@ export default function MessageModal({
       <DialogContent className="cs-modal--centered cs-modal--md">
         <DialogHeader className="sr-only">
           <DialogTitle>{message ? 'Modifica Messaggio' : 'Nuovo Messaggio'}</DialogTitle>
+          <DialogDescription>Inserisci o modifica il messaggio e i suoi destinatari.</DialogDescription>
         </DialogHeader>
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
           <div className="cs-modal__icon" aria-hidden>✉️</div>

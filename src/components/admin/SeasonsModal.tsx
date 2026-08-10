@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -82,6 +83,7 @@ export function SeasonsModal({
           <DialogTitle>
             {isEditing ? 'Modifica Stagione' : 'Nuova Stagione'}
           </DialogTitle>
+          <DialogDescription className="sr-only">Inserisci o modifica i dati della stagione.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

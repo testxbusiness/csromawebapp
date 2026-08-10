@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
@@ -147,6 +148,7 @@ export default function PaymentModal({
       <DialogContent className="cs-modal--centered cs-modal--md">
         <DialogHeader>
           <DialogTitle>{payment ? 'Modifica Pagamento' : 'Nuovo Pagamento'}</DialogTitle>
+          <DialogDescription className="sr-only">Inserisci o modifica i dati del pagamento.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={cleanAndSubmit} className="space-y-4">
