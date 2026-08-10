@@ -38,7 +38,7 @@ function kindColor(kind?: string) {
 }
 
 export default function AthleteCalendarManager() {
-  const { user, role } = useAuth()
+  const { user, role, loading: authLoading, profileLoading } = useAuth()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const userId = user?.id || null
 
@@ -95,6 +95,7 @@ export default function AthleteCalendarManager() {
   }, [role, selectedProfile, selectedProfileId])
 
   useEffect(() => {
+    if (authLoading || profileLoading) return
     if (!userId) {
       setEvents([])
       setTeamMemberships([])
@@ -112,7 +113,7 @@ export default function AthleteCalendarManager() {
     return () => {
       controller.abort()
     }
-  }, [userId, loadData])
+  }, [authLoading, profileLoading, userId, loadData])
 
   useEffect(() => {
     let filtered = events

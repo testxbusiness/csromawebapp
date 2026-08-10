@@ -27,13 +27,17 @@ type Message = {
 
 export default function AthleteMessagesManager() {
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
-  const { role } = useAuth()
+  const { role, loading: authLoading, profileLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
 
   const loadMessages = useCallback(async () => {
+    if (authLoading || profileLoading) {
+      setLoading(true)
+      return
+    }
     if (role === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.receive_messages)) {
       setAccessDenied(true)
       setMessages([])
@@ -60,7 +64,7 @@ export default function AthleteMessagesManager() {
     } finally {
       setLoading(false)
     }
-  }, [role, selectedProfile, selectedProfileId])
+  }, [authLoading, profileLoading, role, selectedProfile, selectedProfileId])
 
   useEffect(() => {
     loadMessages()

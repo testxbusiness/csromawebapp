@@ -35,7 +35,7 @@ interface FeeInstallment {
 }
 
 export default function AthleteFeesManager() {
-  const { user, role } = useAuth()
+  const { user, role, loading: authLoading, profileLoading } = useAuth()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const userId = user?.id || null
 
@@ -101,6 +101,7 @@ export default function AthleteFeesManager() {
   }, [role, selectedProfile, selectedProfileId, userId])
 
   useEffect(() => {
+    if (authLoading || profileLoading) return
     if (!userId) {
       fetchControllerRef.current?.abort()
       fetchControllerRef.current = null
@@ -118,7 +119,7 @@ export default function AthleteFeesManager() {
     return () => {
       controller.abort()
     }
-  }, [userId, loadInstallments])
+  }, [authLoading, profileLoading, userId, loadInstallments])
 
   useEffect(() => {
     const filtered = filter === 'pending'

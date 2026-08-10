@@ -103,7 +103,7 @@ function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
 export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
   const { startNextStep } = useNextStep()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
-  const { role: accountRole } = useAuth()
+  const { role: accountRole, loading: authLoading, profileLoading } = useAuth()
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
@@ -137,6 +137,10 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const lastLoadTimeRef = useRef<number>(0)
 
   const loadAthleteData = useCallback(async () => {
+    if (authLoading || profileLoading) {
+      setLoading(true)
+      return
+    }
     if (accountRole === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
       setAccessDenied(true)
       setLoading(false)
@@ -168,7 +172,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     } finally {
       setLoading(false)
     }
-  }, [accountRole, selectedProfile, selectedProfileId])
+  }, [accountRole, authLoading, profileLoading, selectedProfile, selectedProfileId])
 
   const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase
