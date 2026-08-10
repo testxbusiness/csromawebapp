@@ -46,7 +46,7 @@ export function appendSubjectProfile(url: string, profileId: string | null) {
 }
 
 export function AccessibleProfileProvider({ children }: { children: React.ReactNode }) {
-  const { account, user } = useAuth()
+  const { account, user, loading: authLoading } = useAuth()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [selectedProfileId, setSelectedProfileIdState] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -54,6 +54,12 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
+    // Wait for Supabase to restore the session before deciding whether the
+    // stored subject is still valid. On a full navigation `user` is briefly
+    // null even for an authenticated user; clearing localStorage here would
+    // lose the selected athlete before the session/profile request completes.
+    if (authLoading) return
+
     // During a silent auth refresh the user can remain available while the
     // account context is being reloaded. Do not clear the selected subject in
     // that transient state: doing so makes the selector fall back to "Il mio
@@ -82,7 +88,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
       setLoading(false)
       setProfilesLoaded(true)
     }
-  }, [account, user])
+  }, [account, authLoading, user])
 
   useEffect(() => {
     refresh().catch(() => {})

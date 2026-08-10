@@ -45,6 +45,11 @@ export default defineConfig({
       testMatch: /api-bola\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'family-chromium',
+      testMatch: /family-profile-selection\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 
   globalSetup: require.resolve('./tests/e2e/global-setup'),
