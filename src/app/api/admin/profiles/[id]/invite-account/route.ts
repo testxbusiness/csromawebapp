@@ -45,9 +45,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     if (!profile) return NextResponse.json({ error: 'Persona non trovata' }, { status: 404 })
     if (!appAccount) return NextResponse.json({ error: 'La persona non ha ancora un account collegato' }, { status: 409 })
-    if (appAccount.status !== 'invited') {
-      return NextResponse.json({ error: 'L’account non è in attesa di invito' }, { status: 409 })
-    }
 
     const { data: roleRow, error: roleError } = await adminClient
       .from('account_roles')
@@ -64,6 +61,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const email = authData.user?.email
     if (authError || !email) {
       return NextResponse.json({ error: 'Email account non disponibile' }, { status: 500 })
+    }
+
+    // Recupera in sicurezza un account attivato per errore prima del primo accesso.
+    // Non è consentito reinviare inviti a utenti già entrati o già confermati.
+    const canRecoverPrematureActivation = appAccount.status === 'active'
+      && !authData.user.email_confirmed_at
+      && !authData.user.last_sign_in_at
+    if (appAccount.status !== 'invited' && !canRecoverPrematureActivation) {
+      return NextResponse.json({ error: 'L’account non è in attesa di invito' }, { status: 409 })
     }
 
     const actor = await getAccountActorSnapshot(adminClient, account.ownerProfileId)
@@ -95,7 +101,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const { error: updateError } = await adminClient
       .from('app_accounts')
-      .update({ invited_at: new Date().toISOString(), must_change_password: true })
+      .update({ status: 'invited', invited_at: new Date().toISOString(), must_change_password: true, disabled_at: null })
       .eq('auth_user_id', appAccount.auth_user_id)
 
     if (updateError) {

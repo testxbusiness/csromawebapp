@@ -109,6 +109,21 @@ export default function UsersManager() {
     }
   }
 
+  const handleInvite = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/admin/profiles/${userId}/invite-account`, { method: 'POST' })
+      const result = await response.json()
+      if (!response.ok) {
+        toast.error(result.error || 'Impossibile inviare l’invito')
+        return
+      }
+      toast.success('Invito inviato')
+      await loadUsers()
+    } catch {
+      toast.error('Errore di rete durante l’invio dell’invito')
+    }
+  }
+
   // Statistiche
   const userStats = useMemo(() => {
     const total = users.length
@@ -324,6 +339,14 @@ export default function UsersManager() {
                   </td>
                   <td className="text-sm font-medium">
                     <div className="flex flex-wrap gap-2">
+                      {(user.account_status === 'invited' || (user.account_status === 'active' && !user.last_sign_in_at)) && (
+                        <button
+                          onClick={() => void handleInvite(user.id)}
+                          className="cs-btn cs-btn--outline cs-btn--sm"
+                        >
+                          Invia invito
+                        </button>
+                      )}
                       <button
                         onClick={() => handleToggleActive(user.id)}
                         className="cs-btn cs-btn--outline cs-btn--sm"
@@ -387,6 +410,14 @@ export default function UsersManager() {
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                  {(user.account_status === 'invited' || (user.account_status === 'active' && !user.last_sign_in_at)) && (
+                    <button
+                      onClick={() => void handleInvite(user.id)}
+                      className="cs-btn cs-btn--outline cs-btn--sm flex-1"
+                    >
+                      Invia invito
+                    </button>
+                  )}
                   <button
                     onClick={() => handleToggleActive(user.id)}
                     className="cs-btn cs-btn--outline cs-btn--sm flex-1"
