@@ -54,12 +54,18 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!user || !account) {
+    // During a silent auth refresh the user can remain available while the
+    // account context is being reloaded. Do not clear the selected subject in
+    // that transient state: doing so makes the selector fall back to "Il mio
+    // profilo" after navigation or visibility changes.
+    if (!user) {
       setProfiles([])
       setSelectedProfileIdState(null)
       setProfilesLoaded(true)
       return
     }
+
+    if (!account) return
 
     setLoading(true)
     setProfilesLoaded(false)
