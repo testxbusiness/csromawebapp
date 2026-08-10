@@ -61,6 +61,7 @@ function formatRole(role: string | null | undefined) {
   if (role === 'coach') return 'coach'
   if (role === 'athlete') return 'atleta'
   if (role === 'staff') return 'staff'
+  if (role === 'family_member') return 'familiare / tutore'
   return 'nessun ruolo'
 }
 

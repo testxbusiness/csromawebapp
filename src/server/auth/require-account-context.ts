@@ -3,7 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
-export type AccountRole = 'admin' | 'coach' | 'staff' | 'athlete'
+export type AccountRole = 'admin' | 'coach' | 'staff' | 'athlete' | 'family_member'
 export type AccountStatus = 'invited' | 'active' | 'suspended' | 'disabled'
 
 export type AccountContext = {
@@ -25,7 +25,7 @@ export class AccountContextError extends Error {
 }
 
 const accountStatuses = new Set<AccountStatus>(['invited', 'active', 'suspended', 'disabled'])
-const accountRoles = new Set<AccountRole>(['admin', 'coach', 'staff', 'athlete'])
+const accountRoles = new Set<AccountRole>(['admin', 'coach', 'staff', 'athlete', 'family_member'])
 
 export async function requireAccountContext(
   client?: SupabaseClient

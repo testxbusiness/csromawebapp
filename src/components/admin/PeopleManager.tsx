@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { UserPlus } from 'lucide-react'
 import ProfileRelationshipsManager from './ProfileRelationshipsManager'
+import FamilyMemberAccountActions from './FamilyMemberAccountActions'
 
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, EmptyState, ErrorState, LoadingState, toast } from '@/components/ui'
 
@@ -14,6 +15,7 @@ type Person = {
   phone: string | null
   birth_date: string | null
   role: string | null
+  is_collaborator?: boolean
   is_active: boolean
   created_at: string
   relationships: Array<{
@@ -144,7 +146,7 @@ export default function PeopleManager() {
           <div>
             <h2 id="people-section-title" className="text-lg font-semibold text-[color:var(--cs-text)]">Anagrafica persone</h2>
             <p className="mt-1 max-w-2xl text-sm text-[color:var(--cs-text-secondary)]">
-            Consulta l’anagrafica delle persone. Gli account vengono creati nelle sezioni Iscritti e Collaboratori.
+            Consulta l’anagrafica delle persone. Gli account atleta, coach e staff vengono creati nelle sezioni dedicate; da qui puoi creare un account familiare/tutore.
             </p>
           </div>
           <Button type="button" onClick={() => setDialogOpen(true)}>
@@ -238,7 +240,7 @@ export default function PeopleManager() {
                       <span className="text-xs text-[color:var(--cs-text-tertiary)]">
                         <div className="flex flex-col items-end gap-2">
                           <ProfileRelationshipsManager person={person} people={people} />
-                          <span>{person.account ? 'Gestito dalla sezione dedicata' : 'Senza account'}</span>
+                          {!person.account && !person.role && !person.is_collaborator ? <FamilyMemberAccountActions id={person.id} name={`${person.first_name} ${person.last_name}`} email={person.email} account={person.account} onChanged={() => void loadPeople()} /> : null}
                         </div>
                       </span>
                     </td>

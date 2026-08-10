@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const adminClient = createAdminClient()
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
-      .select('id, email, first_name, last_name')
+      .select('id, email, first_name, last_name, role')
       .eq('id', id)
       .maybeSingle()
 
@@ -62,6 +62,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       ])
       if (!athleteProfile || !activeSeason) {
         return NextResponse.json({ error: 'L’atleta deve avere un profilo sportivo e un’iscrizione stagionale attiva' }, { status: 400 })
+      }
+    }
+
+    if (parsed.data.role === 'family_member') {
+      const [{ data: athleteProfile }, { data: coachProfile }, { data: collaboratorSeason }] = await Promise.all([
+        adminClient.from('athlete_profiles').select('profile_id').eq('profile_id', id).maybeSingle(),
+        adminClient.from('coach_profiles').select('profile_id').eq('profile_id', id).maybeSingle(),
+        adminClient.from('season_profiles').select('profile_id').eq('profile_id', id).in('profile_type', ['coach', 'staff', 'admin']).limit(1).maybeSingle(),
+      ])
+      if (athleteProfile || coachProfile || collaboratorSeason || ['admin', 'coach'].includes(profile.role || '')) {
+        return NextResponse.json({ error: 'Per un atleta o collaboratore usa la sezione Iscritti o Collaboratori; l’account familiare è riservato a persone senza ruolo operativo.' }, { status: 400 })
       }
     }
 

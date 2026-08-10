@@ -274,6 +274,8 @@ function roleName(role: string): string {
       return 'Allenatore'
     case 'athlete':
       return 'Atleta'
+    case 'family_member':
+      return 'Familiare / Tutore'
     default:
       return 'Utente CSRoma'
   }

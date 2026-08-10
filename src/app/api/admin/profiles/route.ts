@@ -52,7 +52,7 @@ export async function GET() {
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
 
-    const [{ data: profiles, error: profilesError }, { data: accounts, error: accountsError }, { data: roles, error: rolesError }, { data: relationships, error: relationshipsError }] = await Promise.all([
+    const [{ data: profiles, error: profilesError }, { data: accounts, error: accountsError }, { data: roles, error: rolesError }, { data: relationships, error: relationshipsError }, { data: collaboratorProfiles, error: collaboratorProfilesError }] = await Promise.all([
       adminClient
         .from('profiles')
         .select('id, email, first_name, last_name, phone, birth_date, role, is_active, created_at, updated_at')
@@ -68,10 +68,14 @@ export async function GET() {
         .select('id, source_profile_id, target_profile_id, relationship_type, status, can_view_schedule, can_confirm_attendance, can_view_payments, can_view_medical_status, can_view_documents, can_sign_documents, can_receive_messages, verified_at')
         .eq('status', 'active')
         .order('created_at', { ascending: false }),
+      adminClient
+        .from('season_profiles')
+        .select('profile_id, profile_type')
+        .in('profile_type', ['coach', 'staff', 'admin']),
     ])
 
-    if (profilesError || accountsError || rolesError || relationshipsError) {
-      console.error('Errore caricamento persone:', profilesError || accountsError || rolesError || relationshipsError)
+    if (profilesError || accountsError || rolesError || relationshipsError || collaboratorProfilesError) {
+      console.error('Errore caricamento persone:', profilesError || accountsError || rolesError || relationshipsError || collaboratorProfilesError)
       return NextResponse.json({ error: 'Impossibile caricare le persone' }, { status: 500 })
     }
 
@@ -84,6 +88,7 @@ export async function GET() {
       rolesByAuthUser.set(row.auth_user_id, current)
     }
 
+    const collaboratorProfileIds = new Set((collaboratorProfiles ?? []).map((row) => row.profile_id))
     const profilesById = new Map((profiles as ProfileRow[] ?? []).map((profile) => [profile.id, profile]))
     const relationshipsByProfile = new Map<string, Array<{
       id: string
@@ -130,6 +135,7 @@ export async function GET() {
       return {
         ...profile,
         relationships: relationshipsByProfile.get(profile.id) ?? [],
+        is_collaborator: collaboratorProfileIds.has(profile.id) || ['admin', 'coach'].includes(profile.role || ''),
         account: account ? {
           auth_user_id: account.auth_user_id,
           status: account.status,

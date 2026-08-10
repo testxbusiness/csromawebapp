@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from 'react'
 import AdminDashboard from '@/components/admin/AdminDashboard'
 import CoachDashboard from '@/components/coach/CoachDashboard'
 import AthleteDashboard from '@/components/athlete/AthleteDashboard'
+import FamilyMemberDashboard from '@/components/family/FamilyMemberDashboard'
 
 export default function DashboardPage() {
   const { user, profile, role, loading } = useAuth()
@@ -68,6 +69,8 @@ export default function DashboardPage() {
           <CoachDashboard user={displayUser} profile={displayProfile} />
         ) : displayRole === 'athlete' ? (
           <AthleteDashboard user={displayUser} profile={displayProfile} />
+        ) : displayRole === 'family_member' ? (
+          <FamilyMemberDashboard />
         ) : (
           <div className="cs-card cs-card--lg">
             <h2 className="cs-card__title">Panoramica account</h2>

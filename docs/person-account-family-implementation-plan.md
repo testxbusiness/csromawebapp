@@ -100,7 +100,7 @@ L'implementazione separa quattro concetti oggi sovrapposti:
 
 1. `profiles`: persona/anagrafica, anche senza login;
 2. `app_accounts`: mapping uno-a-uno opzionale tra account Auth e persona proprietaria;
-3. `account_roles`: ruoli globali dell'account (`admin`, `coach`, `staff`, `athlete`);
+3. `account_roles`: ruoli globali dell'account (`admin`, `coach`, `staff`, `athlete`, `family_member`);
 4. `profile_relationships`: deleghe e relazioni verso altre persone, con permessi granulari.
 
 Gli ID dei 48 profili esistenti non devono cambiare. Le tabelle sportive continuano a
@@ -1182,6 +1182,16 @@ Anche il dettaglio evento e il percorso RSVP usano il medesimo controllo quando 
 richiamati per un soggetto delegato.
 La classifica campionati resta intenzionalmente fuori da questo contesto: non espone dati
 anagrafici o operativi del profilo e continua a verificare l’assegnazione sportiva propria.
+
+Fase 4, slice 6 completata in locale: è stato aggiunto il ruolo globale `account_roles.family_member`
+per familiari/tutori senza profilo sportivo proprio. Il provisioning atomico Auth/app_accounts/ruolo
+accetta ora anche questo ruolo, senza backfill, ricreazione o modifica degli account esistenti.
+La sezione Persone espone la creazione dell’account familiare per persone non tipizzate; gli account
+atleta, coach e staff continuano a essere creati dalle sezioni Iscritti e Collaboratori. Il ruolo
+familiare ha una dashboard dedicata e non riceve navigazione operativa propria: l’accesso ai profili
+minori resta vincolato a relazioni attive, validità temporale e permessi granulari server-side.
+La migration `20260810162451_account_role_family_member.sql` è stata applicata esclusivamente al DB
+locale; staging e produzione restano invariati fino alla chiusura dei test dell’intero piano.
 
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;

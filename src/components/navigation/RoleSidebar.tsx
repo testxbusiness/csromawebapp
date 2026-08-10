@@ -27,7 +27,7 @@ import {
   Wallet2,
 } from 'lucide-react'
 
-type Role = 'admin' | 'coach' | 'athlete'
+type Role = 'admin' | 'coach' | 'athlete' | 'family_member'
 
 type NavItem = {
   href: string
@@ -74,10 +74,15 @@ const athleteItems: NavItem[] = [
   { href: '/athlete/profile', label: 'Profilo', icon: UserCog },
 ]
 
+const familyMemberItems: NavItem[] = [
+  { href: '/dashboard', label: 'Dashboard', icon: LineChart },
+]
+
 const getItemsForRole = (role: Role | undefined): NavItem[] => {
   if (role === 'admin') return adminItems
   if (role === 'coach') return coachItems
   if (role === 'athlete') return athleteItems
+  if (role === 'family_member') return familyMemberItems
   return []
 }
 

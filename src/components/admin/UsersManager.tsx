@@ -23,7 +23,7 @@ export default function UsersManager() {
   // Filtri
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'coach' | 'staff' | 'athlete'>('all')
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'coach' | 'staff' | 'athlete' | 'family_member'>('all')
 
   const loadUsers = useCallback(async () => {
     try {
@@ -117,8 +117,9 @@ export default function UsersManager() {
     const admins = users.filter(u => u.roles?.includes('admin')).length
     const coaches = users.filter(u => u.roles?.includes('coach')).length
     const athletes = users.filter(u => u.roles?.includes('athlete')).length
+    const familyMembers = users.filter(u => u.roles?.includes('family_member')).length
 
-    return { total, active, inactive, admins, coaches, athletes }
+    return { total, active, inactive, admins, coaches, athletes, familyMembers }
   }, [users])
 
   // Filtra utenti
@@ -155,8 +156,9 @@ export default function UsersManager() {
       return <span className="cs-badge cs-badge--neutral">NESSUN RUOLO</span>
     }
 
-    const variant = role === 'admin' ? 'danger' : role === 'coach' ? 'warning' : 'neutral'
-    return <span className={`cs-badge cs-badge--${variant}`}>{role.toUpperCase()}</span>
+    const variant = role === 'admin' ? 'danger' : role === 'coach' ? 'warning' : role === 'family_member' ? 'success' : 'neutral'
+    const label = role === 'family_member' ? 'FAMILIARE / TUTORE' : role.toUpperCase()
+    return <span className={`cs-badge cs-badge--${variant}`}>{label}</span>
   }
 
   const getStatusBadge = (status: string | undefined, isActive: boolean) => {
@@ -215,6 +217,7 @@ export default function UsersManager() {
               <span className="cs-badge cs-badge--danger">Admin: {userStats.admins}</span>
               <span className="cs-badge cs-badge--warning">Coach: {userStats.coaches}</span>
               <span className="cs-badge cs-badge--neutral">Atleti: {userStats.athletes}</span>
+              <span className="cs-badge cs-badge--success">Familiari: {userStats.familyMembers}</span>
             </div>
           </div>
           <div className="flex flex-col gap-3 text-sm sm:flex-row">
@@ -264,7 +267,8 @@ export default function UsersManager() {
                 { value: 'admin', label: 'Amministratore' },
                 { value: 'coach', label: 'Allenatore' },
                 { value: 'staff', label: 'Staff' },
-                { value: 'athlete', label: 'Atleta' }
+                { value: 'athlete', label: 'Atleta' },
+                { value: 'family_member', label: 'Familiare / Tutore' }
               ]}
             />
           </div>

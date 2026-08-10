@@ -28,7 +28,7 @@ export type AccountSummary = {
   authUserId: string
   ownerProfileId: string
   accountStatus: 'invited' | 'active' | 'suspended' | 'disabled'
-  roles: Array<'admin' | 'coach' | 'staff' | 'athlete'>
+  roles: Array<'admin' | 'coach' | 'staff' | 'athlete' | 'family_member'>
   mustChangePassword: boolean
 }
 
@@ -225,7 +225,9 @@ function useAuthState(): UseAuthReturn {
           ? 'athlete'
           : account?.roles.includes('staff')
             ? 'staff'
-            : null
+            : account?.roles.includes('family_member')
+              ? 'family_member'
+              : null
     const raw = account
       ? accountRole ?? (profile?.role === 'athlete' ? 'athlete' : null)
       : profile?.role ?? (user as any)?.app_metadata?.role ?? null
