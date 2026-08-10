@@ -80,6 +80,12 @@ export async function GET() {
     }
 
     const accountsByProfile = new Map((accounts as AccountRow[] ?? []).map((account) => [account.owner_profile_id, account]))
+    const { data: authUsers, error: authUsersError } = await adminClient.auth.admin.listUsers()
+    if (authUsersError) {
+      console.error('Errore caricamento email account Auth:', authUsersError)
+      return NextResponse.json({ error: 'Impossibile caricare le email degli account' }, { status: 500 })
+    }
+    const authEmailById = new Map((authUsers.users ?? []).map((authUser) => [authUser.id, authUser.email ?? null]))
     const rolesByAuthUser = new Map<string, string[]>()
 
     for (const row of roles ?? []) {
@@ -134,6 +140,7 @@ export async function GET() {
       const account = accountsByProfile.get(profile.id)
       return {
         ...profile,
+        account_email: account ? authEmailById.get(account.auth_user_id) ?? null : null,
         relationships: relationshipsByProfile.get(profile.id) ?? [],
         is_collaborator: collaboratorProfileIds.has(profile.id) || ['admin', 'coach'].includes(profile.role || ''),
         account: account ? {

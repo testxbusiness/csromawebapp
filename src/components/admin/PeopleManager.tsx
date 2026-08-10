@@ -16,6 +16,7 @@ type Person = {
   birth_date: string | null
   role: string | null
   is_collaborator?: boolean
+  account_email?: string | null
   is_active: boolean
   created_at: string
   relationships: Array<{
@@ -210,7 +211,7 @@ export default function PeopleManager() {
                       <div className="mt-1 text-xs text-[color:var(--cs-text-tertiary)]">Creata il {formatDate(person.created_at.slice(0, 10))}</div>
                     </td>
                     <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">
-                      <div>{person.email || 'Email non indicata'}</div>
+                      <div>{person.email || person.account_email || 'Email non indicata'}</div>
                       <div className="mt-1 text-xs">{person.phone || 'Telefono non indicato'}</div>
                     </td>
                     <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">{formatDate(person.birth_date)}</td>
