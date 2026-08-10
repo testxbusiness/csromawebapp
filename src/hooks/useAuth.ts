@@ -40,6 +40,11 @@ type PersonalProfileData = {
 const PROFILE_CACHE_KEY = 'csroma_profile_cache'
 const PROFILE_CACHE_DURATION = 5 * 60 * 1000
 
+function shouldDeferProfileLoad() {
+  if (typeof window === 'undefined') return false
+  return window.location.pathname === '/auth/callback' || window.location.pathname === '/reset-password'
+}
+
 interface UseAuthReturn {
   user: User | null
   session: Session | null
@@ -116,6 +121,13 @@ function useAuthState(): UseAuthReturn {
   const loadProfile = useCallback(
     async (uid: string, skipCache = false) => {
       if (!uid) return
+      // During invite callback and mandatory password reset the account may
+      // still be in `invited` state. Defer the resolver until the flow has
+      // activated the account, avoiding a false 403 and concurrent refreshes.
+      if (shouldDeferProfileLoad()) {
+        if (mounted.current) setProfileLoading(false)
+        return
+      }
 
       if (!skipCache && lastProfileFor.current === uid) {
         console.log('[useAuth] Skipping duplicate profile load for', uid)
