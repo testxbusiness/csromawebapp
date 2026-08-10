@@ -79,6 +79,19 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   }, [refresh])
 
   useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refresh().catch(() => {})
+    }
+
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [refresh])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     const stored = window.localStorage.getItem(STORAGE_KEY)
     const stillAccessible = stored && profiles.some((entry) => entry.profile.id === stored)
