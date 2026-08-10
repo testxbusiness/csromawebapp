@@ -1,6 +1,11 @@
 # Piano di implementazione: persone, account opzionali e relazioni familiari
 
-Stato del documento: implementazione incrementale in corso; Fase 2E avviata, migration applicate in locale e staging solo dopo verifica separata.
+Stato del documento: implementazione incrementale in corso; Fase 3A verificata in locale e
+staging, Fasi 4–6 ancora da implementare.
+
+Decisione operativa aggiornata al 10 agosto 2026: la produzione resta fuori perimetro
+finché l’intero piano non sarà implementato e testato. Le modifiche applicative e le
+migration di questo ciclo vengono quindi validate esclusivamente in locale e staging.
 
 Branch di lavoro: `codex/person-account-family-model`.
 
@@ -936,11 +941,14 @@ creazione, modifica e rimozione dell’iscrizione per stagione; la rimozione eli
 il collegamento stagionale e le assegnazioni a squadre della stagione, conservando
 anagrafica, storico e account. `/admin/collaboratori` usa un endpoint dedicato per creare
 e modificare Coach e Staff, con assegnazione opzionale a stagione, attività/squadra e
-ruolo head/assistant per i Coach. La rimozione è stagionale e archivia la persona solo
+ruolo head/assistant per i Coach. Coach e atleti possono essere assegnati a più squadre
+della stessa stagione, con ruolo indipendente per ogni assegnazione coach e numero di
+maglia indipendente per ogni assegnazione atleta. La rimozione è stagionale e archivia la persona solo
 quando non restano altre stagioni. Le azioni di creazione account e invio invito sono
 state portate nella riga del collaboratore; `Persone` resta il pannello centralizzato.
-La creazione account atleta è rinviata alla slice di riconciliazione descritta sotto;
-fino alla sua implementazione non vengono creati nuovi account atleta dal frontend.
+La creazione account atleta segue la slice di riconciliazione descritta sotto; il flusso
+è separato dalla creazione dell’iscrizione e non invia accessi prima della verifica del
+mapping.
 Build e test E2E CRUD locale passano; staging/produzione non sono stati toccati.
 
 Correzione locale classifica: dopo il restore locale la materialized view
@@ -966,7 +974,7 @@ Produzione non è stata modificata.
 
 #### Fase 3A — account atleta e riconciliazione degli account esistenti
 
-Stato: implementazione locale in corso. La migration `20260809140000_account_role_athlete.sql`
+Stato: implementazione completata e verificata in locale e staging. La migration `20260809140000_account_role_athlete.sql`
 abilita il ruolo e aggiorna il provisioning; la migration
 `20260809141000_reconcile_existing_athlete_accounts.sql` ha riconciliato in locale 44
 mapping già certi (`app_accounts` + `athlete_profiles` + `season_profiles` attiva), senza
@@ -974,25 +982,34 @@ modificare Auth, profili, password, sessioni, stato o ruoli esistenti. Non sono 
 rilevati casi ambigui nel database locale; eventuali casi non riconducibili con gli stessi
 criteri restano esclusi e richiedono revisione manuale.
 
-Il gate pre-staging della Fase 3A richiede inoltre:
+Il gate di verifica locale/staging della Fase 3A è stato superato con test manuali. Sono
+stati verificati creazione persona, creazione account, invito, primo accesso, cambio
+password, accesso per ruolo, isolamento di messaggi/eventi e CRUD stagionale per admin,
+coach e atleta. Sono state inoltre verificate le assegnazioni di coach e atleti a più
+squadre.
 
-- completare la transizione controllata dell'account da `invited` ad `active` dopo il
+Restano come attività di consolidamento della Fase 3A:
+
+- mantenere la transizione controllata dell'account da `invited` ad `active` dopo il
   primo set della password, senza consentire al link di attivazione di bypassare
   `app_accounts.status`;
-- risolvere il ruolo applicativo da `account_roles`, includendo `athlete`, e mantenere
-  separati ruolo globale, `athlete_profiles` e iscrizione stagionale;
-- verificare l'iscrizione `season_profiles.status = 'active'` anche nel controllo di
-  accesso atleta, non solo durante la creazione dell'account;
-- creare Admin dalla sezione Collaboratori con relazione stagionale, lasciando Persone
-  come anagrafica generale;
-- rimuovere o rendere non operativi i percorsi legacy di creazione/import da Utenti,
-  che usano direttamente `profiles.role`, `user_roles` o cancellazioni fisiche;
-- completare una matrice E2E per creazione, invito, attivazione, accesso e revoca di
+- mantenere la risoluzione del ruolo applicativo da `account_roles`, inclusivo di
+  `athlete`, separata da `athlete_profiles` e iscrizione stagionale;
+- mantenere il controllo di `season_profiles.status = 'active'` nell'accesso atleta;
+- mantenere la creazione Admin dalla sezione Collaboratori con relazione stagionale;
+- mantenere non operativi i percorsi legacy di creazione account da Utenti, che usano
+  direttamente `profiles.role`, `user_roles` o cancellazioni fisiche;
+- mantenere e completare la matrice E2E automatizzata per creazione, invito, attivazione, accesso e revoca di
   atleta, coach, staff e admin.
 
-Prima dello staging va introdotta una migration forward che estende il vincolo dei ruoli
-globali a `athlete` e aggiorna il provisioning per accettare anche questo ruolo. La nuova
-azione `Crea account atleta` sarà disponibile nella riga della sezione `/admin/atleti`;
+Correzione primo accesso: `useAuth` rimanda la risoluzione del profilo durante
+`/auth/callback` e `/reset-password`, evitando il falso errore `Account non abilitato`
+mentre l’account è ancora `invited` e riducendo i refresh concorrenti della sessione.
+La correzione vale per tutti i ruoli e non modifica dati o policy del database.
+
+La migration forward che estende il vincolo dei ruoli globali a `athlete` e aggiorna il
+provisioning è stata applicata in locale e staging. L’azione `Crea account atleta` è
+disponibile nella riga della sezione `/admin/atleti`;
 creerà l’account Auth, il mapping `app_accounts` e `account_roles('athlete')` in modo
 atomico, senza inviare l’accesso prima della verifica del mapping. L’account atleta non
 darà accesso da solo: le route e le policy continueranno a richiedere anche un profilo
@@ -1098,6 +1115,9 @@ UI:
 
 ### Fase 4 — famiglie e profili accessibili
 
+Stato: da iniziare dopo il consolidamento della Fase 3A. Non sono autorizzate modifiche
+in produzione prima del completamento e dei test dell’intero piano.
+
 Migration 11: `consolidate_profile_athlete_team_sources`
 
 - produce prima un report di confronto per numero tessera, certificato e numero maglia;
@@ -1144,6 +1164,9 @@ scadenza del certificato.
 
 ### Fase 5 — domini collegati
 
+Stato: da iniziare; dipende dal completamento della Fase 4 e dai relativi test di
+sicurezza, delega e audit.
+
 Migration 13: `account_message_reads_and_push_subscriptions`
 
 - crea `message_reads(message_id, auth_user_id, subject_profile_id, read_at)`;
@@ -1180,6 +1203,9 @@ Migration 15: `document_access_and_activity_audit`
   progettato un provider dedicato.
 
 ### Fase 6 — rimozione legacy
+
+Stato: da iniziare; potrà essere eseguita solo dopo almeno un ciclo completo delle Fasi
+3–5 in staging e dopo la validazione finale dell’intero piano.
 
 Solo dopo almeno un ciclo completo in staging e monitoraggio produzione:
 
