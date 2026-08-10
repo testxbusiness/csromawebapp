@@ -1153,6 +1153,15 @@ La parte DB della Migration 12 è completata in locale; restano da implementare 
 successive le API, le policy operative di lettura dei profili accessibili e il frontend
 del soggetto delegato.
 
+Fase 4, slice 3 completata in locale: sono disponibili le API server-side per elencare e
+creare relazioni (`GET/POST /api/admin/profiles/:id/relationships`), modificarle o
+revocarle logicamente (`PATCH/DELETE /api/admin/relationships/:relationshipId`) e
+caricare i profili accessibili dell'utente autenticato (`GET /api/me/accessible-profiles`).
+Le API verificano il contesto account, consentono la gestione solo ad Admin/Staff,
+normalizzano l'attore della verifica lato server e applicano nuovamente le regole di
+validità, età e delega senza fidarsi del client. Non sono ancora collegate a una UI e non
+sono state applicate a staging o produzione.
+
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
 - aggiunge override amministrativo della minore età con motivo, attore e timestamp;
