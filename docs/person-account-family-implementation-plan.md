@@ -1180,6 +1180,8 @@ base ai permessi granulari. Le viste atleta inoltrano il contesto selezionato. L
 locale passa; staging e produzione restano invariati.
 Anche il dettaglio evento e il percorso RSVP usano il medesimo controllo quando vengono
 richiamati per un soggetto delegato.
+La classifica campionati resta intenzionalmente fuori da questo contesto: non espone dati
+anagrafici o operativi del profilo e continua a verificare l’assegnazione sportiva propria.
 
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
