@@ -30,13 +30,29 @@ type AccountRow = {
   disabled_at: string | null
 }
 
+type RelationshipRow = {
+  id: string
+  source_profile_id: string
+  target_profile_id: string
+  relationship_type: string
+  status: string
+  can_view_schedule: boolean
+  can_confirm_attendance: boolean
+  can_view_payments: boolean
+  can_view_medical_status: boolean
+  can_view_documents: boolean
+  can_sign_documents: boolean
+  can_receive_messages: boolean
+  verified_at: string | null
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
 
-    const [{ data: profiles, error: profilesError }, { data: accounts, error: accountsError }, { data: roles, error: rolesError }] = await Promise.all([
+    const [{ data: profiles, error: profilesError }, { data: accounts, error: accountsError }, { data: roles, error: rolesError }, { data: relationships, error: relationshipsError }] = await Promise.all([
       adminClient
         .from('profiles')
         .select('id, email, first_name, last_name, phone, birth_date, role, is_active, created_at, updated_at')
@@ -47,10 +63,14 @@ export async function GET() {
       adminClient
         .from('account_roles')
         .select('auth_user_id, role'),
+      adminClient
+        .from('profile_relationships')
+        .select('id, source_profile_id, target_profile_id, relationship_type, status, can_view_schedule, can_confirm_attendance, can_view_payments, can_view_medical_status, can_view_documents, can_sign_documents, can_receive_messages, verified_at')
+        .order('created_at', { ascending: false }),
     ])
 
-    if (profilesError || accountsError || rolesError) {
-      console.error('Errore caricamento persone:', profilesError || accountsError || rolesError)
+    if (profilesError || accountsError || rolesError || relationshipsError) {
+      console.error('Errore caricamento persone:', profilesError || accountsError || rolesError || relationshipsError)
       return NextResponse.json({ error: 'Impossibile caricare le persone' }, { status: 500 })
     }
 
@@ -63,10 +83,52 @@ export async function GET() {
       rolesByAuthUser.set(row.auth_user_id, current)
     }
 
+    const profilesById = new Map((profiles as ProfileRow[] ?? []).map((profile) => [profile.id, profile]))
+    const relationshipsByProfile = new Map<string, Array<{
+      id: string
+      person_id: string
+      person_name: string
+      relationship_type: string
+      status: string
+      verified_at: string | null
+      permissions: string[]
+    }>>()
+
+    for (const relationship of relationships as RelationshipRow[] ?? []) {
+      const permissionLabels = [
+        relationship.can_view_schedule ? 'Calendario' : null,
+        relationship.can_confirm_attendance ? 'Presenze' : null,
+        relationship.can_view_payments ? 'Pagamenti' : null,
+        relationship.can_view_medical_status ? 'Certificato medico' : null,
+        relationship.can_view_documents ? 'Documenti' : null,
+        relationship.can_sign_documents ? 'Firma documenti' : null,
+        relationship.can_receive_messages ? 'Messaggi' : null,
+      ].filter((label): label is string => label !== null)
+
+      for (const [profileId, otherProfileId] of [
+        [relationship.source_profile_id, relationship.target_profile_id],
+        [relationship.target_profile_id, relationship.source_profile_id],
+      ] as const) {
+        const otherProfile = profilesById.get(otherProfileId)
+        const current = relationshipsByProfile.get(profileId) ?? []
+        current.push({
+          id: relationship.id,
+          person_id: otherProfileId,
+          person_name: otherProfile ? `${otherProfile.first_name} ${otherProfile.last_name}` : 'Persona non trovata',
+          relationship_type: relationship.relationship_type,
+          status: relationship.status,
+          verified_at: relationship.verified_at,
+          permissions: permissionLabels,
+        })
+        relationshipsByProfile.set(profileId, current)
+      }
+    }
+
     const result = (profiles as ProfileRow[] ?? []).map((profile) => {
       const account = accountsByProfile.get(profile.id)
       return {
         ...profile,
+        relationships: relationshipsByProfile.get(profile.id) ?? [],
         account: account ? {
           auth_user_id: account.auth_user_id,
           status: account.status,

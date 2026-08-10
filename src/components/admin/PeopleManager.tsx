@@ -16,6 +16,15 @@ type Person = {
   role: string | null
   is_active: boolean
   created_at: string
+  relationships: Array<{
+    id: string
+    person_id: string
+    person_name: string
+    relationship_type: string
+    status: string
+    verified_at: string | null
+    permissions: string[]
+  }>
   account: {
     status: string
     roles: string[]
@@ -178,7 +187,7 @@ export default function PeopleManager() {
       {!loading && !error && filteredPeople.length > 0 ? (
         <div className="cs-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[900px] text-left text-sm">
               <caption className="sr-only">Elenco persone</caption>
               <thead className="border-b border-[color:var(--cs-border)] bg-[color:var(--cs-surface-muted)] text-[color:var(--cs-text-secondary)]">
                 <tr>
@@ -187,6 +196,7 @@ export default function PeopleManager() {
                   <th scope="col" className="px-4 py-3 font-semibold">Data di nascita</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Accesso</th>
                   <th scope="col" className="px-4 py-3 font-semibold">Stato</th>
+                  <th scope="col" className="px-4 py-3 font-semibold">Relazioni</th>
                   <th scope="col" className="px-4 py-3 text-right font-semibold">Azioni</th>
                 </tr>
               </thead>
@@ -209,6 +219,21 @@ export default function PeopleManager() {
                       {person.account?.roles.length ? <div className="mt-1 text-xs text-[color:var(--cs-text-tertiary)]">{person.account.roles.join(', ')}</div> : null}
                     </td>
                     <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">{person.is_active ? 'Attiva' : 'Archiviata'}</td>
+                    <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">
+                      {person.relationships.length === 0 ? (
+                        <span className="text-xs text-[color:var(--cs-text-tertiary)]">Nessuna</span>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="font-medium">{person.relationships.length} collegat{person.relationships.length === 1 ? 'a' : 'e'}</div>
+                          {person.relationships.slice(0, 2).map((relationship) => (
+                            <div key={relationship.id} className="text-xs">
+                              {relationship.person_name} · {relationship.status === 'active' ? 'Attiva' : relationship.status === 'pending' ? 'In revisione' : 'Revocata'}
+                            </div>
+                          ))}
+                          {person.relationships.length > 2 ? <div className="text-xs text-[color:var(--cs-text-tertiary)]">+{person.relationships.length - 2} altre</div> : null}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-4 text-right">
                       <span className="text-xs text-[color:var(--cs-text-tertiary)]">
                         <div className="flex flex-col items-end gap-2">

@@ -152,8 +152,8 @@ export default function ProfileRelationshipsManager({ person, people }: Props) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[65vh] space-y-5 overflow-y-auto pr-1">
-            <form onSubmit={createRelationship} className="space-y-4 rounded-xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-muted)] p-4">
+          <div className="flex max-h-[65vh] flex-col gap-5 overflow-y-auto pr-1">
+            <form onSubmit={createRelationship} className="order-2 space-y-4 rounded-xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-muted)] p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-[color:var(--cs-text)]">
                 <Plus className="h-4 w-4" aria-hidden="true" /> Nuova relazione
               </div>
@@ -213,8 +213,8 @@ export default function ProfileRelationshipsManager({ person, people }: Props) {
               </DialogFooter>
             </form>
 
-            <section aria-labelledby={`relationship-list-${person.id}`}>
-              <h3 id={`relationship-list-${person.id}`} className="mb-3 text-sm font-semibold text-[color:var(--cs-text)]">Relazioni esistenti</h3>
+            <section aria-labelledby={`relationship-list-${person.id}`} className="order-1">
+              <h3 id={`relationship-list-${person.id}`} className="mb-3 text-sm font-semibold text-[color:var(--cs-text)]">Relazioni esistenti ({relationships.length})</h3>
               {loading ? <p className="text-sm text-[color:var(--cs-text-secondary)]">Caricamento…</p> : null}
               {!loading && relationships.length === 0 ? <p className="text-sm text-[color:var(--cs-text-secondary)]">Nessuna relazione registrata.</p> : null}
               <div className="space-y-2">
