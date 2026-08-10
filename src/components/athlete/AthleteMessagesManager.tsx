@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
+import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { EmptyState, LoadingState } from '@/components/ui'
 import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
@@ -24,17 +25,26 @@ type Message = {
 }
 
 export default function AthleteMessagesManager() {
-  const { selectedProfileId } = useAccessibleProfiles()
+  const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
 
   const loadMessages = useCallback(async () => {
     setLoading(true)
+    setAccessDenied(false)
     try {
       const res = await fetch(appendSubjectProfile('/api/athlete/messages?view=full', selectedProfileId))
       const result = await res.json()
-      if (!res.ok) throw new Error(result?.error || 'Errore caricamento messaggi')
+      if (!res.ok) {
+        if (res.status === 403) {
+          setAccessDenied(true)
+          setMessages([])
+          return
+        }
+        throw new Error(result?.error || 'Errore caricamento messaggi')
+      }
       setMessages(result.messages || [])
     } catch (e) {
       console.error('Errore caricamento messaggi atleta:', e)
@@ -49,6 +59,7 @@ export default function AthleteMessagesManager() {
   }, [loadMessages])
 
   if (loading) return <LoadingState label="Caricamento messaggi..." />
+  if (accessDenied) return <DelegatedAccessDenied section="i messaggi" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
 
   return (
     <div className="space-y-6">

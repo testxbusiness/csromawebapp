@@ -11,6 +11,7 @@ import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 import { EmptyState, LoadingState } from '@/components/ui'
 import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import DelegatedAccessDenied from './DelegatedAccessDenied'
 
 interface User {
   id: string
@@ -100,7 +101,7 @@ function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
 
 export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
   const { startNextStep } = useNextStep()
-  const { selectedProfileId } = useAccessibleProfiles()
+  const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
@@ -113,6 +114,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const [messageDetail, setMessageDetail] = useState<any>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   // Enrich selected message on open
@@ -134,9 +136,14 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
   const loadAthleteData = useCallback(async () => {
     setLoading(true)
+    setAccessDenied(false)
     try {
       const response = await fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId))
       if (!response.ok) {
+        if (response.status === 403) {
+          setAccessDenied(true)
+          return
+        }
         console.error('Error loading athlete dashboard:', response.statusText)
         return
       }
@@ -527,6 +534,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   if (loading) {
     return <LoadingState label="Caricamento dashboard..." />
   }
+  if (accessDenied) return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
 
   return (
     <div className="space-y-6">

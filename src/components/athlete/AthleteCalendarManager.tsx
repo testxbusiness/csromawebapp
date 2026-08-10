@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
 import { EmptyState, LoadingState } from '@/components/ui'
 import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import DelegatedAccessDenied from './DelegatedAccessDenied'
 
 type EventKind = 'training'|'match'|'meeting'|'other'
 
@@ -38,7 +39,7 @@ function kindColor(kind?: string) {
 
 export default function AthleteCalendarManager() {
   const { user } = useAuth()
-  const { selectedProfileId } = useAccessibleProfiles()
+  const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const userId = user?.id || null
 
   const [events, setEvents] = useState<Event[]>([])
@@ -46,6 +47,7 @@ export default function AthleteCalendarManager() {
   const [loading, setLoading] = useState(true)
   const [teamMemberships, setTeamMemberships] = useState<TeamLite[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
 
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
@@ -56,9 +58,16 @@ export default function AthleteCalendarManager() {
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true)
+    setAccessDenied(false)
     try {
       const response = await fetch(appendSubjectProfile('/api/athlete/calendar', selectedProfileId), { signal })
       if (!response.ok) {
+        if (response.status === 403) {
+          setAccessDenied(true)
+          setEvents([])
+          setTeamMemberships([])
+          return
+        }
         console.error('Error loading athlete calendar:', response.statusText)
         setEvents([])
         setTeamMemberships([])
@@ -109,6 +118,7 @@ export default function AthleteCalendarManager() {
   if (loading) {
     return <LoadingState label="Caricamento calendario..." />
   }
+  if (accessDenied) return <DelegatedAccessDenied section="il calendario" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
 
   const calEvents: CalEvent[] = (filteredEvents||[]).map((e)=>({
     id: e.id,
