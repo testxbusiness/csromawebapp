@@ -4,6 +4,7 @@ import { memo, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
+import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
@@ -78,11 +79,19 @@ const familyMemberItems: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LineChart },
 ]
 
-const getItemsForRole = (role: Role | undefined): NavItem[] => {
+const getItemsForRole = (role: Role | undefined, selectedProfile: ReturnType<typeof useAccessibleProfiles>['selectedProfile']): NavItem[] => {
   if (role === 'admin') return adminItems
   if (role === 'coach') return coachItems
   if (role === 'athlete') return athleteItems
-  if (role === 'family_member') return familyMemberItems
+  if (role === 'family_member') {
+    if (!selectedProfile) return familyMemberItems
+    return [
+      familyMemberItems[0],
+      ...(selectedProfile.relationship.permissions.view_schedule ? [{ href: '/athlete/calendar', label: 'Calendario', icon: CalendarClock }] : []),
+      ...(selectedProfile.relationship.permissions.receive_messages ? [{ href: '/athlete/messages', label: 'Messaggi', icon: Mail }] : []),
+      ...(selectedProfile.relationship.permissions.view_payments ? [{ href: '/athlete/fees', label: 'Quote Associative', icon: Wallet2 }] : []),
+    ]
+  }
   return []
 }
 
@@ -132,9 +141,10 @@ NavItem.displayName = 'NavItem'
 
 const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps) => {
   const { role, loading } = useAuth()
+  const { selectedProfile } = useAccessibleProfiles()
   const pathname = usePathname()
 
-  const items = useMemo(() => getItemsForRole(role as Role | undefined), [role])
+  const items = useMemo(() => getItemsForRole(role as Role | undefined, selectedProfile), [role, selectedProfile])
 
   if (loading) {
     return (

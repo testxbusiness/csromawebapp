@@ -1193,6 +1193,12 @@ minori resta vincolato a relazioni attive, validità temporale e permessi granul
 La migration `20260810162451_account_role_family_member.sql` è stata applicata esclusivamente al DB
 locale; staging e produzione restano invariati fino alla chiusura dei test dell’intero piano.
 
+Fase 4, slice 7 completata in locale: la selezione di un profilo accessibile da parte di un
+`family_member` aggiorna ora dashboard e navigazione. Le viste calendario, messaggi e quote
+vengono mostrate solo quando la relazione concede il relativo permesso; le route continuano
+a ricevere `subjectProfileId` e a verificarlo server-side. Senza selezione resta visibile la
+sola area familiare con l’elenco dei profili collegati.
+
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
 - aggiunge override amministrativo della minore età con motivo, attore e timestamp;

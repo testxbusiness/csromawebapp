@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState, Button } from '@/components/ui'
+import { useAuth } from '@/hooks/useAuth'
+import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import AthleteDashboard from '@/components/athlete/AthleteDashboard'
 
 type AccessibleProfile = {
   profile: { id: string; first_name: string; last_name: string; email: string | null }
@@ -16,6 +19,8 @@ const relationshipLabels: Record<string, string> = {
 }
 
 export default function FamilyMemberDashboard() {
+  const { user } = useAuth()
+  const { selectedProfile } = useAccessibleProfiles()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +41,20 @@ export default function FamilyMemberDashboard() {
   }, [])
 
   useEffect(() => { void loadProfiles() }, [loadProfiles])
+
+  if (selectedProfile && user) {
+    return (
+      <AthleteDashboard
+        user={user}
+        profile={{
+          id: selectedProfile.profile.id,
+          first_name: selectedProfile.profile.first_name,
+          last_name: selectedProfile.profile.last_name,
+          role: 'athlete',
+        }}
+      />
+    )
+  }
 
   return (
     <div className="space-y-8">
