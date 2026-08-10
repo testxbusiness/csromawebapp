@@ -1,7 +1,8 @@
 # Piano di implementazione: persone, account opzionali e relazioni familiari
 
 Stato del documento: implementazione incrementale in corso; Fase 3A verificata in locale e
-staging, Fasi 4–6 ancora da implementare.
+staging, Fase 4 implementata in slice locali e verificata con test E2E, Fasi 5–6 ancora da
+implementare.
 
 Decisione operativa aggiornata al 10 agosto 2026: la produzione resta fuori perimetro
 finché l’intero piano non sarà implementato e testato. Le modifiche applicative e le
@@ -1198,6 +1199,23 @@ Fase 4, slice 7 completata in locale: la selezione di un profilo accessibile da 
 vengono mostrate solo quando la relazione concede il relativo permesso; le route continuano
 a ricevere `subjectProfileId` e a verificarlo server-side. Senza selezione resta visibile la
 sola area familiare con l’elenco dei profili collegati.
+
+Fase 4, slice 8 completata in locale: la UX del soggetto delegato è stata rifinita e verificata
+con il genitore di staging/local. La selezione del profilo accessibile resta persistente dopo
+cambio pagina e reload completo, anche durante il ripristino iniziale della sessione Supabase.
+Per le squadre il profilo delegato vede il riepilogo contestuale ma non può aprire i dettagli
+di squadra, evitando l’esposizione non autorizzata di nomi di atleti e allenatori. La dashboard
+adatta statistiche, card e link alle permission effettive: calendario/eventi, messaggi e quote
+sono mostrati solo quando rispettivamente concessi; passando a un profilo con meno permessi
+eventuali modali non autorizzati vengono chiusi. Il ruolo `family_member` non riceve quindi
+card o azioni fuorvianti per sezioni non abilitate.
+
+Verifica slice 7–8: il test E2E Playwright con le credenziali configurate del genitore ha
+confermato la presenza dei due profili collegati (Giorgio Politi e Raffaella Scutieri), la
+selezione di Raffaella con solo calendario autorizzato, la persistenza dopo navigazione/reload
+e l’assenza delle card messaggi/quote non autorizzate. Build Next.js e test E2E sono passati.
+Le migration e le modifiche applicative di Fase 4 restano applicate/verificate solo in locale;
+staging e produzione restano invariati fino alla chiusura dell’intero piano.
 
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
