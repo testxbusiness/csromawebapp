@@ -39,6 +39,12 @@ type AccessibleProfileContextValue = {
 const AccessibleProfileContext = createContext<AccessibleProfileContextValue | null>(null)
 const STORAGE_KEY = 'csroma_active_subject_profile_id'
 
+export function appendSubjectProfile(url: string, profileId: string | null) {
+  if (!profileId) return url
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}subjectProfileId=${encodeURIComponent(profileId)}`
+}
+
 export function AccessibleProfileProvider({ children }: { children: React.ReactNode }) {
   const { account, user } = useAuth()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])

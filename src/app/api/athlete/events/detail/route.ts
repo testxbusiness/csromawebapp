@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,25 +11,26 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const account = await requireAthleteContext(supabase)
-    const athleteProfileId = account.ownerProfileId
+    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
+    const athleteProfileId = subject.profileId
+    const dataClient = subject.dataClient
     if (!athleteProfileId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Verify membership to any team of event
-    const { data: links } = await supabase
+    const { data: links } = await dataClient
       .from('event_teams')
       .select('team_id')
       .eq('event_id', id)
     const teamIds = (links || []).map(l => l.team_id)
     if (teamIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    const { data: member } = await supabase
+    const { data: member } = await dataClient
       .from('team_members')
       .select('team_id')
       .in('team_id', teamIds)
       .eq('profile_id', athleteProfileId)
     if (!member || member.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const { data: ev } = await supabase
+    const { data: ev } = await dataClient
       .from('events')
       .select('*')
       .eq('id', id)
@@ -37,12 +39,12 @@ export async function GET(request: NextRequest) {
 
     let gym: any = null
     if (ev.gym_id) {
-      const { data } = await supabase.from('gyms').select('name, address, city').eq('id', ev.gym_id).maybeSingle()
+      const { data } = await dataClient.from('gyms').select('name, address, city').eq('id', ev.gym_id).maybeSingle()
       gym = data
     }
     let teams: any[] = []
     if (teamIds.length) {
-      const { data } = await supabase.from('teams').select('id, name, code').in('id', teamIds)
+      const { data } = await dataClient.from('teams').select('id, name, code').in('id', teamIds)
       teams = data || []
     }
     let creator: any = null
@@ -52,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Current user's attendance (if any)
-    const { data: myAtt } = await supabase
+    const { data: myAtt } = await dataClient
       .from('event_attendances')
       .select('status, responded_at')
       .eq('event_id', id)

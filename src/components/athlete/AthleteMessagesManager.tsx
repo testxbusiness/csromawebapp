@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
 type Message = {
   id: string
@@ -23,18 +24,15 @@ type Message = {
 }
 
 export default function AthleteMessagesManager() {
+  const { selectedProfileId } = useAccessibleProfiles()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
 
-  useEffect(() => {
-    loadMessages()
-  }, [])
-
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/athlete/messages?view=full')
+      const res = await fetch(appendSubjectProfile('/api/athlete/messages?view=full', selectedProfileId))
       const result = await res.json()
       if (!res.ok) throw new Error(result?.error || 'Errore caricamento messaggi')
       setMessages(result.messages || [])
@@ -44,7 +42,11 @@ export default function AthleteMessagesManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedProfileId])
+
+  useEffect(() => {
+    loadMessages()
+  }, [loadMessages])
 
   if (loading) return <LoadingState label="Caricamento messaggi..." />
 

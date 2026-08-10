@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import PageHeader from '@/components/shared/PageHeader' // se vuoi l'header qui, altrimenti toglilo
 import { EmptyState, LoadingState } from '@/components/ui'
+import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 // import EventDetails from '@/components/.../EventDetails' // TODO: se lo usi davvero, importa il path corretto
 
 interface FeeInstallment {
@@ -34,6 +35,7 @@ interface FeeInstallment {
 
 export default function AthleteFeesManager() {
   const { user } = useAuth()
+  const { selectedProfileId } = useAccessibleProfiles()
   const userId = user?.id || null
 
   const [installments, setInstallments] = useState<FeeInstallment[]>([])
@@ -65,7 +67,7 @@ export default function AthleteFeesManager() {
 
     setLoading(true)
     try {
-      const response = await fetch('/api/athlete/fees', { signal })
+      const response = await fetch(appendSubjectProfile('/api/athlete/fees', selectedProfileId), { signal })
       if (!response.ok) {
         console.error('Error loading fee installments (athlete):', response.statusText)
         setInstallments([])
@@ -81,7 +83,7 @@ export default function AthleteFeesManager() {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [selectedProfileId, userId])
 
   useEffect(() => {
     if (!userId) {

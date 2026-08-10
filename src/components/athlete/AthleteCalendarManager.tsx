@@ -9,6 +9,7 @@ import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
 type EventKind = 'training'|'match'|'meeting'|'other'
 
@@ -37,6 +38,7 @@ function kindColor(kind?: string) {
 
 export default function AthleteCalendarManager() {
   const { user } = useAuth()
+  const { selectedProfileId } = useAccessibleProfiles()
   const userId = user?.id || null
 
   const [events, setEvents] = useState<Event[]>([])
@@ -55,7 +57,7 @@ export default function AthleteCalendarManager() {
   const loadData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true)
     try {
-      const response = await fetch('/api/athlete/calendar', { signal })
+      const response = await fetch(appendSubjectProfile('/api/athlete/calendar', selectedProfileId), { signal })
       if (!response.ok) {
         console.error('Error loading athlete calendar:', response.statusText)
         setEvents([])
@@ -74,7 +76,7 @@ export default function AthleteCalendarManager() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedProfileId])
 
   useEffect(() => {
     if (!userId) {
@@ -283,23 +285,23 @@ export default function AthleteCalendarManager() {
       </div>
 
       {selectedEvent && (
-        <EventDetails id={selectedEvent.id} onClose={() => setSelectedEvent(null)} />
+        <EventDetails id={selectedEvent.id} onClose={() => setSelectedEvent(null)} selectedProfileId={selectedProfileId} />
       )}
     </>
   )
 }
 
-function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
+function EventDetails({ id, onClose, selectedProfileId }: { id: string; onClose: () => void; selectedProfileId: string | null }) {
   const [data, setData] = useState<any>(null)
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`/api/athlete/events/detail?id=${id}`)
+        const res = await fetch(appendSubjectProfile(`/api/athlete/events/detail?id=${id}`, selectedProfileId))
         const json = await res.json()
         if (res.ok) setData(json)
       } catch {}
     })()
-  }, [id])
+  }, [id, selectedProfileId])
   return (
     <EventDetailModal open={true} onClose={onClose} data={data} />
   )

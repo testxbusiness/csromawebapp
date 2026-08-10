@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    const account = await requireAthleteContext(supabase)
-    const athleteProfileId = account.ownerProfileId
+    const { searchParams } = new URL(request.url)
+    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
+    const athleteProfileId = subject.profileId
+    const dataClient = subject.dataClient
+    const canViewMessages = subject.permissions.receive_messages
+    const canViewPayments = subject.permissions.view_payments
     if (!athleteProfileId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -15,22 +20,23 @@ export async function GET(request: NextRequest) {
     // Execute all queries in parallel
     const [seasonRes, memberRes, msgRes, feeRes] = await Promise.all([
       // 1. Get active season
-      supabase
+      dataClient
         .from('seasons')
         .select('*')
         .eq('is_active', true)
         .single(),
 
       // 2. Get team memberships
-      supabase
+      dataClient
         .from('team_members')
         .select('id, team_id, jersey_number')
         .eq('profile_id', athleteProfileId),
 
       // 3. Get unread messages for this user
-      supabase
-        .from('message_recipients')
-        .select(`
+      canViewMessages
+        ? dataClient
+            .from('message_recipients')
+            .select(`
           message_id,
           is_read,
           created_at,
@@ -42,17 +48,20 @@ export async function GET(request: NextRequest) {
             created_by,
             created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
           )
-        `)
-        .eq('profile_id', athleteProfileId)
-        .order('created_at', { ascending: false })
-        .limit(5),
+            `)
+            .eq('profile_id', athleteProfileId)
+            .order('created_at', { ascending: false })
+            .limit(5)
+        : Promise.resolve({ data: [] }),
 
       // 4. Get fee installments
-      supabase
-        .from('fee_installments')
-        .select('id, installment_number, due_date, amount, status, membership_fee_id')
-        .eq('profile_id', athleteProfileId)
-        .limit(5)
+      canViewPayments
+        ? dataClient
+            .from('fee_installments')
+            .select('id, installment_number, due_date, amount, status, membership_fee_id')
+            .eq('profile_id', athleteProfileId)
+            .limit(5)
+        : Promise.resolve({ data: [] })
     ])
 
     const seasons = seasonRes.data
@@ -89,12 +98,12 @@ export async function GET(request: NextRequest) {
       { data: membershipFees },
       { data: clubTeams }
     ] = await Promise.all([
-      supabase
+      dataClient
         .from('teams')
         .select('id, name, code, activity_id')
         .in('id', teamIds),
 
-      supabase
+      dataClient
         .from('event_teams')
         .select('event_id, created_at')
         .in('team_id', teamIds)
@@ -102,13 +111,13 @@ export async function GET(request: NextRequest) {
         .limit(500),
 
       feeInstallments && feeInstallments.length > 0
-        ? supabase
+        ? dataClient
             .from('membership_fees')
             .select('id, team_id, name')
             .in('id', (feeInstallments || []).map(f => f.membership_fee_id).filter(Boolean))
         : Promise.resolve({ data: [] }),
 
-      supabase
+      dataClient
         .from('championship_club_teams')
         .select('id, team_id')
         .in('team_id', teamIds)
@@ -123,7 +132,7 @@ export async function GET(request: NextRequest) {
       if (eventIds.length > 100) {
         for (let i = 0; i < eventIds.length; i += 100) {
           const batch = eventIds.slice(i, i + 100)
-        const { data: events } = await supabase
+        const { data: events } = await dataClient
           .from('events')
           .select('id, title, start_time:start_date, end_time:end_date, location, description')
           .in('id', batch)
@@ -133,7 +142,7 @@ export async function GET(request: NextRequest) {
         allEvents.push(...(events || []))
       }
     } else {
-      const { data: events } = await supabase
+      const { data: events } = await dataClient
         .from('events')
         .select('id, title, start_time:start_date, end_time:end_date, location, description')
         .in('id', eventIds)
@@ -147,7 +156,7 @@ export async function GET(request: NextRequest) {
     // Get activities and enriched team data
     const activityIds = [...new Set((teams || []).map(t => t.activity_id).filter(Boolean))]
     const { data: activities } = activityIds.length > 0
-      ? await supabase
+      ? await dataClient
           .from('activities')
           .select('id, name')
           .in('id', activityIds)
@@ -157,7 +166,7 @@ export async function GET(request: NextRequest) {
     const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
     if (clubTeamIds.length > 0) {
       const clubTeamList = clubTeamIds.join(',')
-      const { data: nextMatch } = await supabase
+      const { data: nextMatch } = await dataClient
         .from('championship_matches')
         .select(`
           id, match_day, match_date, start_time, location_text, status,

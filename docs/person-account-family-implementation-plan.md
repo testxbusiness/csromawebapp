@@ -1171,6 +1171,16 @@ La build locale passa. Il soggetto selezionato non è ancora inoltrato alle vist
 questa integrazione arriverà nella slice successiva insieme ai relativi controlli
 server-side per calendario, messaggi, pagamenti e documenti.
 
+Fase 4, slice 5 completata in locale: il contratto server-side `requireSubjectAthleteContext`
+valida il soggetto selezionato, la relazione attiva, la finestra temporale, l’età e il
+permesso richiesto. Dashboard, calendario, messaggi e quote atleta accettano ora
+`subjectProfileId`; per un soggetto delegato leggono tramite client amministrativo solo
+dopo la verifica della relazione, mentre dashboard filtra messaggi e pagamenti anche in
+base ai permessi granulari. Le viste atleta inoltrano il contesto selezionato. La build
+locale passa; staging e produzione restano invariati.
+Anche il dettaglio evento e il percorso RSVP usano il medesimo controllo quando vengono
+richiamati per un soggetto delegato.
+
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
 - aggiunge override amministrativo della minore età con motivo, attore e timestamp;

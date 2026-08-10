@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { AccountContextError, requireAthleteContext } from '@/server/auth/require-account-context'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    const account = await requireAthleteContext(supabase)
-    const athleteProfileId = account.ownerProfileId
+    const { searchParams } = new URL(request.url)
+    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
+    const athleteProfileId = subject.profileId
+    const dataClient = subject.dataClient
 
     // 1. Get athlete's team memberships
-    const { data: memberships, error: memberErr } = await supabase
+    const { data: memberships, error: memberErr } = await dataClient
       .from('team_members')
       .select('team_id')
       .eq('profile_id', athleteProfileId)
@@ -26,7 +29,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Get team details
-    const { data: teams, error: teamsErr } = await supabase
+      const { data: teams, error: teamsErr } = await dataClient
       .from('teams')
       .select('id, name, code')
       .in('id', teamIds)
@@ -46,7 +49,7 @@ export async function GET(request: NextRequest) {
       // Batch processing
       for (let i = 0; i < teamIds.length; i += 100) {
         const batch = teamIds.slice(i, i + 100)
-        const { data: relations } = await supabase
+        const { data: relations } = await dataClient
           .from('event_teams')
           .select('event_id, team_id')
           .in('team_id', batch)
@@ -56,7 +59,7 @@ export async function GET(request: NextRequest) {
       }
       eventIds = [...new Set(eventIds)]
     } else {
-      const { data: relations, error: relErr } = await supabase
+      const { data: relations, error: relErr } = await dataClient
         .from('event_teams')
         .select('event_id, team_id')
         .in('team_id', teamIds)
@@ -80,7 +83,7 @@ export async function GET(request: NextRequest) {
     if (eventIds.length > 100) {
       for (let i = 0; i < eventIds.length; i += 100) {
         const batch = eventIds.slice(i, i + 100)
-        const { data: events } = await supabase
+        const { data: events } = await dataClient
           .from('events')
           .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind')
           .in('id', batch)
@@ -88,7 +91,7 @@ export async function GET(request: NextRequest) {
         allEvents.push(...(events || []))
       }
     } else {
-      const { data: events, error: evErr } = await supabase
+      const { data: events, error: evErr } = await dataClient
         .from('events')
         .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind')
         .in('id', eventIds)

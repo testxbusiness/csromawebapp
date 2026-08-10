@@ -10,6 +10,7 @@ import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailM
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
 interface User {
   id: string
@@ -99,6 +100,7 @@ function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
 
 export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
   const { startNextStep } = useNextStep()
+  const { selectedProfileId } = useAccessibleProfiles()
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
@@ -118,7 +120,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     const loadDetail = async () => {
       if (!selectedMessage) { return }
       try {
-        const res = await fetch(`/api/athlete/messages?view=full&id=${selectedMessage.id}`)
+        const res = await fetch(appendSubjectProfile(`/api/athlete/messages?view=full&id=${selectedMessage.id}`, selectedProfileId))
         const json = await res.json()
         if (res.ok && json.messages && json.messages.length) {
           setMessageDetail(json.messages[0])
@@ -126,14 +128,14 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       } catch {}
     }
     loadDetail()
-  }, [selectedMessage])
+  }, [selectedMessage, selectedProfileId])
 
   const lastLoadTimeRef = useRef<number>(0)
 
   const loadAthleteData = useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/athlete/dashboard')
+      const response = await fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId))
       if (!response.ok) {
         console.error('Error loading athlete dashboard:', response.statusText)
         return
@@ -152,7 +154,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedProfileId])
 
   const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase
