@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import Image from 'next/image'
 import { usePush } from '@/hooks/usePush'
+import AccessibleProfileSelector from './AccessibleProfileSelector'
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || ''
@@ -179,6 +180,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <AccessibleProfileSelector />
             <ThemeToggle />
             <button type="button" className="cs-btn cs-btn--ghost cs-btn--icon" aria-label="Notifiche">
               <Bell className="h-4 w-4" />

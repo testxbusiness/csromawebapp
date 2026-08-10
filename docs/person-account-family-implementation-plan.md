@@ -1162,6 +1162,15 @@ normalizzano l'attore della verifica lato server e applicano nuovamente le regol
 validità, età e delega senza fidarsi del client. Non sono ancora collegate a una UI e non
 sono state applicate a staging o produzione.
 
+Fase 4, slice 4 completata in locale: il provider client carica i profili accessibili,
+mantiene la selezione in `localStorage` solo come preferenza UI e la azzera quando la
+relazione non è più disponibile. Il layout mostra il selettore accessibile senza usarlo
+come fonte di autorizzazione. La sezione Persone espone inoltre la gestione relazioni:
+creazione, tipo, stato, verifica amministrativa, permessi granulari e revoca logica.
+La build locale passa. Il soggetto selezionato non è ancora inoltrato alle viste operative:
+questa integrazione arriverà nella slice successiva insieme ai relativi controlli
+server-side per calendario, messaggi, pagamenti e documenti.
+
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
 - aggiunge override amministrativo della minore età con motivo, attore e timestamp;

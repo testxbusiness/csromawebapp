@@ -5,6 +5,7 @@ import LayoutShell from "@/components/navigation/LayoutShell";
 import { ToastProvider } from "@/components/ui";
 import OnboardingProvider from "@/components/OnboardingProvider";
 import { AuthProvider } from "@/hooks/useAuth";
+import { AccessibleProfileProvider } from "@/context/AccessibleProfileContext";
 
 export const metadata: Metadata = {
   title: "CSRoma - Gestione Società Sportiva",
@@ -32,7 +33,9 @@ export default function RootLayout({
           <ToastProvider>
             <OnboardingProvider>
               <AuthProvider>
-                <LayoutShell>{children}</LayoutShell>
+                <AccessibleProfileProvider>
+                  <LayoutShell>{children}</LayoutShell>
+                </AccessibleProfileProvider>
               </AuthProvider>
             </OnboardingProvider>
           </ToastProvider>

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { UserPlus } from 'lucide-react'
+import ProfileRelationshipsManager from './ProfileRelationshipsManager'
 
 import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, EmptyState, ErrorState, LoadingState, toast } from '@/components/ui'
 
@@ -210,7 +211,10 @@ export default function PeopleManager() {
                     <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">{person.is_active ? 'Attiva' : 'Archiviata'}</td>
                     <td className="px-4 py-4 text-right">
                       <span className="text-xs text-[color:var(--cs-text-tertiary)]">
-                        {person.account ? 'Gestito dalla sezione dedicata' : 'Senza account'}
+                        <div className="flex flex-col items-end gap-2">
+                          <ProfileRelationshipsManager person={person} people={people} />
+                          <span>{person.account ? 'Gestito dalla sezione dedicata' : 'Senza account'}</span>
+                        </div>
                       </span>
                     </td>
                   </tr>
