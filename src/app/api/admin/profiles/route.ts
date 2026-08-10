@@ -66,6 +66,7 @@ export async function GET() {
       adminClient
         .from('profile_relationships')
         .select('id, source_profile_id, target_profile_id, relationship_type, status, can_view_schedule, can_confirm_attendance, can_view_payments, can_view_medical_status, can_view_documents, can_sign_documents, can_receive_messages, verified_at')
+        .eq('status', 'active')
         .order('created_at', { ascending: false }),
     ])
 

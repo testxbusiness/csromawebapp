@@ -26,6 +26,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .from('profile_relationships')
       .select(relationshipColumns)
       .or(`source_profile_id.eq.${id},target_profile_id.eq.${id}`)
+      .eq('status', 'active')
       .order('created_at', { ascending: false })
 
     if (error) return NextResponse.json({ error: 'Impossibile caricare le relazioni' }, { status: 500 })

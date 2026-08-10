@@ -130,7 +130,7 @@ export default function ProfileRelationshipsManager({ person, people }: Props) {
       const response = await fetch(`/api/admin/relationships/${relationshipId}`, { method: 'DELETE' })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'Impossibile revocare la relazione')
-      setRelationships((current) => current.map((entry) => entry.id === relationshipId ? payload.relationship : entry))
+      setRelationships((current) => current.filter((entry) => entry.id !== relationshipId))
       toast.success('Relazione revocata')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Impossibile revocare la relazione')
