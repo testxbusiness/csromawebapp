@@ -35,7 +35,7 @@ interface FeeInstallment {
 }
 
 export default function AthleteFeesManager() {
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const userId = user?.id || null
 
@@ -67,6 +67,13 @@ export default function AthleteFeesManager() {
       return
     }
 
+    if (role === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_payments)) {
+      setAccessDenied(true)
+      setInstallments([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setAccessDenied(false)
     try {
@@ -91,7 +98,7 @@ export default function AthleteFeesManager() {
     } finally {
       setLoading(false)
     }
-  }, [selectedProfileId, userId])
+  }, [role, selectedProfile, selectedProfileId, userId])
 
   useEffect(() => {
     if (!userId) {

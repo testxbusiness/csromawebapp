@@ -38,7 +38,7 @@ function kindColor(kind?: string) {
 }
 
 export default function AthleteCalendarManager() {
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const userId = user?.id || null
 
@@ -57,6 +57,13 @@ export default function AthleteCalendarManager() {
   const fetchControllerRef = useRef<AbortController | null>(null)
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
+    if (role === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
+      setAccessDenied(true)
+      setEvents([])
+      setTeamMemberships([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setAccessDenied(false)
     try {
@@ -85,7 +92,7 @@ export default function AthleteCalendarManager() {
     } finally {
       setLoading(false)
     }
-  }, [selectedProfileId])
+  }, [role, selectedProfile, selectedProfileId])
 
   useEffect(() => {
     if (!userId) {

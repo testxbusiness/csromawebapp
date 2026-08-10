@@ -12,6 +12,7 @@ import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 import { EmptyState, LoadingState } from '@/components/ui'
 import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
+import { useAuth } from '@/hooks/useAuth'
 
 interface User {
   id: string
@@ -102,6 +103,7 @@ function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
 export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
   const { startNextStep } = useNextStep()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
+  const { role: accountRole } = useAuth()
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
@@ -135,6 +137,11 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const lastLoadTimeRef = useRef<number>(0)
 
   const loadAthleteData = useCallback(async () => {
+    if (accountRole === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
+      setAccessDenied(true)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setAccessDenied(false)
     try {
@@ -161,7 +168,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     } finally {
       setLoading(false)
     }
-  }, [selectedProfileId])
+  }, [accountRole, selectedProfile, selectedProfileId])
 
   const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase

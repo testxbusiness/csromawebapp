@@ -6,6 +6,7 @@ import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { EmptyState, LoadingState } from '@/components/ui'
 import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import { useAuth } from '@/hooks/useAuth'
 
 type Message = {
   id: string
@@ -26,12 +27,19 @@ type Message = {
 
 export default function AthleteMessagesManager() {
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
+  const { role } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
 
   const loadMessages = useCallback(async () => {
+    if (role === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.receive_messages)) {
+      setAccessDenied(true)
+      setMessages([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setAccessDenied(false)
     try {
@@ -52,7 +60,7 @@ export default function AthleteMessagesManager() {
     } finally {
       setLoading(false)
     }
-  }, [selectedProfileId])
+  }, [role, selectedProfile, selectedProfileId])
 
   useEffect(() => {
     loadMessages()

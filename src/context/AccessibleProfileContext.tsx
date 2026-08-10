@@ -50,16 +50,19 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [selectedProfileId, setSelectedProfileIdState] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     if (!user || !account) {
       setProfiles([])
       setSelectedProfileIdState(null)
+      setProfilesLoaded(true)
       return
     }
 
     setLoading(true)
+    setProfilesLoaded(false)
     setError(null)
     try {
       const response = await fetch('/api/me/accessible-profiles', { cache: 'no-store' })
@@ -71,6 +74,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
       setError(cause instanceof Error ? cause.message : 'Impossibile caricare i profili accessibili')
     } finally {
       setLoading(false)
+      setProfilesLoaded(true)
     }
   }, [account, user])
 
@@ -93,11 +97,12 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (!profilesLoaded) return
     const stored = window.localStorage.getItem(STORAGE_KEY)
     const stillAccessible = stored && profiles.some((entry) => entry.profile.id === stored)
     setSelectedProfileIdState(stillAccessible ? stored : null)
     if (!stillAccessible) window.localStorage.removeItem(STORAGE_KEY)
-  }, [profiles])
+  }, [profiles, profilesLoaded])
 
   const setSelectedProfileId = useCallback((profileId: string | null) => {
     if (profileId && !profiles.some((entry) => entry.profile.id === profileId)) return
