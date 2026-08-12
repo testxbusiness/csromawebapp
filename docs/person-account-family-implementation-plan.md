@@ -1217,6 +1217,19 @@ e l’assenza delle card messaggi/quote non autorizzate. Build Next.js e test E2
 Le migration e le modifiche applicative di Fase 4 restano applicate/verificate solo in locale;
 staging e produzione restano invariati fino alla chiusura dell’intero piano.
 
+Preflight e applicazione staging Fase 4 completati il 12 agosto 2026: è stato creato il backup
+preventivo in `/tmp/csroma_staging_phase4_20260812/` con schema, dati e ruoli. Il progetto
+collegato è stato verificato come `csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`) prima di
+qualsiasi operazione. Il dry-run ha elencato esclusivamente le cinque migration locali attese:
+`20260810145627`, `20260810150420`, `20260810160000`, `20260810162451` e `20260810170000`.
+Sono state quindi applicate allo staging; la migration history è allineata e il dry-run
+successivo restituisce `Remote database is up to date`. Il dump post-migration conferma il
+ruolo `family_member`, le tabelle `profile_age_overrides`, `profile_relationship_audit` e
+`profile_relationships`, i relativi vincoli e indici. Il confronto del dump dati mostra solo
+le nuove tabelle vuote e metadati di dump, senza variazioni nei record applicativi esistenti.
+Restano da eseguire i test funzionali, API/BOLA e regressione UI su staging; produzione resta
+fuori perimetro.
+
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
 - aggiunge override amministrativo della minore età con motivo, attore e timestamp;
