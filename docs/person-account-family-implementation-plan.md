@@ -1230,6 +1230,16 @@ le nuove tabelle vuote e metadati di dump, senza variazioni nei record applicati
 Restano da eseguire i test funzionali, API/BOLA e regressione UI su staging; produzione resta
 fuori perimetro.
 
+Correzione staging del 12 agosto 2026: dopo il push Fase 4 il login restituiva
+`Impossibile risolvere il contesto account`. La causa era il `REVOKE ALL` generale sulle
+funzioni `private` eseguito da `20260810170000` dopo i grant delle migration precedenti;
+venivano così rimossi i permessi `EXECUTE` di `authenticated` sugli helper account già
+esistenti. La nuova migration `20260812091923_restore_account_context_helper_grants.sql`
+ripristina in modo idempotente usage dello schema e grant degli helper account-based in
+locale e staging. Il fix è stato verificato localmente sui grant e il dry-run staging
+successivo restituisce `Remote database is up to date`. Restano da ripetere login, test
+funzionali e API/BOLA su staging dopo il redeploy/refresh dell’applicazione.
+
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
 - aggiunge override amministrativo della minore età con motivo, attore e timestamp;
