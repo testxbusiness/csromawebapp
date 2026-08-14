@@ -5,6 +5,7 @@ import { EmptyState, ErrorState, LoadingState, Button } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import AthleteDashboard from '@/components/athlete/AthleteDashboard'
+import { ArrowRight } from 'lucide-react'
 
 type AccessibleProfile = {
   profile: { id: string; first_name: string; last_name: string; email: string | null }
@@ -20,7 +21,7 @@ const relationshipLabels: Record<string, string> = {
 
 export default function FamilyMemberDashboard() {
   const { user } = useAuth()
-  const { selectedProfile } = useAccessibleProfiles()
+  const { selectedProfile, setSelectedProfileId } = useAccessibleProfiles()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +61,7 @@ export default function FamilyMemberDashboard() {
     <div className="space-y-8">
       <section className="cs-card cs-card--primary cs-card--lg">
         <h1 className="cs-card__title">Area familiare</h1>
-        <p className="cs-card__description">Consulta solo le informazioni dei profili che l’amministrazione ti ha collegato.</p>
+        <p className="cs-card__description">Seleziona un profilo collegato per accedere alle informazioni autorizzate.</p>
       </section>
 
       {loading ? <LoadingState label="Caricamento profili collegati…" /> : null}
@@ -71,11 +72,25 @@ export default function FamilyMemberDashboard() {
           <h2 className="cs-card__title">Profili collegati</h2>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             {profiles.map(({ profile, relationship }) => (
-              <article key={`${profile.id}-${relationship.type}`} className="rounded-xl border border-[color:var(--cs-border)] p-4">
-                <h3 className="font-semibold text-[color:var(--cs-text)]">{profile.first_name} {profile.last_name}</h3>
-                <p className="mt-1 text-sm text-[color:var(--cs-text-secondary)]">{relationshipLabels[relationship.type] || relationship.type}</p>
-                <p className="mt-3 text-xs text-[color:var(--cs-text-tertiary)]">I permessi disponibili sono gestiti dall’amministrazione.</p>
-              </article>
+              <button
+                key={`${profile.id}-${relationship.type}`}
+                type="button"
+                onClick={() => setSelectedProfileId(profile.id)}
+                className="group min-h-44 rounded-xl border border-[color:var(--cs-border)] p-4 text-left transition-colors hover:border-[color:var(--cs-primary)] hover:bg-[color:var(--cs-primary)]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--cs-primary)] focus-visible:ring-offset-2"
+                aria-label={`Visualizza area atleta di ${profile.first_name} ${profile.last_name}`}
+              >
+                <span className="flex h-full flex-col justify-between gap-6">
+                  <span>
+                    <span className="block font-semibold text-[color:var(--cs-text)]">{profile.first_name} {profile.last_name}</span>
+                    <span className="mt-1 block text-sm text-[color:var(--cs-text-secondary)]">{relationshipLabels[relationship.type] || relationship.type}</span>
+                    <span className="mt-3 block text-xs text-[color:var(--cs-text-tertiary)]">I permessi disponibili sono gestiti dall’amministrazione.</span>
+                  </span>
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--cs-primary)]">
+                    Visualizza area atleta
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden="true" />
+                  </span>
+                </span>
+              </button>
             ))}
           </div>
         </section>
