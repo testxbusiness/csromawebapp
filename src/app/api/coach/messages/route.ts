@@ -127,12 +127,17 @@ export async function GET(request: NextRequest) {
 
     // 2. Get all recipients for all messages
     const msgIds = (messages || []).map(m => m.id)
-    const { data: allRecipients } = msgIds.length > 0
-      ? await adminClient
+    const { data: allRecipients, error: allRecipientsError } = msgIds.length > 0
+      ? await supabase
           .from('message_recipients')
           .select('id, message_id, team_id, profile_id, is_read, read_at')
           .in('message_id', msgIds)
       : { data: [] }
+
+    if (allRecipientsError) {
+      console.error('Error loading coach message recipients:', allRecipientsError)
+      return NextResponse.json({ error: 'Error loading message recipients' }, { status: 400 })
+    }
 
     // 3. Collect team and profile IDs from recipients
     const teamRecipientsIds = [...new Set((allRecipients || []).filter(r => r.team_id).map(r => r.team_id))]
