@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
@@ -27,13 +27,20 @@ type Message = {
 
 export default function AthleteMessagesManager() {
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
-  const { role, loading: authLoading, profileLoading } = useAuth()
+  const { role, user, loading: authLoading, profileLoading } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
+  const messagesRequestRef = useRef<AbortController | null>(null)
 
   const loadMessages = useCallback(async () => {
+    if (!user?.id || !role) {
+      messagesRequestRef.current?.abort()
+      setLoading(false)
+      return
+    }
+
     if (authLoading || profileLoading) {
       setLoading(true)
       return
@@ -46,8 +53,13 @@ export default function AthleteMessagesManager() {
     }
     setLoading(true)
     setAccessDenied(false)
+    messagesRequestRef.current?.abort()
+    const controller = new AbortController()
+    messagesRequestRef.current = controller
     try {
-      const res = await fetch(appendSubjectProfile('/api/athlete/messages?view=full', selectedProfileId))
+      const res = await fetch(appendSubjectProfile('/api/athlete/messages?view=full', selectedProfileId), {
+        signal: controller.signal,
+      })
       const result = await res.json()
       if (!res.ok) {
         if (res.status === 403) {
@@ -55,20 +67,28 @@ export default function AthleteMessagesManager() {
           setMessages([])
           return
         }
+        if (res.status === 401) return
         throw new Error(result?.error || 'Errore caricamento messaggi')
       }
       setMessages(result.messages || [])
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('Errore caricamento messaggi atleta:', e)
       setMessages([])
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }, [authLoading, profileLoading, role, selectedProfile, selectedProfileId])
+  }, [authLoading, profileLoading, role, selectedProfile, selectedProfileId, user?.id])
 
   useEffect(() => {
     loadMessages()
   }, [loadMessages])
+
+  useEffect(() => {
+    return () => {
+      messagesRequestRef.current?.abort()
+    }
+  }, [])
 
   if (loading) return <LoadingState label="Caricamento messaggi..." />
   if (accessDenied) return <DelegatedAccessDenied section="i messaggi" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
