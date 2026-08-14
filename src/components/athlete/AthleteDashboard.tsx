@@ -118,6 +118,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
   const supabase = useMemo(() => createClient(), [])
+  const dashboardRequestRef = useRef<AbortController | null>(null)
 
   // Enrich selected message on open
   useEffect(() => {
@@ -137,6 +138,12 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const lastLoadTimeRef = useRef<number>(0)
 
   const loadAthleteData = useCallback(async () => {
+    if (!user?.id || !profile?.id || !accountRole) {
+      dashboardRequestRef.current?.abort()
+      setLoading(false)
+      return
+    }
+
     if (authLoading || profileLoading) {
       setLoading(true)
       return
@@ -148,13 +155,20 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     }
     setLoading(true)
     setAccessDenied(false)
+    dashboardRequestRef.current?.abort()
+    const controller = new AbortController()
+    dashboardRequestRef.current = controller
+
     try {
-      const response = await fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId))
+      const response = await fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId), {
+        signal: controller.signal,
+      })
       if (!response.ok) {
         if (response.status === 403) {
           setAccessDenied(true)
           return
         }
+        if (response.status === 401) return
         console.error('Error loading athlete dashboard:', response.statusText)
         return
       }
@@ -168,11 +182,18 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       setFeeInstallments(result.feeInstallments || [])
       lastLoadTimeRef.current = Date.now()
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('Error loading athlete data:', e)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }, [accountRole, authLoading, profileLoading, selectedProfile, selectedProfileId])
+  }, [accountRole, authLoading, profile?.id, profileLoading, selectedProfile, selectedProfileId, user?.id])
+
+  useEffect(() => {
+    return () => {
+      dashboardRequestRef.current?.abort()
+    }
+  }, [])
 
   const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase
