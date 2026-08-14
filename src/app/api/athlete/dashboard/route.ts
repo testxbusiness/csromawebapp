@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
 
     const { searchParams } = new URL(request.url)
-    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
+    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
     const canViewMessages = subject.permissions.receive_messages

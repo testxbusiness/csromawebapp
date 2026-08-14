@@ -45,7 +45,7 @@ export async function resolveSubjectProfile(
   supabase: SupabaseClient,
   account: AccountContext,
   requestedProfileId: string | null,
-  permission: SubjectPermission
+  permission?: SubjectPermission
 ) {
   if (!requestedProfileId || requestedProfileId === account.ownerProfileId) {
     return {
@@ -80,7 +80,7 @@ export async function resolveSubjectProfile(
   if (!relationship || !profile) throw new AccountContextError('Profilo accessibile non autorizzato', 403)
 
   const relation = relationship as RelationshipPermissionRow
-  const permissionGranted = {
+  const permissions = {
     view_schedule: relation.can_view_schedule,
     confirm_attendance: relation.can_confirm_attendance,
     view_payments: relation.can_view_payments,
@@ -88,7 +88,10 @@ export async function resolveSubjectProfile(
     view_documents: relation.can_view_documents,
     sign_documents: relation.can_sign_documents,
     receive_messages: relation.can_receive_messages,
-  }[permission]
+  }
+  const permissionGranted = permission
+    ? permissions[permission]
+    : permissions.view_schedule || permissions.view_payments || permissions.receive_messages
   if (!permissionGranted) throw new AccountContextError('Permesso sul profilo accessibile non concesso', 403)
 
   const targetIsMinor = isMinor(profile.birth_date, override?.treat_as_minor)
@@ -117,7 +120,7 @@ export async function resolveSubjectProfile(
 export async function requireSubjectAthleteContext(
   supabase: SupabaseClient,
   requestedProfileId: string | null,
-  permission: SubjectPermission
+  permission?: SubjectPermission
 ) {
   const account = await requireAccountContext(supabase)
   const isOwnProfile = !requestedProfileId || requestedProfileId === account.ownerProfileId

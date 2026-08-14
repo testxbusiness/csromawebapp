@@ -148,7 +148,13 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       setLoading(true)
       return
     }
-    if (accountRole === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
+    const delegatedPermissions = selectedProfile?.relationship.permissions
+    const canAccessDelegatedDashboard = Boolean(
+      delegatedPermissions?.view_schedule ||
+      delegatedPermissions?.view_payments ||
+      delegatedPermissions?.receive_messages
+    )
+    if (accountRole === 'family_member' && (!selectedProfile || !canAccessDelegatedDashboard)) {
       setAccessDenied(true)
       setLoading(false)
       return
