@@ -126,9 +126,19 @@ export async function GET(request: NextRequest) {
           .in('message_id', fullMsgIds)
       : { data: [] }
 
+    // Per un accesso delegato dataClient è un admin client e quindi non applica
+    // RLS sulle righe dei destinatari. Replica esplicitamente la visibilità
+    // dell'atleta: squadra pertinente oppure solo il profilo atleta selezionato.
+    const visibleRecipients = subject.delegated
+      ? (allRecipients || []).filter((recipient) => (
+          recipient.profile_id === athleteProfileId ||
+          (recipient.team_id && teamIds.includes(recipient.team_id))
+        ))
+      : (allRecipients || [])
+
     // 3. Collect team and profile IDs from recipients
-    const teamRecipientIds = [...new Set((allRecipients || []).filter(r => r.team_id).map(r => r.team_id))]
-    const profileRecipientIds = [...new Set((allRecipients || []).filter(r => r.profile_id).map(r => r.profile_id))]
+    const teamRecipientIds = [...new Set(visibleRecipients.filter(r => r.team_id).map(r => r.team_id))]
+    const profileRecipientIds = [...new Set(visibleRecipients.filter(r => r.profile_id).map(r => r.profile_id))]
 
     // 4. Get all teams and profiles in batch
     const [{ data: teams }, { data: profiles }] = await Promise.all([
@@ -145,7 +155,7 @@ export async function GET(request: NextRequest) {
 
     // 5. Create recipients map by message_id
     const recipientsByMessage = new Map<string, any[]>()
-    for (const rr of (allRecipients || [])) {
+    for (const rr of visibleRecipients) {
       if (!recipientsByMessage.has(rr.message_id)) {
         recipientsByMessage.set(rr.message_id, [])
       }
