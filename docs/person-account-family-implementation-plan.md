@@ -1238,7 +1238,16 @@ esistenti. La nuova migration `20260812091923_restore_account_context_helper_gra
 ripristina in modo idempotente usage dello schema e grant degli helper account-based in
 locale e staging. Il fix è stato verificato localmente sui grant e il dry-run staging
 successivo restituisce `Remote database is up to date`. Restano da ripetere login, test
-funzionali e API/BOLA su staging dopo il redeploy/refresh dell’applicazione.
+funzionali e API/BOLA su staging dopo il redeploy/refresh dell'applicazione.
+
+Correzione messaggi coach del 14 agosto 2026: il report staging mostrava `400` su
+`/api/coach/messages`. Le policy `message_recipients_coach_*` invocavano
+`private.is_message_owner(uuid)`, ma il `REVOKE ALL` generale della Fase 4 aveva
+rimosso il grant `EXECUTE` per `authenticated`. La migration
+`20260814083200_restore_message_owner_helper_grant.sql` ripristina esclusivamente
+quel grant in locale e staging. Il privilegio effettivo è stato verificato in entrambi
+gli ambienti; restano da ripetere il caricamento dei messaggi con Coach U14/U17 e i
+relativi test funzionali su staging.
 
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
