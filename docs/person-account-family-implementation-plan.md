@@ -1305,6 +1305,23 @@ da ciò che è solo legacy o parzialmente implementato.
 Stato: da iniziare; dipende dal completamento della Fase 4 e dai relativi test di
 sicurezza, delega e audit.
 
+Inventario preliminare completato il 17 agosto 2026:
+
+- le letture messaggi usano ancora temporaneamente `message_recipients.is_read/read_at`;
+  non esiste una route applicativa per registrare la lettura e non esiste ancora
+  `message_reads`;
+- le push subscription sono operative tramite `usePush`, service worker, API
+  subscribe/unsubscribe e `web-push`, ma sono ancora collegate a `profile_id` e non a
+  `auth_user_id`; il fan-out per account, dispositivo e soggetto delegato è quindi da
+  completare;
+- `push_subscriptions` conserva due indici unici duplicati su `(profile_id, endpoint)`,
+  da razionalizzare nella migration dedicata senza perdita di subscription;
+- `src/lib/utils/notifications.ts` è stato rimosso perché non importato né utilizzato,
+  dipendeva dalla tabella assente `pending_notifications` e rappresentava un flusso
+  legacy non operativo. Sarà sostituito dal sistema account-based della Fase 5;
+- non viene introdotta in questa fase alcuna tabella `pending_notifications` né viene
+  applicata ancora la Migration 13.
+
 Migration 13: `account_message_reads_and_push_subscriptions`
 
 - crea `message_reads(message_id, auth_user_id, subject_profile_id, read_at)`;
