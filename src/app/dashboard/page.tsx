@@ -10,7 +10,7 @@ import FamilyMemberDashboard from '@/components/family/FamilyMemberDashboard'
 
 export default function DashboardPage() {
   const { user, profile, account, role, loading } = useAuth()
-  const { activeArea } = useAccessibleProfiles()
+  const { activeArea, profiles: accessibleProfiles, loading: accessibleProfilesLoading } = useAccessibleProfiles()
 
   const [lastValidState, setLastValidState] = useState<{
     user: typeof user
@@ -55,7 +55,10 @@ export default function DashboardPage() {
 
   const isRefreshing = loading && hasShownData.current
 
-  const showFamilyArea = displayRole === 'family_member' || (account?.roles.includes('family_member') && activeArea === 'family')
+  const hasFamilyAccess = Boolean(
+    account?.roles.includes('family_member') || (!accessibleProfilesLoading && accessibleProfiles.length > 0)
+  )
+  const showFamilyArea = displayRole === 'family_member' || (hasFamilyAccess && activeArea === 'family')
 
   return (
     <div className="space-y-8 relative">

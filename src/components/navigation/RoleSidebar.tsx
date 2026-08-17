@@ -76,7 +76,7 @@ const athleteItems: NavItem[] = [
 ]
 
 const familyMemberItems: NavItem[] = [
-  { href: '/dashboard', label: 'Area familiare', icon: LineChart },
+  { href: '/dashboard', label: 'Dashboard', icon: LineChart },
 ]
 
 const getItemsForRole = (role: Role | undefined, selectedProfile: ReturnType<typeof useAccessibleProfiles>['selectedProfile']): NavItem[] => {
@@ -84,9 +84,16 @@ const getItemsForRole = (role: Role | undefined, selectedProfile: ReturnType<typ
   if (role === 'coach') return coachItems
   if (role === 'athlete') return athleteItems
   if (role === 'family_member') {
-    if (!selectedProfile) return familyMemberItems
+    const familyItems: NavItem[] = selectedProfile
+      ? [
+          ...familyMemberItems,
+          { href: '/dashboard', label: 'Area familiare', icon: UsersRound },
+        ]
+      : [{ href: '/dashboard', label: 'Area familiare', icon: LineChart }]
+
+    if (!selectedProfile) return familyItems
     return [
-      familyMemberItems[0],
+      ...familyItems,
       ...(selectedProfile.relationship.permissions.view_schedule ? [{ href: '/athlete/calendar', label: 'Calendario', icon: CalendarClock }] : []),
       ...(selectedProfile.relationship.permissions.receive_messages ? [{ href: '/athlete/messages', label: 'Messaggi', icon: Mail }] : []),
       ...(selectedProfile.relationship.permissions.view_payments ? [{ href: '/athlete/fees', label: 'Quote Associative', icon: Wallet2 }] : []),
@@ -141,16 +148,26 @@ NavItem.displayName = 'NavItem'
 
 const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps) => {
   const { role, account, loading } = useAuth()
-  const { selectedProfile, activeArea, setActiveArea, setSelectedProfileId } = useAccessibleProfiles()
+  const {
+    profiles,
+    selectedProfile,
+    activeArea,
+    loading: accessibleProfilesLoading,
+    setActiveArea,
+    setSelectedProfileId,
+  } = useAccessibleProfiles()
   const pathname = usePathname()
 
-  const effectiveRole = role === 'athlete' && account?.roles.includes('family_member') && activeArea === 'family'
+  const hasFamilyAccess = Boolean(
+    account?.roles.includes('family_member') || (!accessibleProfilesLoading && profiles.length > 0)
+  )
+  const effectiveRole = role === 'athlete' && hasFamilyAccess && activeArea === 'family'
     ? 'family_member'
     : role as Role | undefined
 
   const items = useMemo(() => {
     const roleItems = getItemsForRole(effectiveRole, selectedProfile)
-    const hasDualArea = account?.roles.includes('family_member') && role !== 'family_member'
+    const hasDualArea = hasFamilyAccess && role !== 'family_member'
 
     if (!hasDualArea) return roleItems
 
@@ -162,7 +179,7 @@ const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps)
         icon: activeArea === 'family' ? User : UsersRound,
       },
     ]
-  }, [account?.roles, activeArea, effectiveRole, role, selectedProfile])
+  }, [activeArea, effectiveRole, hasFamilyAccess, role, selectedProfile])
 
   if (loading) {
     return (
@@ -202,7 +219,7 @@ const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps)
           const active = pathname?.startsWith(href)
           const isFamilyAreaItem = label === 'Area familiare'
           const isPersonalAreaItem = label === 'Area personale'
-          const isFamilyDashboard = effectiveRole === 'family_member' && href === '/dashboard'
+          const isFamilyDashboard = effectiveRole === 'family_member' && label === 'Dashboard'
           const shouldClearSubject = isFamilyAreaItem || isPersonalAreaItem || isFamilyDashboard
 
           return (

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Execute all queries in parallel
-    const [seasonRes, memberRes, msgRes, feeRes] = await Promise.all([
+    const [seasonRes, memberRes, feeRes] = await Promise.all([
       // 1. Get active season
       dataClient
         .from('seasons')
@@ -32,29 +32,7 @@ export async function GET(request: NextRequest) {
         .select('id, team_id, jersey_number')
         .eq('profile_id', athleteProfileId),
 
-      // 3. Get unread messages for this user
-      canViewMessages
-        ? dataClient
-            .from('message_recipients')
-            .select(`
-          message_id,
-          is_read,
-          created_at,
-          messages(
-            id,
-            subject,
-            content,
-            created_at,
-            created_by,
-            created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
-          )
-            `)
-            .eq('profile_id', athleteProfileId)
-            .order('created_at', { ascending: false })
-            .limit(5)
-        : Promise.resolve({ data: [] }),
-
-      // 4. Get fee installments
+      // 3. Get fee installments
       canViewPayments
         ? dataClient
             .from('fee_installments')
@@ -66,11 +44,43 @@ export async function GET(request: NextRequest) {
 
     const seasons = seasonRes.data
     const memberships = memberRes.data
-    const msgRecipients = msgRes.data
     const feeInstallments = feeRes.data
 
     // Get team IDs
     const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
+
+    let msgRecipients: any[] = []
+    if (canViewMessages) {
+      const recipientFilters = [`profile_id.eq.${athleteProfileId}`]
+      if (teamIds.length > 0) recipientFilters.push(`team_id.in.(${teamIds.join(',')})`)
+
+      const { data, error } = await dataClient
+        .from('message_recipients')
+        .select(`
+          message_id,
+          team_id,
+          profile_id,
+          is_read,
+          created_at,
+          messages(
+            id,
+            subject,
+            content,
+            created_at,
+            created_by,
+            created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
+          )
+        `)
+        .or(recipientFilters.join(','))
+        .order('created_at', { ascending: false })
+        .limit(10)
+
+      if (error) {
+        console.error('Error loading dashboard messages:', error)
+      } else {
+        msgRecipients = data || []
+      }
+    }
 
     if (teamIds.length === 0) {
       return NextResponse.json({
@@ -224,17 +234,24 @@ export async function GET(request: NextRequest) {
       })
       .filter(Boolean)
 
-    const unreadMessages = (msgRecipients || [])
-      .filter(r => r.messages && !r.is_read)
-      .map((r: any) => ({
-        id: r.messages.id,
-        subject: r.messages.subject,
-        content: r.messages.content,
-        created_at: r.messages.created_at,
-        is_read: r.is_read,
-        created_by_profile: r.messages.created_by_profile || null
-      }))
-      .slice(0, 5)
+    const unreadMessages = Array.from(
+      (msgRecipients || [])
+        .filter(r => r.messages && !r.is_read)
+        .reduce((messages: Map<string, any>, recipient: any) => {
+          if (!messages.has(recipient.messages.id)) {
+            messages.set(recipient.messages.id, {
+              id: recipient.messages.id,
+              subject: recipient.messages.subject,
+              content: recipient.messages.content,
+              created_at: recipient.messages.created_at,
+              is_read: recipient.is_read,
+              created_by_profile: recipient.messages.created_by_profile || null
+            })
+          }
+          return messages
+        }, new Map<string, any>())
+        .values()
+    ).slice(0, 5)
 
     return NextResponse.json({
       teamMemberships: enrichedMemberships,
