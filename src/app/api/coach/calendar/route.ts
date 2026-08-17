@@ -82,7 +82,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events: [], teams: teamData })
     }
 
-    // 3. Get events (batch processing)
+    // 3. Get upcoming events (same window used by the athlete dashboard)
+    const fromDate = new Date()
+    const throughDate = new Date(fromDate)
+    throughDate.setDate(throughDate.getDate() + 30)
+
     let allEvents: any[] = []
 
     if (eventIds.length > 100) {
@@ -92,6 +96,8 @@ export async function GET(request: NextRequest) {
           .from('events')
           .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by')
           .in('id', batch)
+          .gte('start_date', fromDate.toISOString())
+          .lte('start_date', throughDate.toISOString())
 
         allEvents.push(...(events || []))
       }
@@ -100,7 +106,10 @@ export async function GET(request: NextRequest) {
         .from('events')
         .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by')
         .in('id', eventIds)
-        .order('start_date', { ascending: false })
+        .gte('start_date', fromDate.toISOString())
+        .lte('start_date', throughDate.toISOString())
+        .order('start_date', { ascending: true })
+        .limit(10)
 
       if (evErr) {
         console.error('Error loading events:', evErr)
@@ -133,21 +142,24 @@ export async function GET(request: NextRequest) {
     }
 
     // 5. Transform events
-    const transformedEvents = allEvents.map((ev: any) => ({
-      id: ev.id,
-      title: ev.title,
-      description: ev.description,
-      location: ev.location,
-      start_time: ev.start_time,
-      end_time: ev.end_time,
-      is_recurring: ev.event_type === 'recurring',
-      // selected_teams is required on the UI to resolve the names, keep names for backwards compatibility
-      selected_teams: teamIdsByEventId.get(ev.id) || [],
-      teams: teamNamesByEventId.get(ev.id) || [],
-      event_kind: ev.event_kind,
-      parent_event_id: ev.parent_event_id,
-      created_by: ev.created_by
-    }))
+    const transformedEvents = allEvents
+      .map((ev: any) => ({
+        id: ev.id,
+        title: ev.title,
+        description: ev.description,
+        location: ev.location,
+        start_time: ev.start_time,
+        end_time: ev.end_time,
+        is_recurring: ev.event_type === 'recurring',
+        // selected_teams is required on the UI to resolve the names, keep names for backwards compatibility
+        selected_teams: teamIdsByEventId.get(ev.id) || [],
+        teams: teamNamesByEventId.get(ev.id) || [],
+        event_kind: ev.event_kind,
+        parent_event_id: ev.parent_event_id,
+        created_by: ev.created_by
+      }))
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      .slice(0, 10)
 
     return NextResponse.json({
       events: transformedEvents,
