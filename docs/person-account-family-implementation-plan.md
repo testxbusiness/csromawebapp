@@ -1116,8 +1116,8 @@ UI:
 
 ### Fase 4 — famiglie e profili accessibili
 
-Stato: in implementazione incrementale dopo il consolidamento della Fase 3A. Non sono autorizzate modifiche
-in produzione prima del completamento e dei test dell’intero piano.
+Stato: completata e verificata in locale e staging. Non sono autorizzate modifiche in produzione
+prima del completamento e dei test dell’intero piano.
 
 Fase 4, slice 1 completato in locale: `20260810160000_consolidate_profile_athlete_team_sources.sql`
 verifica i conflitti tra le colonne sportive legacy di `profiles` e le fonti autorevoli
@@ -1214,8 +1214,6 @@ Verifica slice 7–8: il test E2E Playwright con le credenziali configurate del 
 confermato la presenza dei due profili collegati (Giorgio Politi e Raffaella Scutieri), la
 selezione di Raffaella con solo calendario autorizzato, la persistenza dopo navigazione/reload
 e l’assenza delle card messaggi/quote non autorizzate. Build Next.js e test E2E sono passati.
-Le migration e le modifiche applicative di Fase 4 restano applicate/verificate solo in locale;
-staging e produzione restano invariati fino alla chiusura dell’intero piano.
 
 Preflight e applicazione staging Fase 4 completati il 12 agosto 2026: è stato creato il backup
 preventivo in `/tmp/csroma_staging_phase4_20260812/` con schema, dati e ruoli. Il progetto
@@ -1246,8 +1244,8 @@ Correzione messaggi coach del 14 agosto 2026: il report staging mostrava `400` s
 rimosso il grant `EXECUTE` per `authenticated`. La migration
 `20260814083200_restore_message_owner_helper_grant.sql` ripristina esclusivamente
 quel grant in locale e staging. Il privilegio effettivo è stato verificato in entrambi
-gli ambienti; restano da ripetere il caricamento dei messaggi con Coach U14/U17 e i
-relativi test funzionali su staging.
+gli ambienti; il caricamento dei messaggi con Coach U14/U17 e i relativi test funzionali
+su staging sono stati completati con esito positivo.
 
 - completa policy `profile_relationships`;
 - aggiunge helper per validità, status e singolo permesso;
@@ -1278,6 +1276,29 @@ Frontend:
 Le relazioni familiari sono verificate inizialmente soltanto da Admin o Staff con la
 capability esplicita. Un parent con `can_view_medical_status` vede esclusivamente stato e
 scadenza del certificato.
+
+Chiusura Fase 4 e verifiche finali (17 agosto 2026):
+
+- sono state completate le correzioni dei grant account-context e message-owner in locale e
+  staging, senza modificare produzione;
+- sono stati verificati login, logout, cambio area, selezione e persistenza dei profili
+  accessibili per account genitore, atleta-genitore, atleta, coach, staff e admin;
+- sono stati verificati i confini BOLA/API per soggetto, relazione, permessi granulari,
+  destinatari dei messaggi e accesso agli eventi;
+- la dashboard del soggetto delegato mostra solo card, anteprime e link autorizzati; le
+  sezioni non abilitate mostrano uno stato di accesso non consentito senza dati parziali;
+- il soggetto delegato non apre i dettagli della squadra e non vede nomi di compagni o coach;
+- i messaggi inviati a una squadra compaiono anche nelle anteprime dashboard quando il
+  soggetto ha il permesso messaggi, mentre i destinatari individuali sono filtrati per
+  soggetto;
+- la navigazione familiare è distinta da quella personale: `Area familiare` precede
+  `Dashboard`, il passaggio alla dashboard mantiene il soggetto selezionato e il ritorno
+  all’area familiare lo deseleziona;
+- la build Next.js, i test E2E locali e la regressione manuale/API su staging sono passati.
+
+La Fase 4 è quindi chiusa. Prima di iniziare la Fase 5 è richiesto un inventario separato
+di letture messaggi, notifiche e push subscription, per distinguere ciò che è già operativo
+da ciò che è solo legacy o parzialmente implementato.
 
 ### Fase 5 — domini collegati
 
