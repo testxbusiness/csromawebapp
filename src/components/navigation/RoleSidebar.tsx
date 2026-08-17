@@ -86,10 +86,10 @@ const getItemsForRole = (role: Role | undefined, selectedProfile: ReturnType<typ
   if (role === 'family_member') {
     const familyItems: NavItem[] = selectedProfile
       ? [
-          ...familyMemberItems,
           { href: '/dashboard', label: 'Area familiare', icon: UsersRound },
+          ...familyMemberItems,
         ]
-      : [{ href: '/dashboard', label: 'Area familiare', icon: LineChart }]
+      : [{ href: '/dashboard', label: 'Area familiare', icon: UsersRound }]
 
     if (!selectedProfile) return familyItems
     return [
@@ -216,11 +216,18 @@ const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps)
 
       <nav className="flex flex-col gap-1">
         {items.map(({ href, label, icon }) => {
-          const active = pathname?.startsWith(href)
           const isFamilyAreaItem = label === 'Area familiare'
           const isPersonalAreaItem = label === 'Area personale'
-          const isFamilyDashboard = effectiveRole === 'family_member' && label === 'Dashboard'
-          const shouldClearSubject = isFamilyAreaItem || isPersonalAreaItem || isFamilyDashboard
+          const isDashboardItem = label === 'Dashboard'
+          const onDashboard = pathname?.startsWith('/dashboard')
+          const active = isFamilyAreaItem
+            ? onDashboard && activeArea === 'family' && !selectedProfile
+            : isPersonalAreaItem
+              ? onDashboard && activeArea === 'personal'
+              : isDashboardItem && effectiveRole === 'family_member'
+                ? onDashboard && activeArea === 'family' && Boolean(selectedProfile)
+                : pathname?.startsWith(href)
+          const shouldClearSubject = isFamilyAreaItem || isPersonalAreaItem
 
           return (
             <NavItem
