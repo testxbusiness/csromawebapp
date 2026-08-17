@@ -76,7 +76,7 @@ const athleteItems: NavItem[] = [
 ]
 
 const familyMemberItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LineChart },
+  { href: '/dashboard', label: 'Area familiare', icon: LineChart },
 ]
 
 const getItemsForRole = (role: Role | undefined, selectedProfile: ReturnType<typeof useAccessibleProfiles>['selectedProfile']): NavItem[] => {
@@ -140,11 +140,29 @@ const NavItem = memo(
 NavItem.displayName = 'NavItem'
 
 const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps) => {
-  const { role, loading } = useAuth()
-  const { selectedProfile } = useAccessibleProfiles()
+  const { role, account, loading } = useAuth()
+  const { selectedProfile, activeArea, setActiveArea, setSelectedProfileId } = useAccessibleProfiles()
   const pathname = usePathname()
 
-  const items = useMemo(() => getItemsForRole(role as Role | undefined, selectedProfile), [role, selectedProfile])
+  const effectiveRole = role === 'athlete' && account?.roles.includes('family_member') && activeArea === 'family'
+    ? 'family_member'
+    : role as Role | undefined
+
+  const items = useMemo(() => {
+    const roleItems = getItemsForRole(effectiveRole, selectedProfile)
+    const hasDualArea = account?.roles.includes('family_member') && role !== 'family_member'
+
+    if (!hasDualArea) return roleItems
+
+    return [
+      ...roleItems,
+      {
+        href: '/dashboard',
+        label: activeArea === 'family' ? 'Area personale' : 'Area familiare',
+        icon: activeArea === 'family' ? User : UsersRound,
+      },
+    ]
+  }, [account?.roles, activeArea, effectiveRole, role, selectedProfile])
 
   if (loading) {
     return (
@@ -182,8 +200,27 @@ const RoleSidebar = memo(({ variant = 'desktop', onNavigate }: RoleSidebarProps)
       <nav className="flex flex-col gap-1">
         {items.map(({ href, label, icon }) => {
           const active = pathname?.startsWith(href)
+          const isFamilyAreaItem = label === 'Area familiare'
+          const isPersonalAreaItem = label === 'Area personale'
+          const isFamilyDashboard = effectiveRole === 'family_member' && href === '/dashboard'
+          const shouldClearSubject = isFamilyAreaItem || isPersonalAreaItem || isFamilyDashboard
 
-          return <NavItem key={href} href={href} label={label} icon={icon} active={active} onNavigate={onNavigate} />
+          return (
+            <NavItem
+              key={`${href}-${label}`}
+              href={href}
+              label={label}
+              icon={icon}
+              active={active}
+              onNavigate={() => {
+                if (shouldClearSubject) {
+                  setSelectedProfileId(null)
+                  setActiveArea(isPersonalAreaItem ? 'personal' : 'family')
+                }
+                onNavigate?.()
+              }}
+            />
+          )
         })}
       </nav>
     </div>

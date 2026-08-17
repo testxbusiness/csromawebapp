@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useEffect, useState, useRef } from 'react'
 import AdminDashboard from '@/components/admin/AdminDashboard'
 import CoachDashboard from '@/components/coach/CoachDashboard'
@@ -8,7 +9,8 @@ import AthleteDashboard from '@/components/athlete/AthleteDashboard'
 import FamilyMemberDashboard from '@/components/family/FamilyMemberDashboard'
 
 export default function DashboardPage() {
-  const { user, profile, role, loading } = useAuth()
+  const { user, profile, account, role, loading } = useAuth()
+  const { activeArea } = useAccessibleProfiles()
 
   const [lastValidState, setLastValidState] = useState<{
     user: typeof user
@@ -53,6 +55,8 @@ export default function DashboardPage() {
 
   const isRefreshing = loading && hasShownData.current
 
+  const showFamilyArea = displayRole === 'family_member' || (account?.roles.includes('family_member') && activeArea === 'family')
+
   return (
     <div className="space-y-8 relative">
       {isRefreshing && (
@@ -67,10 +71,10 @@ export default function DashboardPage() {
           <AdminDashboard profile={displayProfile} />
         ) : displayRole === 'coach' ? (
           <CoachDashboard user={displayUser} profile={displayProfile} />
+        ) : showFamilyArea ? (
+          <FamilyMemberDashboard />
         ) : displayRole === 'athlete' ? (
           <AthleteDashboard user={displayUser} profile={displayProfile} />
-        ) : displayRole === 'family_member' ? (
-          <FamilyMemberDashboard />
         ) : (
           <div className="cs-card cs-card--lg">
             <h2 className="cs-card__title">Panoramica account</h2>

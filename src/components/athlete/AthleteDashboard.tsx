@@ -94,13 +94,14 @@ interface FeeInstallment {
 interface AthleteDashboardProps {
   user: User
   profile: Profile
+  delegatedView?: boolean
 }
 
 function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
   return Array.isArray(value) ? value[0] : value ?? undefined
 }
 
-export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
+export default function AthleteDashboard({ user, profile, delegatedView = false }: AthleteDashboardProps) {
   const { startNextStep } = useNextStep()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const { role: accountRole, loading: authLoading, profileLoading } = useAuth()
@@ -569,7 +570,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     }
   }, [loadAthleteData])
 
-  const isDelegatedProfile = accountRole === 'family_member' && Boolean(selectedProfileId)
+  const isDelegatedProfile = (accountRole === 'family_member' || delegatedView) && Boolean(selectedProfileId)
   const permissions = isDelegatedProfile ? selectedProfile?.relationship.permissions : null
   const canViewSchedule = !isDelegatedProfile || permissions?.view_schedule === true
   const canReceiveMessages = !isDelegatedProfile || permissions?.receive_messages === true

@@ -31,6 +31,8 @@ type AccessibleProfileContextValue = {
   selectedProfile: AccessibleProfile | null
   selectedProfileId: string | null
   setSelectedProfileId: (profileId: string | null) => void
+  activeArea: 'personal' | 'family'
+  setActiveArea: (area: 'personal' | 'family') => void
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
@@ -49,6 +51,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const { account, user, loading: authLoading } = useAuth()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [selectedProfileId, setSelectedProfileIdState] = useState<string | null>(null)
+  const [activeArea, setActiveArea] = useState<'personal' | 'family'>('personal')
   const [loading, setLoading] = useState(false)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -67,6 +70,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     if (!user) {
       setProfiles([])
       setSelectedProfileIdState(null)
+      setActiveArea('personal')
       setProfilesLoaded(true)
       return
     }
@@ -116,6 +120,13 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     if (!stillAccessible) window.localStorage.removeItem(STORAGE_KEY)
   }, [profiles, profilesLoaded])
 
+  const isFamilyOnlyAccount = Boolean(account?.roles.includes('family_member') && !account?.roles.includes('athlete'))
+
+  useEffect(() => {
+    if (!account?.authUserId) return
+    setActiveArea(isFamilyOnlyAccount ? 'family' : 'personal')
+  }, [account?.authUserId, isFamilyOnlyAccount])
+
   const setSelectedProfileId = useCallback((profileId: string | null) => {
     if (profileId && !profiles.some((entry) => entry.profile.id === profileId)) return
     setSelectedProfileIdState(profileId)
@@ -134,10 +145,12 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     selectedProfile,
     selectedProfileId,
     setSelectedProfileId,
+    activeArea,
+    setActiveArea,
     loading,
     error,
     refresh,
-  }), [error, loading, profiles, refresh, selectedProfile, selectedProfileId, setSelectedProfileId])
+  }), [activeArea, error, loading, profiles, refresh, selectedProfile, selectedProfileId, setSelectedProfileId])
 
   return <AccessibleProfileContext.Provider value={value}>{children}</AccessibleProfileContext.Provider>
 }

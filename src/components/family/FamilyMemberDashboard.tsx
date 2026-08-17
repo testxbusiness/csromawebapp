@@ -21,7 +21,7 @@ const relationshipLabels: Record<string, string> = {
 
 export default function FamilyMemberDashboard() {
   const { user } = useAuth()
-  const { selectedProfile, setSelectedProfileId } = useAccessibleProfiles()
+  const { selectedProfile, setSelectedProfileId, setActiveArea } = useAccessibleProfiles()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +53,7 @@ export default function FamilyMemberDashboard() {
           last_name: selectedProfile.profile.last_name,
           role: 'athlete',
         }}
+        delegatedView
       />
     )
   }
@@ -75,7 +76,10 @@ export default function FamilyMemberDashboard() {
               <button
                 key={`${profile.id}-${relationship.type}`}
                 type="button"
-                onClick={() => setSelectedProfileId(profile.id)}
+                onClick={() => {
+                  setActiveArea('family')
+                  setSelectedProfileId(profile.id)
+                }}
                 className="group min-h-44 rounded-xl border border-[color:var(--cs-border)] p-4 text-left transition-colors hover:border-[color:var(--cs-primary)] hover:bg-[color:var(--cs-primary)]/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--cs-primary)] focus-visible:ring-offset-2"
                 aria-label={`Visualizza area atleta di ${profile.first_name} ${profile.last_name}`}
               >

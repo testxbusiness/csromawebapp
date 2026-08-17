@@ -10,7 +10,6 @@ import { useAuth } from '@/hooks/useAuth'
 import ThemeToggle from '@/components/ui/ThemeToggle'
 import Image from 'next/image'
 import { usePush } from '@/hooks/usePush'
-import AccessibleProfileSelector from './AccessibleProfileSelector'
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || ''
@@ -180,7 +179,6 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <AccessibleProfileSelector variant="desktop" />
             <ThemeToggle />
             <button type="button" className="cs-btn cs-btn--ghost cs-btn--icon" aria-label="Notifiche">
               <Bell className="h-4 w-4" />
@@ -225,10 +223,6 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             </div>
 
             <RoleSidebar variant="mobile" onNavigate={() => setMobileMenuOpen(false)} />
-
-            <div className="mt-8">
-              <AccessibleProfileSelector variant="mobile" />
-            </div>
 
             <div className="mt-8 space-y-2">
               <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--cs-text-secondary)]">Account</p>
