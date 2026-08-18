@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
             .from('fee_installments')
             .select('id, installment_number, due_date, amount, status, membership_fee_id')
             .eq('profile_id', athleteProfileId)
+            .order('due_date', { ascending: true })
+            .order('installment_number', { ascending: true })
             .limit(5)
         : Promise.resolve({ data: [] })
     ])
