@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
-import { AccountContextError } from '@/server/auth/require-account-context'
-import { requireGlobalRole } from '@/server/auth/require-global-role'
+import {
+  AccountContextError,
+  requireAccountContext,
+} from '@/server/auth/require-account-context'
 
 const idSchema = z.string().uuid()
 
@@ -25,14 +27,20 @@ export async function GET(
 ) {
   try {
     const supabase = await createClient()
-    await requireGlobalRole(supabase, 'admin')
+    const account = await requireAccountContext(supabase)
+    const isAdmin = account.roles.includes('admin')
+    const isCoach = account.roles.includes('coach')
+    if (!isAdmin && !isCoach) {
+      throw new AccountContextError('Ruolo non autorizzato', 403)
+    }
+
     const { id } = await params
     const messageId = idSchema.parse(id)
     const adminClient = createAdminClient()
 
     const { data: message, error: messageError } = await adminClient
       .from('messages')
-      .select('id, subject')
+      .select('id, subject, created_by')
       .eq('id', messageId)
       .maybeSingle()
 
@@ -47,6 +55,25 @@ export async function GET(
     if (recipientError) throw recipientError
 
     const teamIds = [...new Set((recipientRows ?? []).map((row) => row.team_id).filter(Boolean))]
+
+    if (isCoach && !isAdmin) {
+      if (message.created_by !== account.ownerProfileId) {
+        throw new AccountContextError('Report non autorizzato', 403)
+      }
+
+      const { data: assignments, error: assignmentsError } = await adminClient
+        .from('team_coaches')
+        .select('team_id')
+        .eq('coach_id', account.ownerProfileId)
+
+      if (assignmentsError) throw assignmentsError
+
+      const assignedTeamIds = new Set((assignments ?? []).map((assignment) => assignment.team_id))
+      if (teamIds.some((teamId) => !assignedTeamIds.has(teamId))) {
+        throw new AccountContextError('Report non autorizzato', 403)
+      }
+    }
+
     const directProfileIds = new Set(
       (recipientRows ?? []).map((row) => row.profile_id).filter(Boolean),
     )

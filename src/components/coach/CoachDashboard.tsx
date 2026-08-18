@@ -66,6 +66,7 @@ interface Message {
   subject: string
   content: string
   created_at: string
+  created_by?: string
   unread_count?: number
 }
 
@@ -582,7 +583,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
           open={true}
           onClose={() => setSelectedMessage(null)}
           messageId={selectedMessage.id}
-          markAsRead
+          markAsRead={selectedMessage.created_by !== profile.id}
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,

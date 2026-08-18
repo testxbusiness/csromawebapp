@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import CoachMessageModal from '@/components/coach/CoachMessageModal'
+import MessageReadReport from '@/components/admin/MessageReadReport'
 
 interface Message {
   id: string
@@ -364,7 +365,12 @@ export default function CoachMessagesManager() {
           open={true}
           onClose={() => setSelectedMessage(null)}
           messageId={selectedMessage.id}
-          markAsRead
+          markAsRead={selectedMessage.created_by !== ownerProfileId}
+          extraContent={
+            selectedMessage.created_by === ownerProfileId
+              ? <MessageReadReport messageId={selectedMessage.id} />
+              : undefined
+          }
           data={{
             subject: selectedMessage.subject,
             content: selectedMessage.content,
