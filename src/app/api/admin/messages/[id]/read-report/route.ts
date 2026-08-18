@@ -79,6 +79,16 @@ export async function GET(
     )
     const teamNames = new Map<string, string>()
     const teamProfileIds = new Set<string>()
+    const teamNamesByProfile = new Map<string, Set<string>>()
+
+    const addTeamName = (profileId: string | null, teamId: string | null) => {
+      if (!profileId || !teamId) return
+      const teamName = teamNames.get(teamId)
+      if (!teamName) return
+      const names = teamNamesByProfile.get(profileId) ?? new Set<string>()
+      names.add(teamName)
+      teamNamesByProfile.set(profileId, names)
+    }
 
     if (teamIds.length > 0) {
       const [{ data: teams }, { data: members }, { data: coaches }] = await Promise.all([
@@ -88,8 +98,14 @@ export async function GET(
       ])
 
       for (const team of teams ?? []) teamNames.set(team.id, team.name)
-      for (const member of members ?? []) if (member.profile_id) teamProfileIds.add(member.profile_id)
-      for (const coach of coaches ?? []) if (coach.coach_id) teamProfileIds.add(coach.coach_id)
+      for (const member of members ?? []) {
+        if (member.profile_id) teamProfileIds.add(member.profile_id)
+        addTeamName(member.profile_id, member.team_id)
+      }
+      for (const coach of coaches ?? []) {
+        if (coach.coach_id) teamProfileIds.add(coach.coach_id)
+        addTeamName(coach.coach_id, coach.team_id)
+      }
     }
 
     const profileIds = [...new Set([...directProfileIds, ...teamProfileIds])]
@@ -104,13 +120,8 @@ export async function GET(
     ])
 
     const accountByProfile = new Map((accounts ?? []).map((account) => [account.owner_profile_id, account.auth_user_id]))
-    const teamNamesByProfile = new Map<string, Set<string>>()
     for (const row of recipientRows ?? []) {
-      if (!row.profile_id || !row.team_id) continue
-      const names = teamNamesByProfile.get(row.profile_id) ?? new Set<string>()
-      const name = teamNames.get(row.team_id)
-      if (name) names.add(name)
-      teamNamesByProfile.set(row.profile_id, names)
+      addTeamName(row.profile_id, row.team_id)
     }
 
     const reportRecipients: ReportRecipient[] = (profiles ?? [])
