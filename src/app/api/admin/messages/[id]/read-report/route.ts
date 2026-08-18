@@ -113,7 +113,9 @@ export async function GET(
       teamNamesByProfile.set(row.profile_id, names)
     }
 
-    const reportRecipients: ReportRecipient[] = (profiles ?? []).map((profile) => {
+    const reportRecipients: ReportRecipient[] = (profiles ?? [])
+      .filter((profile) => profile.id !== message.created_by)
+      .map((profile) => {
       const authUserId = accountByProfile.get(profile.id) ?? null
       const subjectReads = (reads ?? []).filter((read) => read.subject_profile_id === profile.id)
       const ownRead = authUserId
@@ -133,7 +135,8 @@ export async function GET(
         read_at: read?.read_at ?? null,
         read_by: ownRead ? ('account' as const) : delegatedRead ? ('delegated' as const) : null,
       }
-    }).sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`))
+      })
+      .sort((a, b) => `${a.last_name} ${a.first_name}`.localeCompare(`${b.last_name} ${b.first_name}`))
 
     const delegatedReads = (reads ?? []).filter((read) => {
       return !reportRecipients.some((recipient) => (
