@@ -1,8 +1,8 @@
 # Piano di implementazione: persone, account opzionali e relazioni familiari
 
-Stato del documento: implementazione incrementale in corso; Fase 3A verificata in locale e
-staging, Fase 4 implementata in slice locali e verificata con test E2E, Fasi 5–6 ancora da
-implementare.
+Stato del documento: implementazione incrementale in corso; Fase 3A e Fase 4 verificate in
+locale e staging, Migration 13 della Fase 5 applicata e verificata in staging, Migration 14
+e Migration 15 ancora da implementare, Fase 6 ancora da iniziare.
 
 Decisione operativa aggiornata al 10 agosto 2026: la produzione resta fuori perimetro
 finché l’intero piano non sarà implementato e testato. Le modifiche applicative e le
@@ -1354,6 +1354,18 @@ la migration è stata applicata al progetto `csromawebapp-staging`
 La verifica read-only conferma `message_reads`, le policy RLS, gli indici account/endpoint
 e il backfill push coerente con il dataset staging, che non contiene subscription.
 Produzione non è stata modificata.
+
+Verifica funzionale e BOLA/IDOR su staging completata il 18 agosto 2026: gli account
+admin, coach, atleta e genitore sono stati autenticati tramite gli endpoint applicativi.
+Il coach accede al report solo dei propri messaggi e delle proprie squadre; coach diversi,
+atleti e genitori ricevono `403` sui report non autorizzati. Gli accessi diretti a messaggi
+di altre squadre restituiscono `404`, mentre i tentativi di registrare letture con messaggi
+o soggetti non autorizzati restituiscono `403` senza modificare i conteggi. Il report coach
+esclude il mittente, mostra la squadra sotto il destinatario atleta e mantiene i conteggi
+account-based. Build Next.js, TypeScript, Jest e test API staging sono passati.
+
+Prossimo step operativo: implementare Migration 14, `attendance_rsvp_and_payment_actors`,
+con test locali e preflight staging separato prima dell'applicazione.
 
 Migration 13: `account_message_reads_and_push_subscriptions`
 
