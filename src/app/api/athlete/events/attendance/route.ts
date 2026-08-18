@@ -20,7 +20,14 @@ export async function POST(req: NextRequest) {
 
     const { error } = await subject.dataClient
       .from('event_attendances')
-      .upsert({ event_id, profile_id: athleteProfileId, status, note: note || null }, { onConflict: 'event_id,profile_id' })
+      .upsert({
+        event_id,
+        profile_id: athleteProfileId,
+        status,
+        note: note || null,
+        responded_by_auth_user_id: subject.account.authUserId,
+        response_source: subject.delegated ? 'parent' : 'self',
+      }, { onConflict: 'event_id,profile_id' })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ success: true })

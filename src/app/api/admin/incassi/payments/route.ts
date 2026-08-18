@@ -7,7 +7,7 @@ import { requireGlobalRole } from '@/server/auth/require-global-role'
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
-    await requireGlobalRole(supabase, 'admin')
+    const account = await requireGlobalRole(supabase, 'admin')
     const parsed = incassiPaymentSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Dati pagamento non validi' }, { status: 400 })
     const { installmentIds, paymentDate, paymentMethod } = parsed.data
@@ -39,7 +39,9 @@ export async function POST(request: Request) {
           .from('fee_installments')
           .update({
             paid_at: paymentDate,
-            status: 'paid'
+            status: 'paid',
+            paid_by_auth_user_id: account.authUserId,
+            payment_source: 'admin',
           })
           .eq('id', installment.id)
 

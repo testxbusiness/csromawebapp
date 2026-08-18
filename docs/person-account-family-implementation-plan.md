@@ -1,8 +1,8 @@
 # Piano di implementazione: persone, account opzionali e relazioni familiari
 
 Stato del documento: implementazione incrementale in corso; Fase 3A e Fase 4 verificate in
-locale e staging, Migration 13 della Fase 5 applicata e verificata in staging, Migration 14
-e Migration 15 ancora da implementare, Fase 6 ancora da iniziare.
+locale e staging, Migration 13 e Migration 14 della Fase 5 applicate e verificate in
+staging, Migration 15 ancora da implementare, Fase 6 ancora da iniziare.
 
 Decisione operativa aggiornata al 10 agosto 2026: la produzione resta fuori perimetro
 finché l’intero piano non sarà implementato e testato. Le modifiche applicative e le
@@ -1364,7 +1364,15 @@ o soggetti non autorizzati restituiscono `403` senza modificare i conteggi. Il r
 esclude il mittente, mostra la squadra sotto il destinatario atleta e mantiene i conteggi
 account-based. Build Next.js, TypeScript, Jest e test API staging sono passati.
 
-Prossimo step operativo: implementare Migration 14, `attendance_rsvp_and_payment_actors`,
+Implementazione Migration 14 completata il 18 agosto 2026: la migration
+`20260818084159_attendance_rsvp_and_payment_actors.sql` aggiunge gli attori Auth e la fonte
+per presenze, RSVP e pagamenti rate. Le route di conferma presenza e registrazione pagamenti
+eseguono il dual-write dei nuovi campi; i record storici restano con attore nullo quando
+non ricostruibile. La migration è stata applicata in locale e staging dopo dry-run e backup
+staging in `/tmp/csroma_staging_phase6_20260818/`; produzione non è stata modificata.
+TypeScript, Jest e build Next.js sono passati.
+
+Prossimo step operativo: implementare Migration 15, `document_access_and_activity_audit`,
 con test locali e preflight staging separato prima dell'applicazione.
 
 Migration 13: `account_message_reads_and_push_subscriptions`

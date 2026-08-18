@@ -323,7 +323,7 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
-    await requireGlobalRole(supabase, 'admin')
+    const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = membershipActionSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Parametri quota non validi' }, { status: 400 })
@@ -409,8 +409,12 @@ export async function PATCH(request: NextRequest) {
       const updateData: any = { status }
       if (status === 'paid') {
         updateData.paid_at = new Date().toISOString()
-      } else if (body.paid_at) {
+        updateData.paid_by_auth_user_id = account.authUserId
+        updateData.payment_source = 'admin'
+      } else {
         updateData.paid_at = null
+        updateData.paid_by_auth_user_id = null
+        updateData.payment_source = null
       }
 
       const { error: updateError } = await adminClient
@@ -483,8 +487,15 @@ export async function PATCH(request: NextRequest) {
     if (action === 'bulk_update_installments') {
       const { installment_ids, status } = body
       const updateData: any = { status }
-      if (status === 'paid') updateData.paid_at = new Date().toISOString()
-      else updateData.paid_at = null
+      if (status === 'paid') {
+        updateData.paid_at = new Date().toISOString()
+        updateData.paid_by_auth_user_id = account.authUserId
+        updateData.payment_source = 'admin'
+      } else {
+        updateData.paid_at = null
+        updateData.paid_by_auth_user_id = null
+        updateData.payment_source = null
+      }
 
       const { error: updErr } = await adminClient
         .from('fee_installments')
