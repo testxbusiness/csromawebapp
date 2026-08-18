@@ -363,6 +363,8 @@ export default function CoachMessagesManager() {
         <MessageDetailModal
           open={true}
           onClose={() => setSelectedMessage(null)}
+          messageId={selectedMessage.id}
+          markAsRead
           data={{
             subject: selectedMessage.subject,
             content: selectedMessage.content,

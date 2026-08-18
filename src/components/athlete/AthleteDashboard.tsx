@@ -823,6 +823,9 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         <MessageDetailModal
           open={true}
           onClose={() => setSelectedMessage(null)}
+          messageId={selectedMessage.id}
+          subjectProfileId={selectedProfileId}
+          markAsRead
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,

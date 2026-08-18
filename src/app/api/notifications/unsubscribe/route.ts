@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase
       .from('push_subscriptions')
       .update({ revoked: true, last_seen: new Date().toISOString() })
-      .eq('profile_id', account.ownerProfileId)
+      .eq('auth_user_id', account.authUserId)
       .eq('endpoint', endpoint)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })

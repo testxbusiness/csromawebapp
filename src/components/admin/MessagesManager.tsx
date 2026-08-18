@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MessageModal, { type Message as MessageForm } from '@/components/admin/MessageModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
+import MessageReadReport from '@/components/admin/MessageReadReport'
 
 interface Message {
   id?: string
@@ -277,6 +278,7 @@ export default function MessagesManager() {
             message_recipients: (selectedMessage.message_recipients as any) || [],
             attachments: (selectedMessage.attachments as any)?.map((a:any)=>({ file_name: a.file_name, download_url: a.download_url })) || []
           }}
+          extraContent={<MessageReadReport messageId={selectedMessage.id!} />}
         />
       )}
 

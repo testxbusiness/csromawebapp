@@ -1302,8 +1302,8 @@ da ciò che è solo legacy o parzialmente implementato.
 
 ### Fase 5 — domini collegati
 
-Stato: da iniziare; dipende dal completamento della Fase 4 e dai relativi test di
-sicurezza, delega e audit.
+Stato: slice Migration 13 completata e verificata in locale; resta il preflight con
+backup, dry-run, applicazione e test su staging. Produzione resta fuori perimetro.
 
 Inventario preliminare completato il 17 agosto 2026:
 
@@ -1321,6 +1321,39 @@ Inventario preliminare completato il 17 agosto 2026:
   legacy non operativo. Sarà sostituito dal sistema account-based della Fase 5;
 - non viene introdotta in questa fase alcuna tabella `pending_notifications` né viene
   applicata ancora la Migration 13.
+
+Implementazione locale avviata il 17 agosto 2026: la migration
+`20260817120000_account_message_reads_and_push_subscriptions.sql` crea `message_reads`
+con policy RLS per account/soggetto, backfilla `push_subscriptions.auth_user_id` per i 2
+record esistenti, aggiunge l'unicità account/endpoint e rimuove il solo indice unico
+duplicato legacy. Sono stati aggiornati subscribe/unsubscribe, il fan-out server-side
+delle push e aggiunto `POST /api/messages/read`. La migration è stata applicata e
+verificata in locale; staging e produzione restano invariati.
+
+Consolidamento locale della slice: l'apertura dei messaggi atleta/coach registra ora la
+lettura tramite `POST /api/messages/read`; la dashboard atleta esclude le letture per
+account e soggetto, senza usare più soltanto `message_recipients.is_read`. Il fan-out
+push di Admin e Coach risolve gli account dai profili destinatari, include membri,
+coach e relazioni familiari con `can_receive_messages=true`, e sceglie l'area in base a
+`account_roles`. Build Next.js, TypeScript e Jest sono passati; staging e produzione
+restano invariati.
+
+Slice UI report letture completata in locale: il nuovo endpoint admin
+`GET /api/admin/messages/:id/read-report` espande i destinatari squadra sugli account
+di atleti e coach, legge lo stato da `message_reads` e mostra nel dettaglio messaggio
+conteggi letti/non letti, ultima lettura e destinatario diretto/squadra. Le letture
+delegate vengono evidenziate separatamente quando presenti; i flag legacy non vengono
+usati per falsificare il conteggio. Build e TypeScript sono passati, Jest 3/3; staging
+e produzione restano invariati.
+
+Preflight e applicazione staging completati il 18 agosto 2026: backup preventivo salvato
+in `/tmp/csroma_staging_phase5_20260818/` con checksum di schema, dati e ruoli. Il dry-run
+ha elencato esclusivamente `20260817120000_account_message_reads_and_push_subscriptions.sql`;
+la migration è stata applicata al progetto `csromawebapp-staging`
+(`kibtvkuiedoxgppnnxkf`) e il dry-run successivo restituisce `Remote database is up to date`.
+La verifica read-only conferma `message_reads`, le policy RLS, gli indici account/endpoint
+e il backfill push coerente con il dataset staging, che non contiene subscription.
+Produzione non è stata modificata.
 
 Migration 13: `account_message_reads_and_push_subscriptions`
 

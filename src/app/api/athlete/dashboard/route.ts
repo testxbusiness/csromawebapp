@@ -82,18 +82,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const messageIds = [...new Set(msgRecipients.map((recipient: any) => recipient.messages?.id).filter(Boolean))]
+    const { data: readRows } = canViewMessages && messageIds.length > 0
+      ? await dataClient
+          .from('message_reads')
+          .select('message_id')
+          .eq('auth_user_id', subject.account.authUserId)
+          .eq('subject_profile_id', athleteProfileId)
+          .in('message_id', messageIds)
+      : { data: [] }
+    const readMessageIds = new Set((readRows || []).map((row: any) => row.message_id))
+
     if (teamIds.length === 0) {
       return NextResponse.json({
         teamMemberships: [],
         upcomingEvents: [],
         unreadMessages: (msgRecipients || [])
-          .filter(r => r.messages && !r.is_read)
+          .filter(r => r.messages && !readMessageIds.has(r.messages.id))
           .map((r: any) => ({
             id: r.messages.id,
             subject: r.messages.subject,
             content: r.messages.content,
             created_at: r.messages.created_at,
-            is_read: r.is_read
+            is_read: false
           }))
           .slice(0, 5),
         feeInstallments: [],
@@ -236,7 +247,7 @@ export async function GET(request: NextRequest) {
 
     const unreadMessages = Array.from(
       (msgRecipients || [])
-        .filter(r => r.messages && !r.is_read)
+        .filter(r => r.messages && !readMessageIds.has(r.messages.id))
         .reduce((messages: Map<string, any>, recipient: any) => {
           if (!messages.has(recipient.messages.id)) {
             messages.set(recipient.messages.id, {
@@ -244,7 +255,7 @@ export async function GET(request: NextRequest) {
               subject: recipient.messages.subject,
               content: recipient.messages.content,
               created_at: recipient.messages.created_at,
-              is_read: recipient.is_read,
+              is_read: false,
               created_by_profile: recipient.messages.created_by_profile || null
             })
           }

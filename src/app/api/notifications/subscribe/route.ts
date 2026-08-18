@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     const { endpoint, keys, user_agent, device_label } = parsed.data
 
     const { error } = await supabase.from('push_subscriptions').upsert({
+      auth_user_id: account.authUserId,
       profile_id: account.ownerProfileId,
       endpoint,
       p256dh: keys.p256dh,
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
       device_label: device_label || null,
       revoked: false,
       last_seen: new Date().toISOString(),
-    }, { onConflict: 'profile_id,endpoint' })
+    }, { onConflict: 'auth_user_id,endpoint' })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ success: true })

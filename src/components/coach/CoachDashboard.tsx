@@ -581,6 +581,8 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         <MessageDetailModal
           open={true}
           onClose={() => setSelectedMessage(null)}
+          messageId={selectedMessage.id}
+          markAsRead
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,

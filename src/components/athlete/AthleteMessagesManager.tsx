@@ -189,6 +189,9 @@ export default function AthleteMessagesManager() {
         <MessageDetailModal
           open={true}
           onClose={() => setSelectedMessage(null)}
+          messageId={selectedMessage.id}
+          subjectProfileId={selectedProfileId}
+          markAsRead
           data={{
             subject: selectedMessage.subject,
             content: selectedMessage.content,

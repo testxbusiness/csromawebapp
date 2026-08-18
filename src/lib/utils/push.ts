@@ -28,20 +28,28 @@ async function getWebPush() {
   }
 }
 
-async function fetchUserSubscriptions(userId: string) {
+async function fetchUserSubscriptions(profileId: string) {
   const admin = createAdminClient()
+  const { data: account } = await admin
+    .from('app_accounts')
+    .select('auth_user_id')
+    .eq('owner_profile_id', profileId)
+    .maybeSingle()
+
+  if (!account?.auth_user_id) return []
+
   const { data } = await admin
     .from('push_subscriptions')
     .select('id, endpoint, p256dh, auth')
-    .eq('profile_id', userId)
+    .eq('auth_user_id', account.auth_user_id)
     .eq('revoked', false)
   return data || []
 }
 
-export async function sendToUser(userId: string, payload: PushPayload) {
+export async function sendToUser(profileId: string, payload: PushPayload) {
   const webPush = await getWebPush()
   if (!webPush) return { skipped: true }
-  const subs = await fetchUserSubscriptions(userId)
+  const subs = await fetchUserSubscriptions(profileId)
   await Promise.all(subs.map(async (s: any) => {
     try {
       await webPush.sendNotification({
