@@ -1436,6 +1436,8 @@ stata aggiunta la migration `20260819130000_allow_coach_message_reads.sql`, che 
 la funzione RLS delle letture includendo `team_coaches` oltre a `team_members`. Prima della
 correzione la lettura del secondo coach restituiva `403`; dopo la migration il `POST
 /api/messages/read` restituisce `200` e il report passa correttamente da non letto a letto.
+La migration è stata applicata anche allo staging il 19 agosto 2026; la history remota è
+allineata e il dry-run successivo non rileva migration pendenti.
 
 Successivo step di piano, dopo questa slice funzionale: implementare Migration 15,
 `document_access_and_activity_audit`, con test locali e preflight staging separato prima
