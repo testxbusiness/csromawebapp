@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
-import EventDetailModal from '@/components/shared/EventDetailModal'
+import EventDetailModal, { AttendanceStatus, type EventDetailData } from '@/components/shared/EventDetailModal'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { useAuth } from '@/hooks/useAuth'
@@ -310,7 +310,7 @@ export default function AthleteCalendarManager() {
 }
 
 function EventDetails({ id, onClose, selectedProfileId }: { id: string; onClose: () => void; selectedProfileId: string | null }) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<EventDetailData | null>(null)
   useEffect(() => {
     (async () => {
       try {
@@ -320,7 +320,24 @@ function EventDetails({ id, onClose, selectedProfileId }: { id: string; onClose:
       } catch {}
     })()
   }, [id, selectedProfileId])
+
+  const saveAttendance = async (status: AttendanceStatus) => {
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: id, status }),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(result?.error || 'Impossibile salvare la risposta')
+    }
+    setData((current) => current ? {
+      ...current,
+      my_attendance: { status, responded_at: new Date().toISOString() },
+    } : current)
+  }
+
   return (
-    <EventDetailModal open={true} onClose={onClose} data={data} />
+    <EventDetailModal open={true} onClose={onClose} data={data} onAttendanceChange={saveAttendance} />
   )
 }

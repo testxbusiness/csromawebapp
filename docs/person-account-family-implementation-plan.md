@@ -1372,6 +1372,25 @@ non ricostruibile. La migration è stata applicata in locale e staging dopo dry-
 staging in `/tmp/csroma_staging_phase6_20260818/`; produzione non è stata modificata.
 TypeScript, Jest e build Next.js sono passati.
 
+Consolidamento UI RSVP completato il 19 agosto 2026 in locale:
+
+- il dettaglio evento atleta mostra gli stati `Partecipo`, `Forse` e `Non partecipo`,
+  con stato corrente, scadenza, loading ed errore;
+- il dettaglio evento admin mostra il report separato per confermati, forse, non
+  partecipanti e nessuna risposta;
+- il report admin deduplica gli atleti appartenenti a più squadre associate allo stesso
+  evento, evitando duplicati nei conteggi e nella UI;
+- la risoluzione del profilo delegato genitore viene eseguita prima del controllo del
+  ruolo atleta;
+- la route `POST /api/athlete/events/attendance` legge `subjectProfileId` sia dalla
+  query string sia dal body, correggendo il `403 Ruolo atleta non abilitato` quando il
+  genitore conferma per il figlio;
+- test end-to-end locale con l’account genitore da `.env.local`: HTTP `200`,
+  `response_source = 'parent'`, `responded_by_auth_user_id` valorizzato con l’account
+  genitore e stato RSVP salvato;
+- TypeScript, Jest 3/3 e build Next.js passati. Staging e produzione non sono stati
+  modificati.
+
 Prossimo step operativo: implementare Migration 15, `document_access_and_activity_audit`,
 con test locali e preflight staging separato prima dell'applicazione.
 

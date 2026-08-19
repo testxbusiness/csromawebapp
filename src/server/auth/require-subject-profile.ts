@@ -123,11 +123,13 @@ export async function requireSubjectAthleteContext(
   permission?: SubjectPermission
 ) {
   const account = await requireAccountContext(supabase)
-  const isOwnProfile = !requestedProfileId || requestedProfileId === account.ownerProfileId
-  if (isOwnProfile && !account.roles.includes('athlete')) {
+  const subject = await resolveSubjectProfile(supabase, account, requestedProfileId, permission)
+
+  // A family account may act on an athlete subject. Check the athlete role only
+  // for the account's own subject, after delegated subject resolution has run.
+  if (!subject.delegated && !account.roles.includes('athlete')) {
     throw new AccountContextError('Ruolo atleta non abilitato', 403)
   }
-  const subject = await resolveSubjectProfile(supabase, account, requestedProfileId, permission)
   const { data: athleteProfile } = await subject.dataClient
     .from('athlete_profiles')
     .select('profile_id')

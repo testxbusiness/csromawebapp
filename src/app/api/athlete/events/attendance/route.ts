@@ -8,7 +8,11 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     const body = await req.json().catch(() => null)
-    const requestedProfileId = typeof body?.subjectProfileId === 'string' ? body.subjectProfileId : null
+    const { searchParams } = new URL(req.url)
+    const querySubjectProfileId = searchParams.get('subjectProfileId')
+    const requestedProfileId = typeof body?.subjectProfileId === 'string'
+      ? body.subjectProfileId
+      : querySubjectProfileId
     const subject = await requireSubjectAthleteContext(supabase, requestedProfileId, 'confirm_attendance')
     const athleteProfileId = subject.profileId
     if (!athleteProfileId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

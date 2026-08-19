@@ -23,7 +23,16 @@ export async function GET(req: NextRequest) {
       .select('profile_id, profiles(id, first_name, last_name, email)')
       .in('team_id', teamIds)
 
-    const allProfiles = (members || []).map((m: any) => m.profiles).filter(Boolean)
+    // An athlete can belong to more than one team attached to the same event.
+    // Deduplicate the recipient list so the report counts each athlete once.
+    const allProfiles = Array.from(
+      new Map(
+        (members || [])
+          .map((member: any) => member.profiles)
+          .filter(Boolean)
+          .map((profile: any) => [profile.id, profile] as const)
+      ).values()
+    )
     const { data: atts } = await admin
       .from('event_attendances')
       .select('profile_id, status, responded_at, profiles(first_name,last_name,email)')
