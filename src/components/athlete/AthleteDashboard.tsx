@@ -56,6 +56,10 @@ interface Event {
   location?: string
   description?: string
   event_kind?: 'training' | 'match' | 'meeting' | 'other'
+  gym_id?: string | null
+  requires_confirmation?: boolean
+  confirmation_deadline?: string | null
+  my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null } | null
 }
 
 interface ChampionshipMatch {
@@ -120,6 +124,26 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const [accessDenied, setAccessDenied] = useState(false)
   const supabase = useMemo(() => createClient(), [])
   const dashboardRequestRef = useRef<AbortController | null>(null)
+
+  const saveEventAttendance = async (status: 'going' | 'maybe' | 'declined') => {
+    if (!selectedEvent) return
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: selectedEvent.id, status }),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
+
+    setSelectedEvent((current) => current ? {
+      ...current,
+      my_attendance: { status, responded_at: new Date().toISOString() },
+    } : current)
+    setUpcomingEvents((current) => current.map((event) => event.id === selectedEvent.id
+      ? { ...event, my_attendance: { status, responded_at: new Date().toISOString() } }
+      : event
+    ))
+  }
 
   // Enrich selected message on open
   useEffect(() => {
@@ -800,6 +824,8 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           location: ev.location || null,
           kind: ev.event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
           subtitle: ev.description || null,
+          requiresConfirmation: Boolean(ev.requires_confirmation),
+          attendanceStatus: ev.my_attendance?.status || null,
         }))}
         viewAllHref="/athlete/calendar"
         onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
@@ -816,7 +842,11 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
             end_date: (selectedEvent as any).end_time,
             location: selectedEvent.location || undefined,
             description: selectedEvent.description || undefined,
+            requires_confirmation: selectedEvent.requires_confirmation,
+            confirmation_deadline: selectedEvent.confirmation_deadline,
+            my_attendance: selectedEvent.my_attendance,
           }}
+          onAttendanceChange={selectedEvent.requires_confirmation ? saveEventAttendance : undefined}
         />
       )}
       {selectedMessage && (

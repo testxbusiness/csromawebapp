@@ -11,6 +11,8 @@ type EventItem = {
   location?: string | null
   kind?: string | null
   subtitle?: string | null
+  requiresConfirmation?: boolean
+  attendanceStatus?: 'going' | 'maybe' | 'declined' | null
 }
 
 export default function UpcomingEventsPanel({
@@ -57,6 +59,7 @@ export default function UpcomingEventsPanel({
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="font-medium truncate">{ev.title}</div>
                   {ev.kind && <span className="cs-badge cs-badge--neutral">{ev.kind}</span>}
+                  {ev.requiresConfirmation && <span className="cs-badge cs-badge--warning">RSVP richiesta</span>}
                   <span className="text-xs text-secondary">{ev.start.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}{ev.end ? ` — ${ev.end.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}` : ''}</span>
                 </div>
                 {ev.location && (
@@ -65,9 +68,19 @@ export default function UpcomingEventsPanel({
                 {ev.subtitle && (
                   <div className="text-sm text-secondary truncate">{ev.subtitle}</div>
                 )}
+                {ev.requiresConfirmation && (
+                  <div className="mt-1 text-xs font-medium text-[color:var(--cs-primary)]">
+                    {ev.attendanceStatus === 'going' ? 'Partecipazione confermata' :
+                     ev.attendanceStatus === 'maybe' ? 'Risposta: forse' :
+                     ev.attendanceStatus === 'declined' ? 'Hai indicato: non partecipo' :
+                     'Conferma la tua partecipazione'}
+                  </div>
+                )}
               </div>
               <div className="w-full sm:w-auto">
-                <button className="cs-btn cs-btn--outline cs-btn--sm w-full sm:w-auto" onClick={() => onDetail(ev.id)}>Dettagli</button>
+                <button className="cs-btn cs-btn--outline cs-btn--sm w-full sm:w-auto" onClick={() => onDetail(ev.id)}>
+                  {ev.requiresConfirmation ? 'Conferma partecipazione' : 'Dettagli'}
+                </button>
               </div>
             </div>
           ))}

@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
           const batch = eventIds.slice(i, i + 100)
         const { data: events } = await dataClient
           .from('events')
-          .select('id, title, start_time:start_date, end_time:end_date, location, description')
+          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
           .in('id', batch)
           .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
           .order('start_date', { ascending: true })
@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events } = await dataClient
         .from('events')
-        .select('id, title, start_time:start_date, end_time:end_date, location, description')
+        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
         .in('id', eventIds)
         .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
         .order('start_date', { ascending: true })
@@ -184,6 +184,20 @@ export async function GET(request: NextRequest) {
           .select('id, name')
           .in('id', activityIds)
       : { data: [] }
+
+    const gymIds = [...new Set((allEvents || []).map((event) => event.gym_id).filter(Boolean))]
+    const [{ data: gyms }, { data: attendanceRows }] = await Promise.all([
+      gymIds.length > 0
+        ? dataClient.from('gyms').select('id, name, city').in('id', gymIds)
+        : Promise.resolve({ data: [] }),
+      allEvents.length > 0
+        ? dataClient
+            .from('event_attendances')
+            .select('event_id, status, responded_at')
+            .eq('profile_id', athleteProfileId)
+            .in('event_id', allEvents.map((event) => event.id))
+        : Promise.resolve({ data: [] }),
+    ])
 
     let nextChampionshipMatch = null
     const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
@@ -210,6 +224,21 @@ export async function GET(request: NextRequest) {
     const activitiesMap = new Map((activities || []).map(a => [a.id, a]))
     const teamsMap = new Map((teams || []).map(t => [t.id, t]))
     const membershipFeesMap = new Map((membershipFees || []).map(f => [f.id, f]))
+    const gymsMap = new Map((gyms || []).map((gym) => [gym.id, gym]))
+    const attendanceMap = new Map((attendanceRows || []).map((attendance) => [attendance.event_id, attendance]))
+
+    const enrichedEvents = allEvents.map((event) => {
+      const gym = event.gym_id ? gymsMap.get(event.gym_id) : null
+      const gymLocation = gym?.name ? `${gym.name}${gym.city ? ` - ${gym.city}` : ''}` : null
+      return {
+        ...event,
+        // A registered gym takes precedence over the free-text location.
+        location: gymLocation || event.location || null,
+        requires_confirmation: Boolean(event.requires_confirmation),
+        confirmation_deadline: event.confirmation_deadline || null,
+        my_attendance: attendanceMap.get(event.id) || null,
+      }
+    })
 
     const enrichedMemberships = (memberships || [])
       .map(m => {
@@ -268,7 +297,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       teamMemberships: enrichedMemberships,
-      upcomingEvents: allEvents.slice(0, 10),
+      upcomingEvents: enrichedEvents.slice(0, 10),
       nextChampionshipMatch,
       unreadMessages,
       feeInstallments: enrichedFees,
