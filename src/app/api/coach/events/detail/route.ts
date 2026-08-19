@@ -62,6 +62,8 @@ export async function GET(request: NextRequest) {
       end_date: ev.end_date,
       location: ev.location,
       event_type: ev.event_type,
+      requires_confirmation: ev.requires_confirmation,
+      confirmation_deadline: ev.confirmation_deadline,
       gym,
       teams,
       creator,

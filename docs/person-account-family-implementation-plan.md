@@ -1391,8 +1391,55 @@ Consolidamento UI RSVP completato il 19 agosto 2026 in locale:
 - TypeScript, Jest 3/3 e build Next.js passati. Staging e produzione non sono stati
   modificati.
 
-Prossimo step operativo: implementare Migration 15, `document_access_and_activity_audit`,
-con test locali e preflight staging separato prima dell'applicazione.
+Nuovo step funzionale pianificato: RSVP per eventi creati dai coach.
+
+Obiettivo: consentire a un coach di richiedere la conferma di partecipazione per gli eventi
+delle proprie squadre, mantenendo gli stessi flussi già disponibili per gli eventi admin e
+gli stessi controlli di accesso per atleta/genitore.
+
+Perimetro incrementale:
+
+- aggiungere nel form coach l'opzione `Richiedi conferma partecipazione (RSVP)` e la
+  scadenza opzionale;
+- salvare `requires_confirmation` e `confirmation_deadline` per eventi singoli e per ogni
+  occorrenza delle serie ricorrenti;
+- esporre i due campi nelle route calendario/dettaglio coach e nel modello UI condiviso,
+  così atleta e genitore visualizzano i controlli RSVP anche per eventi creati dal coach;
+- verificare che modifica e salvataggio restino limitati alle squadre assegnate al coach;
+- aggiungere al coach il report delle risposte RSVP limitato alle proprie squadre. Il report
+  admin esistente non viene allargato implicitamente ai coach.
+
+Non è prevista una nuova migration: il database contiene già i campi necessari e la route
+di conferma atleta/genitore è già condivisa. L'impatto stimato è medio-basso per la sola
+attivazione RSVP e medio se si include anche il report coach. Verifica richiesta: test
+locale singolo/ricorrente, test atleta e genitore, controllo di isolamento tra coach e
+build Next.js prima del push.
+
+Slice locale 1 completata il 19 agosto 2026: il form coach espone la richiesta RSVP e la
+scadenza opzionale; i campi vengono persistiti su eventi singoli e su tutte le occorrenze
+create in una serie; le route calendario/dettaglio coach li restituiscono al client. Build
+Next.js e TypeScript passati. Restano i test funzionali con account coach, atleta e
+genitore e la verifica dei permessi prima del push.
+
+Slice locale 2 completata il 19 agosto 2026: il nuovo endpoint
+`GET /api/coach/events/attendance` restituisce confermati, forse, non partecipanti e
+nessuna risposta solo quando l'evento è collegato a una squadra assegnata al coach. Il
+dettaglio evento coach mostra le quattro card del report con liste scorrevoli e deduplica
+gli atleti presenti in più squadre dell'evento. Build Next.js e TypeScript passati. Restano
+test funzionali con due coach e verifica BOLA/IDOR prima del push; questa verifica è stata
+completata nella slice successiva.
+
+Verifica BOLA e correzione letture coach completate in locale il 19 agosto 2026 con coach
+principale e assistant coach: il coach non assegnato riceve `404` sul dettaglio evento
+fuori perimetro, `403` sul report RSVP e `404` sul dettaglio messaggio fuori perimetro. È
+stata aggiunta la migration `20260819130000_allow_coach_message_reads.sql`, che aggiorna
+la funzione RLS delle letture includendo `team_coaches` oltre a `team_members`. Prima della
+correzione la lettura del secondo coach restituiva `403`; dopo la migration il `POST
+/api/messages/read` restituisce `200` e il report passa correttamente da non letto a letto.
+
+Successivo step di piano, dopo questa slice funzionale: implementare Migration 15,
+`document_access_and_activity_audit`, con test locali e preflight staging separato prima
+dell'applicazione.
 
 Migration 13: `account_message_reads_and_push_subscriptions`
 

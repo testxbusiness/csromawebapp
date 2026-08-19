@@ -144,7 +144,7 @@ export default function UsersManager() {
       if (searchTerm) {
         const term = searchTerm.toLowerCase()
         const matchesName = `${user.first_name} ${user.last_name}`.toLowerCase().includes(term)
-        const matchesEmail = user.email.toLowerCase().includes(term)
+        const matchesEmail = (user.email ?? '').toLowerCase().includes(term)
         if (!matchesName && !matchesEmail) return false
       }
 

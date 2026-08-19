@@ -189,7 +189,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
                 </div>
               )}
 
-              {data.requires_confirmation && (
+              {data.requires_confirmation && onAttendanceChange && (
                 <div style={{ gridColumn: '1 / -1' }} id="event-detail-attendance">
                   <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>
                     Conferma partecipazione
@@ -202,8 +202,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
                       Puoi rispondere fino al {new Date(data.confirmation_deadline).toLocaleString('it-IT')}
                     </p>
                   )}
-                  {onAttendanceChange && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                       {([
                         ['going', 'Partecipo'],
                         ['maybe', 'Forse'],
@@ -220,8 +219,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
                           {attendanceSaving && attendanceStatus === status ? 'Salvataggio…' : label}
                         </button>
                       ))}
-                    </div>
-                  )}
+                  </div>
                   {attendanceError && (
                     <p role="alert" style={{ color: '#b91c1c', fontSize: 13, margin: '10px 0 0' }}>
                       {attendanceError}

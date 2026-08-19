@@ -24,6 +24,8 @@ interface Event {
   parent_event_id?: string | null
   created_by?: string
   event_kind?: 'training' | 'match' | 'meeting' | 'other'
+  requires_confirmation?: boolean
+  confirmation_deadline?: string | null
 }
 
 interface Team { id: string; name: string; code: string }
@@ -171,6 +173,10 @@ export default function CoachCalendarManager() {
             start_date: eventData.start_time,
             end_date: eventData.end_time,
             event_kind: (eventData as any).event_kind || 'training',
+            requires_confirmation: !!eventData.requires_confirmation,
+            confirmation_deadline: eventData.requires_confirmation && eventData.confirmation_deadline
+              ? eventData.confirmation_deadline
+              : null,
             // Legacy columns required by DB schema
             name: eventData.title,
             start_time: eventData.start_time,
@@ -211,6 +217,10 @@ export default function CoachCalendarManager() {
             end_date: o.end_date,
             event_type: 'recurring',
             event_kind: (eventData as any).event_kind || 'training',
+            requires_confirmation: !!eventData.requires_confirmation,
+            confirmation_deadline: eventData.requires_confirmation && eventData.confirmation_deadline
+              ? eventData.confirmation_deadline
+              : null,
             created_by: ownerProfileId,
             // Legacy columns required by DB schema
             name: eventData.title,
@@ -241,6 +251,10 @@ export default function CoachCalendarManager() {
               end_date: eventData.end_time,
               event_type: 'one_time',
               event_kind: (eventData as any).event_kind || 'training',
+              requires_confirmation: !!eventData.requires_confirmation,
+              confirmation_deadline: eventData.requires_confirmation && eventData.confirmation_deadline
+                ? eventData.confirmation_deadline
+                : null,
               created_by: ownerProfileId,
               // Legacy columns required by DB schema
               name: eventData.title,
@@ -519,6 +533,8 @@ export default function CoachCalendarManager() {
                   const selectedTeams = Array.from(formData.getAll('teams')) as string[]
                   const gym_id = (formData.get('gym_id') as string) || ''
                   const activity_id = (formData.get('activity_id') as string) || ''
+                  const requiresConfirmation = formData.get('requires_confirmation') === 'on'
+                  const confirmationDeadline = (formData.get('confirmation_deadline') as string) || null
 
                   const eventData: Event = {
                     title: formData.get('title') as string,
@@ -527,7 +543,11 @@ export default function CoachCalendarManager() {
                     start_time: formData.get('start_time') as string,
                     end_time: formData.get('end_time') as string,
                     is_recurring: false,
-                    selected_teams: selectedTeams
+                    selected_teams: selectedTeams,
+                    requires_confirmation: requiresConfirmation,
+                    confirmation_deadline: confirmationDeadline
+                      ? new Date(confirmationDeadline).toISOString()
+                      : null,
                   }
                   ;(eventData as any).gym_id = gym_id || undefined
                   ;(eventData as any).activity_id = activity_id || undefined
@@ -616,6 +636,28 @@ export default function CoachCalendarManager() {
                   </select>
                 </div>
 
+                <div className="mb-4 cs-card p-3">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="requires_confirmation"
+                      defaultChecked={editingEvent?.requires_confirmation ?? false}
+                    />
+                    <span className="text-sm font-medium">Richiedi conferma partecipazione (RSVP)</span>
+                  </label>
+                  <label className="mt-3 block">
+                    <span className="cs-field__label">Scadenza conferma (opzionale)</span>
+                    <input
+                      type="datetime-local"
+                      name="confirmation_deadline"
+                      defaultValue={editingEvent?.confirmation_deadline
+                        ? new Date(editingEvent.confirmation_deadline).toISOString().slice(0, 16)
+                        : ''}
+                      className="cs-select"
+                    />
+                  </label>
+                </div>
+
                 {/* Opzioni ricorrenza (sempre visibili: puoi nasconderle via JS al bisogno) */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                   <div>
@@ -670,7 +712,119 @@ function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
     run()
   }, [id])
   return (
-    <EventDetailModal open={true} onClose={onClose} data={data} />
+    <EventDetailModal open={true} onClose={onClose} data={data}>
+      {data?.requires_confirmation && <CoachEventAttendancePanel eventId={id} />}
+    </EventDetailModal>
+  )
+}
+
+type AttendanceProfile = {
+  id: string
+  first_name: string
+  last_name: string
+  email?: string | null
+}
+
+type AttendanceEntry = {
+  profile_id: string
+  status: 'going' | 'maybe' | 'declined'
+  responded_at: string | null
+  profiles: AttendanceProfile | null
+}
+
+type AttendanceReport = {
+  going: AttendanceEntry[]
+  maybe: AttendanceEntry[]
+  declined: AttendanceEntry[]
+  no_response: AttendanceProfile[]
+  counts: {
+    going: number
+    maybe: number
+    declined: number
+    no_response: number
+  }
+}
+
+const emptyAttendanceReport: AttendanceReport = {
+  going: [],
+  maybe: [],
+  declined: [],
+  no_response: [],
+  counts: { going: 0, maybe: 0, declined: 0, no_response: 0 },
+}
+
+function CoachEventAttendancePanel({ eventId }: { eventId: string }) {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [report, setReport] = useState<AttendanceReport>(emptyAttendanceReport)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError(null)
+    fetch(`/api/coach/events/attendance?event_id=${eventId}`, { cache: 'no-store' })
+      .then(async (response) => {
+        const result = await response.json() as Partial<AttendanceReport> & { error?: string }
+        if (!response.ok) throw new Error(result.error || 'Errore caricamento conferme')
+        if (active) {
+          setReport({
+            going: result.going ?? [],
+            maybe: result.maybe ?? [],
+            declined: result.declined ?? [],
+            no_response: result.no_response ?? [],
+            counts: result.counts ?? emptyAttendanceReport.counts,
+          })
+        }
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(reason instanceof Error ? reason.message : 'Errore caricamento conferme')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => { active = false }
+  }, [eventId])
+
+  if (loading) return <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4 text-xs text-secondary">Caricamento conferme…</div>
+  if (error) return <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4 text-xs text-secondary">{error}</div>
+
+  const names = (entry: AttendanceEntry | AttendanceProfile) => {
+    const profile = 'profiles' in entry ? entry.profiles : entry
+    return profile ? `${profile.first_name} ${profile.last_name}`.trim() : 'Profilo non disponibile'
+  }
+  const renderNames = (entries: Array<AttendanceEntry | AttendanceProfile>) => (
+    entries.length > 0
+      ? entries.map((entry) => (
+        <div key={'profile_id' in entry ? `attendance-${entry.profile_id}` : `profile-${entry.id}`}>
+          {names(entry)}
+        </div>
+      ))
+      : <div className="text-secondary">Nessun atleta</div>
+  )
+
+  return (
+    <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4" aria-label="Report conferme partecipazione">
+      <div className="text-sm font-semibold mb-3">Report conferme partecipazione</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">Confermati ({report.counts.going})</div>
+          <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.going)}</div>
+        </div>
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">Forse ({report.counts.maybe})</div>
+          <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.maybe)}</div>
+        </div>
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">Non partecipano ({report.counts.declined})</div>
+          <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.declined)}</div>
+        </div>
+        <div className="cs-card cs-card--primary p-3">
+          <div className="text-sm font-semibold mb-1">Nessuna risposta ({report.counts.no_response})</div>
+          <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.no_response)}</div>
+        </div>
+      </div>
+    </div>
   )
 }
 
