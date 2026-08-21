@@ -6,8 +6,8 @@ import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 type CollaboratorType = 'coach' | 'staff' | 'admin'
 
-function isCollaborator(type: string | null, role: string | null, hasCoachProfile: boolean) {
-  return type === 'coach' || type === 'staff' || type === 'admin' || role === 'coach' || role === 'admin' || hasCoachProfile
+function isCollaborator(types: Set<string>, accountRoles: string[], hasCoachProfile: boolean) {
+  return types.has('coach') || types.has('staff') || types.has('admin') || accountRoles.includes('coach') || accountRoles.includes('admin') || hasCoachProfile
 }
 
 async function seasonTeamIds(adminClient: ReturnType<typeof createAdminClient>, seasonId: string) {
@@ -34,7 +34,7 @@ export async function GET() {
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const [{ data: profiles, error: profilesError }, { data: coachProfiles, error: coachError }, { data: seasonProfiles, error: seasonError }, { data: teamCoaches }, { data: teams }, { data: accounts }, { data: roles }] = await Promise.all([
-      adminClient.from('profiles').select('id, email, first_name, last_name, phone, birth_date, role, is_active, created_at, updated_at').order('created_at', { ascending: false }),
+      adminClient.from('profiles').select('id, email, first_name, last_name, phone, birth_date, created_at, updated_at').order('created_at', { ascending: false }),
       adminClient.from('coach_profiles').select('profile_id, level, specialization, started_on'),
       adminClient.from('season_profiles').select('profile_id, season_id, profile_type'),
       adminClient.from('team_coaches').select('coach_id, team_id, role, assigned_at'),
@@ -54,13 +54,17 @@ export async function GET() {
     const accountByProfile = new Map((accounts || []).map((account) => [account.owner_profile_id, account]))
     const rolesByAuth = new Map<string, string[]>()
     for (const role of roles || []) rolesByAuth.set(role.auth_user_id, [...(rolesByAuth.get(role.auth_user_id) || []), role.role])
+    const accountRolesByProfile = new Map<string, string[]>()
+    for (const account of accounts || []) accountRolesByProfile.set(account.owner_profile_id, rolesByAuth.get(account.auth_user_id) || [])
     const teamById = new Map((teams || []).map((team) => [team.id, team]))
 
-    const collaborators = (profiles || []).filter((profile) => profile.is_active && isCollaborator(
-      [...(typesByProfile.get(profile.id) || [])][0] || null,
-      profile.role,
-      coachById.has(profile.id),
-    )).map((profile) => {
+    const collaborators = (profiles || []).filter((profile) => {
+      const account = accountByProfile.get(profile.id)
+      const accountRoles = accountRolesByProfile.get(profile.id) || []
+      const types = typesByProfile.get(profile.id) || new Set<string>()
+      const isActive = account?.status !== 'suspended'
+      return isActive && isCollaborator(types, accountRoles, coachById.has(profile.id))
+    }).map((profile) => {
       const coach = coachById.get(profile.id)
       const account = accountByProfile.get(profile.id)
       const assignments = (teamCoaches || []).filter((assignment) => assignment.coach_id === profile.id).map((assignment) => ({
@@ -71,13 +75,15 @@ export async function GET() {
         activity_id: teamById.get(assignment.team_id)?.activity_id,
       }))
       const types = typesByProfile.get(profile.id) || new Set<string>()
-      const type: CollaboratorType = types.has('admin') || profile.role === 'admin'
+      const accountRoles = accountRolesByProfile.get(profile.id) || []
+      const type: CollaboratorType = types.has('admin') || accountRoles.includes('admin')
         ? 'admin'
-        : types.has('staff') && !types.has('coach') && !coachById.has(profile.id) && profile.role !== 'coach'
+        : types.has('staff') && !types.has('coach') && !coachById.has(profile.id) && !accountRoles.includes('coach')
           ? 'staff'
           : 'coach'
       return {
         ...profile,
+        is_active: account?.status !== 'suspended',
         collaborator_type: type,
         season_ids: seasonsByProfile.get(profile.id) || [],
         level: coach?.level || null,
