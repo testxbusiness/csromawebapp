@@ -23,6 +23,8 @@ export default function CollaboratorAccountActions({ id, name, email, account, r
     catch (error) { toast.error(error instanceof Error ? error.message : 'Impossibile inviare l’invito') } finally { setSaving(false) }
   }
   if (account?.status === 'invited') return <Button type="button" variant="outline" size="sm" onClick={() => void invite()} disabled={saving}>{saving ? 'Invio…' : 'Invia invito'}</Button>
+  if (account?.status === 'disabled') return <span className="text-xs text-[color:var(--cs-text-tertiary)]">Account non attivo</span>
+  if (account?.status === 'suspended') return <span className="text-xs text-[color:var(--cs-text-tertiary)]">Account sospeso</span>
   if (account) return <span className="text-xs text-[color:var(--cs-text-tertiary)]">Account attivo</span>
   return <>
     <Button type="button" variant="outline" size="sm" onClick={() => { setAccountEmail(email || ''); setOpen(true) }}>Crea account</Button>
