@@ -7,11 +7,25 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 async function isPaymentPayee(adminClient: ReturnType<typeof createAdminClient>, profileId: string) {
-  const { data: payee } = await adminClient
-    .from('profiles')
-    .select('id, role, coach_profiles(profile_id), season_profiles(profile_type)')
-    .eq('id', profileId)
-    .maybeSingle()
+  const [{ data: payee }, { data: account }] = await Promise.all([
+    adminClient
+      .from('profiles')
+      .select('id, coach_profiles(profile_id), season_profiles(profile_type)')
+      .eq('id', profileId)
+      .maybeSingle(),
+    adminClient
+      .from('app_accounts')
+      .select('auth_user_id')
+      .eq('owner_profile_id', profileId)
+      .maybeSingle(),
+  ])
+
+  const { data: accountRoles } = account?.auth_user_id
+    ? await adminClient
+        .from('account_roles')
+        .select('role')
+        .eq('auth_user_id', account.auth_user_id)
+    : { data: [] }
 
   const hasCoachProfile = Array.isArray(payee?.coach_profiles)
     ? payee.coach_profiles.length > 0
@@ -20,7 +34,9 @@ async function isPaymentPayee(adminClient: ReturnType<typeof createAdminClient>,
     (row: { profile_type: string | null }) => row.profile_type === 'coach' || row.profile_type === 'staff'
   )
 
-  return payee?.role === 'coach' || hasCoachProfile || hasCollaboratorSeasonType
+  const hasCoachAccountRole = (accountRoles ?? []).some((row: { role: string }) => row.role === 'coach')
+
+  return hasCoachAccountRole || hasCoachProfile || hasCollaboratorSeasonType
 }
 
 export async function GET() {
