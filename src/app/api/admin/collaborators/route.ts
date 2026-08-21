@@ -62,7 +62,7 @@ export async function GET() {
       const account = accountByProfile.get(profile.id)
       const accountRoles = accountRolesByProfile.get(profile.id) || []
       const types = typesByProfile.get(profile.id) || new Set<string>()
-      const isActive = account?.status !== 'suspended'
+      const isActive = account?.status !== 'suspended' && account?.status !== 'disabled'
       return isActive && isCollaborator(types, accountRoles, coachById.has(profile.id))
     }).map((profile) => {
       const coach = coachById.get(profile.id)
@@ -83,7 +83,7 @@ export async function GET() {
           : 'coach'
       return {
         ...profile,
-        is_active: account?.status !== 'suspended',
+        is_active: account?.status !== 'suspended' && account?.status !== 'disabled',
         collaborator_type: type,
         season_ids: seasonsByProfile.get(profile.id) || [],
         level: coach?.level || null,

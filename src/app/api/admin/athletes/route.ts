@@ -59,7 +59,7 @@ export async function GET() {
     ])
     const athletes = (profiles ?? []).filter((profile) => {
       const account = accountsByProfile.get(profile.id)
-      return athleteIds.has(profile.id) && account?.status !== 'suspended'
+      return athleteIds.has(profile.id) && account?.status !== 'suspended' && account?.status !== 'disabled'
     })
 
     if (athletes.length === 0) {
