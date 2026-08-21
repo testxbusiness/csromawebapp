@@ -1439,9 +1439,22 @@ correzione la lettura del secondo coach restituiva `403`; dopo la migration il `
 La migration è stata applicata anche allo staging il 19 agosto 2026; la history remota è
 allineata e il dry-run successivo non rileva migration pendenti.
 
-Successivo step di piano, dopo questa slice funzionale: implementare Migration 15,
-`document_access_and_activity_audit`, con test locali e preflight staging separato prima
-dell'applicazione.
+Decisione aggiornata il 21 agosto 2026: Migration 15,
+`document_access_and_activity_audit`, è rinviata.
+
+La verifica read-only di codice, schema, policy e staging ha confermato che oggi la
+funzionalità documentale è esposta solo all'admin tramite `/admin/documents`; non esistono
+record in `documents` o `document_recipients` nello staging, non esiste una sezione
+documenti per atleta, genitore o coach e `system_logs` non registra eventi operativi.
+L'audit effettivamente utilizzato è già separato in `account_lifecycle_audit` e
+`profile_relationship_audit`. Implementare ora il tracciamento delle visualizzazioni
+aggiungerebbe complessità senza un flusso end-user concreto.
+
+Migration 15 sarà rivalutata dopo una decisione funzionale sulla condivisione dei documenti.
+Se i documenti diventeranno accessibili anche ad atleti, genitori e coach, sarà prima
+necessario implementare la relativa sezione end-user con accesso, download e stato di
+lettura; successivamente si definiranno audit actor/subject, policy e test. Se resteranno
+solo amministrativi, la migration potrà essere ridotta o ulteriormente rinviata.
 
 Migration 13: `account_message_reads_and_push_subscriptions`
 
@@ -1482,6 +1495,55 @@ Migration 15: `document_access_and_activity_audit`
 
 Stato: da iniziare; potrà essere eseguita solo dopo almeno un ciclo completo delle Fasi
 3–5 in staging e dopo la validazione finale dell’intero piano.
+
+Preflight inventory read-only completato il 21 agosto 2026 sul codice e sullo staging.
+La rimozione non può ancora iniziare: sono presenti dipendenze applicative e dati legacy
+che richiedono una migrazione dedicata e una verifica di compatibilità.
+
+Risultati staging:
+
+- `profiles`: 14 record; il campo legacy `role` è valorizzato su 7 record e
+  `is_active`/`must_change_password` sono valorizzati su tutti i 14 record;
+- `app_accounts`: 12 record, tutti `active`, nessuno con `must_change_password = true`;
+- `user_roles`: 3 record ancora presenti; due sono coerenti con ruoli account e uno è un
+  ruolo atleta senza corrispondente `account_roles.athlete`, quindi va analizzato prima di
+  qualsiasi rimozione;
+- esistono ancora 2 profili senza account applicativo e 1 account senza ruolo globale,
+  da distinguere tra profili intenzionalmente senza accesso e mapping incompleti;
+- nello staging restano policy legacy su `user_roles`, su `athlete_profiles` e su alcuni
+  domini che confrontano direttamente `auth.uid()` o `profiles.role`;
+- le funzioni `public.messages_set_created_by()` e
+  `public.sync_championship_match_event()` sono ancora `SECURITY DEFINER` e usano il
+  modello legacy per valorizzare l’attore; `private.current_profile_id()` e gli helper
+  account-based restano invece il modello autorizzativo target;
+- il codice applicativo continua a leggere o aggiornare campi legacy in alcune route
+  admin: collaboratori e atleti usano `profiles.is_active`, i pagamenti usano
+  `profiles.role`, le route account/profile espongono ancora il flag legacy e il reset
+  password aggiorna ancora `profiles.must_change_password` oltre ad `app_accounts`;
+- `user_roles` e i campi legacy non sono quindi eliminabili in sicurezza con una singola
+  migration distruttiva.
+
+Decisione sui casi staging verificata il 21 agosto 2026:
+
+- `Atleta RLS Test` è una fixture legacy creata durante il bootstrap iniziale dello
+  staging e resta intenzionalmente fuori dal mapping operativo completo;
+- `nuovo test` è una fixture per i test RLS e per la creazione di profili, quindi resta un
+  profilo senza account;
+- `staff test` resta un profilo senza account e senza ruolo globale: non esiste ancora una
+  UI/UX Staff e non è prevista in questo ciclo;
+- questi record non devono essere corretti, assegnati a ruoli o rimossi dalla Fase 6.
+  La migrazione deve invece distinguere le fixture di test dai dati applicativi reali.
+
+Ordine obbligatorio prima della Fase 6:
+
+1. risolvere il profilo atleta senza `account_roles.athlete` e i profili/account non
+   mappati;
+2. migrare le route admin residue a `app_accounts`, `account_roles` e
+   `season_profiles` dove il campo legacy è usato per stato o autorizzazione;
+3. correggere o sostituire le policy/funzioni legacy ancora effettivamente attive;
+4. ripetere l’inventario e verificare che `user_roles` sia vuota o esplicitamente
+   mantenuta per compatibilità;
+5. solo allora preparare la migration di rimozione con backup, dry-run e test di rollback.
 
 Solo dopo almeno un ciclo completo in staging e monitoraggio produzione:
 
