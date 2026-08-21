@@ -6,7 +6,12 @@ import { z } from 'zod'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 
-async function isPaymentPayee(adminClient: ReturnType<typeof createAdminClient>, profileId: string) {
+type PaymentPayeeType = 'coach' | 'staff'
+
+async function getPaymentPayeeType(
+  adminClient: ReturnType<typeof createAdminClient>,
+  profileId: string,
+): Promise<PaymentPayeeType | null> {
   const [{ data: payee }, { data: account }] = await Promise.all([
     adminClient
       .from('profiles')
@@ -30,13 +35,17 @@ async function isPaymentPayee(adminClient: ReturnType<typeof createAdminClient>,
   const hasCoachProfile = Array.isArray(payee?.coach_profiles)
     ? payee.coach_profiles.length > 0
     : Boolean(payee?.coach_profiles)
-  const hasCollaboratorSeasonType = (payee?.season_profiles ?? []).some(
-    (row: { profile_type: string | null }) => row.profile_type === 'coach' || row.profile_type === 'staff'
+  const seasonTypes = (payee?.season_profiles ?? []).map(
+    (row: { profile_type: string | null }) => row.profile_type,
   )
 
   const hasCoachAccountRole = (accountRoles ?? []).some((row: { role: string }) => row.role === 'coach')
+  const hasStaffSeasonType = seasonTypes.includes('staff')
+  const hasCoachSeasonType = seasonTypes.includes('coach')
 
-  return hasCoachAccountRole || hasCoachProfile || hasCollaboratorSeasonType
+  if (hasCoachAccountRole || hasCoachProfile || hasCoachSeasonType) return 'coach'
+  if (hasStaffSeasonType) return 'staff'
+  return null
 }
 
 export async function GET() {
@@ -132,8 +141,8 @@ export async function POST(request: NextRequest) {
       }
       normalized.coach_id = null
 
-      if (!(await isPaymentPayee(adminClient, normalized.payee_profile_id))) {
-        return NextResponse.json({ error: 'Il destinatario deve essere un coach o uno staff' }, { status: 400 })
+      if ((await getPaymentPayeeType(adminClient, normalized.payee_profile_id)) !== 'staff') {
+        return NextResponse.json({ error: 'Il destinatario deve essere uno staff' }, { status: 400 })
       }
     }
 
@@ -193,8 +202,8 @@ export async function PATCH(request: NextRequest) {
         if (!updateData.payee_profile_id) {
           return NextResponse.json({ error: 'payee_profile_id richiesto per type=person_payment' }, { status: 400 })
         }
-        if (!(await isPaymentPayee(adminClient, updateData.payee_profile_id))) {
-          return NextResponse.json({ error: 'Il destinatario deve essere un coach o uno staff' }, { status: 400 })
+        if ((await getPaymentPayeeType(adminClient, updateData.payee_profile_id)) !== 'staff') {
+          return NextResponse.json({ error: 'Il destinatario deve essere uno staff' }, { status: 400 })
         }
         updateData.coach_id = null
       }

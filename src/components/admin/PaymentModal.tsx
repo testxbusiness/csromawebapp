@@ -338,7 +338,7 @@ export default function PaymentModal({
                   onChange={(e) => setForm({ ...form, payee_profile_id: e.target.value })}
                 >
                   <option value="">Seleziona una persona</option>
-                  {payees.map((payee) => (
+                  {payees.filter((payee) => payee.type === 'staff').map((payee) => (
                     <option key={payee.id} value={payee.id}>
                       {payee.first_name} {payee.last_name} ({payee.type === 'staff' ? 'Staff' : 'Coach'})
                     </option>
