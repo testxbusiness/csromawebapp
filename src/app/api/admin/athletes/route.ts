@@ -21,7 +21,7 @@ export async function GET() {
     const adminClient = createAdminClient()
 
     // Carica atleti con dettagli base
-    const [{ data: profiles, error: profilesError }, { data: athleteProfiles, error: athleteProfilesError }, { data: teamMembers, error: teamMembersError }] = await Promise.all([
+    const [{ data: profiles, error: profilesError }, { data: athleteProfiles, error: athleteProfilesError }, { data: teamMembers, error: teamMembersError }, { data: accounts, error: accountsError }] = await Promise.all([
       adminClient
       .from('profiles')
       .select(`
@@ -31,7 +31,6 @@ export async function GET() {
         last_name,
         phone,
         birth_date,
-        is_active,
         created_at,
         updated_at
       `)
@@ -42,18 +41,26 @@ export async function GET() {
       adminClient
         .from('team_members')
         .select('profile_id, team_id, jersey_number'),
+      adminClient
+        .from('app_accounts')
+        .select('auth_user_id, owner_profile_id, status'),
     ])
 
-    if (profilesError || athleteProfilesError || teamMembersError) {
-      console.error('Errore caricamento atleti:', profilesError || athleteProfilesError || teamMembersError)
+    if (profilesError || athleteProfilesError || teamMembersError || accountsError) {
+      console.error('Errore caricamento atleti:', profilesError || athleteProfilesError || teamMembersError || accountsError)
       return NextResponse.json({ error: 'Impossibile caricare gli atleti' }, { status: 400 })
     }
+
+    const accountsByProfile = new Map((accounts ?? []).map((account) => [account.owner_profile_id, account]))
 
     const athleteIds = new Set([
       ...(athleteProfiles ?? []).map((profile) => profile.profile_id),
       ...(teamMembers ?? []).map((member) => member.profile_id),
     ])
-    const athletes = (profiles ?? []).filter((profile) => athleteIds.has(profile.id) && profile.is_active !== false)
+    const athletes = (profiles ?? []).filter((profile) => {
+      const account = accountsByProfile.get(profile.id)
+      return athleteIds.has(profile.id) && account?.status !== 'suspended'
+    })
 
     if (athletes.length === 0) {
       return NextResponse.json({ athletes: [] })
@@ -71,11 +78,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Impossibile caricare le stagioni degli atleti' }, { status: 400 })
     }
 
-    const [{ data: accounts, error: accountsError }, { data: accountRoles, error: accountRolesError }] = await Promise.all([
-      adminClient
-        .from('app_accounts')
-        .select('auth_user_id, owner_profile_id, status')
-        .in('owner_profile_id', athleteProfileIds),
+    const [{ data: accountRoles, error: accountRolesError }] = await Promise.all([
       adminClient
         .from('account_roles')
         .select('auth_user_id, role'),
@@ -92,8 +95,6 @@ export async function GET() {
       roles.push(roleRow.role)
       rolesByAuthUser.set(roleRow.auth_user_id, roles)
     }
-    const accountsByProfile = new Map((accounts ?? []).map((account) => [account.owner_profile_id, account]))
-
     const seasonalAthleteIds = new Set((seasonProfiles ?? []).map((seasonProfile) => seasonProfile.profile_id))
     const activeSeasonAthletes = athletes.filter((athlete) => seasonalAthleteIds.has(athlete.id))
 
