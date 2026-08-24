@@ -219,7 +219,11 @@ export default function PeopleManager() {
                       <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${person.account ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
                         {accountLabel(person)}
                       </span>
-                      {person.account?.roles.length ? <div className="mt-1 text-xs text-[color:var(--cs-text-tertiary)]">{person.account.roles.join(', ')}</div> : null}
+                      {person.account?.roles.length ? (
+                        <div className="mt-1 text-xs text-[color:var(--cs-text-tertiary)]">{person.account.roles.join(', ')}</div>
+                      ) : person.role ? (
+                        <div className="mt-1 text-xs text-[color:var(--cs-text-tertiary)]">{person.role}</div>
+                      ) : null}
                     </td>
                     <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">{person.is_active ? 'Attiva' : 'Archiviata'}</td>
                     <td className="px-4 py-4 text-[color:var(--cs-text-secondary)]">
