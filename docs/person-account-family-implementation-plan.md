@@ -8,6 +8,11 @@ Decisione operativa aggiornata al 10 agosto 2026: la produzione resta fuori peri
 finché l’intero piano non sarà implementato e testato. Le modifiche applicative e le
 migration di questo ciclo vengono quindi validate esclusivamente in locale e staging.
 
+Aggiornamento operativo al 24 agosto 2026: le slice incrementali di Fase 6 sono in corso,
+ma la rimozione dei campi legacy non è ancora autorizzata. Le liste admin principali sono
+state migrate a fonti account/domain senza perdere gli iscritti privi di account: un atleta
+resta visibile come iscritto e lo stato dell’account viene mostrato separatamente.
+
 Branch di lavoro: `codex/person-account-family-model`.
 
 Database:
@@ -1439,6 +1444,28 @@ correzione la lettura del secondo coach restituiva `403`; dopo la migration il `
 La migration è stata applicata anche allo staging il 19 agosto 2026; la history remota è
 allineata e il dry-run successivo non rileva migration pendenti.
 
+Fase 6, slice applicative iniziali completate tra il 21 e il 24 agosto 2026:
+
+- `/api/admin/payment-payees` e `/api/admin/payments` risolvono i destinatari tramite
+  `app_accounts`, `account_roles`, `coach_profiles` e `season_profiles`; `Pagamento Staff`
+  accetta e mostra solo profili Staff, mentre i pagamenti coach restano separati;
+- la lista `/admin/collaboratori` usa ruoli account e profili dominio per determinare tipo e
+  visibilità, escludendo gli account `disabled` o `suspended` dalla lista operativa;
+- la lista `/admin/atleti` usa i profili atleta/iscrizioni come fonte della visibilità e non
+  richiede un account attivo: gli iscritti senza account restano presenti, mentre lo stato
+  viene indicato come `Account attivo`, `Account non attivo`, `Account sospeso`, `Invia invito`
+  o `Crea account`;
+- i test manuali hanno rilevato e corretto il disallineamento tra lo stato UI `disabled` e
+  il filtro iniziale che considerava soltanto `suspended`;
+- ogni slice è stata verificata con Jest 3/3 e build Next.js, poi committata e pushata sulla
+  branch `codex/person-account-family-model`.
+
+Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
+ruoli o policy legacy. Restano da completare le route admin di gestione profili/account,
+reset password e messaggi, oltre ai consumer UI che interrogano direttamente `profiles.role`;
+la rimozione SQL resta bloccata fino alla chiusura dell’inventario e al ciclo di regressione
+in staging.
+
 Decisione aggiornata il 21 agosto 2026: Migration 15,
 `document_access_and_activity_audit`, è rinviata.
 
@@ -1517,9 +1544,10 @@ Risultati staging:
   modello legacy per valorizzare l’attore; `private.current_profile_id()` e gli helper
   account-based restano invece il modello autorizzativo target;
 - il codice applicativo continua a leggere o aggiornare campi legacy in alcune route
-  admin: collaboratori e atleti usano `profiles.is_active`, i pagamenti usano
-  `profiles.role`, le route account/profile espongono ancora il flag legacy e il reset
-  password aggiorna ancora `profiles.must_change_password` oltre ad `app_accounts`;
+  admin: le route account/profile espongono ancora campi legacy, la creazione/modifica di
+  alcuni collaboratori mantiene dual-write compatibile, il reset password aggiorna ancora
+  `profiles.must_change_password` oltre ad `app_accounts`, e restano consumer UI/API che
+  leggono `profiles.role` direttamente;
 - `user_roles` e i campi legacy non sono quindi eliminabili in sicurezza con una singola
   migration distruttiva.
 
@@ -1539,11 +1567,15 @@ Ordine obbligatorio prima della Fase 6:
 1. risolvere il profilo atleta senza `account_roles.athlete` e i profili/account non
    mappati;
 2. migrare le route admin residue a `app_accounts`, `account_roles` e
-   `season_profiles` dove il campo legacy è usato per stato o autorizzazione;
-3. correggere o sostituire le policy/funzioni legacy ancora effettivamente attive;
-4. ripetere l’inventario e verificare che `user_roles` sia vuota o esplicitamente
+   `season_profiles` dove il campo legacy è usato per stato o autorizzazione; priorità a
+   `/api/admin/profiles`, creazione/invito account, reset password, messaggi e ai consumer
+   UI diretti;
+3. verificare in staging che gli iscritti senza account restino visibili e che gli account
+   `disabled`/`suspended` siano solo non autenticabili, senza cancellare la persona;
+4. correggere o sostituire le policy/funzioni legacy ancora effettivamente attive;
+5. ripetere l’inventario e verificare che `user_roles` sia vuota o esplicitamente
    mantenuta per compatibilità;
-5. solo allora preparare la migration di rimozione con backup, dry-run e test di rollback.
+6. solo allora preparare la migration di rimozione con backup, dry-run e test di rollback.
 
 Solo dopo almeno un ciclo completo in staging e monitoraggio produzione:
 
