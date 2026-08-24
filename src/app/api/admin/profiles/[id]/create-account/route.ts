@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const adminClient = createAdminClient()
     const { data: profile, error: profileError } = await adminClient
       .from('profiles')
-      .select('id, email, first_name, last_name, role')
+      .select('id, email, first_name, last_name')
       .eq('id', id)
       .maybeSingle()
 
@@ -66,12 +66,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     if (parsed.data.role === 'family_member') {
-      const [{ data: athleteProfile }, { data: coachProfile }, { data: collaboratorSeason }] = await Promise.all([
+      const [
+        { data: athleteProfile, error: athleteProfileError },
+        { data: coachProfile, error: coachProfileError },
+        { data: collaboratorSeasons, error: collaboratorSeasonsError },
+      ] = await Promise.all([
         adminClient.from('athlete_profiles').select('profile_id').eq('profile_id', id).maybeSingle(),
         adminClient.from('coach_profiles').select('profile_id').eq('profile_id', id).maybeSingle(),
-        adminClient.from('season_profiles').select('profile_id').eq('profile_id', id).in('profile_type', ['coach', 'staff', 'admin']).limit(1).maybeSingle(),
+        adminClient.from('season_profiles').select('profile_type').eq('profile_id', id).in('profile_type', ['coach', 'staff', 'admin']),
       ])
-      if (athleteProfile || coachProfile || collaboratorSeason || ['admin', 'coach'].includes(profile.role || '')) {
+      if (athleteProfileError || coachProfileError || collaboratorSeasonsError) {
+        return NextResponse.json({ error: 'Impossibile verificare il ruolo operativo della persona' }, { status: 500 })
+      }
+      const hasOperationalProfile = Boolean(athleteProfile || coachProfile || collaboratorSeasons?.length)
+      if (hasOperationalProfile) {
         return NextResponse.json({ error: 'Per un atleta o collaboratore usa la sezione Iscritti o Collaboratori; l’account familiare è riservato a persone senza ruolo operativo.' }, { status: 400 })
       }
     }

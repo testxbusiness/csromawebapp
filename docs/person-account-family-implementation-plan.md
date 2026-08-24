@@ -1455,6 +1455,9 @@ Fase 6, slice applicative iniziali completate tra il 21 e il 24 agosto 2026:
   richiede un account attivo: gli iscritti senza account restano presenti, mentre lo stato
   viene indicato come `Account attivo`, `Account non attivo`, `Account sospeso`, `Invia invito`
   o `Crea account`;
+- la route di creazione account non usa più `profiles.role` per validare il ruolo
+  `family_member`: il controllo usa `athlete_profiles`, `coach_profiles` e
+  `season_profiles`; l’invio email della route di invito resta invariato;
 - i test manuali hanno rilevato e corretto il disallineamento tra lo stato UI `disabled` e
   il filtro iniziale che considerava soltanto `suspended`;
 - ogni slice è stata verificata con Jest 3/3 e build Next.js, poi committata e pushata sulla
