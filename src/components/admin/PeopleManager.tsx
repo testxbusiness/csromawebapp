@@ -42,6 +42,10 @@ type PersonForm = {
   birth_date: string
 }
 
+type AccountFilter = 'all' | 'none' | 'active' | 'invited' | 'disabled' | 'suspended'
+type RoleFilter = 'all' | 'admin' | 'coach' | 'staff' | 'athlete' | 'family_member'
+type RelationshipFilter = 'all' | 'with' | 'without'
+
 const initialForm: PersonForm = {
   first_name: '',
   last_name: '',
@@ -66,6 +70,9 @@ function formatDate(value: string | null) {
 export default function PeopleManager() {
   const [people, setPeople] = useState<Person[]>([])
   const [search, setSearch] = useState('')
+  const [accountFilter, setAccountFilter] = useState<AccountFilter>('all')
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
+  const [relationshipFilter, setRelationshipFilter] = useState<RelationshipFilter>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -94,13 +101,26 @@ export default function PeopleManager() {
 
   const filteredPeople = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return people
     return people.filter((person) =>
-      [person.first_name, person.last_name, person.email, person.phone]
+      (query === '' || [person.first_name, person.last_name, person.email, person.phone]
         .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(query))
+        .some((value) => value!.toLowerCase().includes(query))) &&
+      (accountFilter === 'all' ||
+        (accountFilter === 'none' ? !person.account : person.account?.status === accountFilter)) &&
+      (roleFilter === 'all' || person.role === roleFilter || person.account?.roles.includes(roleFilter)) &&
+      (relationshipFilter === 'all' ||
+        (relationshipFilter === 'with' ? person.relationships.length > 0 : person.relationships.length === 0))
     )
-  }, [people, search])
+  }, [accountFilter, people, relationshipFilter, roleFilter, search])
+
+  const hasActiveFilters = search.trim() !== '' || accountFilter !== 'all' || roleFilter !== 'all' || relationshipFilter !== 'all'
+
+  const resetFilters = () => {
+    setSearch('')
+    setAccountFilter('all')
+    setRoleFilter('all')
+    setRelationshipFilter('all')
+  }
 
   const updateField = (field: keyof PersonForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }))
@@ -167,6 +187,56 @@ export default function PeopleManager() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </div>
+
+        <div className="mt-5 border-t border-[color:var(--cs-border)] pt-5" aria-labelledby="people-filters-title">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="people-filters-title" className="text-sm font-semibold text-[color:var(--cs-text)]">Filtra elenco</h3>
+            {hasActiveFilters ? (
+              <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={resetFilters}>
+                Azzera filtri
+              </button>
+            ) : null}
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label htmlFor="people-account-filter" className="cs-field__label">Account</label>
+              <select id="people-account-filter" className="cs-input" value={accountFilter} onChange={(event) => setAccountFilter(event.target.value as AccountFilter)}>
+                <option value="all">Tutti gli stati</option>
+                <option value="none">Senza account</option>
+                <option value="active">Account attivo</option>
+                <option value="invited">Invito in attesa</option>
+                <option value="disabled">Account non attivo</option>
+                <option value="suspended">Account sospeso</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="people-role-filter" className="cs-field__label">Ruolo</label>
+              <select id="people-role-filter" className="cs-input" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as RoleFilter)}>
+                <option value="all">Tutti i ruoli</option>
+                <option value="admin">Admin</option>
+                <option value="coach">Coach</option>
+                <option value="staff">Staff</option>
+                <option value="athlete">Atleta</option>
+                <option value="family_member">Familiare / tutore</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="people-relationship-filter" className="cs-field__label">Relazioni</label>
+              <select id="people-relationship-filter" className="cs-input" value={relationshipFilter} onChange={(event) => setRelationshipFilter(event.target.value as RelationshipFilter)}>
+                <option value="all">Tutte</option>
+                <option value="with">Con relazioni</option>
+                <option value="without">Senza relazioni</option>
+              </select>
+            </div>
+          </div>
+
+          {hasActiveFilters ? (
+            <p className="mt-3 text-xs text-[color:var(--cs-text-secondary)]" aria-live="polite">
+              {filteredPeople.length} {filteredPeople.length === 1 ? 'persona trovata' : 'persone trovate'}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       {loading ? <LoadingState label="Caricamento persone…" /> : null}
@@ -182,8 +252,8 @@ export default function PeopleManager() {
       {!loading && !error && filteredPeople.length === 0 ? (
         <EmptyState
           title={people.length === 0 ? 'Nessuna persona presente' : 'Nessun risultato'}
-          description={people.length === 0 ? 'La prima persona può essere creata senza account Auth.' : 'Prova a modificare i criteri di ricerca.'}
-          action={people.length === 0 ? <Button onClick={() => setDialogOpen(true)}>Crea la prima persona</Button> : undefined}
+          description={people.length === 0 ? 'La prima persona può essere creata senza account Auth.' : 'Prova a modificare i criteri di ricerca o azzera i filtri.'}
+          action={people.length === 0 ? <Button onClick={() => setDialogOpen(true)}>Crea la prima persona</Button> : hasActiveFilters ? <Button variant="outline" onClick={resetFilters}>Azzera filtri</Button> : undefined}
         />
       ) : null}
 
