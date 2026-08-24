@@ -13,10 +13,17 @@ type ProfileRow = {
   last_name: string
   phone: string | null
   birth_date: string | null
-  role: string | null
   is_active: boolean
   created_at: string
   updated_at: string
+}
+
+function getOperationalRole(accountRoles: string[], profileTypes: string[]): string | null {
+  const roles = new Set([...accountRoles, ...profileTypes])
+  for (const role of ['admin', 'coach', 'staff', 'athlete', 'family_member']) {
+    if (roles.has(role)) return role
+  }
+  return null
 }
 
 type AccountRow = {
@@ -55,7 +62,7 @@ export async function GET() {
     const [{ data: profiles, error: profilesError }, { data: accounts, error: accountsError }, { data: roles, error: rolesError }, { data: relationships, error: relationshipsError }, { data: collaboratorProfiles, error: collaboratorProfilesError }] = await Promise.all([
       adminClient
         .from('profiles')
-        .select('id, email, first_name, last_name, phone, birth_date, role, is_active, created_at, updated_at')
+        .select('id, email, first_name, last_name, phone, birth_date, is_active, created_at, updated_at')
         .order('created_at', { ascending: false }),
       adminClient
         .from('app_accounts')
@@ -70,8 +77,7 @@ export async function GET() {
         .order('created_at', { ascending: false }),
       adminClient
         .from('season_profiles')
-        .select('profile_id, profile_type')
-        .in('profile_type', ['coach', 'staff', 'admin']),
+        .select('profile_id, profile_type'),
     ])
 
     if (profilesError || accountsError || rolesError || relationshipsError || collaboratorProfilesError) {
@@ -94,7 +100,16 @@ export async function GET() {
       rolesByAuthUser.set(row.auth_user_id, current)
     }
 
-    const collaboratorProfileIds = new Set((collaboratorProfiles ?? []).map((row) => row.profile_id))
+    const profileTypesByProfile = new Map<string, string[]>()
+    for (const row of collaboratorProfiles ?? []) {
+      const types = profileTypesByProfile.get(row.profile_id) ?? []
+      if (row.profile_type) types.push(row.profile_type)
+      profileTypesByProfile.set(row.profile_id, types)
+    }
+    const rolesByProfile = new Map<string, string[]>()
+    for (const account of accounts ?? []) {
+      rolesByProfile.set(account.owner_profile_id, rolesByAuthUser.get(account.auth_user_id) ?? [])
+    }
     const profilesById = new Map((profiles as ProfileRow[] ?? []).map((profile) => [profile.id, profile]))
     const relationshipsByProfile = new Map<string, Array<{
       id: string
@@ -138,11 +153,16 @@ export async function GET() {
 
     const result = (profiles as ProfileRow[] ?? []).map((profile) => {
       const account = accountsByProfile.get(profile.id)
+      const role = getOperationalRole(
+        rolesByProfile.get(profile.id) ?? [],
+        profileTypesByProfile.get(profile.id) ?? [],
+      )
       return {
         ...profile,
+        role,
         account_email: account ? authEmailById.get(account.auth_user_id) ?? null : null,
         relationships: relationshipsByProfile.get(profile.id) ?? [],
-        is_collaborator: collaboratorProfileIds.has(profile.id) || ['admin', 'coach'].includes(profile.role || ''),
+        is_collaborator: ['admin', 'coach', 'staff'].includes(role ?? ''),
         account: account ? {
           auth_user_id: account.auth_user_id,
           status: account.status,
@@ -187,9 +207,8 @@ export async function POST(request: NextRequest) {
         email: payload.email ?? null,
         phone: payload.phone ?? null,
         birth_date: payload.birth_date ?? null,
-        role: null,
       })
-      .select('id, email, first_name, last_name, phone, birth_date, role, is_active, created_at, updated_at')
+      .select('id, email, first_name, last_name, phone, birth_date, is_active, created_at, updated_at')
       .single()
 
     if (profileError || !profile) {
