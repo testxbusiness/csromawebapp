@@ -85,6 +85,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Impossibile caricare le persone' }, { status: 500 })
     }
 
+    const [{ data: athleteProfiles, error: athleteProfilesError }, { data: teamMembers, error: teamMembersError }] = await Promise.all([
+      adminClient.from('athlete_profiles').select('profile_id'),
+      adminClient.from('team_members').select('profile_id'),
+    ])
+    if (athleteProfilesError || teamMembersError) {
+      console.error('Errore caricamento profili atleta:', athleteProfilesError || teamMembersError)
+      return NextResponse.json({ error: 'Impossibile classificare le persone' }, { status: 500 })
+    }
+
     const accountsByProfile = new Map((accounts as AccountRow[] ?? []).map((account) => [account.owner_profile_id, account]))
     const { data: authUsers, error: authUsersError } = await adminClient.auth.admin.listUsers()
     if (authUsersError) {
@@ -104,6 +113,11 @@ export async function GET() {
     for (const row of collaboratorProfiles ?? []) {
       const types = profileTypesByProfile.get(row.profile_id) ?? []
       if (row.profile_type) types.push(row.profile_type)
+      profileTypesByProfile.set(row.profile_id, types)
+    }
+    for (const row of [...(athleteProfiles ?? []), ...(teamMembers ?? [])]) {
+      const types = profileTypesByProfile.get(row.profile_id) ?? []
+      if (!types.includes('athlete')) types.push('athlete')
       profileTypesByProfile.set(row.profile_id, types)
     }
     const rolesByProfile = new Map<string, string[]>()
