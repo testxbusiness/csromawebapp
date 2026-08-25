@@ -1550,6 +1550,40 @@ correttiva e responsabile. Le correzioni devono essere applicate e riverificate 
 del deploy; nessun ruolo deve essere assegnato automaticamente soltanto sulla base di
 `profiles.role` senza il mapping dominio/account richiesto.
 
+#### Esito inventario produzione — 25 agosto 2026
+
+L’inventario è stato eseguito in sola lettura dopo il ripristino del progetto
+`csromawebapp` (`qyiholnatsrvpoqoplje`). La produzione è ancora sullo schema legacy:
+sono presenti soltanto le migration `20251007152643 master_migration_fixed` e
+`20260806133634 prod_rls_hardening`; le migration del modello persona/account non sono
+state applicate. Non è stata eseguita alcuna modifica al database.
+
+- `profiles`: 48 record, tutti attivi e con `profiles.role`: 2 admin, 2 coach e 44
+  athlete;
+- `auth.users`: 48 record; non risultano profili senza utente auth né utenti auth senza
+  profilo;
+- `user_roles`: 0 record;
+- coerenza dominio legacy: 44 `athlete_profiles` e 2 `coach_profiles`, senza gap tra
+  ruolo legacy e profilo operativo;
+- relazioni operative: 3 team, 1 stagione, 2 attività, 4 assegnazioni coach e 67
+  appartenenze atleta/team;
+- 3 atleti risultano senza team: `f90e8a38-641a-4aa0-a5f1-2d883a0a4a7d`,
+  `4c5df08f-6965-4388-850f-f23de80628cf` e
+  `47075c85-8340-4da5-ad65-3e73fe4fdcd2`. Devono essere classificati prima del
+  backfill, senza assegnare automaticamente una squadra;
+- contenuti da preservare durante la migrazione: 145 eventi, 17 pagamenti, 120 rate,
+  5 documenti, 3 destinatari documento, 3 destinatari messaggio, 2 sottoscrizioni
+  push e 0 log di sistema. Non risultano ancora presenze evento registrate;
+- restano 2 policy legacy (`documents` e `document_recipients`) che autorizzano tramite
+  `profiles.role = 'admin'`. Devono essere sostituite o mantenute esplicitamente nella
+  fase di compatibilità, prima della rimozione del campo legacy.
+
+Conclusione del gate: la produzione non è pronta per il deploy del nuovo modello. Il
+prossimo passo è preparare un piano di backfill non distruttivo per i 48 profili,
+classificare i tre atleti senza team e verificare il mapping account/ruolo su una copia
+o ambiente di staging equivalente. Nessuna migration va applicata direttamente in
+produzione prima di backup, dry-run e approvazione del risultato.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
