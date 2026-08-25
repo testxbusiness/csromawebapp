@@ -5,6 +5,13 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 import { notifyMessageRecipients } from '@/server/messages/push-notifications'
 
+const rolePriority = ['admin', 'coach', 'staff', 'athlete', 'family_member'] as const
+
+function resolveAccountRole(roles: string[] | undefined): string | null {
+  if (!roles?.length) return null
+  return rolePriority.find((role) => roles.includes(role)) ?? null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -328,7 +335,7 @@ export async function GET() {
             if (recipient.profile_id) {
               const { data: profileData } = await adminClient
                 .from('profiles')
-                .select('id, first_name, last_name, email, role')
+                .select('id, first_name, last_name, email')
                 .eq('id', recipient.profile_id)
                 .single()
               
@@ -336,7 +343,7 @@ export async function GET() {
                 const authUserId = authUserByProfile.get(profileData.id)
                 recipientData.profiles = {
                   ...profileData,
-                  role: authUserId ? (rolesByAuthUser.get(authUserId) || [profileData.role]).filter(Boolean)[0] || null : profileData.role,
+                  role: authUserId ? resolveAccountRole(rolesByAuthUser.get(authUserId)) : null,
                 }
               }
             }

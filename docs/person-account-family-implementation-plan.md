@@ -1505,10 +1505,10 @@ Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 | Alta | `src/app/api/admin/coaches/route.ts` | Migrato: usa `coach_profiles`, `season_profiles` e account | Lista coach coerente con il dominio |
 | Alta | `src/components/admin/TeamsManager.tsx` | Migrato: carica `/api/admin/coaches` | UI operativa coerente |
 | Alta | `src/components/admin/BalanceDashboard.tsx` | Migrato: carica `/api/admin/coaches` | Filtro coach coerente |
-| Media | `src/app/api/admin/messages/route.ts` | Ancora legacy: seleziona `profiles.role` e lo usa come fallback di visualizzazione | Report/destinatari |
+| Media | `src/app/api/admin/messages/route.ts` | Migrato: ruolo destinatario derivato da `app_accounts` e `account_roles` | Report/destinatari coerenti |
 | Media | `src/hooks/useAuth.ts` | Ancora fallback legacy: cache e compatibilità usano `profile.role` | Login/UI; il resolver account resta autorevole |
-| Media | `src/components/navigation/LayoutShell.tsx` | Ancora legacy: legge `profile.must_change_password` | Guardia UI duplicata |
-| Media | `src/components/shared/ResetPasswordForm.tsx` | Ancora fallback legacy: legge `profiles.must_change_password` | Compatibilità reset |
+| Media | `src/components/navigation/LayoutShell.tsx` | Migrato: legge `account.mustChangePassword` | Guardia UI account-based |
+| Media | `src/components/shared/ResetPasswordForm.tsx` | Migrato: legge `app_metadata.must_change_password` | Compatibilità reset account-based |
 | Bassa | `src/components/admin/AdminDashboard.tsx` | Visualizza `profile.role` | Sola visualizzazione |
 | Bassa | `src/components/shared/UserProfile.tsx` | Nessun consumer legacy rilevato nel file attuale | Nessun intervento richiesto |
 | Bassa | `src/components/admin/MessagesManager.tsx` | Visualizza `mr.profiles.role` | Sola visualizzazione |
@@ -1525,11 +1525,15 @@ Verifica locale dello slice: Jest 3/3 e build Next.js completate. Restano da ver
 manualmente login, cambio password obbligatorio e logout su staging; dopo questo gate si
 potrà affrontare la pulizia dei fallback di sola visualizzazione.
 
+Consumer messaggi completato il 25 agosto 2026: `GET /api/admin/messages` non seleziona
+più `profiles.role` e non lo usa come fallback. Il ruolo del destinatario viene derivato
+esclusivamente da `app_accounts` e `account_roles`; per i profili senza account il valore
+resta `null` senza inventare una classificazione legacy.
+
 Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
-ruoli o policy legacy. Restano da completare le route admin di gestione profili/account,
-reset password e messaggi, oltre ai consumer UI che interrogano direttamente `profiles.role`;
-la rimozione SQL resta bloccata fino alla chiusura dell’inventario e al ciclo di regressione
-in staging.
+ruoli o policy legacy. Restano i fallback di sola visualizzazione e i consumer documentali
+rinviati con Migration 15; la rimozione SQL resta bloccata fino alla chiusura
+dell’inventario e al ciclo di regressione in staging.
 
 Decisione aggiornata il 21 agosto 2026: Migration 15,
 `document_access_and_activity_audit`, è rinviata.
