@@ -1743,6 +1743,29 @@ le 49 migration `20260806180000`–`20260819130000`, senza `--include-all` e sen
 modificare produzione. Il preflight è quindi superato; resta necessaria un’esplicita
 conferma immediatamente prima del push reale.
 
+#### Applicazione migration in produzione — 25 agosto 2026
+
+Con conferma esplicita è stato eseguito `supabase db push` usando la directory di
+deploy isolata già verificata: sono state applicate esclusivamente le 49 migration
+`20260806180000`–`20260819130000`. I `NOTICE` relativi a policy e trigger inesistenti
+sono attesi nelle migration idempotenti; il warning finale della cache del CLI non
+ha coinvolto né l'esecuzione SQL né il risultato del deploy.
+
+I controlli post-rilascio in sola lettura hanno confermato:
+
+- `45` profili, `45` utenti Auth, `45` `app_accounts` e `45` `season_profiles`;
+- ruoli account coerenti: `2` admin, `2` coach e `41` athlete;
+- zero utenti Auth senza mapping, mapping senza proprietario, proprietari duplicati
+  o account atleta senza appartenenza stagionale;
+- `17` account con obbligo di cambio password, identici ai `17` flag legacy;
+- history aggiornata con le 49 nuove migration (50 versioni `202608*` includendo la
+  migration storica `20260806133634`).
+
+Il database di produzione è quindi pronto al deploy dell'applicazione. Prima del merge
+di `codex/person-account-family-model` in `main` occorre creare un riferimento Git di
+backup di `main`; il deploy Vercel di `main` va promosso solo dopo il merge e i test
+smoke immediati.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
