@@ -1717,6 +1717,23 @@ Non sono una modifica richiesta alle migration né alla produzione. Il dry-run c
 la compatibilità del backfill; il passaggio successivo richiede il preflight immediato
 e un’esplicita autorizzazione prima dell’applicazione in produzione.
 
+#### Preflight CLI prima del deploy — 25 agosto 2026
+
+Sono stati salvati nel backup locale snapshot di ruoli/grant, schema e policy
+`storage`, mapping ruoli applicativi e history migration. `supabase migration list`
+conferma però che la history di produzione contiene due versioni assenti dalla directory
+locale: `20251007152643 master_migration_fixed` e `20260806133634 prod_rls_hardening`.
+Il file locale `20260729170829_prod_rls_hardening.sql` coincide semanticamente con il
+secondo (la sola differenza è la newline finale), mentre gli statement originali di
+entrambi sono stati esportati nel backup per il recupero tracciabile.
+
+Di conseguenza `supabase db push --dry-run`, eseguito senza `--include-all`, si blocca
+prima di pianificare il deploy. Non eseguire `supabase migration repair` sulla
+produzione: il prossimo step è riallineare la directory locale aggiungendo le due
+migration storiche fedeli alla history remota, rieseguire `migration list` e quindi il
+dry-run. Solo se quest’ultimo elenca esclusivamente le 49 migration `202608*` si potrà
+richiedere il push reale.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
