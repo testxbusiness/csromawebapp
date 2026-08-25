@@ -1734,6 +1734,15 @@ migration storiche fedeli alla history remota, rieseguire `migration list` e qui
 dry-run. Solo se quest’ultimo elenca esclusivamente le 49 migration `202608*` si potrà
 richiedere il push reale.
 
+Riallineamento completato il 25 agosto 2026: le due migration storiche sono state
+recuperate fedelmente dagli statement salvati in produzione. Per evitare di applicare
+le quattro migration locali di luglio, già inglobate dalla migration master di
+produzione, il deploy usa una directory temporanea con la sola history remota e le
+migration successive. Il nuovo `db push --dry-run` è riuscito e pianifica esattamente
+le 49 migration `20260806180000`–`20260819130000`, senza `--include-all` e senza
+modificare produzione. Il preflight è quindi superato; resta necessaria un’esplicita
+conferma immediatamente prima del push reale.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
