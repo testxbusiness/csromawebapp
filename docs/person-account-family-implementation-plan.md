@@ -1584,6 +1584,38 @@ classificare i tre atleti senza team e verificare il mapping account/ruolo su un
 o ambiente di staging equivalente. Nessuna migration va applicata direttamente in
 produzione prima di backup, dry-run e approvazione del risultato.
 
+#### Dry-run staging del backfill — 25 agosto 2026
+
+Il dry-run è stato eseguito sul progetto staging senza scritture. Il modello account è
+presente e il mapping Auth/account/persona funziona secondo la struttura decoupled:
+15 profili, 12 account, 12 utenti Auth, 11 ruoli globali e 12 relazioni stagionali.
+Gli otto utenti Auth il cui `auth.users.id` non coincide con `profiles.id` sono attesi:
+il collegamento autorevole è `app_accounts.auth_user_id -> owner_profile_id`, non una
+join diretta tra i due ID.
+
+La classificazione rilevata è:
+
+- nessun nuovo `app_accounts` necessario;
+- nessun nuovo ruolo globale admin/coach necessario;
+- nessun nuovo ruolo atleta necessario, salvo l’eccezione già documentata
+  `Atleta RLS Test`, che ha volutamente `profiles.role = 'athlete'` senza
+  `account_roles.athlete`;
+- `coach noaccount` (`328be890-9638-4001-b843-2cb446572e89`) è un coach operativo senza
+  account e senza `season_profiles` attiva: deve essere confermato o corretto come
+  partecipante della stagione prima del backfill;
+- `GenitoreU14 prova` e `GenitoreU17 prova` hanno account attivi e ruolo
+  `family_member`, ma nessuna `season_profiles` attiva: il caso è compatibile con un
+  familiare/tutore che non è iscritto sportivamente e non va trasformato
+  automaticamente in atleta o coach;
+- `nuovo test` e `staff test` restano fixture senza account già documentate;
+- non risultano atleti senza squadra nello staging.
+
+Decisione: non applicare ulteriori scritture di backfill allo staging in questa fase. Il
+prossimo passo è produrre il report di classificazione dei profili di produzione e
+definire esplicitamente la regola per i coach senza account e per i familiari senza
+partecipazione stagionale. Solo dopo questa approvazione si potrà eseguire un dry-run
+equivalente sulla copia della produzione.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
