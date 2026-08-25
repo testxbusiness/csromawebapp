@@ -1,13 +1,16 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useEffect, useState, useRef } from 'react'
 import AdminDashboard from '@/components/admin/AdminDashboard'
 import CoachDashboard from '@/components/coach/CoachDashboard'
 import AthleteDashboard from '@/components/athlete/AthleteDashboard'
+import FamilyMemberDashboard from '@/components/family/FamilyMemberDashboard'
 
 export default function DashboardPage() {
-  const { user, profile, role, loading } = useAuth()
+  const { user, profile, account, role, loading } = useAuth()
+  const { activeArea, profiles: accessibleProfiles, loading: accessibleProfilesLoading } = useAccessibleProfiles()
 
   const [lastValidState, setLastValidState] = useState<{
     user: typeof user
@@ -52,6 +55,11 @@ export default function DashboardPage() {
 
   const isRefreshing = loading && hasShownData.current
 
+  const hasFamilyAccess = Boolean(
+    account?.roles.includes('family_member') || (!accessibleProfilesLoading && accessibleProfiles.length > 0)
+  )
+  const showFamilyArea = displayRole === 'family_member' || (hasFamilyAccess && activeArea === 'family')
+
   return (
     <div className="space-y-8 relative">
       {isRefreshing && (
@@ -63,9 +71,11 @@ export default function DashboardPage() {
 
       <section className="space-y-8">
         {displayRole === 'admin' ? (
-          <AdminDashboard profile={displayProfile} />
+          <AdminDashboard profile={displayProfile} role={displayRole} />
         ) : displayRole === 'coach' ? (
           <CoachDashboard user={displayUser} profile={displayProfile} />
+        ) : showFamilyArea ? (
+          <FamilyMemberDashboard />
         ) : displayRole === 'athlete' ? (
           <AthleteDashboard user={displayUser} profile={displayProfile} />
         ) : (

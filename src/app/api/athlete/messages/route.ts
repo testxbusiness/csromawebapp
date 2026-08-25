@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,21 +13,15 @@ export async function GET(request: NextRequest) {
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 10
 
-    // Auth + role
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'receive_messages')
+    const athleteProfileId = subject.profileId
+    const dataClient = subject.dataClient
 
     // Get athlete team IDs
-    const { data: memberships, error: tmErr } = await supabase
+    const { data: memberships, error: tmErr } = await dataClient
       .from('team_members')
       .select('team_id')
-      .eq('profile_id', user.id)
+      .eq('profile_id', athleteProfileId)
 
     if (tmErr) {
       console.error('Error loading athlete team memberships:', tmErr)
@@ -36,10 +32,10 @@ const role = (user as any)?.app_metadata?.role
 
     // Get message IDs from recipients (direct or team)
     const orClauses: string[] = []
-    orClauses.push(`profile_id.eq.${user.id}`)
+    orClauses.push(`profile_id.eq.${athleteProfileId}`)
     if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
 
-    const { data: recips, error: recErr } = await supabase
+    const { data: recips, error: recErr } = await dataClient
       .from('message_recipients')
       .select('message_id, team_id, profile_id')
       .or(orClauses.join(','))
@@ -63,7 +59,7 @@ const role = (user as any)?.app_metadata?.role
     }
 
     // Get messages
-    let query = supabase
+    let query = dataClient
       .from('messages')
       .select('id, subject, content, created_at, created_by')
       .in('id', messageIds)
@@ -124,23 +120,33 @@ const role = (user as any)?.app_metadata?.role
     // 2. Get all recipients for all messages
     const fullMsgIds = (msgs || []).map(m => m.id)
     const { data: allRecipients } = fullMsgIds.length > 0
-      ? await supabase
+      ? await dataClient
           .from('message_recipients')
           .select('id, message_id, team_id, profile_id, is_read, read_at')
           .in('message_id', fullMsgIds)
       : { data: [] }
 
+    // Per un accesso delegato dataClient è un admin client e quindi non applica
+    // RLS sulle righe dei destinatari. Replica esplicitamente la visibilità
+    // dell'atleta: squadra pertinente oppure solo il profilo atleta selezionato.
+    const visibleRecipients = subject.delegated
+      ? (allRecipients || []).filter((recipient) => (
+          recipient.profile_id === athleteProfileId ||
+          (recipient.team_id && teamIds.includes(recipient.team_id))
+        ))
+      : (allRecipients || [])
+
     // 3. Collect team and profile IDs from recipients
-    const teamRecipientIds = [...new Set((allRecipients || []).filter(r => r.team_id).map(r => r.team_id))]
-    const profileRecipientIds = [...new Set((allRecipients || []).filter(r => r.profile_id).map(r => r.profile_id))]
+    const teamRecipientIds = [...new Set(visibleRecipients.filter(r => r.team_id).map(r => r.team_id))]
+    const profileRecipientIds = [...new Set(visibleRecipients.filter(r => r.profile_id).map(r => r.profile_id))]
 
     // 4. Get all teams and profiles in batch
     const [{ data: teams }, { data: profiles }] = await Promise.all([
       teamRecipientIds.length > 0
-        ? supabase.from('teams').select('id, name').in('id', teamRecipientIds)
+        ? dataClient.from('teams').select('id, name').in('id', teamRecipientIds)
         : Promise.resolve({ data: [] }),
       profileRecipientIds.length > 0
-        ? supabase.from('profiles').select('id, first_name, last_name, email').in('id', profileRecipientIds)
+        ? dataClient.from('profiles').select('id, first_name, last_name, email').in('id', profileRecipientIds)
         : Promise.resolve({ data: [] })
     ])
 
@@ -149,7 +155,7 @@ const role = (user as any)?.app_metadata?.role
 
     // 5. Create recipients map by message_id
     const recipientsByMessage = new Map<string, any[]>()
-    for (const rr of (allRecipients || [])) {
+    for (const rr of visibleRecipients) {
       if (!recipientsByMessage.has(rr.message_id)) {
         recipientsByMessage.set(rr.message_id, [])
       }
@@ -222,6 +228,9 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ messages: enriched })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Athlete messages API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

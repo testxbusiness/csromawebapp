@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
@@ -133,6 +134,7 @@ export default function EventModal({
       <DialogContent className="cs-modal--centered cs-modal--lg">
         <DialogHeader className="sr-only">
           <DialogTitle>{event ? 'Modifica Evento' : 'Nuovo Evento'}</DialogTitle>
+          <DialogDescription>Inserisci o modifica i dati dell’evento.</DialogDescription>
         </DialogHeader>
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
           <div className="cs-modal__icon" aria-hidden>📅</div>

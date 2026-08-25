@@ -3,12 +3,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
-import EventDetailModal from '@/components/shared/EventDetailModal'
+import EventDetailModal, { AttendanceStatus, type EventDetailData } from '@/components/shared/EventDetailModal'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import DelegatedAccessDenied from './DelegatedAccessDenied'
 
 type EventKind = 'training'|'match'|'meeting'|'other'
 
@@ -36,7 +38,8 @@ function kindColor(kind?: string) {
 }
 
 export default function AthleteCalendarManager() {
-  const { user } = useAuth()
+  const { user, role, loading: authLoading, profileLoading } = useAuth()
+  const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const userId = user?.id || null
 
   const [events, setEvents] = useState<Event[]>([])
@@ -44,6 +47,7 @@ export default function AthleteCalendarManager() {
   const [loading, setLoading] = useState(true)
   const [teamMemberships, setTeamMemberships] = useState<TeamLite[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
 
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
@@ -53,10 +57,24 @@ export default function AthleteCalendarManager() {
   const fetchControllerRef = useRef<AbortController | null>(null)
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
+    if (role === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
+      setAccessDenied(true)
+      setEvents([])
+      setTeamMemberships([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
+    setAccessDenied(false)
     try {
-      const response = await fetch('/api/athlete/calendar', { signal })
+      const response = await fetch(appendSubjectProfile('/api/athlete/calendar', selectedProfileId), { signal })
       if (!response.ok) {
+        if (response.status === 403) {
+          setAccessDenied(true)
+          setEvents([])
+          setTeamMemberships([])
+          return
+        }
         console.error('Error loading athlete calendar:', response.statusText)
         setEvents([])
         setTeamMemberships([])
@@ -74,9 +92,10 @@ export default function AthleteCalendarManager() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [role, selectedProfile, selectedProfileId])
 
   useEffect(() => {
+    if (authLoading || profileLoading) return
     if (!userId) {
       setEvents([])
       setTeamMemberships([])
@@ -94,7 +113,7 @@ export default function AthleteCalendarManager() {
     return () => {
       controller.abort()
     }
-  }, [userId, loadData])
+  }, [authLoading, profileLoading, userId, loadData])
 
   useEffect(() => {
     let filtered = events
@@ -107,6 +126,7 @@ export default function AthleteCalendarManager() {
   if (loading) {
     return <LoadingState label="Caricamento calendario..." />
   }
+  if (accessDenied) return <DelegatedAccessDenied section="il calendario" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
 
   const calEvents: CalEvent[] = (filteredEvents||[]).map((e)=>({
     id: e.id,
@@ -283,24 +303,41 @@ export default function AthleteCalendarManager() {
       </div>
 
       {selectedEvent && (
-        <EventDetails id={selectedEvent.id} onClose={() => setSelectedEvent(null)} />
+        <EventDetails id={selectedEvent.id} onClose={() => setSelectedEvent(null)} selectedProfileId={selectedProfileId} />
       )}
     </>
   )
 }
 
-function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
-  const [data, setData] = useState<any>(null)
+function EventDetails({ id, onClose, selectedProfileId }: { id: string; onClose: () => void; selectedProfileId: string | null }) {
+  const [data, setData] = useState<EventDetailData | null>(null)
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`/api/athlete/events/detail?id=${id}`)
+        const res = await fetch(appendSubjectProfile(`/api/athlete/events/detail?id=${id}`, selectedProfileId))
         const json = await res.json()
         if (res.ok) setData(json)
       } catch {}
     })()
-  }, [id])
+  }, [id, selectedProfileId])
+
+  const saveAttendance = async (status: AttendanceStatus) => {
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: id, status }),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok) {
+      throw new Error(result?.error || 'Impossibile salvare la risposta')
+    }
+    setData((current) => current ? {
+      ...current,
+      my_attendance: { status, responded_at: new Date().toISOString() },
+    } : current)
+  }
+
   return (
-    <EventDetailModal open={true} onClose={onClose} data={data} />
+    <EventDetailModal open={true} onClose={onClose} data={data} onAttendanceChange={saveAttendance} />
   )
 }

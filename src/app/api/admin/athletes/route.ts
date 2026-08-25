@@ -1,23 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { athleteCreateSchema, athleteUpdateSchema } from '@/lib/validation/profiles'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { getAccountActorSnapshot, recordAccountLifecycleAudit } from '@/server/audit/account-lifecycle'
+
+async function validateAthleteTeams(adminClient: ReturnType<typeof createAdminClient>, seasonId: string, teamIds: string[]) {
+  if (!teamIds.length) return
+  const uniqueTeamIds = [...new Set(teamIds)]
+  const { data: teams } = await adminClient.from('teams').select('id, activity_id').in('id', uniqueTeamIds)
+  if (!teams || teams.length !== uniqueTeamIds.length) throw new Error('Una o più squadre non sono state trovate')
+  const { data: activities } = await adminClient.from('activities').select('id, season_id').in('id', teams.map((team) => team.activity_id))
+  if (!activities || activities.some((activity) => activity.season_id !== seasonId)) throw new Error('Una o più squadre non appartengono alla stagione selezionata')
+}
 
 export async function GET() {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     // Carica atleti con dettagli base
-    const { data: athletes, error } = await adminClient
+    const [{ data: profiles, error: profilesError }, { data: athleteProfiles, error: athleteProfilesError }, { data: teamMembers, error: teamMembersError }, { data: accounts, error: accountsError }] = await Promise.all([
+      adminClient
       .from('profiles')
       .select(`
         id,
@@ -29,41 +34,74 @@ const requesterRole = (user as any)?.app_metadata?.role
         created_at,
         updated_at
       `)
-      .eq('role', 'athlete')
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }),
+      adminClient
+        .from('athlete_profiles')
+        .select('profile_id, membership_number, medical_certificate_expiry, personal_notes'),
+      adminClient
+        .from('team_members')
+        .select('profile_id, team_id, jersey_number'),
+      adminClient
+        .from('app_accounts')
+        .select('auth_user_id, owner_profile_id, status'),
+    ])
 
-    if (error) {
-      console.error('Errore caricamento atleti:', error)
-      return NextResponse.json({ error: error.message }, { status: 400 })
+    if (profilesError || athleteProfilesError || teamMembersError || accountsError) {
+      console.error('Errore caricamento atleti:', profilesError || athleteProfilesError || teamMembersError || accountsError)
+      return NextResponse.json({ error: 'Impossibile caricare gli atleti' }, { status: 400 })
     }
 
-    if (!athletes || athletes.length === 0) {
+    const accountsByProfile = new Map((accounts ?? []).map((account) => [account.owner_profile_id, account]))
+
+    const athleteIds = new Set([
+      ...(athleteProfiles ?? []).map((profile) => profile.profile_id),
+      ...(teamMembers ?? []).map((member) => member.profile_id),
+    ])
+    const athletes = (profiles ?? []).filter((profile) => {
+      return athleteIds.has(profile.id)
+    })
+
+    if (athletes.length === 0) {
       return NextResponse.json({ athletes: [] })
     }
 
-    // Carica profili atleti separatamente
-    const athleteIds = athletes.map(a => a.id)
-    const { data: athleteProfiles } = await adminClient
-      .from('athlete_profiles')
-      .select('profile_id, membership_number, medical_certificate_expiry, personal_notes')
-      .in('profile_id', athleteIds)
+    const athleteProfileIds = athletes.map((athlete) => athlete.id)
 
-    // Carica team memberships separatamente - recupera tutti e poi filtra
-    const { data: allTeamMembers, error: teamMembersError } = await adminClient
-      .from('team_members')
-      .select('profile_id, team_id, jersey_number')
+    const { data: seasonProfiles, error: seasonProfilesError } = await adminClient
+      .from('season_profiles')
+      .select('profile_id, season_id')
+      .in('profile_id', athleteProfileIds)
 
-    if (teamMembersError) {
-      console.error('Errore caricamento team_members:', teamMembersError)
+    if (seasonProfilesError) {
+      console.error('Errore caricamento stagioni atleti:', seasonProfilesError)
+      return NextResponse.json({ error: 'Impossibile caricare le stagioni degli atleti' }, { status: 400 })
     }
 
-    // Filtra lato JavaScript per evitare "URI too long"
-    const teamMembers = allTeamMembers?.filter(tm =>
-      athleteIds.includes(tm.profile_id)
-    ) || []
+    const [{ data: accountRoles, error: accountRolesError }] = await Promise.all([
+      adminClient
+        .from('account_roles')
+        .select('auth_user_id, role'),
+    ])
+
+    if (accountsError || accountRolesError) {
+      console.error('Errore caricamento account atleti:', accountsError || accountRolesError)
+      return NextResponse.json({ error: 'Impossibile caricare lo stato account degli atleti' }, { status: 400 })
+    }
+
+    const rolesByAuthUser = new Map<string, string[]>()
+    for (const roleRow of accountRoles ?? []) {
+      const roles = rolesByAuthUser.get(roleRow.auth_user_id) ?? []
+      roles.push(roleRow.role)
+      rolesByAuthUser.set(roleRow.auth_user_id, roles)
+    }
+    const seasonalAthleteIds = new Set((seasonProfiles ?? []).map((seasonProfile) => seasonProfile.profile_id))
+    const activeSeasonAthletes = athletes.filter((athlete) => seasonalAthleteIds.has(athlete.id))
+
+    // Carica team memberships separatamente - recupera tutti e poi filtra
+    const filteredTeamMembers = (teamMembers ?? []).filter((member) => activeSeasonAthletes.some((athlete) => athlete.id === member.profile_id))
 
     // Carica dettagli squadre separatamente - recupera tutte e poi filtra
-    const teamIds = teamMembers?.map(tm => tm.team_id).filter(Boolean) || []
+    const teamIds = filteredTeamMembers.map((member) => member.team_id).filter(Boolean)
 
     const { data: allTeams, error: teamsError } = await adminClient
       .from('teams')
@@ -79,9 +117,13 @@ const requesterRole = (user as any)?.app_metadata?.role
     ) || []
 
     // Formatta i dati per il frontend
-    const formattedAthletes = athletes.map(athlete => {
+    const formattedAthletes = activeSeasonAthletes.map(athlete => {
       const athleteProfile = athleteProfiles?.find(ap => ap.profile_id === athlete.id)
-      const athleteTeamMembers = teamMembers?.filter(tm => tm.profile_id === athlete.id) || []
+      const athleteTeamMembers = filteredTeamMembers.filter((member) => member.profile_id === athlete.id)
+      const athleteSeasonIds = (seasonProfiles ?? [])
+        .filter((seasonProfile) => seasonProfile.profile_id === athlete.id)
+        .map((seasonProfile) => seasonProfile.season_id)
+      const account = accountsByProfile.get(athlete.id)
 
       const teamsWithDetails = athleteTeamMembers.map(membership => {
         const team = teams?.find(t => t.id === membership.team_id)
@@ -105,6 +147,11 @@ const requesterRole = (user as any)?.app_metadata?.role
         personal_notes: athleteProfile?.personal_notes ?? null,
         created_at: athlete.created_at,
         updated_at: athlete.updated_at,
+        season_ids: athleteSeasonIds,
+        account: account ? {
+          status: account.status,
+          roles: rolesByAuthUser.get(account.auth_user_id) ?? [],
+        } : null,
         teams: teamsWithDetails.filter(team => team.id)
       }
 
@@ -113,7 +160,223 @@ const requesterRole = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ athletes: formattedAthletes })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API lista atleti:', error)
+    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const account = await requireGlobalRole(supabase, 'admin')
+    const parsed = athleteCreateSchema.safeParse(await request.json().catch(() => null))
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Dati atleta non validi' }, { status: 400 })
+    }
+
+    const adminClient = createAdminClient()
+    const payload = parsed.data
+    const { data: season } = await adminClient
+      .from('seasons')
+      .select('id')
+      .eq('id', payload.season_id)
+      .maybeSingle()
+
+    if (!season) {
+      return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
+    }
+
+    try { await validateAthleteTeams(adminClient, payload.season_id, payload.team_ids) } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 })
+    }
+
+    const { data: profile, error: profileError } = await adminClient
+      .from('profiles')
+      .insert({
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        email: payload.email ?? null,
+        phone: payload.phone ?? null,
+        birth_date: payload.birth_date ?? null,
+        role: null,
+      })
+      .select('id, email, first_name, last_name, phone, birth_date, role, is_active, created_at, updated_at')
+      .single()
+
+    if (profileError || !profile) {
+      console.error('Errore creazione profilo atleta:', profileError)
+      return NextResponse.json({ error: 'Impossibile creare l’atleta' }, { status: 400 })
+    }
+
+    const { error: athleteProfileError } = await adminClient
+      .from('athlete_profiles')
+      .insert({
+        profile_id: profile.id,
+        membership_number: payload.membership_number ?? null,
+        medical_certificate_expiry: payload.medical_certificate_expiry ?? null,
+        personal_notes: payload.personal_notes ?? null,
+      })
+
+    const { error: seasonProfileError } = athleteProfileError
+      ? { error: null }
+      : await adminClient
+          .from('season_profiles')
+          .insert({ profile_id: profile.id, season_id: payload.season_id, source: 'admin_athlete_create' })
+
+    let teamMemberError: { message: string } | null = null
+    if (!athleteProfileError && !seasonProfileError && payload.team_ids.length) {
+      const { error } = await adminClient.from('team_members').insert(payload.team_ids.map((teamId) => ({
+        profile_id: profile.id,
+        team_id: teamId,
+        role: 'athlete',
+        jersey_number: payload.jersey_numbers[teamId] ?? null,
+      })))
+      teamMemberError = error
+    }
+
+    if (athleteProfileError || seasonProfileError || teamMemberError) {
+      await adminClient.from('profiles').delete().eq('id', profile.id)
+      console.error('Errore completamento creazione atleta:', athleteProfileError || seasonProfileError || teamMemberError)
+      return NextResponse.json({ error: 'Impossibile completare la creazione dell’atleta' }, { status: 400 })
+    }
+
+    try {
+      const actor = await getAccountActorSnapshot(adminClient, account.ownerProfileId)
+      await recordAccountLifecycleAudit(adminClient, {
+        eventType: 'profile_created',
+        subjectProfileId: profile.id,
+        performedByAuthUserId: account.authUserId,
+        performedByProfileId: account.ownerProfileId,
+        ...actor,
+        details: {
+          profile_type: 'athlete',
+          season_id: payload.season_id,
+          created_without_account: true,
+        },
+      })
+    } catch (auditError) {
+      await adminClient.from('profiles').delete().eq('id', profile.id)
+      console.error('Errore audit creazione atleta:', auditError)
+      return NextResponse.json({ error: 'Impossibile completare la creazione dell’atleta' }, { status: 500 })
+    }
+
+    return NextResponse.json({ profile, season_id: payload.season_id, team_ids: payload.team_ids, account: null }, { status: 201 })
+  } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
+    console.error('Errore API creazione atleta:', error)
+    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
+    const parsed = athleteUpdateSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Dati atleta non validi' }, { status: 400 })
+
+    const adminClient = createAdminClient()
+    const payload = parsed.data
+    const { data: profile } = await adminClient.from('profiles').select('id').eq('id', payload.id).maybeSingle()
+    const { data: season } = await adminClient.from('seasons').select('id').eq('id', payload.season_id).maybeSingle()
+    const { data: athleteProfile } = await adminClient.from('athlete_profiles').select('profile_id').eq('profile_id', payload.id).maybeSingle()
+    if (!profile || !athleteProfile) return NextResponse.json({ error: 'Atleta non trovato' }, { status: 404 })
+    if (!season) return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
+
+    const teamIdsPayload = payload.team_ids || []
+    const jerseyNumbersPayload = payload.jersey_numbers || {}
+    try { await validateAthleteTeams(adminClient, payload.season_id, teamIdsPayload) } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 })
+    }
+
+    const profileUpdate: Record<string, string | null> = {}
+    for (const field of ['first_name', 'last_name', 'email', 'phone', 'birth_date'] as const) {
+      if (field in payload) profileUpdate[field] = payload[field] ?? null
+    }
+    if (Object.keys(profileUpdate).length > 0) {
+      const { error } = await adminClient.from('profiles').update(profileUpdate).eq('id', payload.id)
+      if (error) return NextResponse.json({ error: 'Impossibile aggiornare l’anagrafica' }, { status: 400 })
+    }
+
+    const athleteUpdate: Record<string, string | null> = {}
+    for (const field of ['membership_number', 'medical_certificate_expiry', 'personal_notes'] as const) {
+      if (field in payload) athleteUpdate[field] = payload[field] ?? null
+    }
+    if (Object.keys(athleteUpdate).length > 0) {
+      const { error } = await adminClient.from('athlete_profiles').update(athleteUpdate).eq('profile_id', payload.id)
+      if (error) return NextResponse.json({ error: 'Impossibile aggiornare i dati atleta' }, { status: 400 })
+    }
+
+    const { error: seasonError } = await adminClient.from('season_profiles').upsert({
+      profile_id: payload.id,
+      season_id: payload.season_id,
+      profile_type: 'athlete',
+      source: 'admin_athlete_update',
+    }, { onConflict: 'profile_id,season_id' })
+    if (seasonError) return NextResponse.json({ error: 'Impossibile aggiornare il collegamento stagionale' }, { status: 400 })
+
+    if ('team_ids' in payload) {
+      const { data: activities } = await adminClient.from('activities').select('id').eq('season_id', payload.season_id)
+      const activityIds = (activities || []).map((activity) => activity.id)
+      const { data: seasonTeams } = activityIds.length
+        ? await adminClient.from('teams').select('id').in('activity_id', activityIds)
+        : { data: [] }
+      const seasonTeamIds = (seasonTeams || []).map((team) => team.id)
+      if (seasonTeamIds.length) await adminClient.from('team_members').delete().eq('profile_id', payload.id).in('team_id', seasonTeamIds)
+      if (teamIdsPayload.length) {
+        const { error } = await adminClient.from('team_members').insert(teamIdsPayload.map((teamId) => ({
+          profile_id: payload.id,
+          team_id: teamId,
+          role: 'athlete',
+          jersey_number: jerseyNumbersPayload[teamId] ?? null,
+        })))
+        if (error) return NextResponse.json({ error: 'Impossibile aggiornare la squadra' }, { status: 400 })
+      }
+    }
+
+    return NextResponse.json({ success: true, profile_id: payload.id, season_id: payload.season_id, team_ids: teamIdsPayload })
+  } catch (error) {
+    if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })
+    console.error('Errore API modifica atleta:', error)
+    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
+    const body = await request.json().catch(() => null)
+    const id = typeof body?.id === 'string' ? body.id : ''
+    const seasonId = typeof body?.season_id === 'string' ? body.season_id : ''
+    if (!id || !seasonId) return NextResponse.json({ error: 'Atleta e stagione sono obbligatori' }, { status: 400 })
+
+    const adminClient = createAdminClient()
+    const { data: membership } = await adminClient.from('season_profiles').select('profile_id').eq('profile_id', id).eq('season_id', seasonId).maybeSingle()
+    if (!membership) return NextResponse.json({ error: 'L’atleta non è iscritto alla stagione selezionata' }, { status: 404 })
+
+    const { data: activities } = await adminClient.from('activities').select('id').eq('season_id', seasonId)
+    const activityIds = (activities || []).map((activity) => activity.id)
+    const { data: seasonTeams } = activityIds.length
+      ? await adminClient.from('teams').select('id').in('activity_id', activityIds)
+      : { data: [] }
+    const teamIds = (seasonTeams || []).map((team) => team.id)
+    if (teamIds.length) await adminClient.from('team_members').delete().eq('profile_id', id).in('team_id', teamIds)
+    const { error } = await adminClient.from('season_profiles').delete().eq('profile_id', id).eq('season_id', seasonId)
+    if (error) return NextResponse.json({ error: 'Impossibile rimuovere l’iscrizione' }, { status: 400 })
+
+    return NextResponse.json({ success: true, profile_id: id, season_id: seasonId, archived: true })
+  } catch (error) {
+    if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })
+    console.error('Errore API rimozione iscrizione:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }

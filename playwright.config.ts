@@ -1,4 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
+import { loadEnvConfig } from '@next/env'
+
+loadEnvConfig(process.cwd())
+
+const adminAuthFile = 'test-results/.auth/admin.json'
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -17,26 +22,37 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testMatch: /authorization\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
+      testMatch: /authorization\.spec\.ts/,
       use: { ...devices['Desktop Firefox'] },
     },
-    // Disable webkit and mobile browsers due to system compatibility issues
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: { ...devices['Pixel 5'] },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: { ...devices['iPhone 12'] },
-    // },
+    {
+      name: 'admin-chromium',
+      testMatch: /admin-account-model\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], storageState: adminAuthFile },
+    },
+    {
+      name: 'admin-firefox',
+      testMatch: /admin-account-model\.spec\.ts/,
+      use: { ...devices['Desktop Firefox'], storageState: adminAuthFile },
+    },
+    {
+      name: 'api-bola-chromium',
+      testMatch: /api-bola\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'family-chromium',
+      testMatch: /family-profile-selection\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
+
+  globalSetup: require.resolve('./tests/e2e/global-setup'),
 
   webServer: {
     command: 'npm run dev',

@@ -10,6 +10,9 @@ import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailM
 import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
 import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import DelegatedAccessDenied from './DelegatedAccessDenied'
+import { useAuth } from '@/hooks/useAuth'
 
 interface User {
   id: string
@@ -53,6 +56,10 @@ interface Event {
   location?: string
   description?: string
   event_kind?: 'training' | 'match' | 'meeting' | 'other'
+  gym_id?: string | null
+  requires_confirmation?: boolean
+  confirmation_deadline?: string | null
+  my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null } | null
 }
 
 interface ChampionshipMatch {
@@ -91,14 +98,17 @@ interface FeeInstallment {
 interface AthleteDashboardProps {
   user: User
   profile: Profile
+  delegatedView?: boolean
 }
 
 function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
   return Array.isArray(value) ? value[0] : value ?? undefined
 }
 
-export default function AthleteDashboard({ user, profile }: AthleteDashboardProps) {
+export default function AthleteDashboard({ user, profile, delegatedView = false }: AthleteDashboardProps) {
   const { startNextStep } = useNextStep()
+  const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
+  const { role: accountRole, loading: authLoading, profileLoading } = useAuth()
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
@@ -111,14 +121,36 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
   const [messageDetail, setMessageDetail] = useState<any>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
   const supabase = useMemo(() => createClient(), [])
+  const dashboardRequestRef = useRef<AbortController | null>(null)
+
+  const saveEventAttendance = async (status: 'going' | 'maybe' | 'declined') => {
+    if (!selectedEvent) return
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_id: selectedEvent.id, status }),
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
+
+    setSelectedEvent((current) => current ? {
+      ...current,
+      my_attendance: { status, responded_at: new Date().toISOString() },
+    } : current)
+    setUpcomingEvents((current) => current.map((event) => event.id === selectedEvent.id
+      ? { ...event, my_attendance: { status, responded_at: new Date().toISOString() } }
+      : event
+    ))
+  }
 
   // Enrich selected message on open
   useEffect(() => {
     const loadDetail = async () => {
       if (!selectedMessage) { return }
       try {
-        const res = await fetch(`/api/athlete/messages?view=full&id=${selectedMessage.id}`)
+        const res = await fetch(appendSubjectProfile(`/api/athlete/messages?view=full&id=${selectedMessage.id}`, selectedProfileId))
         const json = await res.json()
         if (res.ok && json.messages && json.messages.length) {
           setMessageDetail(json.messages[0])
@@ -126,15 +158,48 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       } catch {}
     }
     loadDetail()
-  }, [selectedMessage])
+  }, [selectedMessage, selectedProfileId])
 
   const lastLoadTimeRef = useRef<number>(0)
 
   const loadAthleteData = useCallback(async () => {
+    if (!user?.id || !profile?.id || !accountRole) {
+      dashboardRequestRef.current?.abort()
+      setLoading(false)
+      return
+    }
+
+    if (authLoading || profileLoading) {
+      setLoading(true)
+      return
+    }
+    const delegatedPermissions = selectedProfile?.relationship.permissions
+    const canAccessDelegatedDashboard = Boolean(
+      delegatedPermissions?.view_schedule ||
+      delegatedPermissions?.view_payments ||
+      delegatedPermissions?.receive_messages
+    )
+    if (accountRole === 'family_member' && (!selectedProfile || !canAccessDelegatedDashboard)) {
+      setAccessDenied(true)
+      setLoading(false)
+      return
+    }
     setLoading(true)
+    setAccessDenied(false)
+    dashboardRequestRef.current?.abort()
+    const controller = new AbortController()
+    dashboardRequestRef.current = controller
+
     try {
-      const response = await fetch('/api/athlete/dashboard')
+      const response = await fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId), {
+        signal: controller.signal,
+      })
       if (!response.ok) {
+        if (response.status === 403) {
+          setAccessDenied(true)
+          return
+        }
+        if (response.status === 401) return
         console.error('Error loading athlete dashboard:', response.statusText)
         return
       }
@@ -148,9 +213,16 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       setFeeInstallments(result.feeInstallments || [])
       lastLoadTimeRef.current = Date.now()
     } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('Error loading athlete data:', e)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted) setLoading(false)
+    }
+  }, [accountRole, authLoading, profile?.id, profileLoading, selectedProfile, selectedProfileId, user?.id])
+
+  useEffect(() => {
+    return () => {
+      dashboardRequestRef.current?.abort()
     }
   }, [])
 
@@ -168,7 +240,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     const { data: baseMemberships, error: tmError } = await supabase
       .from('team_members')
       .select('id, team_id, jersey_number')
-      .eq('profile_id', user.id)
+      .eq('profile_id', profile.id)
 
     if (tmError) {
       console.error('Error loading team memberships:', tmError)
@@ -228,7 +300,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
 
     setTeamMemberships(mapped)
     return mapped
-  }, [profile?.athlete_profile, supabase, user.id])
+  }, [profile?.athlete_profile, profile.id, supabase])
 
   const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
     if (!teamIds || teamIds.length === 0) return
@@ -279,7 +351,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     if (!teamIds || teamIds.length === 0) return
 
     const orClauses: string[] = []
-    orClauses.push(`profile_id.eq.${user.id}`)
+    orClauses.push(`profile_id.eq.${profile.id}`)
     if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
 
     const { data, error } = await supabase
@@ -324,7 +396,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
       const uniq = Array.from(new Map(mapped.map((m:any) => [m.id, m])).values())
       setUnreadMessages(uniq)
     }
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadFeeInstallments = useCallback(async () => {
     const { data } = await supabase
@@ -340,12 +412,12 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           team:teams(name)
         )
       `)
-      .eq('profile_id', user.id)
+      .eq('profile_id', profile.id)
       .order('due_date', { ascending: true })
       .limit(5)
 
     if (data) setFeeInstallments(data as unknown as FeeInstallment[])
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadTeamDetail = useCallback(async (teamId: string) => {
     try {
@@ -522,9 +594,27 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
     }
   }, [loadAthleteData])
 
+  const isDelegatedProfile = (accountRole === 'family_member' || delegatedView) && Boolean(selectedProfileId)
+  const permissions = isDelegatedProfile ? selectedProfile?.relationship.permissions : null
+  const canViewSchedule = !isDelegatedProfile || permissions?.view_schedule === true
+  const canReceiveMessages = !isDelegatedProfile || permissions?.receive_messages === true
+  const canViewPayments = !isDelegatedProfile || permissions?.view_payments === true
+
+  useEffect(() => {
+    if (!canViewSchedule) {
+      setSelectedEvent(null)
+      setSelectedTeamId(null)
+    }
+    if (!canReceiveMessages) {
+      setSelectedMessage(null)
+      setMessageDetail(null)
+    }
+  }, [canReceiveMessages, canViewSchedule])
+
   if (loading) {
     return <LoadingState label="Caricamento dashboard..." />
   }
+  if (accessDenied) return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
 
   return (
     <div className="space-y-6">
@@ -562,22 +652,28 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                   <div className="cs-card__meta">Squadre</div>
                   <div className="text-2xl font-extrabold" style={{color:'var(--cs-accent)'}}>{teamMemberships.length}</div>
                 </div>
-                <div className="cs-card cs-card--primary">
-                  <div className="cs-card__meta">Prossimi Eventi</div>
-                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
-                </div>
-                <div className="cs-card cs-card--primary">
-                  <div className="cs-card__meta">Ultimi Messaggi</div>
-                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
-                </div>
-                <div className="cs-card cs-card--primary">
-                  <div className="cs-card__meta">Rate Attive</div>
-                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
-                </div>
+                {canViewSchedule && (
+                  <div className="cs-card cs-card--primary">
+                    <div className="cs-card__meta">Prossimi Eventi</div>
+                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
+                  </div>
+                )}
+                {canReceiveMessages && (
+                  <div className="cs-card cs-card--primary">
+                    <div className="cs-card__meta">Ultimi Messaggi</div>
+                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
+                  </div>
+                )}
+                {canViewPayments && (
+                  <div className="cs-card cs-card--primary">
+                    <div className="cs-card__meta">Rate Attive</div>
+                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="cs-card cs-card--primary p-4 flex flex-col justify-between text-slate-900">
+            {canViewSchedule && <div className="cs-card cs-card--primary p-4 flex flex-col justify-between text-slate-900">
               <div className="text-sm font-bold uppercase text-[color:var(--cs-danger)]">Prossima partita</div>
               {!nextChampionshipMatch && (
                 <div className="text-sm text-slate-500 mt-2">NON CI SONO PARTITE IN PROGRAMMA</div>
@@ -599,7 +695,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                   </div>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         </div>
       </div>
@@ -617,13 +713,19 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
                 return (
                   <div
                     key={membership.id}
-                    className="cs-list-item cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => setSelectedTeamId(membership.team.id)}
+                    className={`cs-list-item transition-shadow ${isDelegatedProfile ? '' : 'cursor-pointer hover:shadow-md'}`}
+                    onClick={isDelegatedProfile ? undefined : () => setSelectedTeamId(membership.team.id)}
+                    title={isDelegatedProfile ? 'I dettagli della squadra non sono disponibili per questo profilo' : undefined}
                   >
                     <div className="mb-2 flex w-full items-start justify-between">
                       <div>
                         <div className="font-medium">{membership.team.name}</div>
                         <div className="text-sm text-secondary">Attività: {membership.team.activity?.name}</div>
+                        {isDelegatedProfile && (
+                          <div className="mt-1 text-xs text-secondary">
+                            Dettagli squadra non disponibili per questo profilo
+                          </div>
+                        )}
                       </div>
                     </div>
                     
@@ -662,7 +764,7 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
         </div>
 
         {/* Unread Messages clean */}
-        <LatestMessagesPanel
+        {canReceiveMessages && <LatestMessagesPanel
           anchorId="athlete-messages"
           items={unreadMessages.slice(0,3).map(m => ({
             id: m.id,
@@ -674,10 +776,10 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           viewAllHref="/athlete/messages"
           onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
           showSenderText={false}
-        />
+        />}
 
         {/* Fee Installments */}
-        <div className="cs-card cs-card--primary">
+        {canViewPayments && <div className="cs-card cs-card--primary">
           <h3 id="athlete-fees" className="font-semibold mb-4">Quote Associative</h3>
           {feeInstallments.length === 0 ? (
             <EmptyState title="Nessuna quota associativa" />
@@ -709,10 +811,10 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
               ))}
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
-      <UpcomingEventsPanel
+      {canViewSchedule && <UpcomingEventsPanel
         anchorId="athlete-events"
         items={upcomingEvents.map(ev => ({
           id: ev.id,
@@ -722,10 +824,12 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
           location: ev.location || null,
           kind: ev.event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
           subtitle: ev.description || null,
+          requiresConfirmation: Boolean(ev.requires_confirmation),
+          attendanceStatus: ev.my_attendance?.status || null,
         }))}
         viewAllHref="/athlete/calendar"
         onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
-      />
+      />}
       {/* Modals dettagli */}
       {selectedEvent && (
         <EventDetailModal
@@ -738,13 +842,20 @@ export default function AthleteDashboard({ user, profile }: AthleteDashboardProp
             end_date: (selectedEvent as any).end_time,
             location: selectedEvent.location || undefined,
             description: selectedEvent.description || undefined,
+            requires_confirmation: selectedEvent.requires_confirmation,
+            confirmation_deadline: selectedEvent.confirmation_deadline,
+            my_attendance: selectedEvent.my_attendance,
           }}
+          onAttendanceChange={selectedEvent.requires_confirmation ? saveEventAttendance : undefined}
         />
       )}
       {selectedMessage && (
         <MessageDetailModal
           open={true}
           onClose={() => setSelectedMessage(null)}
+          messageId={selectedMessage.id}
+          subjectProfileId={selectedProfileId}
+          markAsRead
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,

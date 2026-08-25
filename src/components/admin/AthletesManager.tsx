@@ -3,10 +3,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
-import type { Athlete, Team, Activity, Season } from './athleteTypes'
+import type { Athlete, AthleteCreateData, Team, Activity, Season } from './athleteTypes'
 import BulkOperationsModal from './BulkOperationsModal'
 import TeamAssignmentModal from './TeamAssignmentModal'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
+import AthleteCreateModal from './AthleteCreateModal'
+import AthleteImportModal from './AthleteImportModal'
+import CollaboratorAccountActions from './CollaboratorAccountActions'
 
 interface AthleteWithDetails extends Athlete {
   teams: Array<{
@@ -28,6 +31,10 @@ export default function AthletesManager() {
   const [bulkLoading, setBulkLoading] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [showTeamAssignmentModal, setShowTeamAssignmentModal] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [editingAthlete, setEditingAthlete] = useState<AthleteCreateData | null>(null)
+  const [createSubmitting, setCreateSubmitting] = useState(false)
 
   const [showDetails, setShowDetails] = useState(false)
   const [detailsAthlete, setDetailsAthlete] = useState<AthleteWithDetails | null>(null)
@@ -93,7 +100,7 @@ export default function AthletesManager() {
       // Carica attività
       const { data: activitiesData } = await supabase
         .from('activities')
-        .select('id, name')
+        .select('id, name, season_id')
         .order('name')
 
       // Carica squadre
@@ -108,6 +115,10 @@ export default function AthletesManager() {
         .order('name')
 
       setSeasons(seasonsData || [])
+      const activeSeason = seasonsData?.find((season) => season.is_active)
+      if (activeSeason) {
+        setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
+      }
       setActivities(activitiesData || [])
       setTeams(teamsData || [])
     } catch (error) {
@@ -125,7 +136,7 @@ export default function AthletesManager() {
     return athletes.filter(athlete => {
       // Filtro stagione
       if (selectedSeason !== 'all') {
-        // TODO: Implementare filtro stagione quando disponibile nel modello dati
+        if (!athlete.season_ids?.includes(selectedSeason)) return false
       }
 
       // Filtro attività
@@ -149,7 +160,7 @@ export default function AthletesManager() {
       if (searchTerm) {
         const term = searchTerm.toLowerCase()
         const matchesName = `${athlete.first_name} ${athlete.last_name}`.toLowerCase().includes(term)
-        const matchesEmail = athlete.email.toLowerCase().includes(term)
+        const matchesEmail = athlete.email?.toLowerCase().includes(term) ?? false
         const matchesMembership = athlete.membership_number?.toLowerCase().includes(term)
 
         if (!matchesName && !matchesEmail && !matchesMembership) return false
@@ -258,6 +269,74 @@ export default function AthletesManager() {
     setShowBulkModal(true)
   }
 
+  const handleCreateAthlete = async (data: AthleteCreateData) => {
+    setCreateSubmitting(true)
+    try {
+      const response = await fetch('/api/admin/athletes', {
+        method: editingAthlete ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      const result = await response.json()
+
+      if (!response.ok) {
+        toast.error(`Errore: ${result.error || 'Impossibile creare l’atleta'}`)
+        return
+      }
+
+      toast.success(editingAthlete ? 'Atleta aggiornato' : 'Atleta creato nella stagione selezionata')
+      setShowCreateModal(false)
+      setEditingAthlete(null)
+      await loadAthletes()
+    } catch (error) {
+      console.error('Errore creazione atleta:', error)
+      toast.error('Errore di rete')
+    } finally {
+      setCreateSubmitting(false)
+    }
+  }
+
+  const openAthleteEdit = (athlete: AthleteWithDetails) => {
+    const seasonId = selectedSeason !== 'all' ? selectedSeason : athlete.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || ''
+    const seasonTeamIds = new Set(teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === seasonId)).map((team) => team.id))
+    const seasonTeams = (athlete.teams || []).filter((team) => seasonTeamIds.has(team.id))
+    setEditingAthlete({
+      id: athlete.id,
+      first_name: athlete.first_name,
+      last_name: athlete.last_name,
+      email: athlete.email || null,
+      phone: athlete.phone || null,
+      birth_date: athlete.birth_date || null,
+      season_id: seasonId,
+      membership_number: athlete.membership_number || null,
+      medical_certificate_expiry: athlete.medical_certificate_expiry || null,
+      personal_notes: athlete.personal_notes || null,
+      team_ids: seasonTeams.map((team) => team.id),
+      jersey_numbers: Object.fromEntries(seasonTeams.map((team) => [team.id, team.jersey_number == null ? null : Number(team.jersey_number)])),
+    })
+    setShowCreateModal(true)
+  }
+
+  const removeAthleteFromSeason = async (athlete: AthleteWithDetails) => {
+    if (selectedSeason === 'all') {
+      toast.error('Seleziona una stagione prima di rimuovere un iscritto')
+      return
+    }
+    if (!window.confirm(`Rimuovere ${athlete.first_name} ${athlete.last_name} dalla stagione selezionata? L’anagrafica resterà conservata.`)) return
+    const response = await fetch('/api/admin/athletes', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: athlete.id, season_id: selectedSeason }),
+    })
+    const result = await response.json()
+    if (!response.ok) {
+      toast.error(result.error || 'Impossibile rimuovere l’iscrizione')
+      return
+    }
+    toast.success('Iscrizione rimossa dalla stagione')
+    await loadAthletes()
+  }
+
   if (loading) {
     return (
       <div className="cs-card p-6">
@@ -295,6 +374,12 @@ export default function AthletesManager() {
             <button className="cs-btn cs-btn--outline">
               Esporta CSV
             </button>
+            <button className="cs-btn cs-btn--outline" onClick={() => setShowImportModal(true)}>
+              Importa Atleti
+            </button>
+            <button className="cs-btn cs-btn--primary" onClick={() => setShowCreateModal(true)}>
+              Nuovo Atleta
+            </button>
             <button
               onClick={handleOpenBulkModal}
               className="cs-btn cs-btn--primary"
@@ -304,6 +389,24 @@ export default function AthletesManager() {
           </div>
         </div>
       </section>
+
+      <AthleteCreateModal
+        isOpen={showCreateModal}
+        athlete={editingAthlete}
+        seasons={seasons}
+        activities={activities}
+        teams={teams}
+        isSubmitting={createSubmitting}
+        onSubmit={handleCreateAthlete}
+        onClose={() => { setShowCreateModal(false); setEditingAthlete(null) }}
+      />
+
+      <AthleteImportModal
+        isOpen={showImportModal}
+        seasons={seasons}
+        onComplete={() => { void loadAthletes() }}
+        onClose={() => setShowImportModal(false)}
+      />
 
 <DetailsDrawer
   open={showDetails}
@@ -522,6 +625,22 @@ export default function AthletesManager() {
                     >
                       Dettagli
                     </button>
+                    <button className="cs-btn cs-btn--outline cs-btn--sm ml-2" onClick={() => openAthleteEdit(athlete)}>
+                      Modifica
+                    </button>
+                    <button className="cs-btn cs-btn--danger cs-btn--sm ml-2" onClick={() => void removeAthleteFromSeason(athlete)}>
+                      Rimuovi
+                    </button>
+                    <span className="ml-2">
+                      <CollaboratorAccountActions
+                        id={athlete.id}
+                        name={`${athlete.first_name} ${athlete.last_name}`}
+                        email={athlete.email}
+                        account={athlete.account ?? null}
+                        role="athlete"
+                        onChanged={() => void loadAthletes()}
+                      />
+                    </span>
                   </td>
                 </tr>
               ))}
@@ -557,8 +676,18 @@ export default function AthletesManager() {
                   </div>
                 </div>
               </div>
-              <div className="mt-3">
-                <button className="cs-btn cs-btn--outline cs-btn--sm w-full" onClick={() => openAthleteDetails(athlete)}>Dettagli</button>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => openAthleteDetails(athlete)}>Dettagli</button>
+                <button className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => openAthleteEdit(athlete)}>Modifica</button>
+                <button className="cs-btn cs-btn--danger cs-btn--sm" onClick={() => void removeAthleteFromSeason(athlete)}>Rimuovi</button>
+                <CollaboratorAccountActions
+                  id={athlete.id}
+                  name={`${athlete.first_name} ${athlete.last_name}`}
+                  email={athlete.email}
+                  account={athlete.account ?? null}
+                  role="athlete"
+                  onChanged={() => void loadAthletes()}
+                />
               </div>
             </div>
           ))}

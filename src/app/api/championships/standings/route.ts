@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAccountContext, requireAthleteContext } from '@/server/auth/require-account-context'
 
 const groupIdSchema = z.string().uuid()
 
@@ -13,16 +14,14 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient()
     const admin = createAdminClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const account = await requireAccountContext(supabase)
+    const role = account.roles.includes('admin')
+      ? 'admin'
+      : account.roles.includes('coach')
+        ? 'coach'
+        : 'athlete'
 
-    if (authError || !user) {
-      return NextResponse.json({ standings: [] }, { status: 200 })
-    }
-
-    const role = String(user.app_metadata?.role ?? '').toLowerCase()
-    if (!['admin', 'coach', 'athlete'].includes(role)) {
-      return NextResponse.json({ standings: [] }, { status: 200 })
-    }
+    if (role === 'athlete') await requireAthleteContext(supabase)
 
     if (role !== 'admin') {
       const { data: groupTeams, error: groupTeamsError } = await admin
@@ -58,7 +57,7 @@ export async function GET(request: NextRequest) {
         .from(relation)
         .select('team_id')
         .in('team_id', teamIds)
-        .eq(profileColumn, user.id)
+        .eq(profileColumn, account.ownerProfileId)
 
       if (assignmentsError || !assignments?.length) {
         return NextResponse.json({ standings: [] }, { status: 200 })
@@ -77,6 +76,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ standings: standings ?? [] }, { status: 200 })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ standings: [] }, { status: error.status })
+    }
     console.error('Errore endpoint classifica:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }

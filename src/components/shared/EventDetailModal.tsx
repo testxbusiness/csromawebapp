@@ -6,6 +6,7 @@ import { NextStepViewport } from 'nextstepjs'
 import { LoadingState } from '@/components/ui'
 
 type TeamLike = { id?: string; name: string } | string
+export type AttendanceStatus = 'going' | 'maybe' | 'declined'
 
 export type EventDetailData = {
   title?: string
@@ -17,11 +18,43 @@ export type EventDetailData = {
   teams?: TeamLike[]
   creator?: { first_name?: string; last_name?: string } | null
   description?: string | null
+  requires_confirmation?: boolean
+  confirmation_deadline?: string | null
+  my_attendance?: { status?: AttendanceStatus; responded_at?: string | null } | null
 }
 
-export default function EventDetailModal({ open, onClose, data }: { open: boolean; onClose: () => void; data: EventDetailData | null }) {
+type EventDetailModalProps = {
+  open: boolean
+  onClose: () => void
+  data: EventDetailData | null
+  onAttendanceChange?: (status: AttendanceStatus) => Promise<void>
+  children?: React.ReactNode
+}
+
+export default function EventDetailModal({ open, onClose, data, onAttendanceChange, children }: EventDetailModalProps) {
   const [mounted, setMounted] = React.useState(false)
+  const [attendanceStatus, setAttendanceStatus] = React.useState<AttendanceStatus | null>(null)
+  const [attendanceSaving, setAttendanceSaving] = React.useState(false)
+  const [attendanceError, setAttendanceError] = React.useState<string | null>(null)
   React.useEffect(() => { setMounted(true) }, [])
+  React.useEffect(() => {
+    setAttendanceStatus(data?.my_attendance?.status ?? null)
+    setAttendanceError(null)
+  }, [data])
+
+  const handleAttendanceChange = async (status: AttendanceStatus) => {
+    if (!onAttendanceChange) return
+    setAttendanceSaving(true)
+    setAttendanceError(null)
+    try {
+      await onAttendanceChange(status)
+      setAttendanceStatus(status)
+    } catch (error) {
+      setAttendanceError(error instanceof Error ? error.message : 'Impossibile salvare la risposta')
+    } finally {
+      setAttendanceSaving(false)
+    }
+  }
   const IconX = (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
       <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth={2} strokeLinecap="round"/>
@@ -61,6 +94,13 @@ export default function EventDetailModal({ open, onClose, data }: { open: boolea
     if (d.location && d.location.trim()) return d.location
     if (d.gym?.name) return d.gym.city ? `${d.gym.name} - ${d.gym.city}` : d.gym.name
     return '—'
+  }
+
+  const attendanceLabel = (status: AttendanceStatus | null) => {
+    if (status === 'going') return 'Partecipo'
+    if (status === 'maybe') return 'Forse'
+    if (status === 'declined') return 'Non partecipo'
+    return 'Nessuna risposta'
   }
 
   if (!mounted || !open) return null
@@ -148,8 +188,48 @@ export default function EventDetailModal({ open, onClose, data }: { open: boolea
                   <p style={{ whiteSpace: 'pre-wrap' }}>{data.description}</p>
                 </div>
               )}
+
+              {data.requires_confirmation && onAttendanceChange && (
+                <div style={{ gridColumn: '1 / -1' }} id="event-detail-attendance">
+                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>
+                    Conferma partecipazione
+                  </div>
+                  <p style={{ margin: '6px 0 12px' }}>
+                    Risposta attuale: <strong>{attendanceLabel(attendanceStatus)}</strong>
+                  </p>
+                  {data.confirmation_deadline && (
+                    <p className="text-secondary" style={{ fontSize: 12, margin: '0 0 12px' }}>
+                      Puoi rispondere fino al {new Date(data.confirmation_deadline).toLocaleString('it-IT')}
+                    </p>
+                  )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {([
+                        ['going', 'Partecipo'],
+                        ['maybe', 'Forse'],
+                        ['declined', 'Non partecipo'],
+                      ] as const).map(([status, label]) => (
+                        <button
+                          key={status}
+                          type="button"
+                          className={`cs-btn ${attendanceStatus === status ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+                          onClick={() => void handleAttendanceChange(status)}
+                          disabled={attendanceSaving}
+                          aria-pressed={attendanceStatus === status}
+                        >
+                          {attendanceSaving && attendanceStatus === status ? 'Salvataggio…' : label}
+                        </button>
+                      ))}
+                  </div>
+                  {attendanceError && (
+                    <p role="alert" style={{ color: '#b91c1c', fontSize: 13, margin: '10px 0 0' }}>
+                      {attendanceError}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
+          {children}
         </NextStepViewport>
       </section>
     </div>,

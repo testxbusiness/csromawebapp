@@ -1,35 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') {
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // 1. Get coach's teams via team_coaches join
+    // 1. Resolve assignments and team rows separately. Keeping the assignment
+    // query independent avoids losing teams when PostgREST cannot expand the
+    // relation under the current RLS policies.
     const { data: coachTeams, error: coachTeamsErr } = await supabase
       .from('team_coaches')
-      .select('team_id, teams(id, name, code)')
-      .eq('coach_id', user.id)
+      .select('team_id')
+      .eq('coach_id', account.ownerProfileId)
 
     if (coachTeamsErr) {
       console.error('Error loading coach teams:', coachTeamsErr)
       return NextResponse.json({ events: [], teams: [] })
     }
 
-    const teamData = (coachTeams || [])
-      .map(row => Array.isArray(row.teams) ? row.teams[0] : row.teams)
-      .filter((team): team is { id: string; name: string; code: string } => Boolean(team))
+    const assignedTeamIds = [...new Set((coachTeams || []).map(row => row.team_id))]
+    if (assignedTeamIds.length === 0) {
+      return NextResponse.json({ events: [], teams: [] })
+    }
+
+    const { data: assignedTeams, error: assignedTeamsErr } = await supabase
+      .from('teams')
+      .select('id, name, code')
+      .in('id', assignedTeamIds)
+
+    if (assignedTeamsErr) {
+      console.error('Error loading assigned coach teams:', assignedTeamsErr)
+      return NextResponse.json({ events: [], teams: [] })
+    }
+
+    const teamData = (assignedTeams || []) as { id: string; name: string; code: string }[]
 
     if (teamData.length === 0) {
       return NextResponse.json({ events: [], teams: [] })
@@ -72,7 +82,11 @@ const role = (user as any)?.app_metadata?.role
       return NextResponse.json({ events: [], teams: teamData })
     }
 
-    // 3. Get events (batch processing)
+    // 3. Get upcoming events (same window used by the athlete dashboard)
+    const fromDate = new Date()
+    const throughDate = new Date(fromDate)
+    throughDate.setDate(throughDate.getDate() + 30)
+
     let allEvents: any[] = []
 
     if (eventIds.length > 100) {
@@ -80,17 +94,22 @@ const role = (user as any)?.app_metadata?.role
         const batch = eventIds.slice(i, i + 100)
         const { data: events } = await supabase
           .from('events')
-          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by')
+          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, confirmation_deadline')
           .in('id', batch)
+          .gte('start_date', fromDate.toISOString())
+          .lte('start_date', throughDate.toISOString())
 
         allEvents.push(...(events || []))
       }
     } else {
       const { data: events, error: evErr } = await supabase
         .from('events')
-        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by')
+        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, confirmation_deadline')
         .in('id', eventIds)
-        .order('start_date', { ascending: false })
+        .gte('start_date', fromDate.toISOString())
+        .lte('start_date', throughDate.toISOString())
+        .order('start_date', { ascending: true })
+        .limit(10)
 
       if (evErr) {
         console.error('Error loading events:', evErr)
@@ -123,21 +142,26 @@ const role = (user as any)?.app_metadata?.role
     }
 
     // 5. Transform events
-    const transformedEvents = allEvents.map((ev: any) => ({
-      id: ev.id,
-      title: ev.title,
-      description: ev.description,
-      location: ev.location,
-      start_time: ev.start_time,
-      end_time: ev.end_time,
-      is_recurring: ev.event_type === 'recurring',
-      // selected_teams is required on the UI to resolve the names, keep names for backwards compatibility
-      selected_teams: teamIdsByEventId.get(ev.id) || [],
-      teams: teamNamesByEventId.get(ev.id) || [],
-      event_kind: ev.event_kind,
-      parent_event_id: ev.parent_event_id,
-      created_by: ev.created_by
-    }))
+    const transformedEvents = allEvents
+      .map((ev: any) => ({
+        id: ev.id,
+        title: ev.title,
+        description: ev.description,
+        location: ev.location,
+        start_time: ev.start_time,
+        end_time: ev.end_time,
+        is_recurring: ev.event_type === 'recurring',
+        // selected_teams is required on the UI to resolve the names, keep names for backwards compatibility
+        selected_teams: teamIdsByEventId.get(ev.id) || [],
+        teams: teamNamesByEventId.get(ev.id) || [],
+        event_kind: ev.event_kind,
+        parent_event_id: ev.parent_event_id,
+        created_by: ev.created_by,
+        requires_confirmation: ev.requires_confirmation,
+        confirmation_deadline: ev.confirmation_deadline
+      }))
+      .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+      .slice(0, 10)
 
     return NextResponse.json({
       events: transformedEvents,
@@ -145,6 +169,9 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Coach calendar API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

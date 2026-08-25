@@ -66,18 +66,19 @@ export default function BalanceDashboard() {
 
   const loadFilterOptions = useCallback(async () => {
     try {
-      const [activitiesRes, teamsRes, gymsRes, coachesRes] = await Promise.all([
+      const [activitiesRes, teamsRes, gymsRes, coachesResponse] = await Promise.all([
         supabase.from('activities').select('id, name').order('name'),
         supabase.from('teams').select('id, name, code').order('name'),
         supabase.from('gyms').select('id, name').order('name'),
-        supabase.from('profiles').select('id, first_name, last_name').eq('role', 'coach').order('first_name')
+        fetch('/api/admin/coaches', { cache: 'no-store' })
       ])
+      const coachesPayload = await coachesResponse.json().catch(() => null) as { coaches?: FilterOptions['coaches'] } | null
 
       setFilterOptions({
         activities: activitiesRes.data || [],
         teams: teamsRes.data || [],
         gyms: gymsRes.data || [],
-        coaches: coachesRes.data || []
+        coaches: coachesResponse.ok ? coachesPayload?.coaches || [] : []
       })
     } catch (error) {
       console.error('Error loading filter options:', error)

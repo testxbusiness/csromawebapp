@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   toast,
@@ -26,6 +27,15 @@ export type Message = {
 
 type Team = { id: string; name: string; code: string }
 type User = { id: string; first_name: string; last_name: string; role: string }
+
+function formatRole(role: string | null | undefined) {
+  if (role === 'athlete') return 'atleta'
+  if (role === 'admin') return 'admin'
+  if (role === 'coach') return 'coach'
+  if (role === 'staff') return 'staff'
+  if (role === 'family_member') return 'familiare / tutore'
+  return 'nessun ruolo'
+}
 
 type Props = {
   open: boolean
@@ -134,6 +144,7 @@ export default function MessageModal({
       <DialogContent className="cs-modal--centered cs-modal--md">
         <DialogHeader className="sr-only">
           <DialogTitle>{message ? 'Modifica Messaggio' : 'Nuovo Messaggio'}</DialogTitle>
+          <DialogDescription>Inserisci o modifica il messaggio e i suoi destinatari.</DialogDescription>
         </DialogHeader>
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
           <div className="cs-modal__icon" aria-hidden>✉️</div>

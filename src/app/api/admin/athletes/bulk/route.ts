@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { athleteBulkSchema } from '@/lib/validation/bulk'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 interface TeamAssignmentParameters {
   teamId: string
@@ -21,26 +23,11 @@ interface MedicalExpiryParameters {
   expiryDate: string
 }
 
-interface UserWithMetadata {
-  app_metadata?: {
-    role?: string
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as UserWithMetadata)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     const parsed = athleteBulkSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
@@ -65,6 +52,9 @@ const requesterRole = (user as UserWithMetadata)?.app_metadata?.role
     }
   } catch (error) {
     console.error('Errore API operazioni massive atleti:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }

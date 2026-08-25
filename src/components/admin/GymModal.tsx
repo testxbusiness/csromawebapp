@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
@@ -98,6 +99,7 @@ export default function GymModal({
       <DialogContent className="cs-modal--centered cs-modal--md">
         <DialogHeader>
           <DialogTitle>{gym ? 'Modifica Palestra' : 'Nuova Palestra'}</DialogTitle>
+          <DialogDescription className="sr-only">Inserisci o modifica i dati della palestra.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

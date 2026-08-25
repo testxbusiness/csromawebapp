@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import CoachMessageModal from '@/components/coach/CoachMessageModal'
+import MessageReadReport from '@/components/admin/MessageReadReport'
 
 interface Message {
   id: string
@@ -29,8 +30,8 @@ interface Message {
 interface Team { id: string; name: string; code: string }
 
 export default function CoachMessagesManager() {
-  const { user } = useAuth()
-  const userId = user?.id || null
+  const { account } = useAuth()
+  const ownerProfileId = account?.ownerProfileId || null
   const supabase = useMemo(() => createClient(), [])
   const [messages, setMessages] = useState<Message[]>([])
   const [teams, setTeams] = useState<Team[]>([])
@@ -47,25 +48,34 @@ export default function CoachMessagesManager() {
   const fetchControllerRef = useRef<AbortController | null>(null)
 
   const loadTeams = useCallback(async () => {
-    if (!userId) {
+    if (!ownerProfileId) {
+      setTeams([])
+      return
+    }
+
+    const { data: assignments } = await supabase
+      .from('team_coaches')
+      .select('team_id')
+      .eq('coach_id', ownerProfileId)
+
+    const ids = [...new Set((assignments || []).map(row => row.team_id))]
+    if (ids.length === 0) {
       setTeams([])
       return
     }
 
     const { data } = await supabase
-      .from('team_coaches')
-      .select('team_id, teams(id, name, code)')
-      .eq('coach_id', userId)
+      .from('teams')
+      .select('id, name, code')
+      .in('id', ids)
 
-    const list = (data || [])
-      .map((row) => Array.isArray(row.teams) ? row.teams[0] : row.teams)
-      .filter(Boolean) as Team[]
+    const list = (data || []) as Team[]
 
     setTeams(list.sort((a, b) => a.name.localeCompare(b.name)))
-  }, [supabase, userId])
+  }, [ownerProfileId, supabase])
 
   const loadMessages = useCallback(async (signal?: AbortSignal) => {
-    if (!userId) {
+    if (!ownerProfileId) {
       setMessages([])
       setLoading(false)
       return
@@ -73,13 +83,17 @@ export default function CoachMessagesManager() {
 
     setLoading(true)
     try {
-      const res = await fetch('/api/coach/messages?view=full', { signal })
-      const result = await res.json()
+      const res = await fetch('/api/coach/messages?view=full', {
+        signal,
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      })
+      const result = await res.json() as { messages?: unknown; error?: string }
       if (!res.ok) {
         console.error('Errore caricamento messaggi coach:', result.error)
         setMessages([])
       } else {
-        setMessages(result.messages || [])
+        setMessages(Array.isArray(result.messages) ? result.messages as Message[] : [])
       }
     } catch (e: any) {
       if (e?.name === 'AbortError') return
@@ -88,10 +102,10 @@ export default function CoachMessagesManager() {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [ownerProfileId])
 
   useEffect(() => {
-    if (!userId) {
+    if (!ownerProfileId) {
       setTeams([])
       setMessages([])
       setLoading(false)
@@ -110,9 +124,9 @@ export default function CoachMessagesManager() {
     return () => {
       controller.abort()
     }
-  }, [userId, loadTeams, loadMessages])
+  }, [ownerProfileId, loadTeams, loadMessages])
 
-  const canEdit = (m: Message) => m.created_by === user?.id
+  const canEdit = (m: Message) => m.created_by === ownerProfileId
 
   const openCreate = () => {
     setEditingMessage(null)
@@ -350,6 +364,13 @@ export default function CoachMessagesManager() {
         <MessageDetailModal
           open={true}
           onClose={() => setSelectedMessage(null)}
+          messageId={selectedMessage.id}
+          markAsRead={selectedMessage.created_by !== ownerProfileId}
+          extraContent={
+            selectedMessage.created_by === ownerProfileId
+              ? <MessageReadReport messageId={selectedMessage.id} />
+              : undefined
+          }
           data={{
             subject: selectedMessage.subject,
             content: selectedMessage.content,

@@ -42,6 +42,8 @@ interface Event {
   created_at?: string
   updated_at?: string
   selected_teams?: string[]
+  requires_confirmation?: boolean
+  confirmation_deadline?: string | null
   
   // Joined data
   gyms?: {
@@ -749,45 +751,103 @@ export default function EventsManager() {
             gym: selectedEvent.gyms ? { name: selectedEvent.gyms.name, city: (selectedEvent.gyms as any).city } : null,
             teams: (selectedEvent.event_teams || []).map(et => ({ name: et.teams?.name || '' })).filter(t => !!t.name),
             creator: selectedEvent.created_by_profile ? { first_name: selectedEvent.created_by_profile.first_name, last_name: selectedEvent.created_by_profile.last_name } : null,
-            description: selectedEvent.description || ''
+            description: selectedEvent.description || '',
+            requires_confirmation: selectedEvent.requires_confirmation,
+            confirmation_deadline: selectedEvent.confirmation_deadline,
           }}
-        />
+        >
+          {selectedEvent.requires_confirmation && selectedEvent.id && (
+            <EventAttendancePanel eventId={selectedEvent.id} />
+          )}
+        </EventDetailModal>
       )}
     </div>
   )
 }
 
+type AttendanceProfile = {
+  id: string
+  first_name: string
+  last_name: string
+  email?: string | null
+}
+
+type AttendanceEntry = {
+  profile_id: string
+  status: 'going' | 'maybe' | 'declined'
+  responded_at: string | null
+  profiles: AttendanceProfile | null
+}
+
+type AttendanceReport = {
+  going: AttendanceEntry[]
+  maybe: AttendanceEntry[]
+  declined: AttendanceEntry[]
+  no_response: AttendanceProfile[]
+  counts: {
+    going: number
+    maybe: number
+    declined: number
+    no_response: number
+  }
+}
+
+const emptyAttendanceReport: AttendanceReport = {
+  going: [],
+  maybe: [],
+  declined: [],
+  no_response: [],
+  counts: { going: 0, maybe: 0, declined: 0, no_response: 0 },
+}
+
 function EventAttendancePanel({ eventId }: { eventId: string }) {
   const [loading, setLoading] = useState(true)
-  const [lists, setLists] = useState<any>({ going: [], maybe: [], declined: [], no_response: [], counts: { going: 0, maybe: 0, declined: 0, no_response: 0 } })
+  const [lists, setLists] = useState<AttendanceReport>(emptyAttendanceReport)
   useEffect(() => { (async () => {
     try {
       const res = await fetch(`/api/admin/events/attendance?event_id=${eventId}`)
-      const j = await res.json()
-      if (res.ok) setLists(j)
+      const j = await res.json() as Partial<AttendanceReport>
+      if (res.ok) {
+        setLists({
+          going: j.going ?? [],
+          maybe: j.maybe ?? [],
+          declined: j.declined ?? [],
+          no_response: j.no_response ?? [],
+          counts: j.counts ?? emptyAttendanceReport.counts,
+        })
+      }
     } finally { setLoading(false) }
   })() }, [eventId])
 
   if (loading) return <div className="text-xs text-secondary mt-2">Caricamento conferme…</div>
+  const names = (entry: AttendanceEntry | AttendanceProfile) => {
+    const profile = 'profiles' in entry ? entry.profiles : entry
+    return profile ? `${profile.first_name} ${profile.last_name}`.trim() : 'Profilo non disponibile'
+  }
+  const renderNames = (entries: Array<AttendanceEntry | AttendanceProfile>) => (
+    entries.length > 0
+      ? entries.map((entry) => <div key={'profile_id' in entry ? entry.profile_id : entry.id}>{names(entry)}</div>)
+      : <div className="text-secondary">Nessun atleta</div>
+  )
   return (
-    <div className="mt-3">
-      <div className="text-xs text-secondary mb-1">RSVP</div>
+    <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4" aria-label="Report conferme partecipazione">
+      <div className="text-sm font-semibold mb-3">Report conferme partecipazione</div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">✔️ Confermati ({lists.counts?.going||0})</div>
-          <div className="space-y-1 text-sm">{lists.going?.map((a:any,i:number)=> <div key={i}>{a.profiles.first_name} {a.profiles.last_name}</div>)}</div>
+          <div className="text-sm font-semibold mb-1">Confermati ({lists.counts.going})</div>
+          <div className="space-y-1 text-sm">{renderNames(lists.going)}</div>
         </div>
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">🤝 Forse ({lists.counts?.maybe||0})</div>
-          <div className="space-y-1 text-sm">{lists.maybe?.map((a:any,i:number)=> <div key={i}>{a.profiles.first_name} {a.profiles.last_name}</div>)}</div>
+          <div className="text-sm font-semibold mb-1">Forse ({lists.counts.maybe})</div>
+          <div className="space-y-1 text-sm">{renderNames(lists.maybe)}</div>
         </div>
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">✖️ Non viene ({lists.counts?.declined||0})</div>
-          <div className="space-y-1 text-sm">{lists.declined?.map((a:any,i:number)=> <div key={i}>{a.profiles.first_name} {a.profiles.last_name}</div>)}</div>
+          <div className="text-sm font-semibold mb-1">Non partecipano ({lists.counts.declined})</div>
+          <div className="space-y-1 text-sm">{renderNames(lists.declined)}</div>
         </div>
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">⏳ Nessuna risposta ({lists.counts?.no_response||0})</div>
-          <div className="space-y-1 text-sm">{lists.no_response?.map((p:any,i:number)=> <div key={i}>{p.first_name} {p.last_name}</div>)}</div>
+          <div className="text-sm font-semibold mb-1">Nessuna risposta ({lists.counts.no_response})</div>
+          <div className="space-y-1 text-sm">{renderNames(lists.no_response)}</div>
         </div>
       </div>
     </div>

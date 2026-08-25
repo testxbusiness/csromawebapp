@@ -1,0 +1,2222 @@
+# Piano di implementazione: persone, account opzionali e relazioni familiari
+
+Stato del documento: implementazione incrementale in corso; Fase 3A e Fase 4 verificate in
+locale e staging, Migration 13 e Migration 14 della Fase 5 applicate e verificate in
+staging, Migration 15 ancora da implementare, Fase 6 ancora da iniziare.
+
+Decisione operativa aggiornata al 10 agosto 2026: la produzione resta fuori perimetro
+finché l’intero piano non sarà implementato e testato. Le modifiche applicative e le
+migration di questo ciclo vengono quindi validate esclusivamente in locale e staging.
+
+Aggiornamento operativo al 24 agosto 2026: le slice incrementali di Fase 6 sono in corso,
+ma la rimozione dei campi legacy non è ancora autorizzata. Le liste admin principali sono
+state migrate a fonti account/domain senza perdere gli iscritti privi di account: un atleta
+resta visibile come iscritto e lo stato dell’account viene mostrato separatamente.
+
+Branch di lavoro: `codex/person-account-family-model`.
+
+Database:
+
+- produzione: `qyiholnatsrvpoqoplje` (sola lettura durante analisi);
+- staging: `kibtvkuiedoxgppnnxkf` (prima destinazione delle future migration);
+- dump di riferimento: `backups/prod_db_20260806_164940_CEST_{schema,data,roles}.sql`.
+
+### Stato implementazione verificato al 7 agosto 2026
+
+- branch: `codex/person-account-family-model`;
+- locale: migration del modello account/person e policy account-based applicate e
+  verificate sul database Docker ripristinato dal backup; 48 account e 4 ruoli globali
+  presenti;
+- applicazione: resolver account-based e route admin migrate incrementalmente; nessun
+  controllo admin residuo basato solo su `app_metadata` nel perimetro `/api/admin/**`;
+- test: TypeScript, Jest, build Next.js, dry-run Supabase locale e suite E2E Playwright
+  completati con esito positivo (6/6 test, Chromium e Firefox), usando uno `storageState`
+  temporaneo non versionato;
+- staging: il 7 agosto 2026 è stato effettuato un backup preventivo di schema, dati e ruoli
+  in `/tmp/csroma_staging_before_rebaseline_*`. Il confronto con il dump di riferimento
+  mostra uno schema equivalente a quello di prod, senza ancora `app_accounts`,
+  `account_roles` o `profile_relationships`; non è stato quindi necessario ricreare lo
+  schema. È stata riallineata soltanto la migration history: le tre versioni remote
+  `20260729171754`, `20260729171859` e `20260729172054` sono state marcate `reverted`, e le
+  quattro versioni baseline locali fino a `20260729170829` sono state marcate `applied`.
+  Il successivo `supabase db push --linked --dry-run` elenca esclusivamente le migration
+  del nuovo modello e le policy admin del 6–7 agosto. Nessun dato o oggetto applicativo è
+  stato modificato da questa rebaseline; prod non è stata interrogata né modificata. In
+  seguito è stata applicata sullo staging, come primo step separato, la migration
+  `20260806180000_create_account_person_model.sql`; il dump di verifica conferma le tre
+  nuove tabelle, i vincoli, gli indici, i trigger e RLS. Come secondo step è stata
+  applicata `20260806180001_backfill_existing_accounts_and_roles.sql`: sul dataset
+  sintetico di staging risultano 4 `app_accounts`, 2 `account_roles` (`admin` e `coach`)
+  e nessuna relazione familiare preesistente. È stata poi applicata
+  `20260806180002_decouple_profiles_from_auth.sql`: `profiles` non ha più il vincolo
+  diretto verso `auth.users`, mantiene gli ID esistenti, e non risultano trigger attivi
+  di sincronizzazione Auth→profiles; il mapping resta gestito da `app_accounts`. È stata
+  poi applicata `20260806180003_account_authorization_helpers_and_rls.sql`: risultano
+  presenti gli helper `private.*` per account, coach, atleta, relazioni e profilo corrente,
+  oltre alle policy account-based sulle tre nuove tabelle. Le policy legacy su `profiles`
+  basate su `app_metadata` restano intenzionalmente fino alla migration 5, che le
+  sostituirà in modo coordinato. La migration 5 `20260806180004_account_context_and_personal_access_policies.sql`
+  è stata applicata e verificata: le policy legacy di accesso personale a `profiles` sono
+  state rimosse e sostituite da policy basate su `private.current_profile_id()` e
+  `private.has_account_role('admin')`. Le policy `app_metadata` sulle altre tabelle
+  restano previste fino alle successive migration admin. È stata quindi applicata la prima
+  migration admin,
+  `20260807084132_admin_staff_account_role_policies.sql`, verificando che l'accesso
+  amministrativo a `predefined_installments` usi `private.has_account_role('admin')`.
+  È stata poi applicata `20260807084314_admin_events_account_role_policy.sql` e verificata
+  la policy `events_admin_all` con lo stesso helper account-based. Le altre migration
+  admin restano non applicate. È stata inoltre applicata
+  `20260807084449_admin_messages_account_role_policy.sql` e verificata la policy
+  `messages_admin_all` tramite `private.has_account_role('admin')`. È stata infine
+  applicata `20260807084644_admin_profiles_insert_account_role_policy.sql` e verificata
+  `profiles_insert_admin_only` con lo stesso controllo account-based. È stata inoltre
+  applicata `20260807084903_admin_membership_fees_account_role_policy.sql` e verificata
+  `membership_fees_admin_all` tramite `private.has_account_role('admin')`. È stata poi
+  applicata `20260807085155_admin_fee_installments_account_role_policy.sql` e verificata
+  `fee_installments_admin_all` tramite lo stesso helper account-based. È stata inoltre
+  applicata `20260807085332_admin_teams_account_role_policy.sql` e verificata la policy
+  `teams_admin_all` tramite `private.has_account_role('admin')`. È stata poi applicata
+  `20260807085513_admin_event_teams_account_role_policy.sql` e verificata
+  `event_teams_admin_all` tramite `private.has_account_role('admin')`. È stata inoltre
+  applicata `20260807085639_admin_document_recipients_account_role_policy.sql` e
+  verificata `document_recipients_admin_all` tramite lo stesso helper account-based. È
+  stata poi applicata `20260807085912_admin_message_recipients_account_role_policy.sql`
+  e verificata `message_recipients_admin_all` tramite `private.has_account_role('admin')`.
+  Infine è stata applicata `20260807090817_admin_team_training_schedules_account_role_policy.sql`
+  e verificata la policy `Admins can manage all training schedules` tramite lo stesso
+  helper. Il dry-run finale sullo staging conferma: `Remote database is up to date`.
+  In locale e sullo staging è stata poi applicata `20260807134007_coach_team_assignment_policies.sql`:
+  le policy coach di squadre, membri, assegnazioni, eventi squadra, orari, quote, rate,
+  pagamenti e RSVP ora usano gli helper `private.*` e non i fallback
+  `team_members.role`/`teams.coach_id`; il dry-run staging conferma che la history è
+  aggiornata. Le route e i componenti coach principali sono stati aggiornati per usare
+  `ownerProfileId`. La migration forward
+  `20260807134729_coach_event_access_policies.sql` è stata applicata in locale e staging:
+  le policy `events_coach_*` usano `private.current_profile_id()` e
+  `private.is_coach_of_team()`. Restano da migrare nel perimetro coach le policy e route
+  condivise di messaggi. La migration forward
+  `20260807134952_coach_message_access_policies.sql` è stata applicata in locale e
+  staging; le policy `messages_coach_*` e `message_recipients_coach_*` usano gli helper
+  account-based e il dry-run staging è nuovamente `Remote database is up to date`.
+- produzione: non interrogata né modificata durante questa implementazione.
+
+## 1. Confini e criteri di successo
+
+L'implementazione separa quattro concetti oggi sovrapposti:
+
+1. `profiles`: persona/anagrafica, anche senza login;
+2. `app_accounts`: mapping uno-a-uno opzionale tra account Auth e persona proprietaria;
+3. `account_roles`: ruoli globali dell'account (`admin`, `coach`, `staff`, `athlete`, `family_member`);
+4. `profile_relationships`: deleghe e relazioni verso altre persone, con permessi granulari.
+
+Gli ID dei 48 profili esistenti non devono cambiare. Le tabelle sportive continuano a
+referenziare `profiles.id`. Nessuna migration viene applicata direttamente in produzione:
+ogni fase passa da locale, staging, test automatici, query di controllo e approvazione.
+
+Non viene introdotto un nuovo provider di autenticazione e non viene riscritta
+l'applicazione in blocco.
+
+## 2. Fotografia verificata della produzione
+
+Il dump post `20260729170829_prod_rls_hardening.sql` del 6 agosto 2026 mostra:
+
+| Oggetto | Stato corrente |
+| --- | --- |
+| `auth.users` | 48 record |
+| `profiles` | 48 record |
+| Mapping Auth/profilo | 48 corrispondenze per ID; 0 orfani in entrambe le direzioni |
+| `profiles.role` | 2 admin, 2 coach, 44 athlete |
+| `auth.users.raw_app_meta_data.role` | 2 admin, 2 coach, 44 athlete |
+| `user_roles` | 0 record; PK sul solo `profile_id`, quindi al massimo un ruolo |
+| `athlete_profiles` | 44 record |
+| `coach_profiles` | 2 record |
+| `team_members` | 67 record |
+| `team_coaches` | 4 record |
+| `fee_installments` | 120 record |
+| `payments` | 17 record; sono costi generali/pagamenti coach, non rate atleta |
+| `messages` / `message_recipients` | 2 / 3 record |
+| `push_subscriptions` | 2 record |
+| `documents` / `document_recipients` | 5 / 0 record |
+| `event_attendances` / `rsvp` | 0 / 0 record |
+| `system_logs` | 0 record |
+
+Vincoli rilevanti:
+
+- `profiles.id -> auth.users.id ON DELETE CASCADE`;
+- `profiles.id` non ha default;
+- `profiles.email` è `NOT NULL`, indicizzata ma non `UNIQUE`;
+- `profiles.role` è `NOT NULL` con soli `admin`, `coach`, `athlete`;
+- `profiles.must_change_password` e `profiles.is_active` mescolano stato persona e account;
+- tutte le FK sportive principali puntano già a `profiles.id`;
+- molte FK verso profili usano `ON DELETE CASCADE`, quindi la cancellazione fisica di una
+  persona può eliminare storico sportivo e operativo;
+- `v_profiles` e `championship_standings` sono già `security_invoker=true`;
+- le nuove policy post-hardening usano `app_metadata`, non `user_metadata`.
+
+La funzione `public.sync_auth_users_to_profiles()` esiste ancora, ma nel dump aggiornato
+non risulta installato alcun trigger su `auth.users`. La migration dovrà comunque usare
+`DROP TRIGGER IF EXISTS` per neutralizzare eventuale drift tra ambienti, senza assumere che
+il trigger sia presente.
+
+## 3. Assunzioni `profiles.id = auth.uid()` trovate
+
+### 3.1 Funzioni e trigger SQL
+
+Queste funzioni interpretano direttamente `auth.uid()` come ID persona, oppure scrivono
+un UUID Auth in una FK verso `profiles`:
+
+- `can_view_athlete_profile(uuid)`;
+- `can_view_teammate_profile(uuid)`;
+- `coach_has_team_in_group(uuid)`;
+- `coach_is_assigned_to_team(uuid)`;
+- `is_admin()`;
+- `is_athlete()`;
+- `is_coach()`;
+- `is_coach_of_team(uuid)`;
+- `is_in_same_team(uuid)`;
+- `team_ids_for_coach()`;
+- `messages_set_created_by()`;
+- `prevent_non_admin_role_change()`;
+- `sync_profile_role_to_app_metadata()`;
+- `sync_auth_users_to_profiles()`;
+- `sync_championship_match_event()`;
+- `update_user_role_safe(uuid, text)` (accoppia profilo, ruolo e Auth per lo stesso UUID).
+
+`messages_set_created_by()` e `sync_championship_match_event()` sono particolarmente
+critiche: assegnano `auth.uid()` a colonne `created_by` che referenziano `profiles.id`.
+
+### 3.2 Policy con uso diretto di `auth.uid()`
+
+Tutte le policy seguenti devono essere riesaminate. Alcune controllano solo che esista un
+utente autenticato; la maggior parte usa l'UUID Auth come profilo o coach.
+
+- `activities`: `Authenticated users can view activities`;
+- `athlete_profiles`: `Admin can read athlete_profiles`, `Athlete can read own athlete_profile`;
+- `championship_club_teams`: `championship_club_teams_auth_select`;
+- `championship_group_teams`: `championship_group_teams_auth_select`;
+- `championship_groups`: `championship_groups_auth_select`;
+- `championship_match_sets`: `championship_match_sets_auth_select`;
+- `championship_matches`: `championship_matches_auth_select`;
+- `championships`: `championships_auth_select`;
+- `document_recipients`: `Admin only access to document_recipients`,
+  `document_recipients_user_view`;
+- `document_templates`: `Admins can insert document templates`,
+  `Authenticated users can view document templates`;
+- `documents`: `Admin only access to documents`, `Users can view their own documents`;
+- `event_attendances`: `delete_own_attendance`, `insert_own_attendance`,
+  `read_attendance_for_related_events`, `update_own_attendance`;
+- `event_teams`: `Athletes can view event teams`, `Coaches can view event teams`,
+  `event_teams_athlete_select`, `event_teams_coach_select`;
+- `events`: `Athletes can view events for their teams`,
+  `Coaches can manage their team events`, `Coaches can view their team events`,
+  `Coaches manage events for their teams`, `events_athlete_select`,
+  `events_coach_delete`, `events_coach_insert`, `events_coach_select`,
+  `events_coach_update`;
+- `fee_installments`: `Users can view their own fee installments`,
+  `fee_installments_athlete_select`;
+- `gyms`: `Authenticated users can view gyms`;
+- `membership_fees`: `Coaches view membership fees of own teams`,
+  `membership_fees_athlete_select`;
+- `message_attachments`: `message_attachments_owner_all`;
+- `message_recipients`: `Users can view their message recipients`,
+  `message_recipients_athlete_select`, `message_recipients_coach_delete`,
+  `message_recipients_coach_modify`, `message_recipients_coach_select`,
+  `message_recipients_coach_update`, `message_recipients_user_update_read`;
+- `messages`: `Coaches can manage messages for their teams`,
+  `Coaches can view their messages`, `Users can send messages`,
+  `Users can view messages sent to them`, `messages_athlete_select`,
+  `messages_coach_delete`, `messages_coach_insert`, `messages_coach_select`,
+  `messages_coach_update`;
+- `payments`: `Coaches can view their payments`;
+- `profiles`: `Users can view their own profile`, `profiles_select_message_senders`,
+  `profiles_select_message_senders_coaches`, `profiles_select_self_or_admin`,
+  `profiles_update_self_or_admin`;
+- `push_subscriptions`: `Users can manage their own push subscriptions`,
+  `push_subscriptions_admin_read`, `push_subscriptions_owner_all`;
+- `rsvp`: `Coaches can view RSVP for their teams`,
+  `Users can manage their own RSVP`;
+- `team_coaches`: `Athletes can view coaches of their teams`;
+- `team_members`: `Users can view their team memberships`;
+- `team_training_schedules`: `Athletes can view their team schedules`,
+  `Coaches can view their team schedules`;
+- `teams`: `Athletes can view their teams`, `Coaches can view their teams`,
+  `teams_athlete_select`;
+- `user_roles`: `user_roles_self_or_admin_select`.
+
+Le altre policy che chiamano `is_admin()`, `is_coach()`, `is_athlete()`,
+`is_coach_of_team()`, `is_in_same_team()` o gli helper coach dipendono transitivamente
+dalla stessa assunzione e saranno incluse nella riscrittura, anche se non contengono
+letteralmente `auth.uid()`.
+
+### 3.3 Codice applicativo con uso diretto dell'UUID Auth come persona
+
+Core autenticazione e navigazione:
+
+- `src/hooks/useAuth.ts`: carica `profiles.id = session.user.id`, cache compresa;
+- `src/app/api/auth/login/route.ts`: prefetch profilo tramite UUID Auth;
+- `src/app/api/auth/reset-password/route.ts`: aggiorna `profiles.id = user.id`;
+- `src/components/shared/ResetPasswordForm.tsx`: risolve il profilo dall'account;
+- `src/middleware.ts`: autorizza admin dal singolo `app_metadata.role`;
+- `src/components/auth/ProtectedRoute.tsx`: autorizza dal singolo `profile.role`;
+- `src/app/dashboard/page.tsx`: sceglie una sola dashboard da un solo ruolo;
+- `src/components/navigation/RoleSidebar.tsx`: costruisce un solo menu da `profile.role`.
+
+Route utente/atleta:
+
+- `src/app/api/athlete/calendar/route.ts`;
+- `src/app/api/athlete/dashboard/route.ts`;
+- `src/app/api/athlete/events/attendance/route.ts`;
+- `src/app/api/athlete/events/detail/route.ts`;
+- `src/app/api/athlete/fees/route.ts`;
+- `src/app/api/athlete/messages/route.ts`.
+
+Queste route filtrano o scrivono `profile_id = user.id`, quindi non possono operare per
+un figlio e non distinguono soggetto da attore.
+
+Route coach:
+
+- `src/app/api/coach/calendar/route.ts`;
+- `src/app/api/coach/events/detail/route.ts`;
+- `src/app/api/coach/messages/route.ts`;
+- `src/app/api/coach/payments/route.ts`.
+
+Queste route filtrano `coach_id = user.id` o scrivono `created_by = user.id`.
+
+Account e amministrazione:
+
+- `src/app/api/admin/users/route.ts`: crea prima Auth, usa lo stesso UUID per il profilo,
+  elimina profilo e Auth insieme, usa `profiles.is_active` come stato account e tratta
+  `user_roles` come multi-ruolo nonostante la PK;
+- `src/app/api/admin/users/import/route.ts`: ogni persona importata riceve sempre un invito;
+- `src/app/api/admin/users/reset-password/route.ts`: assume ID profilo = ID Auth;
+- `src/app/api/admin/athletes/route.ts` e `bulk/route.ts`;
+- `src/app/api/admin/coaches/route.ts` e `bulk/route.ts`;
+- `src/app/api/admin/events/route.ts`;
+- `src/app/api/admin/messages/route.ts`;
+- `src/app/api/admin/payments/route.ts`;
+- `src/app/api/admin/membership-fees/route.ts`;
+- `src/app/api/admin/document-templates/route.ts`;
+- `src/app/api/admin/documents/generate/route.ts`.
+
+Le restanti route admin verificano un singolo `app_metadata.role` e devono passare al
+contesto account centralizzato:
+
+- `admin/balance`, `admin/events/attendance`, `admin/incassi/*`,
+  `admin/installments`, `admin/membership-fees/available`;
+- `championships/standings`;
+- `messages/attachments/upload`.
+
+Notifiche:
+
+- `src/app/api/notifications/subscribe/route.ts` salva `profile_id = user.id`;
+- `src/app/api/notifications/unsubscribe/route.ts` filtra `profile_id = user.id`;
+- `src/lib/utils/push.ts` e `src/lib/utils/notifications.ts` trattano la subscription
+  come proprietà del profilo.
+
+Componenti client con query dirette o ruolo singolo:
+
+- `src/components/athlete/AthleteDashboard.tsx`;
+- `src/components/athlete/ChampionshipsManager.tsx`;
+- `src/components/coach/CoachDashboard.tsx`;
+- `src/components/coach/ChampionshipsManager.tsx`;
+- `src/components/coach/CoachMessagesManager.tsx`;
+- `src/components/admin/ChampionshipsManager.tsx`;
+- `src/components/shared/UserProfile.tsx`;
+- `src/components/admin/AdminDashboard.tsx`;
+- `src/components/admin/UserFormModal.tsx`;
+- `src/components/admin/UsersManager.tsx`;
+- `src/components/admin/AthletesManager.tsx`;
+- `src/components/admin/CoachesManager.tsx`;
+- `src/components/admin/BalanceDashboard.tsx`;
+- `src/components/admin/DocumentsManager.tsx`;
+- `src/components/admin/MessagesManager.tsx`;
+- `src/components/admin/MembershipFeesManager.tsx`;
+- `src/components/admin/PaymentsManager.tsx`;
+- `src/components/admin/TeamsManager.tsx`;
+- `src/components/admin/ImportManager.tsx`;
+- `src/components/admin/BulkGenerateModal.tsx`;
+- `src/components/admin/incassi/AthleteDetailDrawer.tsx`;
+- `src/lib/utils/trainingScheduleEvents.ts`.
+
+## 4. Modello target e decisioni architetturali
+
+### 4.1 Tabelle principali
+
+`profiles` resta la persona. In Fase 1:
+
+- si rimuove solo la FK verso `auth.users`, preservando PK e ID;
+- si aggiunge `DEFAULT gen_random_uuid()` a `id`;
+- `email` diventa nullable e resta email di contatto, non chiave di login;
+- `role` diventa nullable ma resta valorizzato sui 48 record per compatibilità;
+- `must_change_password` resta temporaneamente, ma la fonte autorevole diventa
+  `app_accounts.must_change_password`;
+- `is_active` assume il significato di anagrafica archiviata/attiva, non account sospeso.
+
+`profiles` non contiene un `season_id` singolo: la stessa persona può partecipare a più
+stagioni e deve conservare lo stesso `profile_id`. Ogni profilo operativo deve quindi
+essere collegato a una o più stagioni tramite una relazione dedicata, prevista come
+`season_profiles` (`profile_id`, `season_id`, stato e metadati di provenienza), con vincolo
+di unicità sulla coppia persona-stagione. La stagione attiva della UI determina quale
+relazione stagionale viene creata o modificata; non viene duplicata l’anagrafica quando
+una persona ritorna in una stagione successiva.
+
+Le iscrizioni sportive e le assegnazioni stagionali restano separate dalla persona:
+`athlete_profiles` conserva i dati sportivi propri dell’atleta, mentre corso e squadra
+sono risolti tramite le entità stagionali esistenti (`activities`, `teams` e
+`team_members`). Per i coach, `team_coaches` continua a determinare la squadra e la
+stagione attraverso il team. Il collegamento a una stagione non rende automaticamente
+stagionale il ruolo globale dell’account: `admin`, `coach` e `staff` restano in
+`account_roles`, secondo le regole di autorizzazione già definite.
+
+`app_accounts` segue lo schema richiesto, con questi dettagli:
+
+- PK `auth_user_id` con `ON DELETE CASCADE`;
+- `owner_profile_id UNIQUE NOT NULL` con `ON DELETE RESTRICT`;
+- stato `invited|active|suspended|disabled`;
+- indice su `(status)` e trigger `updated_at`;
+- nessun `auth_user_id` duplicato anche in `profiles`.
+
+`account_roles` ha PK composta `(auth_user_id, role)` e contiene i ruoli globali
+`admin|coach|staff|athlete`. Il ruolo `athlete` non sostituisce il profilo atleta né
+l'iscrizione stagionale attiva.
+
+Il ruolo `coach` abilita l'area coach, ma non attribuisce accesso a nessuna squadra.
+L'unica catena autorevole per autorizzare una squadra è:
+
+```text
+app_accounts.owner_profile_id
+  -> team_coaches.coach_id
+  -> team_coaches.team_id
+```
+
+Non sono ammessi fallback su `teams.coach_id`, `team_members.role='coach'`,
+`profiles.role` o claim JWT. `is_athlete()` deriva esclusivamente dalla presenza della
+persona in `athlete_profiles` o `team_members`, non da `account_roles`.
+
+Decisione confermata: `team_coaches` è la fonte autorevole per l'accesso coach alle
+squadre e per il ruolo dell'assegnazione. `teams.coach_id` resta temporaneamente un
+campo legacy/compatibilità e non viene sincronizzato automaticamente, perché non può
+rappresentare più coach o ruoli distinti senza perdita di informazione. Nel dato
+attuale, `Amatoriale Mar-Gio` ha Daniele Politi come `head_coach` e Francesca Costantini
+come `assistant_coach`; `Maschile` ha Daniele Politi come `head_coach`.
+
+`profile_relationships` segue lo schema richiesto, con:
+
+- `valid_until IS NULL OR valid_until >= valid_from`;
+- indici su source, target, stato e validità;
+- `verified_by` rinominato semanticamente `verified_by_auth_user_id` e
+  `ON DELETE SET NULL`, mentre l'audit immutabile conserva uno snapshot dell'attore;
+- nessuna cancellazione fisica dal flusso UI: `DELETE` applica `status='revoked'`;
+- nessuna relazione self;
+- un solo `is_primary_contact=true` attivo per target;
+- un solo `is_billing_contact=true` attivo per target;
+- più relazioni possono avere `can_receive_messages=true` o
+  `is_emergency_contact=true`.
+
+L'unicità dei contatti principali è protetta nel database, non solo nella UI. Una
+relazione scaduta non autorizza mai; il flusso amministrativo chiude/revoca il precedente
+contatto principale prima di assegnarne uno nuovo.
+
+### 4.2 Helper di sicurezza
+
+Gli helper che devono leggere tabelle protette vivono in uno schema non esposto,
+proposto `private`, non in `public`:
+
+- `private.current_profile_id()`;
+- `private.has_account_role(role)`;
+- `private.has_active_relationship(target_profile_id)`;
+- un helper specifico per ogni permesso (`can_view_schedule`,
+  `can_confirm_attendance`, `can_view_payments`, ecc.);
+- helper coach/team basati sul profilo proprietario risolto dall'account.
+
+Quando serve bypass RLS, la funzione è `SECURITY DEFINER`, ha riferimenti qualificati,
+`search_path` fissato, `EXECUTE` revocato a `PUBLIC` e concesso solo ad
+`authenticated`/`service_role`. Le firme pubbliche legacy (`is_admin()`, ecc.) restano
+temporaneamente come wrapper `SECURITY INVOKER` per non rompere tutte le policy nello
+stesso deploy.
+
+I grant dello schema `private` sono espliciti:
+
+- `REVOKE ALL ON SCHEMA private FROM PUBLIC`, `anon` e ruoli non necessari;
+- `GRANT USAGE ON SCHEMA private TO authenticated, service_role`; nessun `USAGE` ad
+  `anon`; eventuali ruoli ulteriori richiedono una migration esplicita;
+- nessun grant diretto sulle eventuali tabelle private ad `anon` o `authenticated`;
+- `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA private FROM PUBLIC` prima dei grant;
+- `GRANT EXECUTE` funzione per funzione, mai `ALL FUNCTIONS`;
+- gli helper RLS strettamente necessari sono eseguibili da `authenticated`; funzioni di
+  manutenzione o backfill sono eseguibili solo da `service_role`/owner database;
+- ogni funzione ha `search_path` fisso e usa nomi completamente qualificati;
+- i default privileges sono revocati per impedire esposizioni future involontarie;
+- test SQL automatici verificano `USAGE`, `EXECUTE`, assenza di accesso tabellare e
+  impossibilità di chiamare funzioni non concesse.
+
+`app_accounts` non usa `current_profile_id()` nella propria policy self, evitando
+ricorsione: il self-check è direttamente `auth_user_id = auth.uid()`.
+
+### 4.3 Autorizzazione applicativa
+
+Si introduce un unico resolver server-side, indicativamente:
+
+- `src/server/auth/require-account-context.ts`;
+- `src/server/auth/require-global-role.ts`;
+- `src/server/profiles/require-profile-permission.ts`.
+
+Il contesto contiene `authUserId`, `ownerProfileId`, `accountStatus` e `roles[]`.
+Ogni route chiama `supabase.auth.getUser()` e poi risolve il contesto dal database.
+Nessuna route si autorizza esclusivamente dal ruolo ricevuto dal client o dal JWT.
+
+Il percorso predefinito per dati applicativi è:
+
+```text
+client Supabase dell'utente autenticato + RLS
+```
+
+Il client admin è ammesso soltanto per Supabase Auth Admin, ciclo di vita account,
+operazioni amministrative strettamente circoscritte o casi documentati in cui RLS non è
+applicabile. Non viene usato genericamente dopo un controllo TypeScript per leggere o
+scrivere dati di dominio. Vive in un solo modulo `server-only`, indicativamente
+`src/server/supabase/admin-client.ts`; nessun barrel client lo riesporta e un test di
+dipendenze impedisce import da Client Components o moduli frontend.
+
+Il middleware resta responsabile di refresh sessione e presenza login, non di decisioni
+di dominio: lo stato account e i ruoli vengono verificati dalle route/server layer e da
+RLS. Questo evita di affidarsi a claim JWT non ancora aggiornati.
+
+### 4.4 Dati profilo e granularità
+
+RLS è row-level e non può nascondere singole colonne sensibili di `profiles`. Perciò una
+relazione familiare non ottiene automaticamente `SELECT *` sul profilo del figlio.
+
+- `/api/me/accessible-profiles` restituisce solo identità minima e permessi;
+- calendario, pagamenti, documenti, stato medico e contatti hanno controlli separati;
+- le route server-side usano per default il client dell'utente e RLS;
+- le query client dirette verso dati sensibili vengono progressivamente spostate dietro
+  route tipizzate solo quando il controllo non può essere espresso correttamente in RLS.
+
+### 4.5 Actor e subject
+
+Le colonne esistenti che puntano a `profiles` restano riferimenti a persone. Quando una
+persona agisce per un'altra:
+
+- `subject_profile_id` identifica il soggetto;
+- `performed_by_auth_user_id` identifica l'account;
+- dove utile, `performed_by_profile_id` conserva la persona proprietaria dell'account;
+- audit e future firme gestite da un provider esterno salvano snapshot di relazione/tipo
+  per restare storici dopo revoca.
+
+Per audit e future evidenze esterne, l'UUID Auth storico non deve bloccare la cancellazione dell'account:
+viene conservato come valore immutabile senza FK distruttiva, insieme a uno snapshot
+dell'attore. Le colonne operative non storiche possono usare `ON DELETE SET NULL`.
+
+### 4.6 Maggiore età e accesso familiare
+
+La minore età è calcolata da `profiles.birth_date`. Un override amministrativo è ammesso
+solo con motivazione obbligatoria, attore e timestamp; viene mantenuto in una struttura
+auditabile, non in un flag client.
+
+Un helper centralizzato, indicativamente `private.is_profile_minor(profile_id, at_date)`,
+applica questa precedenza:
+
+1. override amministrativo attivo e motivato;
+2. calcolo dalla data di nascita;
+3. dato mancante o incoerente: fail closed, nessun accesso parent automatico.
+
+La relazione `parent` resta nello storico, ma dal giorno del diciottesimo compleanno non
+concede più accesso operativo. L'accesso successivo richiede una relazione `delegate`
+attiva e verificata con i permessi necessari. Letture, audit ed eventuali evidenze esterne
+già registrate non vengono modificati retroattivamente.
+
+### 4.7 Fonti autorevoli dei dati persona/atleta/squadra
+
+Prima della Fase 4 viene completato un consolidamento esplicito:
+
+- `profiles`: anagrafica e contatti (`first_name`, `last_name`, `birth_date`, email e
+  telefono di contatto, avatar);
+- `athlete_profiles`: numero tessera, stato e scadenza del certificato medico;
+- `team_members`: dati specifici di squadra/stagione, incluso numero maglia.
+
+Le colonne duplicate non vengono eliminate finché una migration di confronto non ha:
+
+1. classificato valori uguali, null e conflitti;
+2. prodotto un report dei conflitti senza sovrascrittura automatica;
+3. backfillato solo valori mancanti dalla fonte scelta;
+4. migrato tutte le letture/scritture alla fonte autorevole;
+5. aggiunto test di non regressione e solo infine deprecato le copie legacy.
+
+Per i genitori, `can_view_medical_status` espone soltanto stato e scadenza del
+certificato; non concede accesso a note o dati sanitari dettagliati.
+
+## 5. Piano delle migration
+
+Ogni file viene creato con `supabase migration new`, mai nominato manualmente.
+
+### Fase 1 — schema, backfill e compatibilità
+
+Migration 1: `create_account_person_model`
+
+- crea `app_accounts`, `account_roles`, `profile_relationships`;
+- crea check, indici e trigger `updated_at`;
+- abilita RLS immediatamente;
+- revoca privilegi impliciti e concede solo quelli necessari;
+- non modifica ancora policy operative esistenti.
+
+Migration 2: `backfill_existing_accounts_and_roles`
+
+- inserisce un `app_accounts` per ogni join `auth.users.id = profiles.id`;
+- determina stato iniziale:
+  - `disabled` se `profiles.is_active = false`;
+  - `invited` se Auth è invitato ma non ha completato il primo accesso;
+  - `active` altrimenti;
+- copia `profiles.must_change_password`;
+- inserisce in `account_roles` solo `admin` e `coach`, usando l'unione tra
+  `profiles.role` e `user_roles`;
+- usa `ON CONFLICT DO NOTHING/UPDATE` in modo idempotente;
+- contiene assert che falliscono la migration se un account non ha esattamente un
+  mapping o se un owner è duplicato.
+
+Migration 3: `decouple_profiles_from_auth`
+
+- elimina `profiles_id_fkey`;
+- imposta default UUID;
+- rende `email` e `role` nullable;
+- mantiene valori e colonne legacy;
+- esegue `DROP TRIGGER IF EXISTS sync_auth_users_to_profiles_trigger ON auth.users`;
+- revoca l'esecuzione pubblica della funzione legacy e la marca con commento di
+  deprecazione; la rimozione definitiva resta in Fase 6.
+
+Migration 4: `account_authorization_helpers_and_rls`
+
+- crea schema/helper privati;
+- applica revoche, `USAGE` e `EXECUTE` puntuali definiti nella sezione 4.2, senza grant
+  diretti alle tabelle private;
+- riscrive `is_admin`, `is_coach`, `is_athlete`, helper team e visibilità profili;
+- `is_coach` verifica l'abilitazione area, gli helper team seguono esclusivamente
+  `owner_profile_id -> team_coaches`, e `is_athlete` legge solo dati sportivi;
+- crea policy self/admin sulle tre nuove tabelle;
+- impedisce agli utenti standard di mutare owner, ruoli, verifiche e permessi;
+- verifica RLS di `user_roles`, mantenuta solo in lettura compatibile;
+- aggiunge test automatici di grant/default privileges e `search_path`;
+- non concede ancora accesso famiglia ai domini operativi.
+
+Gate Fase 1: i 48 account esistenti devono continuare a operare; nessun profilo senza
+account viene creato finché Fase 3 non è deployata.
+
+### Fase 2 — migrazione incrementale delle autorizzazioni
+
+Fase 2 non viene rilasciata in un unico deploy. Ogni sottofase ha una migration, un
+deploy applicativo indipendente e un gate di merge. Le policy non ancora migrate restano
+nel modello legacy finché arriva la loro sottofase; i 48 ID esistenti rendono possibile
+questa convivenza controllata.
+
+#### Fase 2A — account context, profilo personale e account status
+
+Migration 5: `account_context_and_personal_access_policies`
+
+- stabilizza `private.current_profile_id()` e il controllo status account;
+- migra solo policy self di `app_accounts`, `account_roles` e `profiles`;
+- introduce il resolver server `requireAccountContext` e migra login, reset password,
+  `useAuth`, dashboard base e profilo personale;
+- un account `suspended` o `disabled` non ottiene contesto, dati o mutazioni.
+
+Test SQL: active/invited/suspended/disabled, owner univoco, self SELECT/UPDATE e diniego
+cross-profile.
+
+Test API: login legacy, profilo personale, reset password, 401/403 per status non
+operativo e UUID manipolato.
+
+Query di verifica: conteggi Auth/profili/mapping, mapping senza owner, account non active
+che risolvono un profilo (atteso zero), policy self residue con confronto diretto
+`profiles.id = auth.uid()`.
+
+Gate di merge: login e profilo personale funzionano per tutti i 48 account; sospensione
+blocca API e RLS immediatamente; nessuna route migrata scrive `user.id` in una FK profilo.
+
+Rollback/roll-forward: rollback del codice al resolver legacy è possibile perché gli ID
+restano invariati; le tabelle additive restano. Se la migration policy è già applicata,
+si ripristinano soltanto le policy self precedenti con una migration forward correttiva.
+
+#### Fase 2B — Admin e Staff
+
+Migration 6: `admin_staff_account_role_policies`
+
+- migra le policy e le route admin dal singolo claim a `account_roles`;
+- `admin` conserva le operazioni globali esplicitamente elencate;
+- `staff` non equivale ad admin e non riceve accesso globale implicito;
+- ogni capacità staff è nominata e concessa solo alla policy/route necessaria; la prima
+  capacità prevista è la verifica relazioni in Fase 4;
+- centralizza il client Auth Admin nel modulo server-only e aggiunge il controllo
+  statico che ne vieta import frontend.
+
+Test SQL: matrice admin/staff/utente su profili, account e ruoli; grant dello schema
+`private`; tentativi staff su funzioni admin non concesse.
+
+Test API: tutte le route `/api/admin/**`, payload con ruolo falsificato, status
+disabilitato e import account.
+
+Query di verifica: policy admin ancora basate solo su JWT (atteso zero nel perimetro),
+grant eccessivi, funzioni `private` eseguibili da `PUBLIC`, route admin ancora prive del
+resolver centralizzato.
+
+Gate di merge: l'admin esistente conserva tutte le funzioni; staff vede soltanto
+capabilities allowlisted; il frontend non importa service role/admin client.
+
+Rollback/roll-forward: il codice admin precedente può essere ripristinato mentre il
+dual-write legacy è attivo; le policy vengono corrette con nuova migration, mai
+modificando una migration già applicata.
+
+#### Fase 2C — Coach e autorizzazioni squadra
+
+Migration 7: `coach_team_assignment_policies`
+
+- `account_roles.coach` abilita esclusivamente l'area coach;
+- tutte le policy team usano soltanto `current_profile_id() -> team_coaches.coach_id`;
+- elimina fallback autorizzativi su `teams.coach_id`, `team_members.role='coach'`,
+  `profiles.role` e claim JWT;
+- migra route coach, calendario, eventi, convocazioni, pagamenti coach e query UI.
+
+Test SQL: coach con zero/una/più squadre, due coach sulla stessa squadra, coach che è
+anche genitore/iscritto, tentativo di accesso a squadra non assegnata.
+
+Test API: ogni route coach con team ID valido, alterato e rimosso durante la sessione.
+
+Query di verifica: policy/funzioni contenenti `teams.coach_id = auth.uid()`,
+`team_members.role='coach'` o `team_coaches.coach_id = auth.uid()` (atteso zero);
+confronto squadre restituite dall'API con `team_coaches`.
+
+Gate di merge: aggiungere/rimuovere `account_roles.coach` cambia l'area, mentre
+aggiungere/rimuovere `team_coaches` cambia immediatamente le singole squadre accessibili.
+
+Rollback/roll-forward: si mantiene `team_coaches` come fonte dati; eventuali regressioni
+si correggono con policy forward. Nessun backfill autorizzativo usa le colonne fallback.
+
+#### Fase 2D — Iscritti e accesso personale
+
+Migration 8: `athlete_personal_access_policies`
+
+- riscrive `is_athlete()` usando `athlete_profiles` o `team_members`;
+- migra policy e route athlete per calendario, dashboard, presenze e quote personali;
+- introduce `account_roles.athlete` come abilitazione globale dell’area atleta, senza
+  sostituire il controllo sportivo su `athlete_profiles`, `season_profiles` e iscrizioni;
+- mantiene ancora fuori perimetro l'accesso parent, introdotto in Fase 4.
+
+Test SQL: atleta con/senza `athlete_profiles`, iscrizione a più squadre, persona non
+iscritta e compagno di squadra.
+
+Test API: tutte le route `/api/athlete/**`, self e IDOR.
+
+Query di verifica: coerenza tra `account_roles.role='athlete'`, mapping `app_accounts` e
+profilo operativo atleta; helper che leggono `profiles.role='athlete'` e route athlete
+che usano `user.id` come profilo.
+
+Gate di merge: i 44 atleti esistenti conservano accesso personale; una persona non
+iscritta non ottiene l'area atleta; revoca iscrizione aggiorna subito l'accesso.
+
+Rollback/roll-forward: le colonne legacy restano in dual-read fino a fine gate; eventuali
+correzioni policy sono forward e non modificano dati sportivi.
+
+Implementazione eseguita:
+
+- `20260807135515_athlete_personal_access_policies.sql` applicata in locale e staging;
+- `20260807135828_athlete_personal_access_policy_corrections.sql` applicata in locale e staging;
+- le policy atleta usano `private.current_profile_id()` e `private.is_in_same_team()`;
+- le API e i componenti atleta usano `ownerProfileId`/`profile.id`, mentre l'identità Auth
+  resta confinata alla risoluzione dell'account;
+- coperti accesso personale a profilo atleta, squadre, eventi, calendario, quote,
+  messaggi, RSVP e presenze; l'accesso parent resta fuori perimetro;
+- build Next.js, TypeScript ed E2E locale completati: 6 test su 6 passati;
+- backup staging pre-migration: `/tmp/csroma_staging_before_athlete_phase2d_schema.sql`,
+  `/tmp/csroma_staging_before_athlete_phase2d_data.sql`,
+  `/tmp/csroma_staging_before_athlete_phase2d_roles.sql`;
+- `supabase db push --linked --dry-run` staging: database aggiornato.
+
+Correzione post-staging: `20260807142346_drop_legacy_profile_message_policies.sql` rimuove
+le due policy legacy dei mittenti messaggi su `profiles`, che insieme alle nuove policy
+account-based del dominio messaggi causavano ricorsione RLS infinita. La correzione è stata
+applicata e verificata su staging; il dump successivo non contiene più quelle policy e il
+dry-run è aggiornato. L'applicazione locale resta da eseguire quando il daemon Docker sarà
+nuovamente disponibile.
+
+La successiva verifica coach ha evidenziato un secondo gruppo di policy legacy su
+`messages` e `message_recipients`; è stata quindi applicata anche
+`20260807143216_drop_legacy_message_policies.sql`. Le policy storiche sono state rimosse,
+il dump staging non le contiene più e il dry-run è aggiornato.
+
+La correzione definitiva è contenuta in
+`20260807143907_fix_message_recipient_coach_rls_recursion.sql`: usa
+`private.is_message_owner()` come funzione `SECURITY DEFINER` per il solo controllo di
+ownership, evitando il ciclo tra `messages` e `message_recipients`. Una verifica SQL
+read-only con il JWT coach di staging ha confermato 3 destinatari e 5 messaggi accessibili.
+
+Fase 2E, slice 1: la migration
+`20260807160000_shared_push_subscription_account_policies.sql` sostituisce le policy
+legacy di `push_subscriptions` con policy basate su `private.current_profile_id()` e
+`private.has_account_role('admin')`. Le route subscribe, unsubscribe e test risolvono ora
+`ownerProfileId` tramite il contesto account prima di leggere o scrivere le subscription.
+La migration è stata applicata manualmente in locale dopo una verifica dei grant dello
+schema `private` (il CLI locale si fermava su una migration coach già verificata); la
+history locale è stata riallineata con `supabase migration repair`. La build Next.js è
+passata. Dopo backup `/tmp/csroma_staging_before_2e_push_schema.sql`, dry-run e
+applicazione, staging mostra esclusivamente le due policy account-based attese e il
+successivo dry-run è aggiornato. Produzione non è stata modificata.
+
+Fase 2E, slice 2: le migration
+`20260807162000_shared_document_account_policies.sql` e
+`20260807162100_shared_document_legacy_policy_cleanup.sql` aggiornano documents,
+document recipients, document templates e le policy Storage dei PDF generati. Le FK
+persona (`profile_id`, `target_user_id`, `created_by`) restano basate sul profilo
+proprietario; `document_recipients.user_id` resta intenzionalmente un identificatore Auth
+del destinatario. Il slice è applicato e verificato in locale; il passaggio staging resta
+da eseguire dopo il commit. Dopo backup `/tmp/csroma_staging_before_2e_documents_schema.sql`,
+dry-run e applicazione, staging espone solo le policy documentali account-based attese e
+`supabase db push --linked --dry-run` conferma `Remote database is up to date`. Produzione
+non è stata modificata.
+
+Fase 2E, slice 3: la migration
+`20260807164000_shared_financial_account_policies.sql` rimuove le policy duplicate legacy
+da `payments`, `membership_fees` e `fee_installments`, mantenendo le policy coach/atleta
+basate sugli helper privati e sostituendo i controlli admin con
+`private.has_account_role('admin')`. I conteggi locali restano 17 pagamenti, 9 quote e
+120 rate. Dopo backup `/tmp/csroma_staging_before_2e_financial_schema.sql`, dry-run e
+applicazione, staging espone solo le policy account-based attese e il dry-run è aggiornato.
+Produzione non è stata modificata.
+
+Fase 2E, slice 4: la migration
+`20260807165000_shared_event_support_account_policies.sql` normalizza le policy di
+`rsvp`, `event_attendances` e `team_training_schedules`, usando
+`private.current_profile_id()`, `private.is_athlete()`, `private.is_coach_of_team()` e
+`private.has_account_role('coach')`. I dati locali restano invariati: 0 RSVP, 0 presenze e
+4 orari squadra. Dopo backup `/tmp/csroma_staging_before_2e_event_support_schema.sql`,
+dry-run e applicazione, staging espone solo le policy attese e il dry-run è aggiornato.
+Produzione non è stata modificata.
+
+Fase 2E, audit applicativo finale: `src/app/api/championships/standings/route.ts`,
+`src/app/api/messages/attachments/upload/route.ts` e
+`src/lib/utils/trainingScheduleEvents.ts` non usano più l’UUID Auth come profilo per
+classifiche, ownership dei messaggi o `events.created_by`. Le route risolvono il contesto
+account e usano `ownerProfileId`; i percorsi Storage e la pulizia dei draft mantengono
+`authUserId` perché sono identificatori tecnici dell’attore. Build Next.js e Jest passano
+(3 test su 3). Non è stata necessaria una nuova migration DB.
+
+Verifica staging successiva: i test manuali admin/coach/atleta hanno confermato i confini
+di visibilità per messaggi ed eventi, inclusi i casi negativi. È stata inoltre corretta la
+route `src/app/api/coach/messages/route.ts`: dopo che RLS ha autorizzato i messaggi,
+l’enrichment del mittente usa il client server-side per mostrare il profilo del creator
+anche quando è un admin. Questo non amplia la lettura dei messaggi né modifica le policy;
+risolve solo il precedente `N/D` nella colonna Mittente del coach. La build Next.js passa.
+La suite `tests/e2e/api-bola.spec.ts` copre i confini non autenticato e i casi BOLA/IDOR;
+il caso non autenticato passa, mentre i casi autenticati richiedono le credenziali e gli
+ID di record di test configurati in `.env.local`.
+
+#### Fase 2E — messaggi, notifiche, documenti e domini condivisi
+
+Migration 9: `shared_domain_actor_and_access_policies`
+
+- migra policy e route condivise di messaggi, allegati, notifiche, documenti, quote,
+  pagamenti, eventi e tabelle di supporto;
+- nelle FK persona scrive `ownerProfileId`, nelle colonne actor scrive `authUserId`;
+- rimuove duplicazioni di policy solo nel dominio migrato;
+- prepara, senza abilitarlo, il subject delegato della Fase 4.
+
+Test SQL: matrice self/admin/coach per ciascun dominio, `USING` + `WITH CHECK`, allegati
+storage e grant.
+
+Test API: messaggi, notifications, documents, shared routes, BOLA/IDOR e status account.
+
+Query di verifica: inventario completo della sezione 3.2, confronti diretti residui tra
+UUID Auth e FK profilo, policy duplicate e funzioni pubbliche con grant eccessivi.
+
+Gate di merge: nessuna occorrenza applicativa nel perimetro completo passa `user.id` a
+`profile_id`, `coach_id` o `created_by -> profiles`; tutti i domini mantengono il
+comportamento dei 48 account.
+
+Rollback/roll-forward: deploy applicativo reversibile grazie ai campi legacy; policy e
+grant vengono riparati con migration forward atomica per dominio.
+
+### Fase 3 — persone e ciclo di vita account
+
+#### Decisione UI: percorsi distinti su modello persona condiviso
+
+La creazione resterà unica a livello di modello dati (`profiles`), ma sarà esposta con
+percorsi UI separati in base all'operatività:
+
+- **Atleti**: creazione singola e import massivo da file Excel/CSV;
+- **Coach**: creazione manuale della persona, assegnazione alle squadre e account
+  opzionale in un passaggio separato;
+- **Collaboratori**: creazione manuale della persona e account con ruolo `staff`;
+- **Admin**: creazione manuale e assegnazione esplicita del ruolo `admin`, con permessi
+  riservati.
+
+L’inserimento e l’import degli atleti avverranno nel contesto di una stagione selezionata.
+Dovranno prevedere anteprima, validazione per riga, report degli errori e comportamento
+idempotente per evitare duplicati. Se la persona esiste già, il flusso riutilizzerà lo
+stesso `profile_id` e creerà o aggiornerà solo il collegamento stagionale e le relative
+iscrizioni; se non esiste, creerà prima l’anagrafica e poi il collegamento alla stagione.
+La chiave di riconciliazione non dovrà essere l’email, che può essere condivisa da più
+familiari: verrà definito un identificativo stabile del file sorgente, come codice atleta
+o tessera federale, con revisione manuale dei conflitti. L’import non creerà
+automaticamente account Auth; l’eventuale attivazione dell’accesso resterà un’azione
+successiva e separata.
+
+Questa separazione riguarda esclusivamente UX e workflow: il backend manterrà un solo
+modello `profiles`, con `season_profiles`, `app_accounts` e `account_roles` opzionali
+secondo le regole già definite. L’implementazione procede per slice, partendo dalla
+relazione persona-stagione e dai suoi vincoli DB.
+
+Spike Fase 3 completato in locale: con `@supabase/supabase-js 2.56.0` e lo stack
+Supabase Docker è stato verificato il flusso `auth.admin.createUser` senza invio seguito
+da `auth.admin.generateLink(type='invite')`. Entrambe le operazioni sono riuscite; il
+link è stato generato senza invio automatico e l’utente tecnico è stato eliminato subito
+dopo la prova. Il test non ha creato `profiles`, `app_accounts` o `account_roles` e non ha
+interessato staging o produzione. Il primo slice può quindi usare il flusso
+create-then-verify-then-link previsto dal piano.
+
+Migration 10, primo slice locale: `20260809120000_person_account_audit_support.sql`
+ha aggiunto `account_lifecycle_audit` come tabella append-only, con snapshot dell’attore,
+soggetto non distruttivo, dettagli JSON e timestamp. La tabella non è esposta ai ruoli
+`anon`/`authenticated`; i grant sono riservati al percorso server-side. Un trigger blocca
+UPDATE e DELETE: il test locale ha rifiutato la modifica e il conteggio finale è rimasto
+zero. La migration non è ancora stata applicata a staging e non è stata applicata in
+produzione.
+
+Fase 3, slice API persone: sono stati aggiunti `GET/POST /api/admin/profiles`, lo schema
+`src/lib/validation/profiles.ts` e il servizio audit `src/server/audit/account-lifecycle.ts`.
+Il POST crea esclusivamente una persona anagrafica neutra, senza account Auth, ruolo legacy
+o invio email; il GET espone i profili all’admin con l’eventuale stato account e ruoli
+collegati. Ogni creazione valida registra `profile_created`; se l’audit fallisce viene
+tentato il rollback del profilo appena creato. Il test autenticato locale ha verificato
+GET con 48 profili e il rifiuto di un POST invalido con HTTP 400 senza inserimenti. Nessuna
+UI è stata modificata e staging/produzione non sono stati toccati.
+
+Fase 3, slice UI persone: sono stati aggiunti il menu admin `Persone`, la pagina
+`/admin/profiles` e `src/components/admin/PeopleManager.tsx`. La schermata separa
+anagrafica e accesso, mostra stato/account collegato, ricerca locale, stati loading/error/
+empty e il dialog accessibile `Nuova persona`. Il form invia solo dati anagrafici e non
+crea account Auth. La verifica UI autenticata locale ha confermato navigazione, caricamento
+elenco e apertura del dialog con campi etichettati; nessuna persona di test è stata
+inserita. Build Next.js e Jest passano. Staging e produzione non sono stati toccati.
+
+Fase 3, slice provisioning senza invio: la migration
+`20260809130000_account_provisioning_mapping_function.sql` aggiunge la funzione server-role
+only `provision_account_mapping`, che crea mapping `app_accounts` e ruolo globale in modo
+atomico. La route `POST /api/admin/profiles/:id/create-account` crea Auth senza conferma
+email né notifica, esegue il mapping, verifica owner/stato/ruolo e registra gli eventi
+`account_provisioning_started`, `account_created` e `mapping_verified`; in caso di errore
+tenta la cancellazione compensativa dell’utente Auth e registra il problema. La UI mostra
+l’azione separata `Crea account` con ruolo esplicito `admin`, `coach` o `staff` e chiarisce
+che l’accesso non viene ancora inviato. Il test locale ha verificato mapping temporaneo e
+cleanup completo, oltre al guard 409 sui profili già collegati. Non è ancora stato inviato
+alcun accesso e staging/produzione non sono stati toccati.
+
+Fase 3, slice invito: `POST /api/admin/profiles/:id/invite-account` usa il mailer nativo
+Supabase tramite `auth.admin.inviteUserByEmail`, dopo il controllo dello stato `invited`,
+del mapping e del ruolo. Supabase genera e invia il template Invite attraverso l’SMTP già
+configurato in staging e produzione; il codice verifica anche che l’utente restituito
+coincida con l’Auth mapping atteso. Gli eventi audit indicano
+`provider: supabase_auth_smtp`; in caso di errore l’account resta invitabile e viene
+registrato il fallimento, senza esporre link o token. La UI espone `Invia invito` solo per
+account `invited`, con conferma esplicita. Non sono necessarie variabili Resend né un
+provider email aggiuntivo. Build e Jest passano; staging/produzione non sono stati
+toccati.
+
+Fase 3, slice iscritti stagionale: la sezione `/admin/atleti` espone creazione singola e
+import massivo nel contesto di una stagione. `POST /api/admin/athletes` crea anagrafica,
+`athlete_profiles` e `season_profiles` senza account Auth; la lista usa la relazione
+stagionale per filtrare gli atleti e non dipende più dal ruolo legacy `profiles.role`.
+La creazione e l’import consentono di associare attività e squadra coerenti con la stagione;
+l’assegnazione viene salvata in `team_members` dopo la validazione server-side. Il nuovo
+endpoint `POST /api/admin/athletes/import` usa il numero tessera come chiave stabile,
+riutilizza il profilo esistente, aggiorna il collegamento stagionale e restituisce un
+report per riga; supporta anteprima XLSX/CSV e dry-run senza scritture. Build, Jest
+e gli E2E stagionali passano; due smoke test admin
+preesistenti hanno avuto timeout durante il caricamento di pagine pesanti, senza errori
+funzionali sul nuovo flusso.
+
+Fase 3, slice pagamenti collaboratori: la migration
+`20260809090904_collaborator_season_profile_type.sql` aggiunge la classificazione
+stagionale `athlete|coach|staff|admin`, distinta dai ruoli globali di accesso. La migration
+`20260809091419_person_payment_payee.sql` mantiene i pagamenti coach esistenti e aggiunge
+`person_payment` con `payee_profile_id`, consentendo di registrare pagamenti a coach o Staff
+anche senza squadra, attività o palestra. La UI `/admin/payments` carica i destinatari
+collaboratori da un endpoint admin dedicato, mantiene il flusso coach legacy e aggiunge il
+flusso Staff; API e vincoli DB verificano che il destinatario sia effettivamente coach o
+Staff. Build e test E2E locale del nuovo form passano; staging/produzione non sono stati
+toccati.
+
+Fase 3, slice ciclo di vita iscritti e collaboratori: `/admin/atleti` ora consente
+creazione, modifica e rimozione dell’iscrizione per stagione; la rimozione elimina solo
+il collegamento stagionale e le assegnazioni a squadre della stagione, conservando
+anagrafica, storico e account. `/admin/collaboratori` usa un endpoint dedicato per creare
+e modificare Coach e Staff, con assegnazione opzionale a stagione, attività/squadra e
+ruolo head/assistant per i Coach. Coach e atleti possono essere assegnati a più squadre
+della stessa stagione, con ruolo indipendente per ogni assegnazione coach e numero di
+maglia indipendente per ogni assegnazione atleta. La rimozione è stagionale e archivia la persona solo
+quando non restano altre stagioni. Le azioni di creazione account e invio invito sono
+state portate nella riga del collaboratore; `Persone` resta il pannello centralizzato.
+La creazione account atleta segue la slice di riconciliazione descritta sotto; il flusso
+è separato dalla creazione dell’iscrizione e non invia accessi prima della verifica del
+mapping.
+Build e test E2E CRUD locale passano; staging/produzione non sono stati toccati.
+
+Correzione locale classifica: dopo il restore locale la materialized view
+`championship_standings_mv` risultava non popolata, pur avendo 62 righe nella vista
+sorgente e i trigger di refresh presenti. La migration forward
+`20260809150000_populate_championship_standings_mv.sql` esegue il popolamento iniziale;
+in locale la view è ora popolata e l’endpoint `/api/championships/standings` può leggerla.
+La stessa migration dovrà essere inclusa nel preflight staging; produzione non è stata
+interrogata né modificata.
+
+Correzione RLS atleta: la migration
+`20260809160000_athlete_season_profile_select_policy.sql` consente a un account con
+`account_roles('athlete')` di leggere esclusivamente le proprie relazioni in
+`season_profiles`. Il controllo server `requireAthleteContext` verifica ora anche il
+ruolo globale atleta, oltre a `athlete_profiles` e a una relazione stagionale attiva;
+senza questi requisiti le API atleta continuano a rispondere `403`.
+
+Preflight staging completato il 9 agosto 2026: backup schema, dati e ruoli salvati in
+`/tmp/csroma_staging_preflight_20260809/`; le 10 migration della Fase 3A sono state
+applicate al progetto staging `kibtvkuiedoxgppnnxkf`. Il dry-run successivo ha restituito
+`Remote database is up to date` e il lint remoto non ha rilevato errori di schema.
+Produzione non è stata modificata.
+
+#### Fase 3A — account atleta e riconciliazione degli account esistenti
+
+Stato: implementazione completata e verificata in locale e staging. La migration `20260809140000_account_role_athlete.sql`
+abilita il ruolo e aggiorna il provisioning; la migration
+`20260809141000_reconcile_existing_athlete_accounts.sql` ha riconciliato in locale 44
+mapping già certi (`app_accounts` + `athlete_profiles` + `season_profiles` attiva), senza
+modificare Auth, profili, password, sessioni, stato o ruoli esistenti. Non sono stati
+rilevati casi ambigui nel database locale; eventuali casi non riconducibili con gli stessi
+criteri restano esclusi e richiedono revisione manuale.
+
+Il gate di verifica locale/staging della Fase 3A è stato superato con test manuali. Sono
+stati verificati creazione persona, creazione account, invito, primo accesso, cambio
+password, accesso per ruolo, isolamento di messaggi/eventi e CRUD stagionale per admin,
+coach e atleta. Sono state inoltre verificate le assegnazioni di coach e atleti a più
+squadre.
+
+Restano come attività di consolidamento della Fase 3A:
+
+- mantenere la transizione controllata dell'account da `invited` ad `active` dopo il
+  primo set della password, senza consentire al link di attivazione di bypassare
+  `app_accounts.status`;
+- mantenere la risoluzione del ruolo applicativo da `account_roles`, inclusivo di
+  `athlete`, separata da `athlete_profiles` e iscrizione stagionale;
+- mantenere il controllo di `season_profiles.status = 'active'` nell'accesso atleta;
+- mantenere la creazione Admin dalla sezione Collaboratori con relazione stagionale;
+- mantenere non operativi i percorsi legacy di creazione account da Utenti, che usano
+  direttamente `profiles.role`, `user_roles` o cancellazioni fisiche;
+- mantenere e completare la matrice E2E automatizzata per creazione, invito, attivazione, accesso e revoca di
+  atleta, coach, staff e admin.
+
+Correzione primo accesso: `useAuth` rimanda la risoluzione del profilo durante
+`/auth/callback` e `/reset-password`, evitando il falso errore `Account non abilitato`
+mentre l’account è ancora `invited` e riducendo i refresh concorrenti della sessione.
+La correzione vale per tutti i ruoli e non modifica dati o policy del database.
+
+La migration forward che estende il vincolo dei ruoli globali a `athlete` e aggiorna il
+provisioning è stata applicata in locale e staging. L’azione `Crea account atleta` è
+disponibile nella riga della sezione `/admin/atleti`;
+creerà l’account Auth, il mapping `app_accounts` e `account_roles('athlete')` in modo
+atomico, senza inviare l’accesso prima della verifica del mapping. L’account atleta non
+darà accesso da solo: le route e le policy continueranno a richiedere anche un profilo
+atleta attivo e un collegamento stagionale valido.
+
+Gli account atleta già presenti saranno preservati con una procedura di riconciliazione
+prima del backfill:
+
+1. fotografare `auth.users`, `profiles`, `app_accounts`, `account_roles`,
+   `athlete_profiles` e `season_profiles`, producendo un report degli ID non riconciliati;
+2. riutilizzare sempre lo stesso `auth.users.id` e lo stesso `profiles.id`, senza
+   cancellare, ricreare o sostituire utenti Auth;
+3. riconoscere automaticamente solo i mapping già certi (`app_accounts`) o il legacy
+   mapping documentato e verificato; email uguali non bastano per collegare un account;
+4. per ogni atleta riconciliato, creare solo il mapping/ruolo mancante e aggiungere
+   `account_roles('athlete')`, lasciando invariati sessioni, password, stato e storico;
+5. lasciare in revisione manuale i casi ambigui o senza corrispondenza, senza modificare
+   i dati e senza inviare inviti;
+6. verificare che ogni ruolo atleta punti a un owner profile atleta e che nessun account
+   esistente perda i ruoli già posseduti: una persona può avere anche `coach`, `staff`
+   o `admin` se il caso operativo lo richiede.
+
+Il rollback non elimina utenti Auth né profili: al massimo rimuove il ruolo atleta
+aggiunto dalla migration, solo per gli ID registrati nel report di backfill. I mapping
+creati restano conservati per evitare ricreazioni o perdita di stato; eventuali correzioni
+successive sono forward-only.
+
+Migration 10: `person_and_account_audit_support`
+
+- separa semanticamente archiviazione persona e stato account;
+- prepara audit delle operazioni account;
+- nessuna cancellazione cascata del profilo dalla cancellazione Auth.
+
+API nuove:
+
+- `POST/GET /api/admin/profiles`;
+- `GET/PATCH /api/admin/profiles/:id`;
+- `POST /api/admin/profiles/:id/create-account`;
+- `POST /api/admin/profiles/:id/invite-account`;
+- `POST /api/admin/profiles/:id/suspend-account`;
+- `POST /api/admin/profiles/:id/reactivate-account`;
+- `DELETE /api/admin/profiles/:id/account`;
+- eventuale `DELETE /account` self-service, con la stessa semantica di revoca logica.
+
+Migration 10B: `season_profile_memberships`
+
+Implementazione locale: `20260809084503_season_profile_memberships.sql` crea la relazione
+e fa il backfill dei 48 profili locali verso l’unica stagione attiva. La correzione
+`20260809084717_season_profile_memberships_indexes.sql` rimuove un indice ordinario
+ridondante, lasciando l’indice univoco per identificativo esterno.
+
+- aggiunge la relazione unica `season_profiles(profile_id, season_id)` per collegare una
+  persona a una o più stagioni senza duplicare `profiles`;
+- conserva stato, identificativo esterno e metadati utili all’import stagionale;
+- impedisce duplicati della stessa persona nella stessa stagione e mantiene le FK verso
+  `profiles` e `seasons` con cancellazione esplicita e verificata;
+- definisce il controllo che ogni profilo operativo creato dalle UI abbia almeno una
+  relazione stagionale;
+- non trasforma `account_roles` in un ruolo stagionale: account e autorizzazioni globali
+  restano separati dalla partecipazione a una stagione.
+
+Servizi server separati gestiscono persona e account. La creazione persona non invoca
+Auth. Il flusso account:
+
+1. blocca profili già collegati;
+2. crea l'utente Auth server-side senza inviare ancora accesso, se la combinazione di
+   Auth Admin API e mailer disponibile lo consente;
+3. crea `app_accounts` e `account_roles` tramite un'operazione DB atomica e circoscritta;
+4. rilegge e verifica mapping, owner, stato e ruoli;
+5. genera il link di attivazione e lo invia solo dopo la verifica;
+6. non usa password temporanee e non collega mai automaticamente un account esistente
+   per sola uguaglianza email.
+
+Prima dell'implementazione viene eseguito uno spike sul flusso supportato dalla versione
+Supabase in uso: `createUser` senza notifica seguito da `generateLink` e invio tramite
+mailer server. Se non è praticabile e si deve usare `inviteUserByEmail`, che invia subito,
+il codice registra lo stato `provisioning`, verifica l'esito del mapping e testa
+esplicitamente il caso "email inviata ma mapping fallito". In tale caso l'account viene
+immediatamente disabilitato/bannato, l'errore è auditato e l'admin riceve un'azione di
+riparazione; non si considera l'operazione riuscita.
+
+Per il primo rilascio ogni cancellazione account ordinaria, incluso
+`DELETE /api/admin/profiles/:id/account` e l'eventuale `DELETE /account`, è una revoca
+logica:
+
+- imposta `app_accounts.status='disabled'`;
+- blocca immediatamente API, helper e RLS;
+- applica un eventuale ban Auth come difesa aggiuntiva;
+- non elimina `auth.users` e non elimina mai `profiles`;
+- conserva mapping e audit per una possibile riattivazione controllata.
+
+La cancellazione fisica Auth è un'operazione amministrativa separata, fuori dal flusso
+normale e soggetta a retention, verifica dello storico e conferma esplicita.
+
+UI:
+
+- menu `Persone` e `Accessi`;
+- lista e scheda persona con sezioni richieste;
+- stato/azioni account;
+- creazione minore senza obbligo di account o genitore;
+- adattamento progressivo di `UsersManager`, `AthletesManager`, `CoachesManager` e
+  relativi form/type, senza duplicare logica.
+
+### Fase 4 — famiglie e profili accessibili
+
+Stato: completata e verificata in locale e staging. Non sono autorizzate modifiche in produzione
+prima del completamento e dei test dell’intero piano.
+
+Fase 4, slice 1 completato in locale: `20260810160000_consolidate_profile_athlete_team_sources.sql`
+verifica i conflitti tra le colonne sportive legacy di `profiles` e le fonti autorevoli
+`athlete_profiles`/`team_members`, esegue backfill solo per valori mancanti e lascia le
+copie legacy in compatibilità. Il report locale ha rilevato 0 conflitti e 0 valori legacy
+non null; gli update hanno quindi modificato 0 righe. La migration non è stata applicata
+allo staging e produzione resta fuori perimetro.
+
+Fase 4, slice 2 completata in locale: `20260810170000_relationship_permissions_age_and_audit.sql`
+crea gli override amministrativi dell’età e lo storico append-only delle relazioni,
+centralizza il calcolo della minore età con comportamento fail-closed per data mancante,
+applica le regole di accesso per permesso e richiede una relazione `delegate` attiva e
+verificata per i soggetti maggiorenni. La cancellazione diretta delle relazioni è stata
+rimossa dal ruolo `authenticated`: la revoca dovrà essere una modifica a `status = 'revoked'`.
+I test SQL locali, eseguiti in transazione con rollback, hanno verificato calcolo età,
+override/revoca, trigger di audit e privilegi. La migration non è stata applicata allo
+staging e produzione resta fuori perimetro.
+
+Migration 11: `consolidate_profile_athlete_team_sources`
+
+- produce prima un report di confronto per numero tessera, certificato e numero maglia;
+- blocca la migration automatica se trova conflitti non classificati;
+- backfilla solo valori mancanti verso la fonte autorevole definita in 4.7;
+- mantiene le colonne duplicate in sola compatibilità con TODO di rimozione;
+- aggiunge query di verifica che dimostrano assenza di perdita dati.
+
+Gate pre-Fase 4: tutte le letture/scritture usano `profiles` per anagrafica/contatti,
+`season_profiles` per il collegamento persona/stagione, `athlete_profiles` per
+tessera/certificato e `team_members` per dati squadra/stagione.
+
+Migration 12: `relationship_permissions_age_and_domain_helpers`
+
+La parte DB della Migration 12 è completata in locale; restano da implementare in slice
+successive le API, le policy operative di lettura dei profili accessibili e il frontend
+del soggetto delegato.
+
+Fase 4, slice 3 completata in locale: sono disponibili le API server-side per elencare e
+creare relazioni (`GET/POST /api/admin/profiles/:id/relationships`), modificarle o
+revocarle logicamente (`PATCH/DELETE /api/admin/relationships/:relationshipId`) e
+caricare i profili accessibili dell'utente autenticato (`GET /api/me/accessible-profiles`).
+Le API verificano il contesto account, consentono la gestione solo ad Admin/Staff,
+normalizzano l'attore della verifica lato server e applicano nuovamente le regole di
+validità, età e delega senza fidarsi del client. Non sono ancora collegate a una UI e non
+sono state applicate a staging o produzione.
+
+Fase 4, slice 4 completata in locale: il provider client carica i profili accessibili,
+mantiene la selezione in `localStorage` solo come preferenza UI e la azzera quando la
+relazione non è più disponibile. Il layout mostra il selettore accessibile senza usarlo
+come fonte di autorizzazione. La sezione Persone espone inoltre la gestione relazioni:
+creazione, tipo, stato, verifica amministrativa, permessi granulari e revoca logica.
+La build locale passa. Il soggetto selezionato non è ancora inoltrato alle viste operative:
+questa integrazione arriverà nella slice successiva insieme ai relativi controlli
+server-side per calendario, messaggi, pagamenti e documenti.
+
+Fase 4, slice 5 completata in locale: il contratto server-side `requireSubjectAthleteContext`
+valida il soggetto selezionato, la relazione attiva, la finestra temporale, l’età e il
+permesso richiesto. Dashboard, calendario, messaggi e quote atleta accettano ora
+`subjectProfileId`; per un soggetto delegato leggono tramite client amministrativo solo
+dopo la verifica della relazione, mentre dashboard filtra messaggi e pagamenti anche in
+base ai permessi granulari. Le viste atleta inoltrano il contesto selezionato. La build
+locale passa; staging e produzione restano invariati.
+Anche il dettaglio evento e il percorso RSVP usano il medesimo controllo quando vengono
+richiamati per un soggetto delegato.
+La classifica campionati resta intenzionalmente fuori da questo contesto: non espone dati
+anagrafici o operativi del profilo e continua a verificare l’assegnazione sportiva propria.
+
+Fase 4, slice 6 completata in locale: è stato aggiunto il ruolo globale `account_roles.family_member`
+per familiari/tutori senza profilo sportivo proprio. Il provisioning atomico Auth/app_accounts/ruolo
+accetta ora anche questo ruolo, senza backfill, ricreazione o modifica degli account esistenti.
+La sezione Persone espone la creazione dell’account familiare per persone non tipizzate; gli account
+atleta, coach e staff continuano a essere creati dalle sezioni Iscritti e Collaboratori. Il ruolo
+familiare ha una dashboard dedicata e non riceve navigazione operativa propria: l’accesso ai profili
+minori resta vincolato a relazioni attive, validità temporale e permessi granulari server-side.
+La migration `20260810162451_account_role_family_member.sql` è stata applicata esclusivamente al DB
+locale; staging e produzione restano invariati fino alla chiusura dei test dell’intero piano.
+
+Fase 4, slice 7 completata in locale: la selezione di un profilo accessibile da parte di un
+`family_member` aggiorna ora dashboard e navigazione. Le viste calendario, messaggi e quote
+vengono mostrate solo quando la relazione concede il relativo permesso; le route continuano
+a ricevere `subjectProfileId` e a verificarlo server-side. Senza selezione resta visibile la
+sola area familiare con l’elenco dei profili collegati.
+
+Fase 4, slice 8 completata in locale: la UX del soggetto delegato è stata rifinita e verificata
+con il genitore di staging/local. La selezione del profilo accessibile resta persistente dopo
+cambio pagina e reload completo, anche durante il ripristino iniziale della sessione Supabase.
+Per le squadre il profilo delegato vede il riepilogo contestuale ma non può aprire i dettagli
+di squadra, evitando l’esposizione non autorizzata di nomi di atleti e allenatori. La dashboard
+adatta statistiche, card e link alle permission effettive: calendario/eventi, messaggi e quote
+sono mostrati solo quando rispettivamente concessi; passando a un profilo con meno permessi
+eventuali modali non autorizzati vengono chiusi. Il ruolo `family_member` non riceve quindi
+card o azioni fuorvianti per sezioni non abilitate.
+
+Verifica slice 7–8: il test E2E Playwright con le credenziali configurate del genitore ha
+confermato la presenza dei due profili collegati (Giorgio Politi e Raffaella Scutieri), la
+selezione di Raffaella con solo calendario autorizzato, la persistenza dopo navigazione/reload
+e l’assenza delle card messaggi/quote non autorizzate. Build Next.js e test E2E sono passati.
+
+Preflight e applicazione staging Fase 4 completati il 12 agosto 2026: è stato creato il backup
+preventivo in `/tmp/csroma_staging_phase4_20260812/` con schema, dati e ruoli. Il progetto
+collegato è stato verificato come `csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`) prima di
+qualsiasi operazione. Il dry-run ha elencato esclusivamente le cinque migration locali attese:
+`20260810145627`, `20260810150420`, `20260810160000`, `20260810162451` e `20260810170000`.
+Sono state quindi applicate allo staging; la migration history è allineata e il dry-run
+successivo restituisce `Remote database is up to date`. Il dump post-migration conferma il
+ruolo `family_member`, le tabelle `profile_age_overrides`, `profile_relationship_audit` e
+`profile_relationships`, i relativi vincoli e indici. Il confronto del dump dati mostra solo
+le nuove tabelle vuote e metadati di dump, senza variazioni nei record applicativi esistenti.
+Restano da eseguire i test funzionali, API/BOLA e regressione UI su staging; produzione resta
+fuori perimetro.
+
+Correzione staging del 12 agosto 2026: dopo il push Fase 4 il login restituiva
+`Impossibile risolvere il contesto account`. La causa era il `REVOKE ALL` generale sulle
+funzioni `private` eseguito da `20260810170000` dopo i grant delle migration precedenti;
+venivano così rimossi i permessi `EXECUTE` di `authenticated` sugli helper account già
+esistenti. La nuova migration `20260812091923_restore_account_context_helper_grants.sql`
+ripristina in modo idempotente usage dello schema e grant degli helper account-based in
+locale e staging. Il fix è stato verificato localmente sui grant e il dry-run staging
+successivo restituisce `Remote database is up to date`. Restano da ripetere login, test
+funzionali e API/BOLA su staging dopo il redeploy/refresh dell'applicazione.
+
+Correzione messaggi coach del 14 agosto 2026: il report staging mostrava `400` su
+`/api/coach/messages`. Le policy `message_recipients_coach_*` invocavano
+`private.is_message_owner(uuid)`, ma il `REVOKE ALL` generale della Fase 4 aveva
+rimosso il grant `EXECUTE` per `authenticated`. La migration
+`20260814083200_restore_message_owner_helper_grant.sql` ripristina esclusivamente
+quel grant in locale e staging. Il privilegio effettivo è stato verificato in entrambi
+gli ambienti; il caricamento dei messaggi con Coach U14/U17 e i relativi test funzionali
+su staging sono stati completati con esito positivo.
+
+- completa policy `profile_relationships`;
+- aggiunge helper per validità, status e singolo permesso;
+- aggiunge override amministrativo della minore età con motivo, attore e timestamp;
+- centralizza `is_profile_minor()` e disattiva l'accesso `parent` al compimento dei 18;
+- richiede una relazione `delegate` attiva/verificata per l'accesso successivo;
+- impone un solo contatto amministrativo e un solo contatto pagamenti attivi;
+- aggiunge audit verifica/revoca/modifica;
+- non concede una policy generica che esponga tutte le colonne di `profiles`.
+
+API:
+
+- `GET/POST /api/admin/profiles/:id/relationships`;
+- `PATCH/DELETE /api/admin/relationships/:relationshipId`;
+- `GET /api/me/accessible-profiles`;
+- aggiornamento delle route di dominio per accettare un `subjectProfileId` e verificarlo
+  server-side.
+
+Frontend:
+
+- provider account/profilo accessibile;
+- selettore persistente "Stai operando per";
+- persistenza solo UI (local storage o cookie non autorevole);
+- reset automatico della selezione quando relazione scade, viene revocata o il soggetto
+  compie 18 anni senza delega valida;
+- aree personale, famiglia, coach, amministrazione non mutuamente esclusive.
+
+Le relazioni familiari sono verificate inizialmente soltanto da Admin o Staff con la
+capability esplicita. Un parent con `can_view_medical_status` vede esclusivamente stato e
+scadenza del certificato.
+
+Chiusura Fase 4 e verifiche finali (17 agosto 2026):
+
+- sono state completate le correzioni dei grant account-context e message-owner in locale e
+  staging, senza modificare produzione;
+- sono stati verificati login, logout, cambio area, selezione e persistenza dei profili
+  accessibili per account genitore, atleta-genitore, atleta, coach, staff e admin;
+- sono stati verificati i confini BOLA/API per soggetto, relazione, permessi granulari,
+  destinatari dei messaggi e accesso agli eventi;
+- la dashboard del soggetto delegato mostra solo card, anteprime e link autorizzati; le
+  sezioni non abilitate mostrano uno stato di accesso non consentito senza dati parziali;
+- il soggetto delegato non apre i dettagli della squadra e non vede nomi di compagni o coach;
+- i messaggi inviati a una squadra compaiono anche nelle anteprime dashboard quando il
+  soggetto ha il permesso messaggi, mentre i destinatari individuali sono filtrati per
+  soggetto;
+- la navigazione familiare è distinta da quella personale: `Area familiare` precede
+  `Dashboard`, il passaggio alla dashboard mantiene il soggetto selezionato e il ritorno
+  all’area familiare lo deseleziona;
+- la build Next.js, i test E2E locali e la regressione manuale/API su staging sono passati.
+
+La Fase 4 è quindi chiusa. Prima di iniziare la Fase 5 è richiesto un inventario separato
+di letture messaggi, notifiche e push subscription, per distinguere ciò che è già operativo
+da ciò che è solo legacy o parzialmente implementato.
+
+### Fase 5 — domini collegati
+
+Stato: slice Migration 13 completata e verificata in locale; resta il preflight con
+backup, dry-run, applicazione e test su staging. Produzione resta fuori perimetro.
+
+Inventario preliminare completato il 17 agosto 2026:
+
+- le letture messaggi usano ancora temporaneamente `message_recipients.is_read/read_at`;
+  non esiste una route applicativa per registrare la lettura e non esiste ancora
+  `message_reads`;
+- le push subscription sono operative tramite `usePush`, service worker, API
+  subscribe/unsubscribe e `web-push`, ma sono ancora collegate a `profile_id` e non a
+  `auth_user_id`; il fan-out per account, dispositivo e soggetto delegato è quindi da
+  completare;
+- `push_subscriptions` conserva due indici unici duplicati su `(profile_id, endpoint)`,
+  da razionalizzare nella migration dedicata senza perdita di subscription;
+- `src/lib/utils/notifications.ts` è stato rimosso perché non importato né utilizzato,
+  dipendeva dalla tabella assente `pending_notifications` e rappresentava un flusso
+  legacy non operativo. Sarà sostituito dal sistema account-based della Fase 5;
+- non viene introdotta in questa fase alcuna tabella `pending_notifications` né viene
+  applicata ancora la Migration 13.
+
+Implementazione locale avviata il 17 agosto 2026: la migration
+`20260817120000_account_message_reads_and_push_subscriptions.sql` crea `message_reads`
+con policy RLS per account/soggetto, backfilla `push_subscriptions.auth_user_id` per i 2
+record esistenti, aggiunge l'unicità account/endpoint e rimuove il solo indice unico
+duplicato legacy. Sono stati aggiornati subscribe/unsubscribe, il fan-out server-side
+delle push e aggiunto `POST /api/messages/read`. La migration è stata applicata e
+verificata in locale; staging e produzione restano invariati.
+
+Consolidamento locale della slice: l'apertura dei messaggi atleta/coach registra ora la
+lettura tramite `POST /api/messages/read`; la dashboard atleta esclude le letture per
+account e soggetto, senza usare più soltanto `message_recipients.is_read`. Il fan-out
+push di Admin e Coach risolve gli account dai profili destinatari, include membri,
+coach e relazioni familiari con `can_receive_messages=true`, e sceglie l'area in base a
+`account_roles`. Build Next.js, TypeScript e Jest sono passati; staging e produzione
+restano invariati.
+
+Slice UI report letture completata in locale: il nuovo endpoint admin
+`GET /api/admin/messages/:id/read-report` espande i destinatari squadra sugli account
+di atleti e coach, legge lo stato da `message_reads` e mostra nel dettaglio messaggio
+conteggi letti/non letti, ultima lettura e destinatario diretto/squadra. Le letture
+delegate vengono evidenziate separatamente quando presenti; i flag legacy non vengono
+usati per falsificare il conteggio. Build e TypeScript sono passati, Jest 3/3; staging
+e produzione restano invariati.
+
+Preflight e applicazione staging completati il 18 agosto 2026: backup preventivo salvato
+in `/tmp/csroma_staging_phase5_20260818/` con checksum di schema, dati e ruoli. Il dry-run
+ha elencato esclusivamente `20260817120000_account_message_reads_and_push_subscriptions.sql`;
+la migration è stata applicata al progetto `csromawebapp-staging`
+(`kibtvkuiedoxgppnnxkf`) e il dry-run successivo restituisce `Remote database is up to date`.
+La verifica read-only conferma `message_reads`, le policy RLS, gli indici account/endpoint
+e il backfill push coerente con il dataset staging, che non contiene subscription.
+Produzione non è stata modificata.
+
+Verifica funzionale e BOLA/IDOR su staging completata il 18 agosto 2026: gli account
+admin, coach, atleta e genitore sono stati autenticati tramite gli endpoint applicativi.
+Il coach accede al report solo dei propri messaggi e delle proprie squadre; coach diversi,
+atleti e genitori ricevono `403` sui report non autorizzati. Gli accessi diretti a messaggi
+di altre squadre restituiscono `404`, mentre i tentativi di registrare letture con messaggi
+o soggetti non autorizzati restituiscono `403` senza modificare i conteggi. Il report coach
+esclude il mittente, mostra la squadra sotto il destinatario atleta e mantiene i conteggi
+account-based. Build Next.js, TypeScript, Jest e test API staging sono passati.
+
+Implementazione Migration 14 completata il 18 agosto 2026: la migration
+`20260818084159_attendance_rsvp_and_payment_actors.sql` aggiunge gli attori Auth e la fonte
+per presenze, RSVP e pagamenti rate. Le route di conferma presenza e registrazione pagamenti
+eseguono il dual-write dei nuovi campi; i record storici restano con attore nullo quando
+non ricostruibile. La migration è stata applicata in locale e staging dopo dry-run e backup
+staging in `/tmp/csroma_staging_phase6_20260818/`; produzione non è stata modificata.
+TypeScript, Jest e build Next.js sono passati.
+
+Consolidamento UI RSVP completato il 19 agosto 2026 in locale:
+
+- il dettaglio evento atleta mostra gli stati `Partecipo`, `Forse` e `Non partecipo`,
+  con stato corrente, scadenza, loading ed errore;
+- il dettaglio evento admin mostra il report separato per confermati, forse, non
+  partecipanti e nessuna risposta;
+- il report admin deduplica gli atleti appartenenti a più squadre associate allo stesso
+  evento, evitando duplicati nei conteggi e nella UI;
+- la risoluzione del profilo delegato genitore viene eseguita prima del controllo del
+  ruolo atleta;
+- la route `POST /api/athlete/events/attendance` legge `subjectProfileId` sia dalla
+  query string sia dal body, correggendo il `403 Ruolo atleta non abilitato` quando il
+  genitore conferma per il figlio;
+- test end-to-end locale con l’account genitore da `.env.local`: HTTP `200`,
+  `response_source = 'parent'`, `responded_by_auth_user_id` valorizzato con l’account
+  genitore e stato RSVP salvato;
+- TypeScript, Jest 3/3 e build Next.js passati. Staging e produzione non sono stati
+  modificati.
+
+Nuovo step funzionale pianificato: RSVP per eventi creati dai coach.
+
+Obiettivo: consentire a un coach di richiedere la conferma di partecipazione per gli eventi
+delle proprie squadre, mantenendo gli stessi flussi già disponibili per gli eventi admin e
+gli stessi controlli di accesso per atleta/genitore.
+
+Perimetro incrementale:
+
+- aggiungere nel form coach l'opzione `Richiedi conferma partecipazione (RSVP)` e la
+  scadenza opzionale;
+- salvare `requires_confirmation` e `confirmation_deadline` per eventi singoli e per ogni
+  occorrenza delle serie ricorrenti;
+- esporre i due campi nelle route calendario/dettaglio coach e nel modello UI condiviso,
+  così atleta e genitore visualizzano i controlli RSVP anche per eventi creati dal coach;
+- verificare che modifica e salvataggio restino limitati alle squadre assegnate al coach;
+- aggiungere al coach il report delle risposte RSVP limitato alle proprie squadre. Il report
+  admin esistente non viene allargato implicitamente ai coach.
+
+Non è prevista una nuova migration: il database contiene già i campi necessari e la route
+di conferma atleta/genitore è già condivisa. L'impatto stimato è medio-basso per la sola
+attivazione RSVP e medio se si include anche il report coach. Verifica richiesta: test
+locale singolo/ricorrente, test atleta e genitore, controllo di isolamento tra coach e
+build Next.js prima del push.
+
+Slice locale 1 completata il 19 agosto 2026: il form coach espone la richiesta RSVP e la
+scadenza opzionale; i campi vengono persistiti su eventi singoli e su tutte le occorrenze
+create in una serie; le route calendario/dettaglio coach li restituiscono al client. Build
+Next.js e TypeScript passati. Restano i test funzionali con account coach, atleta e
+genitore e la verifica dei permessi prima del push.
+
+Slice locale 2 completata il 19 agosto 2026: il nuovo endpoint
+`GET /api/coach/events/attendance` restituisce confermati, forse, non partecipanti e
+nessuna risposta solo quando l'evento è collegato a una squadra assegnata al coach. Il
+dettaglio evento coach mostra le quattro card del report con liste scorrevoli e deduplica
+gli atleti presenti in più squadre dell'evento. Build Next.js e TypeScript passati. Restano
+test funzionali con due coach e verifica BOLA/IDOR prima del push; questa verifica è stata
+completata nella slice successiva.
+
+Verifica BOLA e correzione letture coach completate in locale il 19 agosto 2026 con coach
+principale e assistant coach: il coach non assegnato riceve `404` sul dettaglio evento
+fuori perimetro, `403` sul report RSVP e `404` sul dettaglio messaggio fuori perimetro. È
+stata aggiunta la migration `20260819130000_allow_coach_message_reads.sql`, che aggiorna
+la funzione RLS delle letture includendo `team_coaches` oltre a `team_members`. Prima della
+correzione la lettura del secondo coach restituiva `403`; dopo la migration il `POST
+/api/messages/read` restituisce `200` e il report passa correttamente da non letto a letto.
+La migration è stata applicata anche allo staging il 19 agosto 2026; la history remota è
+allineata e il dry-run successivo non rileva migration pendenti.
+
+Fase 6, slice applicative iniziali completate tra il 21 e il 24 agosto 2026:
+
+- `/api/admin/payment-payees` e `/api/admin/payments` risolvono i destinatari tramite
+  `app_accounts`, `account_roles`, `coach_profiles` e `season_profiles`; `Pagamento Staff`
+  accetta e mostra solo profili Staff, mentre i pagamenti coach restano separati;
+- la lista `/admin/collaboratori` usa ruoli account e profili dominio per determinare tipo e
+  visibilità, escludendo gli account `disabled` o `suspended` dalla lista operativa;
+- la lista `/admin/atleti` usa i profili atleta/iscrizioni come fonte della visibilità e non
+  richiede un account attivo: gli iscritti senza account restano presenti, mentre lo stato
+  viene indicato come `Account attivo`, `Account non attivo`, `Account sospeso`, `Invia invito`
+  o `Crea account`;
+- la route di creazione account non usa più `profiles.role` per validare il ruolo
+  `family_member`: il controllo usa `athlete_profiles`, `coach_profiles` e
+  `season_profiles`; l’invio email della route di invito resta invariato;
+- le route di reset password usano `app_accounts` e `auth_user_id` per lo stato e il
+  collegamento dell’account; non scrivono più `profiles.must_change_password`;
+- i test manuali hanno rilevato e corretto il disallineamento tra lo stato UI `disabled` e
+  il filtro iniziale che considerava soltanto `suspended`;
+- ogni slice è stata verificata con Jest 3/3 e build Next.js, poi committata e pushata sulla
+  branch `codex/person-account-family-model`.
+
+Slice consumer coach legacy:
+
+- migrare `GET /api/admin/coaches` dalla selezione `profiles.role = 'coach'` a
+  `coach_profiles`, `season_profiles` e `account_roles`;
+- rimuovere il controllo legacy dalla modifica collaboratori;
+- usare l’endpoint account/domain-based nei filtri coach di Teams e Bilancio;
+- verificare che coach senza account ma con collegamento stagionale attivo restino visibili e
+  che coach rimossi dalla stagione o sospesi/disabilitati siano esclusi dalle liste operative.
+
+Inventario staging ripetuto il 25 agosto 2026 (verifica read-only tramite API admin):
+
+- `profiles`: 15 record; 14 attivi e 1 inattivo;
+- `app_accounts`: 12 account attivi; 3 profili senza account (`coach noaccount`,
+  `staff test`, `nuovo test`);
+- i ruoli derivati risultano: 6 atleti, 2 family member, 4 coach, 1 staff e 1 admin;
+  un profilo (`Atleta RLS Test`) ha account attivo ma nessun ruolo globale, quindi resta
+  da analizzare prima della rimozione di `user_roles`;
+- `/api/admin/coaches` restituisce 4 coach operativi, tutti con collegamento stagionale
+  attivo; `coach noaccount`, senza collegamento stagionale attivo, non compare nei
+  selector operativi;
+- i profili senza account restano visibili nell’elenco persone; `staff test` e
+  `nuovo test` restano fixture intenzionali senza account;
+- la mail non viene più mostrata nei selector squadra, né nella lista principale né nel
+  modal di creazione/modifica squadra;
+- non sono state applicate modifiche al database durante questo inventario. La verifica
+  della migration history, delle policy e dei record `user_roles` richiede ancora una
+  query SQL read-only diretta sul progetto Supabase staging.
+
+Il consumer coach legacy è quindi verificato a livello applicativo/staging API. Prima di
+procedere con la Fase 6 resta da completare il controllo SQL read-only della history,
+delle policy e dei mapping globali, con priorità al caso `Atleta RLS Test`.
+
+Inventario SQL read-only staging completato il 25 agosto 2026 sul progetto
+`csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`):
+
+- migration history allineata fino a `20260819130000_allow_coach_message_reads`;
+- `profiles`: 15 record, 8 con `profiles.role` ancora valorizzato e tutti i 15 con
+  `profiles.must_change_password` valorizzato;
+- `app_accounts`: 12 record, tutti `active`, nessuno con `must_change_password = true`;
+- `account_roles`: 11 record;
+- `user_roles`: 3 record: admin e coach coerenti con `account_roles`, mentre il ruolo
+  `athlete` di `Atleta RLS Test` non ha corrispondenza in `account_roles`;
+- esiste 1 account senza ruolo globale (`Atleta RLS Test`), 0 account senza profilo e
+  3 profili senza account;
+- le tabelle controllate risultano con RLS abilitato; nelle policy di `profiles`,
+  `user_roles`, account, messaggi, documenti e domini operativi non sono stati trovati
+  riferimenti diretti a `profiles.role` o `user_roles`;
+- le funzioni `public.messages_set_created_by()` e
+  `public.sync_championship_match_event()` restano `SECURITY DEFINER`, ma il controllo
+  della definizione non rileva riferimenti diretti a `profiles.role` o `user_roles`;
+- `user_roles`, `profiles.role` e `profiles.must_change_password` non sono quindi ancora
+  eliminabili: il caso `Atleta RLS Test` è una fixture RLS documentata e va escluso da
+  qualsiasi correzione automatica.
+
+Il gate SQL conferma che non serve una nuova migration correttiva in questa fase. Prima
+della rimozione legacy serve una decisione esplicita sul destino delle fixture (`Atleta
+RLS Test`, `nuovo test`, `staff test`) e un test di regressione finale che dimostri che
+nessun flusso applicativo dipende dai dati legacy residui.
+
+### Gate obbligatorio pre-deploy produzione — inventario completo dei profili
+
+Prima del go-live del nuovo modello account/persona deve essere eseguito un inventario
+read-only sull’intero database di produzione, non limitato agli atleti. Il deploy deve
+essere bloccato finché ogni profilo non risulta classificato e riconciliato oppure
+esplicitamente registrato come eccezione documentata.
+
+Il controllo deve verificare almeno:
+
+- ogni profilo e il relativo `app_accounts`, incluso lo stato (`invited`, `active`,
+  `suspended`, `disabled`);
+- coerenza tra `profiles.role`, `user_roles`, `account_roles`, `athlete_profiles`,
+  `coach_profiles` e `season_profiles`;
+- profili senza account e account senza profilo;
+- account senza ruolo globale e ruoli globali senza mapping coerente;
+- atleti senza `athlete_profiles` o senza stagione attiva;
+- coach, staff e admin senza classificazione stagionale prevista;
+- relazioni familiari, stato e permessi delle relazioni;
+- fixture, profili storici, duplicati e profili intenzionalmente senza accesso;
+- profili con `must_change_password` o altri campi legacy incoerenti.
+
+L’output deve contenere conteggi, identificativi, classificazione attesa, azione
+correttiva e responsabile. Le correzioni devono essere applicate e riverificate prima
+del deploy; nessun ruolo deve essere assegnato automaticamente soltanto sulla base di
+`profiles.role` senza il mapping dominio/account richiesto.
+
+#### Esito inventario produzione — 25 agosto 2026
+
+L’inventario è stato eseguito in sola lettura dopo il ripristino del progetto
+`csromawebapp` (`qyiholnatsrvpoqoplje`). La produzione è ancora sullo schema legacy:
+sono presenti soltanto le migration `20251007152643 master_migration_fixed` e
+`20260806133634 prod_rls_hardening`; le migration del modello persona/account non sono
+state applicate. Non è stata eseguita alcuna modifica al database.
+
+- `profiles`: 48 record, tutti attivi e con `profiles.role`: 2 admin, 2 coach e 44
+  athlete;
+- `auth.users`: 48 record; non risultano profili senza utente auth né utenti auth senza
+  profilo;
+- `user_roles`: 0 record;
+- coerenza dominio legacy: 44 `athlete_profiles` e 2 `coach_profiles`, senza gap tra
+  ruolo legacy e profilo operativo;
+- relazioni operative: 3 team, 1 stagione, 2 attività, 4 assegnazioni coach e 67
+  appartenenze atleta/team;
+- 3 atleti risultano senza team: `f90e8a38-641a-4aa0-a5f1-2d883a0a4a7d`,
+  `4c5df08f-6965-4388-850f-f23de80628cf` e
+  `47075c85-8340-4da5-ad65-3e73fe4fdcd2`. Devono essere classificati prima del
+  backfill, senza assegnare automaticamente una squadra;
+- contenuti da preservare durante la migrazione: 145 eventi, 17 pagamenti, 120 rate,
+  5 documenti, 3 destinatari documento, 3 destinatari messaggio, 2 sottoscrizioni
+  push e 0 log di sistema. Non risultano ancora presenze evento registrate;
+- restano 2 policy legacy (`documents` e `document_recipients`) che autorizzano tramite
+  `profiles.role = 'admin'`. Devono essere sostituite o mantenute esplicitamente nella
+  fase di compatibilità, prima della rimozione del campo legacy.
+
+Conclusione del gate: la produzione non è pronta per il deploy del nuovo modello. Il
+prossimo passo è preparare un piano di backfill non distruttivo per i 48 profili,
+classificare i tre atleti senza team e verificare il mapping account/ruolo su una copia
+o ambiente di staging equivalente. Nessuna migration va applicata direttamente in
+produzione prima di backup, dry-run e approvazione del risultato.
+
+#### Dry-run staging del backfill — 25 agosto 2026
+
+Il dry-run è stato eseguito sul progetto staging senza scritture. Il modello account è
+presente e il mapping Auth/account/persona funziona secondo la struttura decoupled:
+15 profili, 12 account, 12 utenti Auth, 11 ruoli globali e 12 relazioni stagionali.
+Gli otto utenti Auth il cui `auth.users.id` non coincide con `profiles.id` sono attesi:
+il collegamento autorevole è `app_accounts.auth_user_id -> owner_profile_id`, non una
+join diretta tra i due ID.
+
+La classificazione rilevata è:
+
+- nessun nuovo `app_accounts` necessario;
+- nessun nuovo ruolo globale admin/coach necessario;
+- nessun nuovo ruolo atleta necessario, salvo l’eccezione già documentata
+  `Atleta RLS Test`, che ha volutamente `profiles.role = 'athlete'` senza
+  `account_roles.athlete`;
+- `coach noaccount` (`328be890-9638-4001-b843-2cb446572e89`) è un coach operativo senza
+  account e senza `season_profiles` attiva: deve essere confermato o corretto come
+  partecipante della stagione prima del backfill;
+- `GenitoreU14 prova` e `GenitoreU17 prova` hanno account attivi e ruolo
+  `family_member`, ma nessuna `season_profiles` attiva: il caso è compatibile con un
+  familiare/tutore che non è iscritto sportivamente e non va trasformato
+  automaticamente in atleta o coach;
+- `nuovo test` e `staff test` restano fixture senza account già documentate;
+- non risultano atleti senza squadra nello staging.
+
+Decisione: non applicare ulteriori scritture di backfill allo staging in questa fase. Il
+prossimo passo è produrre il report di classificazione dei profili di produzione e
+definire esplicitamente la regola per i coach senza account e per i familiari senza
+partecipazione stagionale. Solo dopo questa approvazione si potrà eseguire un dry-run
+equivalente sulla copia della produzione.
+
+#### Classificazione produzione — 25 agosto 2026
+
+Il report read-only sui 48 profili di produzione ha prodotto questa classificazione:
+
+| Gruppo | Conteggio | Esito previsto |
+| --- | ---: | --- |
+| Admin attivi con Auth e profilo coerente | 2 | Backfill automatico `app_accounts` + `account_roles.admin` |
+| Coach attivi con `coach_profiles` e assegnazioni squadra | 2 | Backfill automatico `app_accounts` + `account_roles.coach` e relazione stagionale |
+| Atleti attivi con `athlete_profiles` e almeno una squadra | 41 | Backfill automatico account/ruolo atleta e relazione stagionale |
+| Atleti attivi senza squadra | 3 | Revisione manuale prima del backfill stagionale |
+
+I tre casi da revisionare sono:
+
+- `test email` — `f90e8a38-641a-4aa0-a5f1-2d883a0a4a7d`;
+- `Giorgio Politi` — `4c5df08f-6965-4388-850f-f23de80628cf`;
+- `Vesna Politi` — `47075c85-8340-4da5-ad65-3e73fe4fdcd2`.
+
+Sono tutti profili attivi, autenticati e con `athlete_profiles`, ma senza
+`team_members`. Non devono ricevere automaticamente una squadra; occorre decidere se
+mantenerli come atleti senza assegnazione, assegnarli a una squadra o marcarli come
+storici/inattivi secondo il dato gestionale corretto.
+
+Controlli di stato da preservare nel backfill:
+
+- tutti i 48 profili sono attivi e hanno un utente in `auth.users`;
+- 17 profili hanno `must_change_password = true` e 16 account non hanno ancora fatto
+  login: il backfill deve conservare questi stati nel nuovo modello;
+- non risultano profili staff o familiari nel dataset legacy di produzione: non vanno
+  creati ruoli o relazioni familiari per inferenza;
+- non risultano gap tra `profiles.role`, `athlete_profiles` e `coach_profiles`.
+
+I tre profili sono stati verificati come account di test di produzione e rimossi il 25
+agosto 2026, insieme ai rispettivi utenti Auth. La verifica post-rimozione restituisce
+45 profili, 45 utenti Auth e zero atleti senza squadra; il vecchio destinatario del
+messaggio di prova e la sottoscrizione push già revocata sono stati rimossi tramite le
+relazioni di cascade previste. Non sono stati trovati eventi, pagamenti, rate, presenze,
+documenti o altri dati operativi associati.
+
+La classificazione consente ora di preparare il dry-run della migrazione per tutti i 45
+profili rimasti. Il go-live resta comunque bloccato finché non viene verificato il
+report di mapping su una copia della produzione e non sono stati preservati gli stati
+`must_change_password` e di mancato primo accesso.
+
+#### Dry-run logico produzione — 25 agosto 2026
+
+È stata richiesta una branch Supabase temporanea per creare una copia isolata, ma il
+progetto `csromawebapp` non espone branch disponibili e la creazione della preview
+branch è stata rifiutata. Non è stata quindi creata alcuna risorsa persistente né sono
+stati addebitati costi. In attesa di una copia fisica o di un dump controllato, è stato
+eseguito un dry-run logico in sola lettura direttamente sulla produzione.
+
+Il dry-run proietta il backfill sui 45 profili rimasti e restituisce:
+
+- 45 `app_accounts` e 45 `season_profiles`, con una sola stagione attiva;
+- 2 ruoli globali `admin`, 2 `coach` e 41 `athlete` riconciliati con i profili operativi;
+- nessun mismatch tra conteggio `profiles` e `auth.users` e nessun ID Auth orfano;
+- nessun ruolo sconosciuto, atleta senza squadra o coach senza assegnazione;
+- 17 profili con `must_change_password = true` e 16 account mai entrati, da preservare
+  nel mapping dello stato account.
+
+Il risultato è idoneo per un dry-run applicativo, ma non sostituisce una copia fisica:
+prima di applicare migration in produzione serve ancora un backup verificabile e una
+procedura di rollback. Le migration account/persona non sono state applicate.
+
+Backup locale completato il 25 agosto 2026 tramite pooler PostgreSQL compatibile con
+PostgreSQL 17. Il dump completo degli schemi `public` e `auth` è salvato in
+`backups/production-20260825/csromawebapp-production.dump`, insieme allo schema SQL
+leggibile `csromawebapp-production-schema.sql`. Il dump custom contiene 735 entry ed è
+stato verificato con `pg_restore --list`; la cartella è esclusa da Git e non viene
+pubblicata. Checksum SHA-256:
+
+- dump: `db7c9438b9939509acb62d7463b42ce4ac26b03009398b809c810f688d022cfd`;
+- schema: `feda8e80f930f017ecbc4de67f7e125cfb96edda04cfb561eea3c70cd70059d4`.
+
+#### Restore e backfill su copia locale — 25 agosto 2026
+
+Il dump è stato ripristinato nel database locale isolato
+`csroma_prod_dryrun_20260825`. Sulla sola copia sono state applicate, in ordine, tutte
+le 49 migration `202608*.sql` presenti nel repository. La sequenza ha completato senza
+errori funzionali; l’unico adattamento dell’ambiente di test è stato aggiungere lo
+schema `storage` (solo definizione locale) perché il backup richiesto includeva
+espressamente i soli schemi `public` e `auth`, mentre una migration documenti aggiorna
+policy su `storage.objects`. Produzione include già Storage e non è stata modificata.
+
+Esito della riconciliazione post-backfill sulla copia:
+
+- 45 `profiles`, 45 `auth.users`, 45 `app_accounts` e 45 `season_profiles`;
+- ruoli globali: 2 `admin`, 2 `coach`, 41 `athlete`;
+- zero mapping Auth senza account, account senza persona o owner duplicati;
+- zero ruoli atleta senza profilo/relazione stagionale attiva;
+- `must_change_password` preservato su 17 record sia legacy sia account;
+- dati invariati: 145 eventi, 17 pagamenti, 120 rate e 5 documenti;
+- smoke RLS superato: admin e atleta risolvono account/persona/ruolo; il coach risolve
+  il ruolo e può operare solo sulla squadra assegnata.
+
+I grant minimi su `auth` e `public` sono stati ripristinati soltanto nella copia per
+simulare il runtime Supabase, perché il dump è stato creato con `--no-privileges`.
+Non sono una modifica richiesta alle migration né alla produzione. Il dry-run conferma
+la compatibilità del backfill; il passaggio successivo richiede il preflight immediato
+e un’esplicita autorizzazione prima dell’applicazione in produzione.
+
+#### Preflight CLI prima del deploy — 25 agosto 2026
+
+Sono stati salvati nel backup locale snapshot di ruoli/grant, schema e policy
+`storage`, mapping ruoli applicativi e history migration. `supabase migration list`
+conferma però che la history di produzione contiene due versioni assenti dalla directory
+locale: `20251007152643 master_migration_fixed` e `20260806133634 prod_rls_hardening`.
+Il file locale `20260729170829_prod_rls_hardening.sql` coincide semanticamente con il
+secondo (la sola differenza è la newline finale), mentre gli statement originali di
+entrambi sono stati esportati nel backup per il recupero tracciabile.
+
+Di conseguenza `supabase db push --dry-run`, eseguito senza `--include-all`, si blocca
+prima di pianificare il deploy. Non eseguire `supabase migration repair` sulla
+produzione: il prossimo step è riallineare la directory locale aggiungendo le due
+migration storiche fedeli alla history remota, rieseguire `migration list` e quindi il
+dry-run. Solo se quest’ultimo elenca esclusivamente le 49 migration `202608*` si potrà
+richiedere il push reale.
+
+Riallineamento completato il 25 agosto 2026: le due migration storiche sono state
+recuperate fedelmente dagli statement salvati in produzione. Per evitare di applicare
+le quattro migration locali di luglio, già inglobate dalla migration master di
+produzione, il deploy usa una directory temporanea con la sola history remota e le
+migration successive. Il nuovo `db push --dry-run` è riuscito e pianifica esattamente
+le 49 migration `20260806180000`–`20260819130000`, senza `--include-all` e senza
+modificare produzione. Il preflight è quindi superato; resta necessaria un’esplicita
+conferma immediatamente prima del push reale.
+
+#### Applicazione migration in produzione — 25 agosto 2026
+
+Con conferma esplicita è stato eseguito `supabase db push` usando la directory di
+deploy isolata già verificata: sono state applicate esclusivamente le 49 migration
+`20260806180000`–`20260819130000`. I `NOTICE` relativi a policy e trigger inesistenti
+sono attesi nelle migration idempotenti; il warning finale della cache del CLI non
+ha coinvolto né l'esecuzione SQL né il risultato del deploy.
+
+I controlli post-rilascio in sola lettura hanno confermato:
+
+- `45` profili, `45` utenti Auth, `45` `app_accounts` e `45` `season_profiles`;
+- ruoli account coerenti: `2` admin, `2` coach e `41` athlete;
+- zero utenti Auth senza mapping, mapping senza proprietario, proprietari duplicati
+  o account atleta senza appartenenza stagionale;
+- `17` account con obbligo di cambio password, identici ai `17` flag legacy;
+- history aggiornata con le 49 nuove migration (50 versioni `202608*` includendo la
+  migration storica `20260806133634`).
+
+Il database di produzione è quindi pronto al deploy dell'applicazione. Prima del merge
+di `codex/person-account-family-model` in `main` occorre creare un riferimento Git di
+backup di `main`; il deploy Vercel di `main` va promosso solo dopo il merge e i test
+smoke immediati.
+
+Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
+
+| Priorità | Consumer | Stato attuale | Impatto |
+| --- | --- | --- | --- |
+| Alta | `src/app/api/admin/collaborators/route.ts` | Migrato: usa `season_profiles`, `account_roles` e stato account; non legge più `profiles.role` | Autorizzazione/classificazione verificata |
+| Alta | `src/app/api/admin/coaches/route.ts` | Migrato: usa `coach_profiles`, `season_profiles` e account | Lista coach coerente con il dominio |
+| Alta | `src/components/admin/TeamsManager.tsx` | Migrato: carica `/api/admin/coaches` | UI operativa coerente |
+| Alta | `src/components/admin/BalanceDashboard.tsx` | Migrato: carica `/api/admin/coaches` | Filtro coach coerente |
+| Media | `src/app/api/admin/messages/route.ts` | Migrato: ruolo destinatario derivato da `app_accounts` e `account_roles` | Report/destinatari coerenti |
+| Media | `src/hooks/useAuth.ts` | Ancora fallback legacy: cache e compatibilità usano `profile.role` | Login/UI; il resolver account resta autorevole |
+| Media | `src/components/navigation/LayoutShell.tsx` | Migrato: legge `account.mustChangePassword` | Guardia UI account-based |
+| Media | `src/components/shared/ResetPasswordForm.tsx` | Migrato: legge `app_metadata.must_change_password` | Compatibilità reset account-based |
+| Bassa | `src/components/admin/AdminDashboard.tsx` | Migrato: visualizza il ruolo risolto da `useAuth` | Sola visualizzazione account-based |
+| Bassa | `src/components/shared/UserProfile.tsx` | Nessun consumer legacy rilevato nel file attuale | Nessun intervento richiesto |
+| Bassa | `src/components/admin/MessagesManager.tsx` | Visualizza il ruolo già derivato dalla route messaggi account-based | Sola visualizzazione |
+| Bassa | `src/components/admin/DocumentsManager.tsx` | Legge `profiles.role` per la sezione documenti admin | Migration 15 rinviata |
+
+Slice Media completato il 25 agosto 2026: `useAuth` risolve il ruolo esclusivamente da
+`account_roles`, `LayoutShell` usa `account.mustChangePassword` e
+`ResetPasswordForm` usa il claim `app_metadata.must_change_password`, necessario anche
+per gli account invitati che non possono ancora passare dal contesto account attivo. Non
+è stato modificato il flusso di invio email e `DocumentsManager` resta rinviato con
+Migration 15.
+
+Verifica locale dello slice: Jest 3/3 e build Next.js completate. Restano da verificare
+manualmente login, cambio password obbligatorio e logout su staging; dopo questo gate si
+potrà affrontare la pulizia dei fallback di sola visualizzazione.
+
+Consumer messaggi completato il 25 agosto 2026: `GET /api/admin/messages` non seleziona
+più `profiles.role` e non lo usa come fallback. Il ruolo del destinatario viene derivato
+esclusivamente da `app_accounts` e `account_roles`; per i profili senza account il valore
+resta `null` senza inventare una classificazione legacy.
+
+Pulizia fallback UI completata il 25 agosto 2026: `AdminDashboard` riceve il ruolo
+risolto dal contesto account e non legge più `profile.role`; `MessagesManager` conserva
+solo la visualizzazione del valore già derivato dalla route account-based. Non restano
+consumer attivi della tabella legacy per autorizzazione nei flussi migrati; restano
+soltanto i campi legacy esposti nei tipi/endpoint per compatibilità e il consumer
+documentale rinviato con Migration 15.
+
+Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
+ruoli o policy legacy. Restano i fallback di sola visualizzazione e i consumer documentali
+rinviati con Migration 15; la rimozione SQL resta bloccata fino alla chiusura
+dell’inventario e al ciclo di regressione in staging.
+
+Decisione aggiornata il 21 agosto 2026: Migration 15,
+`document_access_and_activity_audit`, è rinviata.
+
+La verifica read-only di codice, schema, policy e staging ha confermato che oggi la
+funzionalità documentale è esposta solo all'admin tramite `/admin/documents`; non esistono
+record in `documents` o `document_recipients` nello staging, non esiste una sezione
+documenti per atleta, genitore o coach e `system_logs` non registra eventi operativi.
+L'audit effettivamente utilizzato è già separato in `account_lifecycle_audit` e
+`profile_relationship_audit`. Implementare ora il tracciamento delle visualizzazioni
+aggiungerebbe complessità senza un flusso end-user concreto.
+
+Migration 15 sarà rivalutata dopo una decisione funzionale sulla condivisione dei documenti.
+Se i documenti diventeranno accessibili anche ad atleti, genitori e coach, sarà prima
+necessario implementare la relativa sezione end-user con accesso, download e stato di
+lettura; successivamente si definiranno audit actor/subject, policy e test. Se resteranno
+solo amministrativi, la migration potrà essere ridotta o ulteriormente rinviata.
+
+Migration 13: `account_message_reads_and_push_subscriptions`
+
+- crea `message_reads(message_id, auth_user_id, subject_profile_id, read_at)`;
+- mantiene `message_recipients.is_read/read_at` in dual-read temporaneo;
+- backfilla letture solo per destinatari diretti quando il mapping è univoco;
+- non inventa letture individuali dai destinatari team legacy, perché il dato condiviso
+  non identifica chi abbia letto;
+- aggiunge `push_subscriptions.auth_user_id` nullable, backfill dai 2 record attuali,
+  dual-write, nuova unique `(auth_user_id, endpoint)` e rimozione futura di `profile_id`;
+- fan-out notifiche a tutti gli account autorizzati con `can_receive_messages=true`.
+
+Migration 14: `attendance_rsvp_and_payment_actors`
+
+- `event_attendances`: `responded_by_auth_user_id`, `response_source`, `responded_at`;
+- `rsvp`: stessi campi per compatibilità, anche se oggi non usata dal codice;
+- `fee_installments`: soggetto resta `profile_id`; aggiunge attore del pagamento quando
+  effettivamente registrato;
+- `payments`: conserva `coach_id` per compatibilità con i pagamenti coach esistenti;
+- aggiunge `person_payment` con `payee_profile_id` per pagare qualsiasi collaboratore,
+  incluso Staff senza squadra, attività o palestra;
+- i riferimenti a palestra, attività e squadra restano opzionali per `person_payment`;
+- le notifiche applicative restano specifiche dei pagamenti coach finché lo Staff non
+  avrà un’area personale di consultazione;
+- mantiene `payments` distinto dalle quote atleta e dalle rate associative.
+
+Migration 15: `document_access_and_activity_audit`
+
+- aggiunge letture/visualizzazioni documenti per account quando necessarie;
+- evolve `system_logs` in audit actor/subject/azione/timestamp;
+- preserva letture e audit dopo revoca relazione o revoca logica account;
+- applica `can_view_documents` in modo separato dagli altri permessi;
+- non implementa firme con valore legale, `document_signatures` o una firma applicativa
+  proprietaria: la firma resta fuori da questo refactoring finché non viene scelto e
+  progettato un provider dedicato.
+
+### Fase 6 — rimozione legacy
+
+Stato: da iniziare; potrà essere eseguita solo dopo almeno un ciclo completo delle Fasi
+3–5 in staging e dopo la validazione finale dell’intero piano.
+
+Preflight inventory read-only completato il 21 agosto 2026 sul codice e sullo staging.
+La rimozione non può ancora iniziare: sono presenti dipendenze applicative e dati legacy
+che richiedono una migrazione dedicata e una verifica di compatibilità.
+
+Risultati staging:
+
+- `profiles`: 14 record; il campo legacy `role` è valorizzato su 7 record e
+  `is_active`/`must_change_password` sono valorizzati su tutti i 14 record;
+- `app_accounts`: 12 record, tutti `active`, nessuno con `must_change_password = true`;
+- `user_roles`: 3 record ancora presenti; due sono coerenti con ruoli account e uno è un
+  ruolo atleta senza corrispondente `account_roles.athlete`, quindi va analizzato prima di
+  qualsiasi rimozione;
+- esistono ancora 2 profili senza account applicativo e 1 account senza ruolo globale,
+  da distinguere tra profili intenzionalmente senza accesso e mapping incompleti;
+- nello staging restano policy legacy su `user_roles`, su `athlete_profiles` e su alcuni
+  domini che confrontano direttamente `auth.uid()` o `profiles.role`;
+- le funzioni `public.messages_set_created_by()` e
+  `public.sync_championship_match_event()` sono ancora `SECURITY DEFINER` e usano il
+  modello legacy per valorizzare l’attore; `private.current_profile_id()` e gli helper
+  account-based restano invece il modello autorizzativo target;
+- il codice applicativo continua a leggere o aggiornare campi legacy in alcune route
+  admin: le route account/profile espongono ancora campi legacy, la creazione/modifica di
+  alcuni collaboratori mantiene dual-write compatibile, il reset password aggiorna ancora
+  `profiles.must_change_password` oltre ad `app_accounts`, e restano consumer UI/API che
+  leggono `profiles.role` direttamente;
+- `user_roles` e i campi legacy non sono quindi eliminabili in sicurezza con una singola
+  migration distruttiva.
+
+Decisione sui casi staging verificata il 21 agosto 2026:
+
+- `Atleta RLS Test` è una fixture legacy creata durante il bootstrap iniziale dello
+  staging e resta intenzionalmente fuori dal mapping operativo completo;
+- `nuovo test` è una fixture per i test RLS e per la creazione di profili, quindi resta un
+  profilo senza account;
+- `staff test` resta un profilo senza account e senza ruolo globale: non esiste ancora una
+  UI/UX Staff e non è prevista in questo ciclo;
+- questi record non devono essere corretti, assegnati a ruoli o rimossi dalla Fase 6.
+  La migrazione deve invece distinguere le fixture di test dai dati applicativi reali.
+
+Ordine obbligatorio prima della Fase 6:
+
+1. risolvere il profilo atleta senza `account_roles.athlete` e i profili/account non
+   mappati;
+2. migrare le route admin residue a `app_accounts`, `account_roles` e
+   `season_profiles` dove il campo legacy è usato per stato o autorizzazione; priorità a
+   `/api/admin/profiles`, creazione/invito account, reset password, messaggi e ai consumer
+   UI diretti;
+3. verificare in staging che gli iscritti senza account restino visibili e che gli account
+   `disabled`/`suspended` siano solo non autenticabili, senza cancellare la persona;
+4. correggere o sostituire le policy/funzioni legacy ancora effettivamente attive;
+5. ripetere l’inventario e verificare che `user_roles` sia vuota o esplicitamente
+   mantenuta per compatibilità;
+6. solo allora preparare la migration di rimozione con backup, dry-run e test di rollback.
+
+Solo dopo almeno un ciclo completo in staging e monitoraggio produzione:
+
+- elimina `sync_auth_users_to_profiles()`;
+- elimina sync `profiles.role -> app_metadata`;
+- rimuove letture/scritture da `user_roles` e poi la tabella;
+- rimuove `profiles.role` e `profiles.must_change_password`;
+- rimuove `push_subscriptions.profile_id` e campi lettura messaggi legacy;
+- elimina wrapper SQL e fallback marcati con TODO di fase;
+- aggiorna tipi, fixture e documentazione.
+
+## 6. Strategia di backfill e verifiche
+
+Il backfill viene eseguito in transazione e preceduto da query che bloccano casi
+inattesi. Query minime dopo Fase 1:
+
+```sql
+select count(*) from auth.users;
+select count(*) from public.profiles;
+select count(*) from public.app_accounts;
+
+select count(*) as auth_without_mapping
+from auth.users au
+left join public.app_accounts aa on aa.auth_user_id = au.id
+where aa.auth_user_id is null;
+
+select count(*) as mapping_without_owner
+from public.app_accounts aa
+left join public.profiles p on p.id = aa.owner_profile_id
+where p.id is null;
+
+select owner_profile_id, count(*)
+from public.app_accounts
+group by owner_profile_id
+having count(*) <> 1;
+
+select count(*) as changed_profile_ids
+from public.profiles p
+left join auth.users au on au.id = p.id
+where p.created_at < :migration_started_at
+  and au.id is null;
+```
+
+Per la fotografia corrente i risultati attesi sono 48 account, 48 profili, 48 mapping,
+zero orfani e zero duplicati owner.
+
+Il backfill ruoli atteso parte da 2 admin + 2 coach e aggiunge
+`account_roles('athlete')` solo per gli account atleta riconciliati con esito certo. Il
+conteggio finale deve essere prodotto dal report di riconciliazione; gli account ambigui
+restano invariati e richiedono revisione manuale.
+
+## 7. Rollback
+
+Le migration restano forward-only; ogni fase fornisce uno script di rollback manuale e
+precondizioni esplicite.
+
+Fase 1 è reversibile finché non esistono profili senza Auth:
+
+1. verificare che ogni `profiles.id` esista ancora in `auth.users`;
+2. verificare email non nulle e role legacy valido;
+3. ripristinare NOT NULL/default/vincolo Auth;
+4. ripristinare helper legacy;
+5. eliminare nuove policy e tabelle in ordine relationships, roles, accounts.
+
+Dopo Fase 3 il ripristino della FK `profiles -> auth.users` non è più reversibile senza
+perdere anagrafiche o creare account fittizi. Da quel punto il rollback corretto è un
+roll-forward: si mantiene lo schema additivo e si disabilitano le nuove UI/API.
+
+Rollback applicativo:
+
+- Fase 1 è compatibile con il codice vecchio perché i 48 ID e i campi legacy restano;
+- Fasi 2A-2E mantengono dual-write dei ruoli legacy e possono essere riportate indietro
+  indipendentemente nel codice; le policy già migrate ricevono correzioni roll-forward;
+- Fase 3 non cancella dati persona durante rollback;
+- Fase 4 revoca/oscura le relazioni senza cancellarle;
+- Fase 5 mantiene colonne legacy fino alla Fase 6.
+
+Prima di ogni applicazione staging/produzione viene creato un dump schema+dati+ruoli e
+registrato il checksum. Nessun rollback usa delete cascata su persone o storico.
+
+## 8. Rischi principali e mitigazioni
+
+| Rischio | Mitigazione |
+| --- | --- |
+| Policy residue con `auth.uid() = profile_id` | inventario automatico `rg` sul dump e test SQL che fallisce se resta il pattern |
+| JWT valido dopo sospensione/revoca | `app_accounts.status` verificato in ogni helper/RLS/API; ban Auth solo difesa aggiuntiva |
+| Invito inviato prima del mapping | preferire create + mapping + verify + link; fallback immediato testato, disable/ban e riparazione auditata |
+| Email contatto uguale per più familiari | `profiles.email` nullable/non autorevole; login email gestita da Auth |
+| Parent vede colonne sensibili del figlio | niente `SELECT *` parent su `profiles`; endpoint/permessi per dominio |
+| Parent conserva accesso dopo i 18 anni | helper minore centralizzato; parent storico ma non operativo; nuova delega verificata |
+| Ruolo singolo in UI/middleware | context con `roles[]` e aree multiple; legacy dual-write temporaneo |
+| Ruolo coach interpretato come accesso globale | ruolo abilita solo area; team sempre risolti tramite `owner_profile_id -> team_coaches` |
+| Service role usata come bypass generico | user client + RLS di default; admin client server-only, allowlist e test import/grant |
+| Cancellazione persona elimina storico | nessuna delete persona dal flusso account; revisione futura delle FK cascade |
+| Campi atleta duplicati divergono | fonti autorevoli definite, report conflitti e consolidamento senza overwrite |
+| Due genitori condividono stato lettura | `message_reads` per account e soggetto |
+| Backfill letture team ambiguo | nessuna lettura individuale inventata; mantenimento flag legacy |
+| `payments` confuso con quote atleta | quote/subject su `fee_installments`; `payments` resta contabilità costi/coach |
+| Trigger Auth diverso tra ambienti | `DROP TRIGGER IF EXISTS`, dump e confronto staging prima della migration |
+| Helper `SECURITY DEFINER` esposto | schema privato, search_path fisso, revoke PUBLIC, test grants/advisors |
+| Relazione revocata ma cache UI attiva | recheck server a ogni richiesta; selector non autorizzativo |
+| Indici mancanti nelle policy | indici source/target/status/date/role; `EXPLAIN` e performance advisor |
+
+## 9. Ordine esatto dei commit/PR
+
+Il piano raccomanda PR separate per Fase 1, ciascuna Fase 2A-2E, Fase 3, Fase 4,
+Fase 5 e Fase 6. Ordine dei commit:
+
+1. `docs: plan optional accounts and family profiles`;
+2. `docs: incorporate approved authorization and lifecycle decisions`;
+3. `test(db): add account model baseline and invariant checks`;
+4. `feat(db): create account person and relationship tables`;
+5. `feat(db): backfill existing accounts and global roles`;
+6. `feat(db): decouple profiles from auth users`;
+7. `feat(db): add private helpers explicit grants and initial rls`;
+8. `test(db): cover account mapping grants and rollback preconditions`;
+9. `feat(db): migrate personal account context policies`;
+10. `refactor(auth): resolve owner profile and account status`;
+11. `test(auth): gate phase 2a personal access and account status`;
+12. `feat(db): migrate admin and staff role policies`;
+13. `refactor(admin): use account roles and scoped server-only admin client`;
+14. `test(admin): gate phase 2b admin staff routes and grants`;
+15. `feat(db): migrate coach team assignment policies`;
+16. `refactor(coach): authorize teams only through team coaches`;
+17. `test(coach): gate phase 2c team isolation`;
+18. `feat(db): migrate athlete personal access policies`;
+19. `refactor(athlete): derive athlete access from sports records`;
+20. `test(athlete): gate phase 2d personal athlete access`;
+21. `feat(db): migrate shared domain actor and access policies`;
+22. `refactor(domains): migrate messages notifications documents and shared routes`;
+23. `test(domains): gate phase 2e shared access and idor protection`;
+24. `feat(db): add person account lifecycle audit support`;
+25. `feat(admin): add profile-only crud and robust invite lifecycle`;
+26. `feat(admin-ui): add people access states and person detail`;
+27. `test(admin): cover logical revoke mapping verification and invite failure`;
+28. `feat(db): consolidate profile athlete and team member sources`;
+29. `feat(db): add age-aware relationship permissions`;
+30. `feat(family): add relationship APIs accessible profiles and selector`;
+31. `test(family): cover age boundary contacts delegates and permission isolation`;
+32. `feat(messages): add per-account reads and account push subscriptions`;
+33. `feat(attendance): add actor subject fields to attendance rsvp and fees`;
+34. `feat(documents): add document access and immutable actor audit`;
+35. `test(domains): cover delegated actions reads and audit history`;
+36. `refactor(legacy): remove profile role user_roles and compatibility fields`;
+37. `test(e2e): validate full migration and legacy removal`.
+
+## 10. Test da aggiungere
+
+### SQL/integration database
+
+- assert schema, FK, indici, RLS e grants;
+- backfill eseguito due volte senza duplicati;
+- revoca logica account mantiene Auth, mapping e profilo;
+- cancellazione fisica Auth separata non elimina profilo;
+- delete profilo collegato è rifiutata;
+- status non active rende `current_profile_id()` nullo;
+- policy self/admin/coach/relationship con JWT simulati;
+- coach abilitato senza team non vede alcuna squadra;
+- atleta deriva da `athlete_profiles`/`team_members`, mai da ruolo account;
+- UPDATE sempre con `USING` e `WITH CHECK`;
+- relazione pending/revoked/expired non autorizza;
+- relazione parent smette di autorizzare esattamente a 18 anni e delegate continua;
+- un solo contatto principale amministrativo e pagamenti per target;
+- ogni permesso nega il dominio corrispondente;
+- `authenticated` non può leggere tabelle private e può eseguire solo helper concessi;
+- advisors security/performance senza nuovi errori critici;
+- query automatica che cerca policy/funzioni residue con confronti diretti
+  `profile_id = auth.uid()` o `coach_id = auth.uid()`.
+
+### Unit test Jest
+
+- Zod persone/account/relazioni;
+- mapping stato Auth -> `app_accounts.status`;
+- costruzione `AccessibleProfile` e matrice permessi;
+- scelta area per ruoli multipli;
+- compensazione create/invite account;
+- mapping verificato prima dell'invio link e gestione fallback invito già inviato;
+- calcolo minore, compleanno, override motivato e fail-closed senza `birth_date`;
+- selector che scarta un profilo non più accessibile;
+- source `self|parent|coach|admin|system` per attendance;
+- fan-out notifiche senza duplicati account/device.
+
+### Integration route
+
+- persona atleta e coach senza account;
+- account aggiunto in un secondo momento;
+- suspend/reactivate/revoca logica account senza perdere profilo o Auth;
+- cancellazione fisica Auth disponibile solo nell'azione amministrativa separata;
+- admin non derivato da payload/JWT client;
+- `profileId` manipolato restituisce 403;
+- coach limitato ai team autorizzati;
+- relazioni create/modificate/revocate solo da admin/staff autorizzato;
+- parent maggiorenne negato e delegate verificato autorizzato;
+- genitore vede solo stato/scadenza certificato, non dettagli sanitari;
+- due parent hanno `message_reads` distinti.
+
+### E2E Playwright
+
+Tutti gli scenari obbligatori della specifica:
+
+- account/persona: 8 scenari;
+- famiglia: 12 scenari;
+- sicurezza: 10 scenari;
+- confine temporale prima/durante/dopo il diciottesimo compleanno;
+- navigazione multi-area e persistenza selector;
+- compatibilità login dei 48 account backfillati.
+
+I test E2E usano fixture sintetiche nel Supabase locale/staging, mai il dump dati di
+produzione.
+
+## 11. File da creare o modificare
+
+Nuovi moduli principali previsti:
+
+- `src/server/auth/require-account-context.ts`;
+- `src/server/auth/require-global-role.ts`;
+- `src/server/supabase/admin-client.ts` (`server-only`, unico punto Auth Admin);
+- `src/server/profiles/require-profile-permission.ts`;
+- `src/server/admin/profiles.ts`;
+- `src/server/admin/accounts.ts`;
+- `src/server/admin/relationships.ts`;
+- `src/lib/validation/profiles.ts`;
+- `src/lib/validation/accounts.ts`;
+- `src/lib/validation/relationships.ts`;
+- test di confine import che vieta `admin-client` da moduli client;
+- script/report di consolidamento `profiles`/`athlete_profiles`/`team_members`;
+- route `/api/admin/profiles/**`, `/api/admin/relationships/**`,
+  `/api/me/accessible-profiles`;
+- componenti persone/account/relazioni e `ProfileSwitcher`;
+- migration e test SQL descritti nella sezione 5.
+
+File esistenti prioritari:
+
+- auth/navigation: `src/middleware.ts`, `src/hooks/useAuth.ts`,
+  `src/app/dashboard/page.tsx`, `src/components/navigation/RoleSidebar.tsx`,
+  `src/components/auth/ProtectedRoute.tsx`;
+- account admin: `src/app/api/admin/users/**`, `src/lib/validation/users.ts`,
+  `src/components/admin/UsersManager.tsx`, `UserFormModal.tsx`, `userTypes.ts`;
+- persone sportive: route/componenti athletes/coaches e relativi type;
+- domini: tutte le route athlete/coach, messages, notifications, documents,
+  membership fees, attendance e pagamenti elencate nella sezione 3;
+- test/config: Jest, Playwright, script SQL RLS esistenti.
+
+## 12. Decisioni funzionali confermate e perimetro rinviato
+
+Default approvati e vincolanti:
+
+1. minore calcolato da `birth_date`, con override amministrativo motivato e auditato;
+2. un solo contatto principale amministrativo per soggetto;
+3. un solo contatto principale pagamenti per soggetto;
+4. più contatti ammessi per messaggi ed emergenze;
+5. account creato tramite invito/link, senza password temporanee;
+6. relazione familiare verificata inizialmente solo da Admin o Staff autorizzato;
+7. accesso `parent` sospeso al compimento dei 18 anni; accesso successivo solo con
+   relazione `delegate` attiva e verificata;
+8. il parent può vedere soltanto stato e scadenza del certificato medico, non dettagli
+   sanitari;
+9. firma con valore legale esclusa dal refactoring finché non viene scelto il provider.
+10. `team_coaches` è la fonte autorevole per accesso e ruolo coach; `teams.coach_id`
+    resta un campo legacy non usato dalle route e policy coach migrate nella Fase 2C.
+11. `profiles` è un’identità unica e non contiene una stagione singola; ogni persona deve
+    avere il collegamento stagionale in `season_profiles`, anche se il relativo account
+    globale (`admin`, `coach`, `staff` o `athlete`) può avere permessi non limitati alla
+    stagione.
+12. I pagamenti coach esistenti restano compatibili; i pagamenti a persone non legati a
+    squadra, attività o palestra usano `person_payment` e `payee_profile_id`.
+13. Gli account atleta esistenti non vengono cancellati né ricreati: vengono riconciliati
+    conservando gli stessi ID Auth/profilo e ricevono `account_roles.athlete` solo quando
+    il mapping è certo; i casi ambigui restano in revisione manuale.
+
+Restano rinviati senza bloccare la Fase 1:
+
+- capability Staff ulteriori rispetto a quelle esplicitamente allowlisted;
+- retention e procedura della cancellazione fisica Auth separata;
+- provider pagamenti e semantica futura di `paid_by_auth_user_id`;
+- provider di firma legale e relativo modello probatorio;
+- merge persone duplicate, che non usa mai la sola uguaglianza email.
+
+## 13. Gate operativo per iniziare Fase 1
+
+Prima di scrivere/applicare la prima migration:
+
+1. verificare changelog e documentazione Supabase correnti;
+2. creare dump aggiornato di staging e confrontarlo con produzione;
+3. verificare migration history locale/staging/produzione;
+4. ripristinare il dump produzione in un ambiente isolato o clonare lo schema per prova;
+5. eseguire baseline test dei 48 account;
+6. creare le migration con CLI;
+7. applicare solo locale, poi staging;
+8. eseguire test, query di controllo e advisors;
+9. produrre report di fase con file, migration, risultati, problemi e stato merge;
+10. richiedere approvazione esplicita prima di qualsiasi applicazione in produzione.
+
+Riferimenti Supabase verificati durante la pianificazione:
+
+- Auth Admin invite: <https://supabase.com/docs/reference/javascript/auth-admin-inviteuserbyemail>
+- Auth Admin update/ban: <https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid>
+- Auth Admin delete: <https://supabase.com/docs/reference/javascript/auth-admin-deleteuser>
+- Sign out e limiti revoca JWT: <https://supabase.com/docs/reference/javascript/auth-signout>

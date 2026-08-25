@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasValidMagicBytes } from '@/lib/utils/fileValidation'
 import { cleanupOrphanedDraftAttachments } from '@/lib/utils/cleanupDraftAttachments'
+import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 
 const MAX_FILES = 5
 const MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -22,18 +23,17 @@ const ALLOWED_MIME_TYPES = new Set([
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const account = await requireAccountContext(supabase)
 
     // Authorize roles admin/coach
-const role = (user as any)?.app_metadata?.role
-    if (!['admin', 'coach'].includes(role)) {
+    const role = account.roles.includes('admin') ? 'admin' : account.roles.includes('coach') ? 'coach' : null
+    if (!role) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Cleanup non-blocking dei draft vecchi e non ancora associati a un messaggio.
     try {
-      await cleanupOrphanedDraftAttachments(user.id)
+      await cleanupOrphanedDraftAttachments(account.authUserId)
     } catch (cleanupError) {
       console.warn('Cleanup draft allegati non riuscito:', cleanupError)
     }
@@ -83,7 +83,7 @@ const role = (user as any)?.app_metadata?.role
         .eq('id', messageId)
         .maybeSingle()
 
-      if (messageError || !message || (role !== 'admin' && message.created_by !== user.id)) {
+      if (messageError || !message || (role !== 'admin' && message.created_by !== account.ownerProfileId)) {
         return NextResponse.json({ error: 'Messaggio non autorizzato' }, { status: 403 })
       }
     }
@@ -95,8 +95,8 @@ const role = (user as any)?.app_metadata?.role
       const buffer = Buffer.from(arrayBuffer)
       const safeName = file.name.replace(/[^a-zA-Z0-9_.-]+/g, '_')
       const basePath = messageId
-        ? `messages/${user.id}/${messageId}`
-        : `draft/${user.id}/${crypto.randomUUID()}`
+        ? `messages/${account.authUserId}/${messageId}`
+        : `draft/${account.authUserId}/${crypto.randomUUID()}`
       const objectPath = `${basePath}/${Date.now()}_${safeName}`
 
       const { error: uploadError } = await supabase
@@ -123,6 +123,9 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ success: true, files: uploaded })
   } catch (e: any) {
+    if (e instanceof AccountContextError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
     console.error('Upload attachments error:', e)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }

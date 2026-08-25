@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { loginPayloadSchema } from '@/lib/validation/auth'
+import {
+  AccountContext,
+  AccountContextError,
+  requireAccountContext,
+} from '@/server/auth/require-account-context'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,29 +31,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Autenticazione fallita' }, { status: 401 })
     }
 
-    let profile = null
+    let account: AccountContext
     try {
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', authData.user.id)
-        .single()
-
-      if (!profileError && profileData) {
-        profile = profileData
-        console.log('Profile prefetched during login')
-      }
-    } catch (err) {
-      console.warn('Profile prefetch failed, will load on client:', err)
+      account = await requireAccountContext(supabase)
+    } catch (error) {
+      await supabase.auth.signOut()
+      throw error
     }
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', account.ownerProfileId)
+      .maybeSingle()
 
     return NextResponse.json({
       success: true,
       user: authData.user,
       profile,
+      account,
       session: authData.session,
     })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Login exception:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }

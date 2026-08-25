@@ -1,42 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { coachBulkSchema } from '@/lib/validation/bulk'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function GET() {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const [{ data: profiles, error: profilesError }, { data: coachProfiles, error: coachProfilesError }, { data: seasonProfiles, error: seasonProfilesError }, { data: accounts, error: accountsError }] = await Promise.all([
+      adminClient.from('profiles').select('id, email, first_name, last_name, phone, birth_date, created_at, updated_at').order('created_at', { ascending: false }),
+      adminClient.from('coach_profiles').select('profile_id, level, specialization, started_on'),
+      adminClient.from('season_profiles').select('profile_id, profile_type, status'),
+      adminClient.from('app_accounts').select('auth_user_id, owner_profile_id, status'),
+    ])
+
+    if (profilesError || coachProfilesError || seasonProfilesError || accountsError) {
+      console.error('Errore caricamento collaboratori:', profilesError || coachProfilesError || seasonProfilesError || accountsError)
+      return NextResponse.json({ error: 'Impossibile caricare i collaboratori' }, { status: 500 })
     }
 
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    // Carica collaboratori con dettagli base (solo dati profilo)
-    const { data: coaches, error } = await adminClient
-      .from('profiles')
-      .select(`
-        id,
-        email,
-        first_name,
-        last_name,
-        phone,
-        birth_date,
-        created_at,
-        updated_at
-      `)
-      .eq('role', 'coach')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Errore caricamento collaboratori:', error)
-      return NextResponse.json({ error: error.message }, { status: 400 })
-    }
+    const coachSeasonIds = new Set((seasonProfiles || [])
+      .filter((profile) => profile.profile_type === 'coach' && profile.status === 'active')
+      .map((profile) => profile.profile_id))
+    const accountByProfile = new Map((accounts || []).map((account) => [account.owner_profile_id, account]))
+    const coaches = (profiles || []).filter((profile) => {
+      const account = accountByProfile.get(profile.id)
+      if (account?.status === 'disabled' || account?.status === 'suspended') return false
+      return coachSeasonIds.has(profile.id)
+    })
 
     if (!coaches || coaches.length === 0) {
       return NextResponse.json({ coaches: [] })
@@ -44,10 +38,6 @@ const requesterRole = (user as any)?.app_metadata?.role
 
     // Carica profili coach separatamente
     const coachIds = coaches.map(c => c.id)
-    const { data: coachProfiles } = await adminClient
-      .from('coach_profiles')
-      .select('profile_id, level, specialization, started_on')
-      .in('profile_id', coachIds)
 
     // Carica team coaches separatamente - recupera tutti e poi filtra
     const { data: allTeamCoaches, error: teamCoachesError } = await adminClient
@@ -115,6 +105,10 @@ const requesterRole = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ coaches: formattedCoaches })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API lista collaboratori:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -124,17 +118,8 @@ const requesterRole = (user as any)?.app_metadata?.role
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     const parsed = coachBulkSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Parametri non validi' }, { status: 400 })
@@ -155,6 +140,10 @@ const requesterRole = (user as any)?.app_metadata?.role
         return NextResponse.json({ error: 'Operazione non supportata' }, { status: 400 })
     }
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API operazioni massive collaboratori:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }

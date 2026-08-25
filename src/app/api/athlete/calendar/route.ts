@@ -1,26 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const { searchParams } = new URL(request.url)
+    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
+    const athleteProfileId = subject.profileId
+    const dataClient = subject.dataClient
 
     // 1. Get athlete's team memberships
-    const { data: memberships, error: memberErr } = await supabase
+    const { data: memberships, error: memberErr } = await dataClient
       .from('team_members')
       .select('team_id')
-      .eq('profile_id', user.id)
+      .eq('profile_id', athleteProfileId)
 
     if (memberErr) {
       console.error('Error loading athlete team memberships:', memberErr)
@@ -33,7 +29,7 @@ const role = (user as any)?.app_metadata?.role
     }
 
     // 2. Get team details
-    const { data: teams, error: teamsErr } = await supabase
+      const { data: teams, error: teamsErr } = await dataClient
       .from('teams')
       .select('id, name, code')
       .in('id', teamIds)
@@ -53,7 +49,7 @@ const role = (user as any)?.app_metadata?.role
       // Batch processing
       for (let i = 0; i < teamIds.length; i += 100) {
         const batch = teamIds.slice(i, i + 100)
-        const { data: relations } = await supabase
+        const { data: relations } = await dataClient
           .from('event_teams')
           .select('event_id, team_id')
           .in('team_id', batch)
@@ -63,7 +59,7 @@ const role = (user as any)?.app_metadata?.role
       }
       eventIds = [...new Set(eventIds)]
     } else {
-      const { data: relations, error: relErr } = await supabase
+      const { data: relations, error: relErr } = await dataClient
         .from('event_teams')
         .select('event_id, team_id')
         .in('team_id', teamIds)
@@ -87,7 +83,7 @@ const role = (user as any)?.app_metadata?.role
     if (eventIds.length > 100) {
       for (let i = 0; i < eventIds.length; i += 100) {
         const batch = eventIds.slice(i, i + 100)
-        const { data: events } = await supabase
+        const { data: events } = await dataClient
           .from('events')
           .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind')
           .in('id', batch)
@@ -95,7 +91,7 @@ const role = (user as any)?.app_metadata?.role
         allEvents.push(...(events || []))
       }
     } else {
-      const { data: events, error: evErr } = await supabase
+      const { data: events, error: evErr } = await dataClient
         .from('events')
         .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind')
         .in('id', eventIds)
@@ -141,6 +137,9 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Athlete calendar API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

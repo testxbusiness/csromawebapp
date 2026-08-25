@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
@@ -251,6 +252,7 @@ export default function TeamModal({
       <DialogContent className="cs-modal--centered cs-modal--md">
         <DialogHeader>
           <DialogTitle>{team ? 'Modifica Squadra' : 'Nuova Squadra'}</DialogTitle>
+          <DialogDescription className="sr-only">Inserisci o modifica i dati della squadra.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -320,7 +322,7 @@ export default function TeamModal({
               <option value="">Nessun allenatore assegnato</option>
               {coaches.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.first_name} {c.last_name} ({c.email})
+                  {c.first_name} {c.last_name}
                 </option>
               ))}
             </select>

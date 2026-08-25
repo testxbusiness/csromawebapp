@@ -50,3 +50,8 @@ export const pushTestSchema = z.object({
   icon: z.string().trim().startsWith('/').max(500).optional(),
   badge: z.string().trim().startsWith('/').max(500).optional(),
 }).strict()
+
+export const messageReadSchema = z.object({
+  message_id: uuid,
+  subject_profile_id: uuid.optional(),
+}).strict()

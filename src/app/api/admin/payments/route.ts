@@ -3,18 +3,55 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { sendToUser } from '@/lib/utils/push'
 import { paymentCreateSchema, paymentPatchSchema } from '@/lib/validation/payments'
 import { z } from 'zod'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
+
+type PaymentPayeeType = 'coach' | 'staff'
+
+async function getPaymentPayeeType(
+  adminClient: ReturnType<typeof createAdminClient>,
+  profileId: string,
+): Promise<PaymentPayeeType | null> {
+  const [{ data: payee }, { data: account }] = await Promise.all([
+    adminClient
+      .from('profiles')
+      .select('id, coach_profiles(profile_id), season_profiles(profile_type)')
+      .eq('id', profileId)
+      .maybeSingle(),
+    adminClient
+      .from('app_accounts')
+      .select('auth_user_id')
+      .eq('owner_profile_id', profileId)
+      .maybeSingle(),
+  ])
+
+  const { data: accountRoles } = account?.auth_user_id
+    ? await adminClient
+        .from('account_roles')
+        .select('role')
+        .eq('auth_user_id', account.auth_user_id)
+    : { data: [] }
+
+  const hasCoachProfile = Array.isArray(payee?.coach_profiles)
+    ? payee.coach_profiles.length > 0
+    : Boolean(payee?.coach_profiles)
+  const seasonTypes = (payee?.season_profiles ?? []).map(
+    (row: { profile_type: string | null }) => row.profile_type,
+  )
+
+  const hasCoachAccountRole = (accountRoles ?? []).some((row: { role: string }) => row.role === 'coach')
+  const hasStaffSeasonType = seasonTypes.includes('staff')
+  const hasCoachSeasonType = seasonTypes.includes('coach')
+
+  if (hasCoachAccountRole || hasCoachProfile || hasCoachSeasonType) return 'coach'
+  if (hasStaffSeasonType) return 'staff'
+  return null
+}
 
 export async function GET() {
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
     
     const { data, error } = await adminClient
@@ -40,6 +77,11 @@ const role = (user as any)?.app_metadata?.role
           first_name,
           last_name
         ),
+        payees:profiles!payments_payee_profile_id_fkey (
+          id,
+          first_name,
+          last_name
+        ),
         created_by_profile:profiles!payments_created_by_fkey (
           first_name,
           last_name
@@ -53,6 +95,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json(data || [])
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -68,31 +114,35 @@ export async function POST(request: NextRequest) {
     }
     const paymentData = parsed.data
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
 
     // Normalize payload to DB vocabulary and add auditing fields
     const normalized: any = {
       ...paymentData,
       status: paymentData?.status === 'to_pay' || !paymentData?.status ? 'pending' : paymentData.status,
-      created_by: user.id,
+      created_by: account.ownerProfileId,
     }
 
     // Enforce DB check constraints for type/coach_id
     if (normalized?.type === 'general_cost') {
       // General costs must not be tied to a coach
       normalized.coach_id = null
+      normalized.payee_profile_id = null
     } else if (normalized?.type === 'coach_payment') {
       // Coach payments must have a coach_id
       if (!normalized?.coach_id) {
         return NextResponse.json({ error: 'coach_id richiesto per type=coach_payment' }, { status: 400 })
+      }
+      normalized.payee_profile_id = null
+    } else if (normalized?.type === 'person_payment') {
+      if (!normalized?.payee_profile_id) {
+        return NextResponse.json({ error: 'payee_profile_id richiesto per type=person_payment' }, { status: 400 })
+      }
+      normalized.coach_id = null
+
+      if ((await getPaymentPayeeType(adminClient, normalized.payee_profile_id)) !== 'staff') {
+        return NextResponse.json({ error: 'Il destinatario deve essere uno staff' }, { status: 400 })
       }
     }
 
@@ -107,6 +157,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json(data?.[0] || null)
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -122,14 +176,7 @@ export async function PATCH(request: NextRequest) {
     }
     const { id, ...rawUpdate } = parsed.data
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
 
     // Normalize incoming fields to satisfy DB constraints
@@ -145,10 +192,20 @@ const role = (user as any)?.app_metadata?.role
     if (typeof updateData.type === 'string') {
       if (updateData.type === 'general_cost') {
         updateData.coach_id = null
+        updateData.payee_profile_id = null
       } else if (updateData.type === 'coach_payment') {
         if (!updateData.coach_id) {
           return NextResponse.json({ error: 'coach_id richiesto per type=coach_payment' }, { status: 400 })
         }
+        updateData.payee_profile_id = null
+      } else if (updateData.type === 'person_payment') {
+        if (!updateData.payee_profile_id) {
+          return NextResponse.json({ error: 'payee_profile_id richiesto per type=person_payment' }, { status: 400 })
+        }
+        if ((await getPaymentPayeeType(adminClient, updateData.payee_profile_id)) !== 'staff') {
+          return NextResponse.json({ error: 'Il destinatario deve essere uno staff' }, { status: 400 })
+        }
+        updateData.coach_id = null
       }
     }
 
@@ -185,6 +242,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -202,14 +263,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
 
     const { error } = await adminClient
@@ -223,6 +277,10 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json({ success: true })
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

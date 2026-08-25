@@ -2,16 +2,15 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { LoadingState, toast } from '@/components/ui'
-import { createClient, createRecoveryClient } from '@/lib/supabase/client'
+import { createRecoveryClient } from '@/lib/supabase/client'
 import { exportUsers } from '@/lib/utils/excelExport'
-import ImportManager from './ImportManager'
-import type { User, UserFormData } from './userTypes'
-import UserFormModal from './UserFormModal'
+import type { User } from './userTypes'
 
 interface AccountUser extends User {
   id: string
   roles: string[]
   is_active: boolean
+  account_status?: string
   last_sign_in_at?: string
   must_change_password?: boolean
 }
@@ -19,17 +18,12 @@ interface AccountUser extends User {
 export default function UsersManager() {
   const [users, setUsers] = useState<AccountUser[]>([])
   const [loading, setLoading] = useState(true)
-  const [editingUser, setEditingUser] = useState<AccountUser | null>(null)
-  const [showForm, setShowForm] = useState(false)
-  const [showImport, setShowImport] = useState(false)
-  const [formSubmitting, setFormSubmitting] = useState(false)
-  const supabase = createClient()
   const recoveryClient = createRecoveryClient()
 
   // Filtri
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'coach' | 'athlete'>('all')
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'coach' | 'staff' | 'athlete' | 'family_member'>('all')
 
   const loadUsers = useCallback(async () => {
     try {
@@ -80,115 +74,6 @@ export default function UsersManager() {
     }
   }
 
-  const handleUpdateRoles = async (userId: string, roles: string[]) => {
-    try {
-      const response = await fetch('/api/admin/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, action: 'update_roles', roles })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        console.error('Errore aggiornamento ruoli:', result.error)
-        toast.error(`Errore: ${result.error}`)
-        return
-      }
-
-      toast.success(result.message)
-      loadUsers()
-    } catch (error) {
-      console.error('Errore aggiornamento ruoli:', error)
-      toast.error('Errore di rete')
-    }
-  }
-
-  const handleCreateUser = async (userData: UserFormData) => {
-    setFormSubmitting(true)
-    try {
-      const response = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData)
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        console.error('Errore creazione utente:', result.error)
-        toast.error(`Errore: ${result.error}`)
-        return
-      }
-
-      toast.success(result.message)
-      setShowForm(false)
-      setEditingUser(null)
-      loadUsers()
-    } catch (error) {
-      console.error('Errore creazione utente:', error)
-      toast.error('Errore di rete')
-    } finally {
-      setFormSubmitting(false)
-    }
-  }
-
-  const handleUpdateUser = async (id: string, userData: Partial<UserFormData>) => {
-    setFormSubmitting(true)
-    try {
-      const response = await fetch('/api/admin/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...userData,
-          email: editingUser?.email
-        })
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        console.error('Errore aggiornamento utente:', result.error)
-        toast.error(`Errore: ${result.error}`)
-        return
-      }
-
-      toast.success(result.message)
-      setShowForm(false)
-      setEditingUser(null)
-      loadUsers()
-    } catch (error) {
-      console.error('Errore aggiornamento utente:', error)
-      toast.error('Errore di rete')
-    } finally {
-      setFormSubmitting(false)
-    }
-  }
-
-  const handleDeleteUser = async (id: string) => {
-    if (window.confirm('Sei sicuro di voler eliminare questo account? Questa azione è irreversibile.')) {
-      try {
-        const response = await fetch(`/api/admin/users?id=${id}`, {
-          method: 'DELETE',
-        })
-
-        const result = await response.json()
-
-        if (!response.ok) {
-          console.error('Errore eliminazione utente:', result.error)
-          toast.error(`Errore: ${result.error}`)
-          return
-        }
-
-        toast.success('Account eliminato con successo')
-        loadUsers()
-      } catch (error) {
-        console.error('Errore eliminazione utente:', error)
-        toast.error('Errore di rete')
-      }
-    }
-  }
-
   const handleResetPassword = async (id: string) => {
     if (!window.confirm('Inviare un nuovo link per reimpostare la password a questo utente?')) return
 
@@ -224,6 +109,21 @@ export default function UsersManager() {
     }
   }
 
+  const handleInvite = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/admin/profiles/${userId}/invite-account`, { method: 'POST' })
+      const result = await response.json()
+      if (!response.ok) {
+        toast.error(result.error || 'Impossibile inviare l’invito')
+        return
+      }
+      toast.success('Invito inviato')
+      await loadUsers()
+    } catch {
+      toast.error('Errore di rete durante l’invio dell’invito')
+    }
+  }
+
   // Statistiche
   const userStats = useMemo(() => {
     const total = users.length
@@ -232,8 +132,9 @@ export default function UsersManager() {
     const admins = users.filter(u => u.roles?.includes('admin')).length
     const coaches = users.filter(u => u.roles?.includes('coach')).length
     const athletes = users.filter(u => u.roles?.includes('athlete')).length
+    const familyMembers = users.filter(u => u.roles?.includes('family_member')).length
 
-    return { total, active, inactive, admins, coaches, athletes }
+    return { total, active, inactive, admins, coaches, athletes, familyMembers }
   }, [users])
 
   // Filtra utenti
@@ -243,7 +144,7 @@ export default function UsersManager() {
       if (searchTerm) {
         const term = searchTerm.toLowerCase()
         const matchesName = `${user.first_name} ${user.last_name}`.toLowerCase().includes(term)
-        const matchesEmail = user.email.toLowerCase().includes(term)
+        const matchesEmail = (user.email ?? '').toLowerCase().includes(term)
         if (!matchesName && !matchesEmail) return false
       }
 
@@ -265,12 +166,19 @@ export default function UsersManager() {
   }, [users, searchTerm, statusFilter, roleFilter])
 
   // Utility functions
-  const getRoleBadge = (role: string) => {
-    const variant = role === 'admin' ? 'danger' : role === 'coach' ? 'warning' : 'neutral'
-    return <span className={`cs-badge cs-badge--${variant}`}>{role.toUpperCase()}</span>
+  const getRoleBadge = (role: string | null | undefined) => {
+    if (!role) {
+      return <span className="cs-badge cs-badge--neutral">NESSUN RUOLO</span>
+    }
+
+    const variant = role === 'admin' ? 'danger' : role === 'coach' ? 'warning' : role === 'family_member' ? 'success' : 'neutral'
+    const label = role === 'family_member' ? 'FAMILIARE / TUTORE' : role.toUpperCase()
+    return <span className={`cs-badge cs-badge--${variant}`}>{label}</span>
   }
 
-  const getStatusBadge = (isActive: boolean) => {
+  const getStatusBadge = (status: string | undefined, isActive: boolean) => {
+    if (status === 'invited') return <span className="cs-badge cs-badge--warning">INVITATO</span>
+    if (status === 'suspended') return <span className="cs-badge cs-badge--danger">SOSPESO</span>
     return isActive ? (
       <span className="cs-badge cs-badge--success">ATTIVO</span>
     ) : (
@@ -324,12 +232,11 @@ export default function UsersManager() {
               <span className="cs-badge cs-badge--danger">Admin: {userStats.admins}</span>
               <span className="cs-badge cs-badge--warning">Coach: {userStats.coaches}</span>
               <span className="cs-badge cs-badge--neutral">Atleti: {userStats.athletes}</span>
+              <span className="cs-badge cs-badge--success">Familiari: {userStats.familyMembers}</span>
             </div>
           </div>
           <div className="flex flex-col gap-3 text-sm sm:flex-row">
-            <button className="cs-btn cs-btn--outline" onClick={() => setShowImport(true)}>Importa CSV</button>
             <button className="cs-btn cs-btn--outline" onClick={handleExportUsers}>Esporta Account</button>
-            <button className="cs-btn cs-btn--primary" onClick={() => { setEditingUser(null); setShowForm(true) }}>Nuovo Account</button>
           </div>
         </div>
       </section>
@@ -374,7 +281,9 @@ export default function UsersManager() {
                 { value: 'all', label: 'Tutti' },
                 { value: 'admin', label: 'Amministratore' },
                 { value: 'coach', label: 'Allenatore' },
-                { value: 'athlete', label: 'Atleta' }
+                { value: 'staff', label: 'Staff' },
+                { value: 'athlete', label: 'Atleta' },
+                { value: 'family_member', label: 'Familiare / Tutore' }
               ]}
             />
           </div>
@@ -414,15 +323,15 @@ export default function UsersManager() {
                     </div>
                   </td>
                   <td>
-                    {getStatusBadge(user.is_active)}
+                    {getStatusBadge(user.account_status, user.is_active)}
                   </td>
                   <td>
                     <div className="flex flex-wrap gap-1">
-                      {user.roles?.map(role => (
+                      {user.roles?.length ? user.roles.map(role => (
                         <span key={role} className="inline-block">
                           {getRoleBadge(role)}
                         </span>
-                      ))}
+                      )) : getRoleBadge(null)}
                     </div>
                   </td>
                   <td className="text-sm text-secondary">
@@ -430,6 +339,14 @@ export default function UsersManager() {
                   </td>
                   <td className="text-sm font-medium">
                     <div className="flex flex-wrap gap-2">
+                      {(user.account_status === 'invited' || (user.account_status === 'active' && !user.last_sign_in_at)) && (
+                        <button
+                          onClick={() => void handleInvite(user.id)}
+                          className="cs-btn cs-btn--outline cs-btn--sm"
+                        >
+                          Invia invito
+                        </button>
+                      )}
                       <button
                         onClick={() => handleToggleActive(user.id)}
                         className="cs-btn cs-btn--outline cs-btn--sm"
@@ -442,21 +359,6 @@ export default function UsersManager() {
                       >
                         Reset PW
                       </button>
-                      <button
-                        onClick={() => {
-                          setEditingUser(user)
-                          setShowForm(true)
-                        }}
-                        className="cs-btn cs-btn--outline cs-btn--sm"
-                      >
-                        Modifica
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="cs-btn cs-btn--danger cs-btn--sm"
-                      >
-                        Elimina
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -467,10 +369,6 @@ export default function UsersManager() {
           {filteredUsers.length === 0 && (
             <EmptyState
               hasUsers={users.length > 0}
-              onCreate={() => {
-                setEditingUser(null)
-                setShowForm(true)
-              }}
             />
           )}
         </div>
@@ -493,17 +391,17 @@ export default function UsersManager() {
                     </p>
                     <p className="text-xs text-[color:var(--cs-text-secondary)]">{user.email}</p>
                   </div>
-                  {getStatusBadge(user.is_active)}
+                  {getStatusBadge(user.account_status, user.is_active)}
                 </div>
                 <div className="mt-4 space-y-2 text-xs text-[color:var(--cs-text-secondary)]">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-[color:var(--cs-text-primary)]">Ruoli:</span>
                     <div className="flex flex-wrap gap-1">
-                      {user.roles?.map(role => (
+                      {user.roles?.length ? user.roles.map(role => (
                         <span key={role} className="inline-block">
                           {getRoleBadge(role)}
                         </span>
-                      ))}
+                      )) : getRoleBadge(null)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -512,6 +410,14 @@ export default function UsersManager() {
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+                  {(user.account_status === 'invited' || (user.account_status === 'active' && !user.last_sign_in_at)) && (
+                    <button
+                      onClick={() => void handleInvite(user.id)}
+                      className="cs-btn cs-btn--outline cs-btn--sm flex-1"
+                    >
+                      Invia invito
+                    </button>
+                  )}
                   <button
                     onClick={() => handleToggleActive(user.id)}
                     className="cs-btn cs-btn--outline cs-btn--sm flex-1"
@@ -524,64 +430,17 @@ export default function UsersManager() {
                   >
                     Reset PW
                   </button>
-                  <button
-                    onClick={() => {
-                      setEditingUser(user)
-                      setShowForm(true)
-                    }}
-                    className="cs-btn cs-btn--primary cs-btn--sm flex-1"
-                  >
-                    Modifica
-                  </button>
-                  <button
-                    onClick={() => handleDeleteUser(user.id)}
-                    className="cs-btn cs-btn--danger cs-btn--sm flex-1"
-                  >
-                    Elimina
-                  </button>
                 </div>
               </div>
             ))
           ) : (
             <EmptyState
               hasUsers={users.length > 0}
-              onCreate={() => {
-                setEditingUser(null)
-                setShowForm(true)
-              }}
             />
           )}
         </div>
       </div>
 
-      {/* Modals */}
-      <UserFormModal
-        isOpen={showForm}
-        user={editingUser}
-        teams={[]} // Empty teams array since UsersManager focuses on account governance
-        isSubmitting={formSubmitting}
-        onSubmit={(data) => {
-          if (editingUser?.id) {
-            handleUpdateUser(editingUser.id, data)
-          } else {
-            handleCreateUser(data)
-          }
-        }}
-        onClose={() => {
-          setShowForm(false)
-          setEditingUser(null)
-        }}
-      />
-
-      {showImport && (
-        <ImportManager
-          type="users"
-          onComplete={() => {
-            setShowImport(false)
-            loadUsers()
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -618,7 +477,7 @@ function FilterSelect({
   )
 }
 
-function EmptyState({ hasUsers, onCreate }: { hasUsers: boolean; onCreate: () => void }) {
+function EmptyState({ hasUsers }: { hasUsers: boolean }) {
   return (
     <div className="px-6 py-12 text-center text-sm text-secondary">
       <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[color:var(--cs-outline)]/35 text-3xl">
@@ -630,16 +489,8 @@ function EmptyState({ hasUsers, onCreate }: { hasUsers: boolean; onCreate: () =>
       <p className="mt-1 text-sm text-secondary">
         {hasUsers
           ? 'Modifica o azzera i filtri per mostrare altri risultati.'
-          : 'Crea il primo account per iniziare a popolare il sistema.'}
+          : 'Crea gli account dalle sezioni Iscritti e Collaboratori.'}
       </p>
-      {!hasUsers && (
-        <button
-          onClick={onCreate}
-          className="mt-6 cs-btn cs-btn--primary"
-        >
-          Crea il primo account
-        </button>
-      )}
     </div>
   )
 }

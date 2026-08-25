@@ -8,7 +8,7 @@ import { LoadingState } from '@/components/ui'
 
 interface Payment {
   id?: string
-  type: 'general_cost' | 'coach_payment'
+  type: 'general_cost' | 'coach_payment' | 'person_payment'
   description: string
   amount: number
   frequency: 'one_time' | 'recurring'
@@ -22,6 +22,7 @@ interface Payment {
   activity_id?: string
   team_id?: string
   coach_id?: string
+  payee_profile_id?: string
   
   created_at?: string
   updated_at?: string
@@ -43,6 +44,11 @@ interface Payment {
     code: string
   }
   coaches?: {
+    id: string
+    first_name: string
+    last_name: string
+  }
+  payees?: {
     id: string
     first_name: string
     last_name: string
@@ -76,16 +82,20 @@ interface Coach {
   last_name: string
 }
 
+interface Payee extends Coach {
+  type: 'coach' | 'staff'
+}
+
 export default function PaymentsManager() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
-  const [coaches, setCoaches] = useState<Coach[]>([])
+  const [payees, setPayees] = useState<Payee[]>([])
   const [loading, setLoading] = useState(true)
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const [filterType, setFilterType] = useState<'all' | 'general_cost' | 'coach_payment'>('all')
+  const [filterType, setFilterType] = useState<'all' | 'general_cost' | 'coach_payment' | 'person_payment'>('all')
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid'>('all')
   const supabase = useMemo(() => createClient(), [])
 
@@ -94,7 +104,7 @@ export default function PaymentsManager() {
     loadGyms()
     loadActivities()
     loadTeams()
-    loadCoaches()
+    loadPayees()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPayments = async () => {
@@ -139,14 +149,10 @@ export default function PaymentsManager() {
     setTeams(data || [])
   }
 
-  const loadCoaches = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .eq('role', 'coach')
-      .order('first_name')
-
-    setCoaches(data || [])
+  const loadPayees = async () => {
+    const response = await fetch('/api/admin/payment-payees')
+    const result = await response.json()
+    setPayees(response.ok ? result.payees || [] : [])
   }
 
   const generateRecurringPaymentDates = (pattern: string, startDate: string): string[] => {
@@ -342,7 +348,7 @@ export default function PaymentsManager() {
     const filteredPayments = filterPayments()
     
     exportToExcel(filteredPayments, [
-      { key: 'type', title: 'Tipo', width: 12, format: (val) => val === 'general_cost' ? 'Costo Generale' : 'Pagamento Allenatore' },
+      { key: 'type', title: 'Tipo', width: 12, format: (val) => val === 'general_cost' ? 'Costo Generale' : val === 'coach_payment' ? 'Pagamento Allenatore' : 'Pagamento Staff' },
       { key: 'description', title: 'Descrizione', width: 25 },
       { key: 'amount', title: 'Importo', width: 10, format: (val) => `€${val.toFixed(2)}` },
       { key: 'frequency', title: 'Frequenza', width: 10, format: (val) => val === 'one_time' ? 'Una tantum' : 'Ricorrente' },
@@ -353,6 +359,7 @@ export default function PaymentsManager() {
       { key: 'activities', title: 'Attività', width: 15, format: (val) => val?.name || '' },
       { key: 'teams', title: 'Squadra', width: 15, format: (val) => val?.name || '' },
       { key: 'coaches', title: 'Allenatore', width: 15, format: (val) => val ? `${val.first_name} ${val.last_name}` : '' },
+      { key: 'payees', title: 'Persona', width: 15, format: (val) => val ? `${val.first_name} ${val.last_name}` : '' },
       { key: 'created_by_profile', title: 'Creato Da', width: 15, format: (val) => val ? `${val.first_name} ${val.last_name}` : '' }
     ], {
       filename: 'pagamenti_csroma',
@@ -374,7 +381,7 @@ export default function PaymentsManager() {
   }
 
   const getTypeColor = (type: string) => {
-    return type === 'general_cost' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+    return type === 'general_cost' ? 'bg-blue-100 text-blue-800' : type === 'coach_payment' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
   }
 
   const getTotalAmount = () => {
@@ -452,12 +459,13 @@ export default function PaymentsManager() {
             <label className="cs-field__label">Tipo Pagamento</label>
             <select
               value={filterType}
-              onChange={(e) => setFilterType(e.target.value as 'all' | 'general_cost' | 'coach_payment')}
+              onChange={(e) => setFilterType(e.target.value as 'all' | 'general_cost' | 'coach_payment' | 'person_payment')}
               className="cs-select"
             >
               <option value="all">Tutti i tipi</option>
               <option value="general_cost">Costi Generali</option>
               <option value="coach_payment">Pagamenti Allenatori</option>
+              <option value="person_payment">Pagamenti Staff</option>
             </select>
           </div>
           <div>
@@ -482,7 +490,7 @@ export default function PaymentsManager() {
             gyms={gyms}
             activities={activities}
             teams={teams}
-            coaches={coaches}
+            payees={payees}
             onCreate={handleCreatePayment}
             onUpdate={handleUpdatePayment}
         />
@@ -521,7 +529,7 @@ export default function PaymentsManager() {
 
             <td className="p-4 whitespace-nowrap align-top">
               <span className={`cs-badge cs-badge--neutral`}>
-                {payment.type === 'general_cost' ? 'Costo Generale' : 'Allenatore'}
+                {payment.type === 'general_cost' ? 'Costo Generale' : payment.type === 'coach_payment' ? 'Allenatore' : 'Staff'}
               </span>
             </td>
 
@@ -551,7 +559,8 @@ export default function PaymentsManager() {
                 {payment.activities && <>Attività: {payment.activities.name}<br/></>}
                 {payment.teams && <>Squadra: {payment.teams.name}<br/></>}
                 {payment.coaches && <>Allenatore: {payment.coaches.first_name} {payment.coaches.last_name}</>}
-                {!payment.gyms && !payment.activities && !payment.teams && !payment.coaches && 'Generale'}
+                {payment.payees && <>Persona: {payment.payees.first_name} {payment.payees.last_name}</>}
+                {!payment.gyms && !payment.activities && !payment.teams && !payment.coaches && !payment.payees && 'Generale'}
               </div>
             </td>
 
@@ -604,7 +613,7 @@ export default function PaymentsManager() {
             </div>
           </div>
           <span className={`cs-badge cs-badge--neutral`}>
-            {payment.type === 'general_cost' ? 'Costo Generale' : 'Allenatore'}
+            {payment.type === 'general_cost' ? 'Costo Generale' : payment.type === 'coach_payment' ? 'Allenatore' : 'Staff'}
           </span>
         </div>
 
@@ -622,7 +631,8 @@ export default function PaymentsManager() {
             {payment.activities && <>Attività: {payment.activities.name}<br/></>}
             {payment.teams && <>Squadra: {payment.teams.name}<br/></>}
             {payment.coaches && <>Allenatore: {payment.coaches.first_name} {payment.coaches.last_name}</>}
-            {!payment.gyms && !payment.activities && !payment.teams && !payment.coaches && 'Generale'}
+            {payment.payees && <>Persona: {payment.payees.first_name} {payment.payees.last_name}</>}
+            {!payment.gyms && !payment.activities && !payment.teams && !payment.coaches && !payment.payees && 'Generale'}
           </div>
         </div>
 
@@ -723,7 +733,8 @@ function PaymentForm({
     gym_id: payment?.gym_id || '',
     activity_id: payment?.activity_id || '',
     team_id: payment?.team_id || '',
-    coach_id: payment?.coach_id || ''
+    coach_id: payment?.coach_id || '',
+    payee_profile_id: payment?.payee_profile_id || ''
   })
 
   const [coachTeams, setCoachTeams] = useState<Team[]>([])
@@ -782,6 +793,7 @@ function PaymentForm({
       activity_id: formData.activity_id || undefined,
       team_id: formData.team_id || undefined,
       coach_id: formData.coach_id || undefined,
+      payee_profile_id: formData.payee_profile_id || undefined,
       recurrence_pattern: formData.recurrence_pattern || undefined,
       due_date: formData.due_date || undefined,
     }
@@ -807,12 +819,13 @@ function PaymentForm({
           </label>
           <select
             value={formData.type}
-            onChange={(e) => setFormData({ ...formData, type: e.target.value as 'general_cost' | 'coach_payment' })}
+            onChange={(e) => setFormData({ ...formData, type: e.target.value as 'general_cost' | 'coach_payment' | 'person_payment', coach_id: '', payee_profile_id: '', team_id: '' })}
             required
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="general_cost">Costo Generale</option>
             <option value="coach_payment">Pagamento Allenatore</option>
+            <option value="person_payment">Pagamento Staff</option>
           </select>
         </div>
 
@@ -960,7 +973,7 @@ function PaymentForm({
               </select>
             </div>
           </div>
-        ) : (
+        ) : formData.type === 'coach_payment' ? (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1003,7 +1016,6 @@ function PaymentForm({
                 </p>
               </div>
             )}
-
             {formData.coach_id && coachTeams.length === 0 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
                 <p className="text-sm text-yellow-800">
@@ -1011,6 +1023,22 @@ function PaymentForm({
                 </p>
               </div>
             )}
+          </div>
+        ) : (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Persona destinataria *</label>
+            <select
+              value={formData.payee_profile_id ?? ''}
+              onChange={(e) => setFormData({ ...formData, payee_profile_id: e.target.value })}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Seleziona una persona</option>
+              {coaches.map((coach) => (
+                <option key={coach.id} value={coach.id}>{coach.first_name} {coach.last_name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Palestra, attività e squadra sono opzionali.</p>
           </div>
         )}
 

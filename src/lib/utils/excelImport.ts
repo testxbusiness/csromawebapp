@@ -10,6 +10,7 @@ export interface ImportResult<T> {
 
 export interface ImportColumn {
   key: string
+  aliases?: string[]
   required?: boolean
   type?: 'string' | 'number' | 'date' | 'email' | 'phone'
   validator?: (value: any) => boolean | string
@@ -104,8 +105,8 @@ function processExcelData<T>(
   headers.forEach((header, index) => {
     const normalizedHeader = header?.toString().toLowerCase().trim()
     for (const [key, column] of Object.entries(columns)) {
-      if (normalizedHeader === key.toLowerCase() || 
-          normalizedHeader === column.key?.toLowerCase()) {
+      const aliases = [column.key, ...(column.aliases || [])].map((value) => value.toLowerCase())
+      if (normalizedHeader === key.toLowerCase() || aliases.includes(normalizedHeader)) {
         columnMapping[index] = key
         break
       }
@@ -388,4 +389,23 @@ export const teamMemberImportColumns: Record<string, ImportColumn> = {
     key: 'scadenza_certificato',
     type: 'date'
   }
+}
+
+export const athleteImportColumns: Record<string, ImportColumn> = {
+  first_name: { key: 'Nome', required: true, type: 'string' },
+  last_name: { key: 'Cognome', required: true, type: 'string' },
+  membership_number: {
+    key: 'Numero Tessera',
+    aliases: ['N. Tessera', 'Tessera', 'Codice Atleta', 'Codice'],
+    required: true,
+    type: 'string',
+  },
+  email: { key: 'Email', type: 'email' },
+  phone: { key: 'Telefono', aliases: ['Cellulare', 'Telefono di contatto'], type: 'phone' },
+  birth_date: { key: 'Data Nascita', aliases: ['Data di nascita'], type: 'date' },
+  activity_name: { key: 'Attività', aliases: ['Attivita', 'Corso'], type: 'string' },
+  team_code: { key: 'Squadra', aliases: ['Codice Squadra', 'Nome Squadra'], type: 'string' },
+  jersey_number: { key: 'Numero Maglia', aliases: ['N. Maglia'], type: 'number' },
+  medical_certificate_expiry: { key: 'Scadenza Certificato', aliases: ['Scad. Cert. Medico'], type: 'date' },
+  personal_notes: { key: 'Note', type: 'string' },
 }

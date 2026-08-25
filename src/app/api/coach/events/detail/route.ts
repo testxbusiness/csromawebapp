@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,10 +10,8 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Verify access: event belongs to teams coached by user
     const { data: links } = await supabase
@@ -25,7 +24,7 @@ const role = (user as any)?.app_metadata?.role
       .from('team_coaches')
       .select('team_id')
       .in('team_id', teamIds)
-      .eq('coach_id', user.id)
+      .eq('coach_id', account.ownerProfileId)
     if (!allowed || allowed.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Base event
@@ -63,11 +62,16 @@ const role = (user as any)?.app_metadata?.role
       end_date: ev.end_date,
       location: ev.location,
       event_type: ev.event_type,
+      requires_confirmation: ev.requires_confirmation,
+      confirmation_deadline: ev.confirmation_deadline,
       gym,
       teams,
       creator,
     })
   } catch (e) {
+    if (e instanceof AccountContextError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

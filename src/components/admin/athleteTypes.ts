@@ -1,6 +1,6 @@
 export interface Athlete {
   id: string
-  email: string
+  email: string | null
   first_name: string
   last_name: string
   phone?: string
@@ -10,6 +10,26 @@ export interface Athlete {
   personal_notes?: string
   created_at: string
   updated_at: string
+  season_ids?: string[]
+  account?: {
+    status: string
+    roles: string[]
+  } | null
+}
+
+export interface AthleteCreateData {
+  id?: string
+  first_name: string
+  last_name: string
+  email?: string | null
+  phone?: string | null
+  birth_date?: string | null
+  season_id: string
+  membership_number?: string | null
+  medical_certificate_expiry?: string | null
+  personal_notes?: string | null
+  team_ids?: string[]
+  jersey_numbers?: Record<string, number | null>
 }
 
 export interface Team {
@@ -25,6 +45,7 @@ export interface Team {
 export interface Activity {
   id: string
   name: string
+  season_id?: string
 }
 
 export interface Season {

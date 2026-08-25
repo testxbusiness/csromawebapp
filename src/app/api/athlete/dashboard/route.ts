@@ -1,41 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
-    // Auth
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') {
+    const { searchParams } = new URL(request.url)
+    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
+    const athleteProfileId = subject.profileId
+    const dataClient = subject.dataClient
+    const canViewMessages = subject.permissions.receive_messages
+    const canViewPayments = subject.permissions.view_payments
+    if (!athleteProfileId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Execute all queries in parallel
-    const [seasonRes, memberRes, msgRes, feeRes] = await Promise.all([
+    const [seasonRes, memberRes, feeRes] = await Promise.all([
       // 1. Get active season
-      supabase
+      dataClient
         .from('seasons')
         .select('*')
         .eq('is_active', true)
         .single(),
 
       // 2. Get team memberships
-      supabase
+      dataClient
         .from('team_members')
         .select('id, team_id, jersey_number')
-        .eq('profile_id', user.id),
+        .eq('profile_id', athleteProfileId),
 
-      // 3. Get unread messages for this user
-      supabase
+      // 3. Get fee installments
+      canViewPayments
+        ? dataClient
+            .from('fee_installments')
+            .select('id, installment_number, due_date, amount, status, membership_fee_id')
+            .eq('profile_id', athleteProfileId)
+            .order('due_date', { ascending: true })
+            .order('installment_number', { ascending: true })
+            .limit(5)
+        : Promise.resolve({ data: [] })
+    ])
+
+    const seasons = seasonRes.data
+    const memberships = memberRes.data
+    const feeInstallments = feeRes.data
+
+    // Get team IDs
+    const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
+
+    let msgRecipients: any[] = []
+    if (canViewMessages) {
+      const recipientFilters = [`profile_id.eq.${athleteProfileId}`]
+      if (teamIds.length > 0) recipientFilters.push(`team_id.in.(${teamIds.join(',')})`)
+
+      const { data, error } = await dataClient
         .from('message_recipients')
         .select(`
           message_id,
+          team_id,
+          profile_id,
           is_read,
           created_at,
           messages(
@@ -47,38 +73,40 @@ const role = (user as any)?.app_metadata?.role
             created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
           )
         `)
-        .eq('profile_id', user.id)
+        .or(recipientFilters.join(','))
         .order('created_at', { ascending: false })
-        .limit(5),
+        .limit(10)
 
-      // 4. Get fee installments
-      supabase
-        .from('fee_installments')
-        .select('id, installment_number, due_date, amount, status, membership_fee_id')
-        .eq('profile_id', user.id)
-        .limit(5)
-    ])
+      if (error) {
+        console.error('Error loading dashboard messages:', error)
+      } else {
+        msgRecipients = data || []
+      }
+    }
 
-    const seasons = seasonRes.data
-    const memberships = memberRes.data
-    const msgRecipients = msgRes.data
-    const feeInstallments = feeRes.data
-
-    // Get team IDs
-    const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
+    const messageIds = [...new Set(msgRecipients.map((recipient: any) => recipient.messages?.id).filter(Boolean))]
+    const { data: readRows } = canViewMessages && messageIds.length > 0
+      ? await dataClient
+          .from('message_reads')
+          .select('message_id')
+          .eq('auth_user_id', subject.account.authUserId)
+          .eq('subject_profile_id', athleteProfileId)
+          .in('message_id', messageIds)
+      : { data: [] }
+    const readMessageIds = new Set((readRows || []).map((row: any) => row.message_id))
 
     if (teamIds.length === 0) {
       return NextResponse.json({
         teamMemberships: [],
         upcomingEvents: [],
         unreadMessages: (msgRecipients || [])
-          .filter(r => r.messages && !r.is_read)
+          .filter(r => r.messages && !readMessageIds.has(r.messages.id))
           .map((r: any) => ({
             id: r.messages.id,
             subject: r.messages.subject,
             content: r.messages.content,
             created_at: r.messages.created_at,
-            is_read: r.is_read
+            is_read: false
           }))
           .slice(0, 5),
         feeInstallments: [],
@@ -93,12 +121,12 @@ const role = (user as any)?.app_metadata?.role
       { data: membershipFees },
       { data: clubTeams }
     ] = await Promise.all([
-      supabase
+      dataClient
         .from('teams')
         .select('id, name, code, activity_id')
         .in('id', teamIds),
 
-      supabase
+      dataClient
         .from('event_teams')
         .select('event_id, created_at')
         .in('team_id', teamIds)
@@ -106,13 +134,13 @@ const role = (user as any)?.app_metadata?.role
         .limit(500),
 
       feeInstallments && feeInstallments.length > 0
-        ? supabase
+        ? dataClient
             .from('membership_fees')
             .select('id, team_id, name')
             .in('id', (feeInstallments || []).map(f => f.membership_fee_id).filter(Boolean))
         : Promise.resolve({ data: [] }),
 
-      supabase
+      dataClient
         .from('championship_club_teams')
         .select('id, team_id')
         .in('team_id', teamIds)
@@ -127,9 +155,9 @@ const role = (user as any)?.app_metadata?.role
       if (eventIds.length > 100) {
         for (let i = 0; i < eventIds.length; i += 100) {
           const batch = eventIds.slice(i, i + 100)
-        const { data: events } = await supabase
+        const { data: events } = await dataClient
           .from('events')
-          .select('id, title, start_time:start_date, end_time:end_date, location, description')
+          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
           .in('id', batch)
           .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
           .order('start_date', { ascending: true })
@@ -137,9 +165,9 @@ const role = (user as any)?.app_metadata?.role
         allEvents.push(...(events || []))
       }
     } else {
-      const { data: events } = await supabase
+      const { data: events } = await dataClient
         .from('events')
-        .select('id, title, start_time:start_date, end_time:end_date, location, description')
+        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
         .in('id', eventIds)
         .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
         .order('start_date', { ascending: true })
@@ -151,17 +179,31 @@ const role = (user as any)?.app_metadata?.role
     // Get activities and enriched team data
     const activityIds = [...new Set((teams || []).map(t => t.activity_id).filter(Boolean))]
     const { data: activities } = activityIds.length > 0
-      ? await supabase
+      ? await dataClient
           .from('activities')
           .select('id, name')
           .in('id', activityIds)
       : { data: [] }
 
+    const gymIds = [...new Set((allEvents || []).map((event) => event.gym_id).filter(Boolean))]
+    const [{ data: gyms }, { data: attendanceRows }] = await Promise.all([
+      gymIds.length > 0
+        ? dataClient.from('gyms').select('id, name, city').in('id', gymIds)
+        : Promise.resolve({ data: [] }),
+      allEvents.length > 0
+        ? dataClient
+            .from('event_attendances')
+            .select('event_id, status, responded_at')
+            .eq('profile_id', athleteProfileId)
+            .in('event_id', allEvents.map((event) => event.id))
+        : Promise.resolve({ data: [] }),
+    ])
+
     let nextChampionshipMatch = null
     const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
     if (clubTeamIds.length > 0) {
       const clubTeamList = clubTeamIds.join(',')
-      const { data: nextMatch } = await supabase
+      const { data: nextMatch } = await dataClient
         .from('championship_matches')
         .select(`
           id, match_day, match_date, start_time, location_text, status,
@@ -182,6 +224,21 @@ const role = (user as any)?.app_metadata?.role
     const activitiesMap = new Map((activities || []).map(a => [a.id, a]))
     const teamsMap = new Map((teams || []).map(t => [t.id, t]))
     const membershipFeesMap = new Map((membershipFees || []).map(f => [f.id, f]))
+    const gymsMap = new Map((gyms || []).map((gym) => [gym.id, gym]))
+    const attendanceMap = new Map((attendanceRows || []).map((attendance) => [attendance.event_id, attendance]))
+
+    const enrichedEvents = allEvents.map((event) => {
+      const gym = event.gym_id ? gymsMap.get(event.gym_id) : null
+      const gymLocation = gym?.name ? `${gym.name}${gym.city ? ` - ${gym.city}` : ''}` : null
+      return {
+        ...event,
+        // A registered gym takes precedence over the free-text location.
+        location: gymLocation || event.location || null,
+        requires_confirmation: Boolean(event.requires_confirmation),
+        confirmation_deadline: event.confirmation_deadline || null,
+        my_attendance: attendanceMap.get(event.id) || null,
+      }
+    })
 
     const enrichedMemberships = (memberships || [])
       .map(m => {
@@ -219,21 +276,28 @@ const role = (user as any)?.app_metadata?.role
       })
       .filter(Boolean)
 
-    const unreadMessages = (msgRecipients || [])
-      .filter(r => r.messages && !r.is_read)
-      .map((r: any) => ({
-        id: r.messages.id,
-        subject: r.messages.subject,
-        content: r.messages.content,
-        created_at: r.messages.created_at,
-        is_read: r.is_read,
-        created_by_profile: r.messages.created_by_profile || null
-      }))
-      .slice(0, 5)
+    const unreadMessages = Array.from(
+      (msgRecipients || [])
+        .filter(r => r.messages && !readMessageIds.has(r.messages.id))
+        .reduce((messages: Map<string, any>, recipient: any) => {
+          if (!messages.has(recipient.messages.id)) {
+            messages.set(recipient.messages.id, {
+              id: recipient.messages.id,
+              subject: recipient.messages.subject,
+              content: recipient.messages.content,
+              created_at: recipient.messages.created_at,
+              is_read: false,
+              created_by_profile: recipient.messages.created_by_profile || null
+            })
+          }
+          return messages
+        }, new Map<string, any>())
+        .values()
+    ).slice(0, 5)
 
     return NextResponse.json({
       teamMemberships: enrichedMemberships,
-      upcomingEvents: allEvents.slice(0, 10),
+      upcomingEvents: enrichedEvents.slice(0, 10),
       nextChampionshipMatch,
       unreadMessages,
       feeInstallments: enrichedFees,
@@ -241,6 +305,9 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Athlete dashboard API error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

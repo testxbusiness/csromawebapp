@@ -164,15 +164,6 @@ export default function MembershipFeesManager() {
     setSelectedInstallments(new Set())
   }
 
-  const calculateTotalAmount = (formData: any) => {
-    const toFloat = (v: any) => parseFloat((v ?? '0').toString().replace(',', '.')) || 0
-    const enrollment = toFloat(formData.enrollment_fee)
-    const insurance = toFloat(formData.insurance_fee)
-    const monthly = toFloat(formData.monthly_fee)
-    const months = toFloat(formData.months_count)
-    return enrollment + insurance + (monthly * months)
-  }
-
   const handleCreateFee = async (feeData: Omit<MembershipFee, 'id'> & { installments: InstallmentForm[] }) => {
     try {
       const response = await fetch('/api/admin/membership-fees', {
@@ -182,7 +173,6 @@ export default function MembershipFeesManager() {
         },
         body: JSON.stringify({
           ...feeData,
-          total_amount: calculateTotalAmount(feeData),
           installments: feeData.installments
         })
       })
@@ -208,10 +198,6 @@ export default function MembershipFeesManager() {
   const handleUpdateFee = async (id: string, feeData: Partial<MembershipFee> & { installments?: InstallmentForm[] }) => {
     try {
       const updateData = { ...feeData }
-      if (feeData.enrollment_fee !== undefined || feeData.insurance_fee !== undefined || 
-          feeData.monthly_fee !== undefined || feeData.months_count !== undefined) {
-        updateData.total_amount = calculateTotalAmount(feeData)
-      }
 
       const response = await fetch('/api/admin/membership-fees', {
         method: 'PUT',

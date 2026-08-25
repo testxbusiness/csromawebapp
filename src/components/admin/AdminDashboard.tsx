@@ -8,11 +8,11 @@ import { Badge } from '@/components/ui/Badge'
 
 interface AdminProfile {
   first_name?: string | null
-  role?: string | null
 }
 
 interface AdminDashboardProps {
   profile: AdminProfile
+  role: string | null
 }
 
 interface Season {
@@ -23,7 +23,7 @@ interface Season {
   is_active: boolean
 }
 
-export default function AdminDashboard({ profile }: AdminDashboardProps) {
+export default function AdminDashboard({ profile, role }: AdminDashboardProps) {
   const [isFirstAccess, setIsFirstAccess] = useState(false)
   const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
@@ -187,7 +187,7 @@ export default function AdminDashboard({ profile }: AdminDashboardProps) {
         <div className="cs-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <div>
             <CardMeta>Ruolo</CardMeta>
-            <CardTitle>{profile.role?.toUpperCase?.() ?? 'ADMIN'}</CardTitle>
+            <CardTitle>{role?.toUpperCase() ?? 'ADMIN'}</CardTitle>
           </div>
           <div>
             <CardMeta>Ultimo accesso</CardMeta>

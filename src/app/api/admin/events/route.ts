@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { eventCreateSchema, eventUpdateSchema } from '@/lib/validation/eventCrud'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = eventCreateSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Dati evento non validi' }, { status: 400 })
@@ -13,17 +16,6 @@ export async function POST(request: NextRequest) {
       event_type, event_kind, recurrence_rule, recurrence_end_date, selected_teams,
       requires_confirmation, confirmation_deadline
     } = parsed.data
-
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Helper per generare ricorrenze
     const buildOccurrences = (): { start_date: string; end_date: string }[] => {
@@ -71,7 +63,7 @@ const role = (user as any)?.app_metadata?.role
         event_kind: event_kind || 'training',
         recurrence_rule,
         recurrence_end_date,
-        created_by: user.id,
+        created_by: account.ownerProfileId,
         // Legacy required fields (DB requires NOT NULL)
         name: title,
         start_time: o.start_date,
@@ -126,7 +118,7 @@ const role = (user as any)?.app_metadata?.role
           event_kind: event_kind || 'training',
           requires_confirmation: !!requires_confirmation,
           confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
-          created_by: user.id,
+          created_by: account.ownerProfileId,
           // Legacy required fields
           name: title,
           start_time: start_date,
@@ -149,7 +141,7 @@ const role = (user as any)?.app_metadata?.role
             gym_id: gym_id || null,
             activity_id: activity_id || null,
             event_type: event_type || 'one_time',
-            created_by: user.id,
+            created_by: account.ownerProfileId,
             // Legacy required fields
             name: title,
             start_time: start_date,
@@ -188,6 +180,10 @@ const role = (user as any)?.app_metadata?.role
     return NextResponse.json({ success: true, event_ids: createdEventIds, message: 'Evento creato con successo' })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API creazione evento:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -196,6 +192,7 @@ const role = (user as any)?.app_metadata?.role
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const { searchParams } = new URL(request.url)
     const teamId = searchParams.get('team_id')
@@ -214,17 +211,6 @@ export async function GET(request: NextRequest) {
     const to = searchParams.get('to') // ISO string
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '200'), 1), 5000) // Max 5000
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
-
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Se filtriamo per squadra, recupera gli event_ids prima con batching
     let eventIds: string[] | null = null
@@ -369,6 +355,10 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API lista eventi:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -377,6 +367,7 @@ const role = (user as any)?.app_metadata?.role
 export async function PUT(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     const parsed = eventUpdateSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Dati aggiornamento evento non validi' }, { status: 400 })
@@ -384,17 +375,6 @@ export async function PUT(request: NextRequest) {
       id, title, description, start_date, end_date, location, gym_id, activity_id,
       event_type, event_kind, selected_teams, requires_confirmation, confirmation_deadline
     } = parsed.data
-
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     // Aggiorna l'evento (retry senza event_kind se colonna assente)
     let updateRes = await adminClient
@@ -484,6 +464,10 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API aggiornamento evento:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
@@ -492,19 +476,9 @@ const role = (user as any)?.app_metadata?.role
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     
-    // Verifica che l'utente corrente sia admin
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     const { searchParams } = new URL(request.url)
     const eventId = searchParams.get('id')
     const scope = searchParams.get('scope') || 'one'
@@ -573,6 +547,10 @@ const role = (user as any)?.app_metadata?.role
     })
 
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+
     console.error('Errore API eliminazione evento:', error)
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }

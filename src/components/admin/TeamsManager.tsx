@@ -161,14 +161,10 @@ export default function TeamsManager() {
   }, [supabase])
 
   const loadCoaches = useCallback(async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .eq('role', 'coach')
-      .order('first_name')
-
-    setCoaches(data || [])
-  }, [supabase])
+    const response = await fetch('/api/admin/coaches', { cache: 'no-store' })
+    const payload = await response.json().catch(() => null) as { coaches?: Coach[] } | null
+    setCoaches(response.ok ? payload?.coaches || [] : [])
+  }, [])
 
   const loadGyms = useCallback(async () => {
     const { data } = await supabase
@@ -535,7 +531,7 @@ function TeamForm({
             <option value="">Nessun allenatore assegnato</option>
             {coaches.map((coach) => (
               <option key={coach.id} value={coach.id}>
-                {coach.first_name} {coach.last_name} ({coach.email})
+                {coach.first_name} {coach.last_name}
               </option>
             ))}
           </select>

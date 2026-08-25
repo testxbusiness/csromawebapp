@@ -17,7 +17,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
-  const { profile, role, user, loading, profileLoading, signOut, silentRefresh } = useAuth()
+  const { profile, account, role, user, loading, profileLoading, signOut, silentRefresh } = useAuth()
   const router = useRouter()
   const { registerSW } = usePush()
 
@@ -48,7 +48,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!profile || mustChangePasswordChecked.current) return
 
-    const mustChange = (profile as any)?.must_change_password === true
+    const mustChange = account?.mustChangePassword === true
     if (!mustChange) {
       mustChangePasswordChecked.current = true
       return
@@ -67,7 +67,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
     const next = encodeURIComponent(pathname || '/dashboard')
     router.replace(`/reset-password?next=${next}`)
-  }, [profile, pathname, router])
+  }, [account?.mustChangePassword, profile, pathname, router])
 
   const handleSignOut = async () => {
     try {
@@ -272,6 +272,8 @@ function roleName(role: string): string {
       return 'Allenatore'
     case 'athlete':
       return 'Atleta'
+    case 'family_member':
+      return 'Familiare / Tutore'
     default:
       return 'Utente CSRoma'
   }

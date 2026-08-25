@@ -1,16 +1,17 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 
 type ProfileRow = {
   id: string
-  email: string
+  email: string | null
   first_name: string
   last_name: string
   date_of_birth?: string | null
   avatar_url?: string | null
+  // Retained only for profile display compatibility; account roles are authoritative.
   role: 'admin' | 'coach' | 'athlete' | string
   must_change_password: boolean | null
   created_at: string | null
@@ -22,13 +23,32 @@ type ProfileRow = {
   } | null
 }
 
+export type AccountSummary = {
+  authUserId: string
+  ownerProfileId: string
+  accountStatus: 'invited' | 'active' | 'suspended' | 'disabled'
+  roles: Array<'admin' | 'coach' | 'staff' | 'athlete' | 'family_member'>
+  mustChangePassword: boolean
+}
+
+type PersonalProfileData = {
+  profile: ProfileRow
+  account: AccountSummary | null
+}
+
 const PROFILE_CACHE_KEY = 'csroma_profile_cache'
 const PROFILE_CACHE_DURATION = 5 * 60 * 1000
+
+function shouldDeferProfileLoad() {
+  if (typeof window === 'undefined') return false
+  return window.location.pathname === '/auth/callback' || window.location.pathname === '/reset-password'
+}
 
 interface UseAuthReturn {
   user: User | null
   session: Session | null
   profile: ProfileRow | null
+  account: AccountSummary | null
   role: string | null
   loading: boolean
   profileLoading: boolean
@@ -38,18 +58,20 @@ interface UseAuthReturn {
   silentRefresh: () => Promise<void>
 }
 
-export function useAuth(): UseAuthReturn {
+function useAuthState(): UseAuthReturn {
   const supabaseRef = useRef(createClient())
   const supabase = supabaseRef.current
 
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
+  const [account, setAccount] = useState<AccountSummary | null>(null)
 
   const [authInitialized, setAuthInitialized] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
 
   const lastProfileFor = useRef<string | null>(null)
+  const profileRef = useRef<ProfileRow | null>(null)
   const mounted = useRef(true)
   const currentUserIdRef = useRef<string | null>(null)
   const loadingWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -61,7 +83,11 @@ export function useAuth(): UseAuthReturn {
     }
   }, [])
 
-  const loadProfileFromCache = useCallback((userId: string): ProfileRow | null => {
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
+
+  const loadProfileFromCache = useCallback((userId: string): PersonalProfileData | null => {
     try {
       const cached = sessionStorage.getItem(PROFILE_CACHE_KEY)
       if (!cached) return null
@@ -69,13 +95,14 @@ export function useAuth(): UseAuthReturn {
       const { data, timestamp, userId: cachedUserId } = JSON.parse(cached)
       if (cachedUserId !== userId) return null
       if (Date.now() - timestamp > PROFILE_CACHE_DURATION) return null
-      return data as ProfileRow
+      if (data?.profile) return data as PersonalProfileData
+      return { profile: data as ProfileRow, account: null }
     } catch {
       return null
     }
   }, [])
 
-  const saveProfileToCache = useCallback((userId: string, profileData: ProfileRow) => {
+  const saveProfileToCache = useCallback((userId: string, profileData: PersonalProfileData) => {
     try {
       sessionStorage.setItem(
         PROFILE_CACHE_KEY,
@@ -93,6 +120,13 @@ export function useAuth(): UseAuthReturn {
   const loadProfile = useCallback(
     async (uid: string, skipCache = false) => {
       if (!uid) return
+      // During invite callback and mandatory password reset the account may
+      // still be in `invited` state. Defer the resolver until the flow has
+      // activated the account, avoiding a false 403 and concurrent refreshes.
+      if (shouldDeferProfileLoad()) {
+        if (mounted.current) setProfileLoading(false)
+        return
+      }
 
       if (!skipCache && lastProfileFor.current === uid) {
         console.log('[useAuth] Skipping duplicate profile load for', uid)
@@ -101,9 +135,13 @@ export function useAuth(): UseAuthReturn {
 
       if (!skipCache) {
         const cachedProfile = loadProfileFromCache(uid)
-        if (cachedProfile) {
+        // Authenticated UI pages require an account-based resolver. Older cache
+        // entries containing only the legacy profile must not suppress refresh.
+        const cacheHasRequiredAccount = Boolean(cachedProfile?.account)
+        if (cachedProfile && cacheHasRequiredAccount) {
           console.log('[useAuth] Profile loaded from cache for', uid)
-          setProfile(cachedProfile)
+          setProfile(cachedProfile.profile)
+          setAccount(cachedProfile.account)
           lastProfileFor.current = uid
           return
         }
@@ -112,42 +150,41 @@ export function useAuth(): UseAuthReturn {
       lastProfileFor.current = uid
       setProfileLoading(true)
 
-      console.log('[useAuth] Loading profile from database for', uid)
+      console.log('[useAuth] Loading personal profile from server for', uid)
 
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', uid)
-          .single()
+        const loadPersonalProfile = async () => {
+          const response = await fetch('/api/me/profile', { cache: 'no-store' })
+          const payload = (await response.json().catch(() => null)) as
+            | { profile?: ProfileRow; account?: AccountSummary; error?: string }
+            | null
+          return { response, payload }
+        }
+
+        let { response, payload } = await loadPersonalProfile()
 
         if (!mounted.current) return
 
-        if (error) {
-          console.warn('[useAuth] Profile load error', error)
+        if (!response.ok || !payload?.profile) {
+          console.warn('[useAuth] Profile load error', payload?.error ?? response.statusText)
 
-          const isAuthError =
-            error.message?.includes('JWT') ||
-            error.message?.includes('token') ||
-            error.code === 'PGRST301'
-
-          if (isAuthError) {
+          if (response.status === 401) {
             console.warn('[useAuth] Auth error, refreshing session...')
             try {
               const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
               if (!refreshError && refreshData.session) {
                 console.log('[useAuth] Session refreshed, retrying profile load...')
                 lastProfileFor.current = null
-                const { data: retryData, error: retryError } = await supabase
-                  .from('profiles')
-                  .select('*')
-                  .eq('id', uid)
-                  .single()
+                const retryResult = await loadPersonalProfile()
+                response = retryResult.response
+                payload = retryResult.payload
 
-                if (!retryError && retryData && mounted.current) {
+                if (response.ok && payload?.profile && mounted.current) {
                   console.log('[useAuth] Profile loaded after session refresh')
-                  setProfile(retryData as ProfileRow)
-                  saveProfileToCache(uid, retryData as ProfileRow)
+                  const personalData = { profile: payload.profile, account: payload.account ?? null }
+                  setProfile(personalData.profile)
+                  setAccount(personalData.account)
+                  saveProfileToCache(uid, personalData)
                   return
                 }
               }
@@ -157,12 +194,15 @@ export function useAuth(): UseAuthReturn {
           }
 
           setProfile(null)
+          setAccount(null)
           return
         }
 
-        console.log('[useAuth] Profile loaded successfully from database')
-        setProfile(data as ProfileRow)
-        saveProfileToCache(uid, data as ProfileRow)
+        console.log('[useAuth] Personal profile loaded successfully')
+        const personalData = { profile: payload.profile, account: payload.account ?? null }
+        setProfile(personalData.profile)
+        setAccount(personalData.account)
+        saveProfileToCache(uid, personalData)
       } finally {
         if (mounted.current) {
           setProfileLoading(false)
@@ -173,13 +213,19 @@ export function useAuth(): UseAuthReturn {
   )
 
   const role = useMemo(() => {
-    const raw =
-      (user as any)?.app_metadata?.role ??
-      profile?.role ??
-      null
-    if (raw == null) return null
-    return String(raw).trim().toLowerCase()
-  }, [profile?.role, user])
+    const accountRole = account?.roles.includes('admin')
+      ? 'admin'
+      : account?.roles.includes('coach')
+        ? 'coach'
+        : account?.roles.includes('athlete')
+          ? 'athlete'
+          : account?.roles.includes('staff')
+            ? 'staff'
+            : account?.roles.includes('family_member')
+              ? 'family_member'
+              : null
+    return accountRole
+  }, [account])
 
   const refreshProfile = useCallback(async () => {
     const uid = currentUserIdRef.current
@@ -207,6 +253,9 @@ export function useAuth(): UseAuthReturn {
       if (uid) {
         lastProfileFor.current = null
         await loadProfile(uid, true)
+      } else {
+        setProfile(null)
+        setAccount(null)
       }
     } finally {
       if (loadingWatchdog.current) {
@@ -228,6 +277,9 @@ export function useAuth(): UseAuthReturn {
 
       if (uid) {
         await loadProfile(uid, false)
+      } else {
+        setProfile(null)
+        setAccount(null)
       }
     } catch (e) {
       console.warn('[useAuth] Silent refresh error', e)
@@ -261,6 +313,7 @@ export function useAuth(): UseAuthReturn {
           await loadProfile(data.session.user.id, false)
         } else {
           setProfile(null)
+          setAccount(null)
           setProfileLoading(false)
         }
       } finally {
@@ -286,7 +339,7 @@ export function useAuth(): UseAuthReturn {
         currentUserIdRef.current = nextUserId
 
         if (isRefresh && sameUser) {
-          if (nextUserId && !profile) {
+          if (nextUserId && !profileRef.current) {
             await loadProfile(nextUserId, false)
           }
           return
@@ -299,6 +352,7 @@ export function useAuth(): UseAuthReturn {
           setProfileLoading(false)
         } else {
           setProfile(null)
+          setAccount(null)
           setProfileLoading(false)
           try {
             sessionStorage.removeItem(PROFILE_CACHE_KEY)
@@ -319,7 +373,7 @@ export function useAuth(): UseAuthReturn {
       unsub?.()
       if (loadingWatchdog.current) clearTimeout(loadingWatchdog.current)
     }
-  }, [loadProfile, profile, supabase])
+  }, [loadProfile, supabase])
 
   const lastRefreshTimeRef = useRef<number>(0)
   const visibilityTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -372,6 +426,7 @@ export function useAuth(): UseAuthReturn {
     setUser(null)
     setSession(null)
     setProfile(null)
+    setAccount(null)
     lastProfileFor.current = null
     currentUserIdRef.current = null
 
@@ -384,6 +439,7 @@ export function useAuth(): UseAuthReturn {
     user,
     session,
     profile,
+    account,
     role,
     loading: !authInitialized,
     profileLoading,
@@ -392,4 +448,19 @@ export function useAuth(): UseAuthReturn {
     forceRefresh,
     silentRefresh,
   }
+}
+
+const AuthContext = createContext<UseAuthReturn | null>(null)
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const auth = useAuthState()
+  return createElement(AuthContext.Provider, { value: auth }, children)
+}
+
+export function useAuth(): UseAuthReturn {
+  const auth = useContext(AuthContext)
+  if (!auth) {
+    throw new Error('useAuth deve essere utilizzato all’interno di AuthProvider')
+  }
+  return auth
 }

@@ -66,6 +66,7 @@ interface Message {
   subject: string
   content: string
   created_at: string
+  created_by?: string
   unread_count?: number
 }
 
@@ -125,7 +126,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     const { data } = await supabase
       .from('team_coaches')
       .select('team_id, teams(id, name, code, activity_id)')
-      .eq('coach_id', user.id)
+      .eq('coach_id', profile.id)
 
     if (!data || data.length === 0) {
       setTeams([])
@@ -155,7 +156,7 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
 
     setTeams(teamsWithActivities as Team[])
     return teamsWithActivities.map(team => team.id)
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
     if (teamIds.length === 0) {
@@ -252,13 +253,13 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     const { data } = await supabase
       .from('payments')
       .select('*')
-      .eq('coach_id', user.id)
+      .eq('coach_id', profile.id)
       .eq('type', 'coach_payment')
       .order('due_date', { ascending: true })
       .limit(5)
 
     if (data) setPayments(data)
-  }, [supabase, user.id])
+  }, [profile.id, supabase])
 
   const loadTeamDetail = useCallback(async (teamId: string) => {
     try {
@@ -356,9 +357,11 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
     setLoading(true)
 
     try {
-      // Carica in sequenza per evitare dipendenze circolari
-      await loadActiveSeason()
-      const teamIds = await loadCoachTeams()
+      // Stagione e squadre sono indipendenti: caricale in parallelo.
+      const [, teamIds] = await Promise.all([
+        loadActiveSeason(),
+        loadCoachTeams(),
+      ])
 
       if (teamIds.length > 0) {
         await Promise.all([
@@ -579,6 +582,8 @@ export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
         <MessageDetailModal
           open={true}
           onClose={() => setSelectedMessage(null)}
+          messageId={selectedMessage.id}
+          markAsRead={selectedMessage.created_by !== profile.id}
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,

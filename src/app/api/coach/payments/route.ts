@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 
 export async function GET() {
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'coach') {
+    const account = await requireAccountContext(supabase)
+    if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -43,7 +40,7 @@ const role = (user as any)?.app_metadata?.role
         )
       `)
       .eq('type', 'coach_payment')
-      .eq('coach_id', user.id)          // 👈 filtro fondamentale
+      .eq('coach_id', account.ownerProfileId)
       .order('due_date', { ascending: true, nullsFirst: true })
 
     if (error) {
@@ -52,6 +49,9 @@ const role = (user as any)?.app_metadata?.role
 
     return NextResponse.json(data || [])
   } catch (error) {
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

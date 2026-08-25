@@ -1,0 +1,43 @@
+import { chromium, type FullConfig } from '@playwright/test'
+import { mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+
+const authFile = path.resolve('test-results/.auth/admin.json')
+
+export default async function globalSetup(config: FullConfig) {
+  await mkdir(path.dirname(authFile), { recursive: true })
+
+  const email = process.env.E2E_ADMIN_EMAIL
+  const password = process.env.E2E_ADMIN_PASSWORD
+
+  if (!email || !password) {
+    await writeFile(authFile, JSON.stringify({ cookies: [], origins: [] }))
+    return
+  }
+
+  const baseURL = config.projects[0].use.baseURL as string
+  const browser = await chromium.launch()
+  const context = await browser.newContext()
+  const page = await context.newPage()
+
+  try {
+    await page.goto(`${baseURL}/login`)
+    await page.getByLabel('Email').fill(email)
+    await page.getByLabel('Password').fill(password)
+
+    const loginResponsePromise = page.waitForResponse((response) =>
+      response.url().endsWith('/api/auth/login')
+    )
+    await page.getByRole('button', { name: 'Accedi' }).click()
+    const loginResponse = await loginResponsePromise
+
+    if (loginResponse.status() !== 200) {
+      throw new Error(`E2E admin login failed with HTTP ${loginResponse.status()}`)
+    }
+
+    await page.waitForURL(/\/dashboard/, { timeout: 15_000 })
+    await context.storageState({ path: authFile })
+  } finally {
+    await browser.close()
+  }
+}

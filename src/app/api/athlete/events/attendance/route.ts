@@ -1,26 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { athleteAttendanceSchema } from '@/lib/validation/events'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-const role = (user as any)?.app_metadata?.role
-    if (role !== 'athlete') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const body = await req.json().catch(() => null)
+    const { searchParams } = new URL(req.url)
+    const querySubjectProfileId = searchParams.get('subjectProfileId')
+    const requestedProfileId = typeof body?.subjectProfileId === 'string'
+      ? body.subjectProfileId
+      : querySubjectProfileId
+    const subject = await requireSubjectAthleteContext(supabase, requestedProfileId, 'confirm_attendance')
+    const athleteProfileId = subject.profileId
+    if (!athleteProfileId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    const parsed = athleteAttendanceSchema.safeParse(await req.json().catch(() => null))
+    const { subjectProfileId: _subjectProfileId, ...attendanceBody } = body ?? {}
+    const parsed = athleteAttendanceSchema.safeParse(attendanceBody)
     if (!parsed.success) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     const { event_id, status, note } = parsed.data
 
-    const { error } = await supabase
+    const { error } = await subject.dataClient
       .from('event_attendances')
-      .upsert({ event_id, profile_id: user.id, status, note: note || null }, { onConflict: 'event_id,profile_id' })
+      .upsert({
+        event_id,
+        profile_id: athleteProfileId,
+        status,
+        note: note || null,
+        responded_by_auth_user_id: subject.account.authUserId,
+        response_source: subject.delegated ? 'parent' : 'self',
+      }, { onConflict: 'event_id,profile_id' })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     return NextResponse.json({ success: true })
   } catch (e) {
+    if (e instanceof AccountContextError) {
+      return NextResponse.json({ error: e.message }, { status: e.status })
+    }
     console.error('RSVP error', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

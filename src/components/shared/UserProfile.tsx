@@ -33,14 +33,6 @@ export default function UserProfile({ userRole }: UserProfileProps) {
   const [teamMemberships, setTeamMemberships] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
-  })
-  const [passwordChanging, setPasswordChanging] = useState(false)
-  const [passwordMsg, setPasswordMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
-  const passwordOpRef = useRef(0)
   const supabase = createClient()
   const { subscribe, unsubscribe } = usePush()
   const [pushSupported, setPushSupported] = useState<boolean>(false)
@@ -182,60 +174,6 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     }
 
     setSaving(false)
-  }
-
-  const handlePasswordChange = async (e?: React.FormEvent) => {
-    e?.preventDefault()
-
-    setPasswordMsg(null)
-
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error('Le password non coincidono')
-      return
-    }
-
-    if (passwordData.newPassword.length < 6) {
-      toast.error('La password deve essere di almeno 6 caratteri')
-      return
-    }
-
-    const opId = ++passwordOpRef.current
-    setPasswordChanging(true)
-
-    try {
-      // Usa l'endpoint server che aggiorna password via Admin API
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passwordData.newPassword })
-      })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        const msg = j?.error || 'Errore nel cambio password. Riprova.'
-        setPasswordMsg({ kind: 'error', text: msg })
-        return
-      }
-
-      // Best-effort: refresh session per allineare il token localmente
-      try { await supabase.auth.refreshSession() } catch {}
-
-      // Pulisci i campi e mostra messaggio inline
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
-      setPasswordMsg({ kind: 'success', text: 'Password cambiata con successo.' })
-
-      // Auto-hide il messaggio dopo qualche secondo
-      setTimeout(() => {
-        if (passwordOpRef.current === opId) setPasswordMsg(null)
-      }, 4000)
-    } catch (error) {
-      console.error('Error changing password:', error)
-      setPasswordMsg({ kind: 'error', text: 'Errore nel cambio password. Riprova.' })
-    } finally {
-      // Solo se siamo ancora nella stessa operazione
-      if (passwordOpRef.current === opId) {
-        setPasswordChanging(false)
-      }
-    }
   }
 
   // Calcola jersey number per atleti
@@ -530,62 +468,6 @@ export default function UserProfile({ userRole }: UserProfileProps) {
             )}
           </div>
             
-          {/* Password Change */}
-          <div className="cs-card cs-card--primary p-6">
-            <h2 className="text-xl font-semibold mb-4">Cambia Password</h2>
-            <form
-              className="space-y-4"
-              aria-live="polite"
-              aria-busy={passwordChanging}
-              onSubmit={handlePasswordChange}
-            >
-              <div>
-                <label className="cs-field__label">
-                  Nuova Password *
-                </label>
-                <input
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                  required
-                  minLength={6}
-                  className="cs-input"
-                  autoComplete="new-password"
-                  name="new-password"
-                />
-              </div>
-
-              <div>
-                <label className="cs-field__label">
-                  Conferma Nuova Password *
-                </label>
-                <input
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                  required
-                  minLength={6}
-                  className="cs-input"
-                  autoComplete="new-password"
-                  name="confirm-new-password"
-                />
-              </div>
-
-              {passwordMsg && (
-                <div className={`cs-alert ${passwordMsg.kind === 'success' ? 'cs-alert--success' : 'cs-alert--danger'}`}>
-                  {passwordMsg.text}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="cs-btn cs-btn--danger"
-                disabled={passwordChanging}
-              >
-                {passwordChanging ? 'Aggiornamento…' : 'Cambia Password'}
-              </button>
-            </form>
-          </div>
         </div>
       </main>
     </div>

@@ -5,6 +5,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import PageHeader from '@/components/shared/PageHeader' // se vuoi l'header qui, altrimenti toglilo
 import { EmptyState, LoadingState } from '@/components/ui'
+import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import DelegatedAccessDenied from './DelegatedAccessDenied'
 // import EventDetails from '@/components/.../EventDetails' // TODO: se lo usi davvero, importa il path corretto
 
 interface FeeInstallment {
@@ -33,7 +35,8 @@ interface FeeInstallment {
 }
 
 export default function AthleteFeesManager() {
-  const { user } = useAuth()
+  const { user, role, loading: authLoading, profileLoading } = useAuth()
+  const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const userId = user?.id || null
 
   const [installments, setInstallments] = useState<FeeInstallment[]>([])
@@ -41,6 +44,7 @@ export default function AthleteFeesManager() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'paid' | 'overdue'>('all')
   const [selectedEvent, setSelectedEvent] = useState<{ id: string } | null>(null)
+  const [accessDenied, setAccessDenied] = useState(false)
 
   const statusToBadge = (status: 'not_due' | 'due_soon' | 'overdue' | 'partially_paid' | 'paid') => {
     switch (status) {
@@ -63,10 +67,23 @@ export default function AthleteFeesManager() {
       return
     }
 
+    if (role === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_payments)) {
+      setAccessDenied(true)
+      setInstallments([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
+    setAccessDenied(false)
     try {
-      const response = await fetch('/api/athlete/fees', { signal })
+      const response = await fetch(appendSubjectProfile('/api/athlete/fees', selectedProfileId), { signal })
       if (!response.ok) {
+        if (response.status === 403) {
+          setAccessDenied(true)
+          setInstallments([])
+          return
+        }
         console.error('Error loading fee installments (athlete):', response.statusText)
         setInstallments([])
         return
@@ -81,9 +98,10 @@ export default function AthleteFeesManager() {
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [role, selectedProfile, selectedProfileId, userId])
 
   useEffect(() => {
+    if (authLoading || profileLoading) return
     if (!userId) {
       fetchControllerRef.current?.abort()
       fetchControllerRef.current = null
@@ -101,7 +119,7 @@ export default function AthleteFeesManager() {
     return () => {
       controller.abort()
     }
-  }, [userId, loadInstallments])
+  }, [authLoading, profileLoading, userId, loadInstallments])
 
   useEffect(() => {
     const filtered = filter === 'pending'
@@ -149,6 +167,7 @@ export default function AthleteFeesManager() {
   if (loading) {
     return <LoadingState label="Caricamento quote..." />
   }
+  if (accessDenied) return <DelegatedAccessDenied section="le quote associative" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
 
   return (
     <div className="space-y-6">

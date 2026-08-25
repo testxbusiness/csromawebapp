@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { userPatchPayloadSchema, userPayloadSchema } from '@/lib/validation/users'
+import { AccountContextError } from '@/server/auth/require-account-context'
+import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 type Role = 'admin' | 'coach' | 'athlete'
 
@@ -22,9 +24,14 @@ const normalizeString = (value: unknown) => {
 }
 
 export async function POST(request: NextRequest) {
+  return NextResponse.json({
+    error: 'La creazione degli account avviene dalla sezione Iscritti o Collaboratori.'
+  }, { status: 410 })
+}
+
+/* Legacy path retained temporarily for migration history; no longer callable.
   try {
     const supabase = await createClient()
-    const adminClient = createAdminClient()
     const parsed = userPayloadSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
       return NextResponse.json({ error: 'Dati utente non validi' }, { status: 400 })
@@ -37,15 +44,8 @@ export async function POST(request: NextRequest) {
       coach_level, coach_specialization, coach_started_on
     } = parsed.data
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    await requireGlobalRole(supabase, 'admin')
+    const adminClient = createAdminClient()
 
     const targetRole: Role = role
     let userId: string | null = null
@@ -258,26 +258,20 @@ const requesterRole = (user as any)?.app_metadata?.role
     })
   } catch (error) {
     console.error('Errore API creazione/aggiornamento utente:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
-}
+} */
 
 export async function GET() {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
-    // Carica dati base profili con informazioni auth
+    // La sezione Utenti mostra solo account applicativi già provisionati.
     const { data: users, error } = await adminClient
       .from('profiles')
       .select(`
@@ -285,13 +279,12 @@ const requesterRole = (user as any)?.app_metadata?.role
         email,
         first_name,
         last_name,
-        role,
         phone,
         birth_date,
-        is_active,
         created_at,
         updated_at,
-        must_change_password
+        must_change_password,
+        app_accounts!inner(auth_user_id,status,must_change_password,owner_profile_id)
       `)
       .order('created_at', { ascending: false })
 
@@ -303,8 +296,7 @@ const requesterRole = (user as any)?.app_metadata?.role
       return NextResponse.json({ users: [] })
     }
 
-    // Carica ultimi accessi da auth.users
-    const userIds = users.map(u => u.id)
+    // Carica ultimi accessi da auth.users e ruoli dal modello account.
     const { data: authUsers } = await adminClient.auth.admin.listUsers()
 
     // Mappa per accesso rapido agli utenti auth
@@ -313,37 +305,51 @@ const requesterRole = (user as any)?.app_metadata?.role
       authUsersMap.set(authUser.id, authUser)
     })
 
-    // Carica ruoli multipli da user_roles
+    const accounts = users
+      .map(user => ({ user, account: Array.isArray(user.app_accounts) ? user.app_accounts[0] : user.app_accounts }))
+      .filter(({ account }) => Boolean(account?.auth_user_id))
+
+    if (accounts.length === 0) return NextResponse.json({ users: [] })
+
+    const authUserIds = accounts.map(({ account }) => account.auth_user_id)
     const { data: userRoles } = await adminClient
-      .from('user_roles')
-      .select('profile_id, role')
-      .in('profile_id', userIds)
+      .from('account_roles')
+      .select('auth_user_id, role')
+      .in('auth_user_id', authUserIds)
 
     // Raggruppa ruoli per utente
-    const rolesByUser = new Map()
+    const rolesByUser = new Map<string, string[]>()
     userRoles?.forEach(ur => {
-      if (!rolesByUser.has(ur.profile_id)) {
-        rolesByUser.set(ur.profile_id, [])
+      if (!rolesByUser.has(ur.auth_user_id)) {
+        rolesByUser.set(ur.auth_user_id, [])
       }
-      rolesByUser.get(ur.profile_id).push(ur.role)
+      rolesByUser.get(ur.auth_user_id)?.push(ur.role)
     })
 
     // Combina i dati
-    const usersWithDetails = users.map(user => {
-      const authUser = authUsersMap.get(user.id)
-      const userRoles = rolesByUser.get(user.id) || [user.role]
+    const usersWithDetails = accounts.map(({ user, account }) => {
+      const authUser = authUsersMap.get(account.auth_user_id)
+      const rawRoles: unknown[] = rolesByUser.get(account.auth_user_id) || []
+      const userRoles = rawRoles.filter(
+        (role: unknown): role is string => typeof role === 'string' && role.length > 0
+      )
 
       return {
         ...user,
+        account_status: account.status,
+        account_must_change_password: account.must_change_password,
         last_sign_in_at: authUser?.last_sign_in_at || null,
         roles: userRoles,
-        is_active: user.is_active ?? true
+        is_active: account.status === 'active'
       }
     })
 
     return NextResponse.json({ users: usersWithDetails })
   } catch (error) {
     console.error('Errore API lista utenti:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
@@ -352,17 +358,8 @@ const requesterRole = (user as any)?.app_metadata?.role
 export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     const parsed = userPatchPayloadSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
@@ -372,21 +369,24 @@ const requesterRole = (user as any)?.app_metadata?.role
 
     switch (action) {
       case 'toggle_active':
-        // Toggle stato attivo/disattivo
-        const { data: currentUser } = await adminClient
-          .from('profiles')
-          .select('is_active')
-          .eq('id', userId)
-          .single()
+        const { data: currentAccount } = await adminClient
+          .from('app_accounts')
+          .select('status')
+          .eq('owner_profile_id', userId)
+          .maybeSingle()
 
-        if (!currentUser) {
+        if (!currentAccount) {
           return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
         }
 
+        const nextStatus = currentAccount.status === 'active' ? 'disabled' : 'active'
         const { error: toggleError } = await adminClient
-          .from('profiles')
-          .update({ is_active: !currentUser.is_active })
-          .eq('id', userId)
+          .from('app_accounts')
+          .update({
+            status: nextStatus,
+            disabled_at: nextStatus === 'disabled' ? new Date().toISOString() : null
+          })
+          .eq('owner_profile_id', userId)
 
         if (toggleError) {
           return NextResponse.json({ error: toggleError.message }, { status: 400 })
@@ -394,56 +394,24 @@ const requesterRole = (user as any)?.app_metadata?.role
 
         return NextResponse.json({
           success: true,
-          message: `Account ${!currentUser.is_active ? 'attivato' : 'disattivato'} con successo`,
-          is_active: !currentUser.is_active
+          message: `Account ${nextStatus === 'active' ? 'attivato' : 'disattivato'} con successo`,
+          is_active: nextStatus === 'active',
+          account_status: nextStatus
         })
 
       case 'update_roles':
-        // Aggiorna ruoli multipli
-        const roles = parsed.data.roles
-
-        // Elimina ruoli esistenti
-        await adminClient.from('user_roles').delete().eq('profile_id', userId)
-
-        // Inserisci nuovi ruoli
-        if (roles.length > 0) {
-          const roleRows = roles.map(role => ({
-            profile_id: userId,
-            role: role
-          }))
-
-          const { error: rolesError } = await adminClient
-            .from('user_roles')
-            .insert(roleRows)
-
-          if (rolesError) {
-            return NextResponse.json({ error: rolesError.message }, { status: 400 })
-          }
-        }
-
-        // Aggiorna ruolo principale
-        const primaryRole = roles.length > 0 ? roles[0] : 'athlete'
-        const { error: updateRoleError } = await adminClient
-          .rpc('update_user_role_safe', {
-            p_profile_id: userId,
-            p_role: primaryRole
-          })
-
-        if (updateRoleError) {
-          return NextResponse.json({ error: updateRoleError.message }, { status: 400 })
-        }
-
         return NextResponse.json({
-          success: true,
-          message: 'Ruoli aggiornati con successo',
-          roles: roles
-        })
+          error: 'I ruoli vengono gestiti nelle sezioni Iscritti e Collaboratori.'
+        }, { status: 410 })
 
       default:
         return NextResponse.json({ error: 'Azione non supportata' }, { status: 400 })
     }
   } catch (error) {
     console.error('Errore API gestione account:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
@@ -451,17 +419,8 @@ const requesterRole = (user as any)?.app_metadata?.role
 export async function DELETE(request: NextRequest) {
   try {
     const supabase = await createClient()
+    await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-const requesterRole = (user as any)?.app_metadata?.role
-    if (requesterRole !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('id')
@@ -470,29 +429,25 @@ const requesterRole = (user as any)?.app_metadata?.role
       return NextResponse.json({ error: 'Missing user id' }, { status: 400 })
     }
 
-    await adminClient.from('team_members').delete().eq('profile_id', userId)
-    await adminClient.from('team_coaches').delete().eq('coach_id', userId)
-    await adminClient.from('athlete_profiles').delete().eq('profile_id', userId)
-    await adminClient.from('coach_profiles').delete().eq('profile_id', userId)
+    const { error: disableError } = await adminClient
+      .from('app_accounts')
+      .update({ status: 'disabled', disabled_at: new Date().toISOString() })
+      .eq('owner_profile_id', userId)
 
-    const { error: deleteProfileError } = await adminClient
-      .from('profiles')
-      .delete()
-      .eq('id', userId)
-
-    if (deleteProfileError) {
-      console.error('Errore eliminazione profilo:', deleteProfileError)
-      return NextResponse.json({ error: deleteProfileError.message }, { status: 400 })
+    if (disableError) {
+      console.error('Errore disattivazione account:', disableError)
+      return NextResponse.json({ error: disableError.message }, { status: 400 })
     }
 
-    const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId)
-    if (deleteAuthError) {
-      console.error('Errore eliminazione utente auth:', deleteAuthError)
-    }
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      message: 'Account disattivato. Profilo, Auth, sessioni e storico sono stati conservati.'
+    })
   } catch (error) {
     console.error('Errore API eliminazione utente:', error)
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }

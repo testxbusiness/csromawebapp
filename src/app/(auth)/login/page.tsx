@@ -4,6 +4,7 @@ import { useState, useMemo, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   return (
@@ -20,6 +21,7 @@ function LoginPageInner() {
   const [error, setError] = useState('')
   const router = useRouter()
   const searchParams = useSearchParams()
+  const supabase = useMemo(() => createClient(), [])
 
   const nextPath = useMemo(() => {
     const raw = searchParams?.get('next') || '/dashboard'
@@ -49,12 +51,29 @@ function LoginPageInner() {
 
       const j = await res.json()
 
+      // The API signs in through the server-side Supabase client. Synchronize
+      // the returned session with the browser client as well, so AuthProvider
+      // receives the auth event before the protected page is rendered.
+      if (j?.session?.access_token && j?.session?.refresh_token) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: j.session.access_token,
+          refresh_token: j.session.refresh_token,
+        })
+
+        if (sessionError) {
+          console.error('Failed to synchronize browser session:', sessionError)
+          setError('Sessione non sincronizzata. Riprova ad accedere.')
+          return
+        }
+      }
+
       if (j?.profile && j?.user) {
         try {
           sessionStorage.setItem(
             'csroma_profile_cache',
             JSON.stringify({
               data: j.profile,
+              account: j.account ?? null,
               timestamp: Date.now(),
               userId: j.user.id,
             })

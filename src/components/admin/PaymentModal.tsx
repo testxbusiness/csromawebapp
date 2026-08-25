@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
@@ -11,7 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 
 type Payment = {
   id?: string
-  type: 'general_cost' | 'coach_payment'
+  type: 'general_cost' | 'coach_payment' | 'person_payment'
   description: string
   amount: number
   frequency: 'one_time' | 'recurring'
@@ -22,12 +23,14 @@ type Payment = {
   activity_id?: string
   team_id?: string
   coach_id?: string
+  payee_profile_id?: string
 }
 
 type Gym = { id: string; name: string; address: string }
 type Activity = { id: string; name: string }
 type Team = { id: string; name: string; code: string }
 type Coach = { id: string; first_name: string; last_name: string }
+type Payee = Coach & { type: 'coach' | 'staff' }
 
 type Props = {
   open: boolean
@@ -36,7 +39,7 @@ type Props = {
   gyms: Gym[]
   activities: Activity[]
   teams: Team[]
-  coaches: Coach[]
+  payees: Payee[]
   onCreate: (data: Omit<Payment, 'id'>) => Promise<void> | void
   onUpdate: (id: string, data: Partial<Payment>) => Promise<void> | void
 }
@@ -48,7 +51,7 @@ export default function PaymentModal({
   gyms,
   activities,
   teams,
-  coaches,
+  payees,
   onCreate,
   onUpdate,
 }: Props) {
@@ -68,6 +71,7 @@ export default function PaymentModal({
     activity_id: payment?.activity_id ?? '',
     team_id: payment?.team_id ?? '',
     coach_id: payment?.coach_id ?? '',
+    payee_profile_id: payment?.payee_profile_id ?? '',
   })
 
   React.useEffect(() => {
@@ -83,6 +87,7 @@ export default function PaymentModal({
       activity_id: payment?.activity_id ?? '',
       team_id: payment?.team_id ?? '',
       coach_id: payment?.coach_id ?? '',
+      payee_profile_id: payment?.payee_profile_id ?? '',
     })
   }, [payment])
 
@@ -123,6 +128,7 @@ export default function PaymentModal({
       if (!payload.activity_id) delete payload.activity_id
       if (!payload.team_id) delete payload.team_id
       if (!payload.coach_id) delete payload.coach_id
+      if (!payload.payee_profile_id) delete payload.payee_profile_id
       if (!payload.recurrence_pattern) delete payload.recurrence_pattern
       if (!payload.due_date) delete payload.due_date
 
@@ -142,6 +148,7 @@ export default function PaymentModal({
       <DialogContent className="cs-modal--centered cs-modal--md">
         <DialogHeader>
           <DialogTitle>{payment ? 'Modifica Pagamento' : 'Nuovo Pagamento'}</DialogTitle>
+          <DialogDescription className="sr-only">Inserisci o modifica i dati del pagamento.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={cleanAndSubmit} className="space-y-4">
@@ -151,10 +158,11 @@ export default function PaymentModal({
               className="cs-select"
               required
               value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value as Payment['type'] })}
+              onChange={(e) => setForm({ ...form, type: e.target.value as Payment['type'], coach_id: '', payee_profile_id: '', team_id: '' })}
             >
               <option value="general_cost">Costo Generale</option>
               <option value="coach_payment">Pagamento Allenatore</option>
+              <option value="person_payment">Pagamento Staff</option>
             </select>
           </div>
 
@@ -273,7 +281,7 @@ export default function PaymentModal({
                 </select>
               </div>
             </div>
-          ) : (
+          ) : form.type === 'coach_payment' ? (
             <div className="space-y-4">
               <div>
                 <label className="cs-field__label">Allenatore *</label>
@@ -284,7 +292,7 @@ export default function PaymentModal({
                   onChange={(e) => setForm({ ...form, coach_id: e.target.value, team_id: '' })}
                 >
                   <option value="">Seleziona un allenatore</option>
-                  {coaches.map((c) => (
+                  {payees.filter((payee) => payee.type === 'coach').map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.first_name} {c.last_name}
                     </option>
@@ -318,6 +326,28 @@ export default function PaymentModal({
                   </div>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="cs-field__label">Persona destinataria *</label>
+                <select
+                  className="cs-select"
+                  required
+                  value={form.payee_profile_id ?? ''}
+                  onChange={(e) => setForm({ ...form, payee_profile_id: e.target.value })}
+                >
+                  <option value="">Seleziona una persona</option>
+                  {payees.filter((payee) => payee.type === 'staff').map((payee) => (
+                    <option key={payee.id} value={payee.id}>
+                      {payee.first_name} {payee.last_name} ({payee.type === 'staff' ? 'Staff' : 'Coach'})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-secondary mt-1">
+                  Palestra, attività e squadra restano opzionali per questo pagamento.
+                </p>
+              </div>
             </div>
           )}
 

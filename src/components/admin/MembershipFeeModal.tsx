@@ -4,6 +4,7 @@ import * as React from 'react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
@@ -173,6 +174,7 @@ export default function MembershipFeeModal({
       <DialogContent className="cs-modal--centered cs-modal--lg">
         <DialogHeader>
           <DialogTitle>{fee ? 'Modifica Quota' : 'Nuova Quota Associativa'}</DialogTitle>
+          <DialogDescription className="sr-only">Inserisci o modifica i dati della quota associativa.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

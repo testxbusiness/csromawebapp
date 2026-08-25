@@ -4,7 +4,7 @@ const dateSchema = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data non vali
 const optionalUuid = z.string().uuid('ID non valido').optional().nullable()
 
 export const paymentCreateSchema = z.object({
-  type: z.enum(['general_cost', 'coach_payment']),
+  type: z.enum(['general_cost', 'coach_payment', 'person_payment']),
   description: z.string().trim().min(1).max(500),
   amount: z.number().finite().min(0).max(10_000_000),
   frequency: z.enum(['one_time', 'recurring']),
@@ -15,6 +15,7 @@ export const paymentCreateSchema = z.object({
   activity_id: optionalUuid,
   team_id: optionalUuid,
   coach_id: optionalUuid,
+  payee_profile_id: optionalUuid,
 }).strict()
 
 export const paymentPatchSchema = paymentCreateSchema.partial().extend({
