@@ -1647,9 +1647,17 @@ Controlli di stato da preservare nel backfill:
   creati ruoli o relazioni familiari per inferenza;
 - non risultano gap tra `profiles.role`, `athlete_profiles` e `coach_profiles`.
 
-La classificazione consente di preparare il dry-run della migrazione per 45 profili,
-ma il go-live resta bloccato finché i tre atleti senza squadra non hanno una decisione
-esplicita e non viene verificato il report di mapping su una copia della produzione.
+I tre profili sono stati verificati come account di test di produzione e rimossi il 25
+agosto 2026, insieme ai rispettivi utenti Auth. La verifica post-rimozione restituisce
+45 profili, 45 utenti Auth e zero atleti senza squadra; il vecchio destinatario del
+messaggio di prova e la sottoscrizione push già revocata sono stati rimossi tramite le
+relazioni di cascade previste. Non sono stati trovati eventi, pagamenti, rate, presenze,
+documenti o altri dati operativi associati.
+
+La classificazione consente ora di preparare il dry-run della migrazione per tutti i 45
+profili rimasti. Il go-live resta comunque bloccato finché non viene verificato il
+report di mapping su una copia della produzione e non sono stati preservati gli stati
+`must_change_password` e di mancato primo accesso.
 
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
