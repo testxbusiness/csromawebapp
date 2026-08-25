@@ -1690,6 +1690,33 @@ pubblicata. Checksum SHA-256:
 - dump: `db7c9438b9939509acb62d7463b42ce4ac26b03009398b809c810f688d022cfd`;
 - schema: `feda8e80f930f017ecbc4de67f7e125cfb96edda04cfb561eea3c70cd70059d4`.
 
+#### Restore e backfill su copia locale — 25 agosto 2026
+
+Il dump è stato ripristinato nel database locale isolato
+`csroma_prod_dryrun_20260825`. Sulla sola copia sono state applicate, in ordine, tutte
+le 49 migration `202608*.sql` presenti nel repository. La sequenza ha completato senza
+errori funzionali; l’unico adattamento dell’ambiente di test è stato aggiungere lo
+schema `storage` (solo definizione locale) perché il backup richiesto includeva
+espressamente i soli schemi `public` e `auth`, mentre una migration documenti aggiorna
+policy su `storage.objects`. Produzione include già Storage e non è stata modificata.
+
+Esito della riconciliazione post-backfill sulla copia:
+
+- 45 `profiles`, 45 `auth.users`, 45 `app_accounts` e 45 `season_profiles`;
+- ruoli globali: 2 `admin`, 2 `coach`, 41 `athlete`;
+- zero mapping Auth senza account, account senza persona o owner duplicati;
+- zero ruoli atleta senza profilo/relazione stagionale attiva;
+- `must_change_password` preservato su 17 record sia legacy sia account;
+- dati invariati: 145 eventi, 17 pagamenti, 120 rate e 5 documenti;
+- smoke RLS superato: admin e atleta risolvono account/persona/ruolo; il coach risolve
+  il ruolo e può operare solo sulla squadra assegnata.
+
+I grant minimi su `auth` e `public` sono stati ripristinati soltanto nella copia per
+simulare il runtime Supabase, perché il dump è stato creato con `--no-privileges`.
+Non sono una modifica richiesta alle migration né alla produzione. Il dry-run conferma
+la compatibilità del backfill; il passaggio successivo richiede il preflight immediato
+e un’esplicita autorizzazione prima dell’applicazione in produzione.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
