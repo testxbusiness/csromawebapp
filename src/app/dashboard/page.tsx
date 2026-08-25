@@ -71,7 +71,7 @@ export default function DashboardPage() {
 
       <section className="space-y-8">
         {displayRole === 'admin' ? (
-          <AdminDashboard profile={displayProfile} />
+          <AdminDashboard profile={displayProfile} role={displayRole} />
         ) : displayRole === 'coach' ? (
           <CoachDashboard user={displayUser} profile={displayProfile} />
         ) : showFamilyArea ? (

@@ -1509,9 +1509,9 @@ Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 | Media | `src/hooks/useAuth.ts` | Ancora fallback legacy: cache e compatibilità usano `profile.role` | Login/UI; il resolver account resta autorevole |
 | Media | `src/components/navigation/LayoutShell.tsx` | Migrato: legge `account.mustChangePassword` | Guardia UI account-based |
 | Media | `src/components/shared/ResetPasswordForm.tsx` | Migrato: legge `app_metadata.must_change_password` | Compatibilità reset account-based |
-| Bassa | `src/components/admin/AdminDashboard.tsx` | Visualizza `profile.role` | Sola visualizzazione |
+| Bassa | `src/components/admin/AdminDashboard.tsx` | Migrato: visualizza il ruolo risolto da `useAuth` | Sola visualizzazione account-based |
 | Bassa | `src/components/shared/UserProfile.tsx` | Nessun consumer legacy rilevato nel file attuale | Nessun intervento richiesto |
-| Bassa | `src/components/admin/MessagesManager.tsx` | Visualizza `mr.profiles.role` | Sola visualizzazione |
+| Bassa | `src/components/admin/MessagesManager.tsx` | Visualizza il ruolo già derivato dalla route messaggi account-based | Sola visualizzazione |
 | Bassa | `src/components/admin/DocumentsManager.tsx` | Legge `profiles.role` per la sezione documenti admin | Migration 15 rinviata |
 
 Slice Media completato il 25 agosto 2026: `useAuth` risolve il ruolo esclusivamente da
@@ -1529,6 +1529,13 @@ Consumer messaggi completato il 25 agosto 2026: `GET /api/admin/messages` non se
 più `profiles.role` e non lo usa come fallback. Il ruolo del destinatario viene derivato
 esclusivamente da `app_accounts` e `account_roles`; per i profili senza account il valore
 resta `null` senza inventare una classificazione legacy.
+
+Pulizia fallback UI completata il 25 agosto 2026: `AdminDashboard` riceve il ruolo
+risolto dal contesto account e non legge più `profile.role`; `MessagesManager` conserva
+solo la visualizzazione del valore già derivato dalla route account-based. Non restano
+consumer attivi della tabella legacy per autorizzazione nei flussi migrati; restano
+soltanto i campi legacy esposti nei tipi/endpoint per compatibilità e il consumer
+documentale rinviato con Migration 15.
 
 Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
 ruoli o policy legacy. Restano i fallback di sola visualizzazione e i consumer documentali
