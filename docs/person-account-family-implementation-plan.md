@@ -1471,8 +1471,8 @@ Slice in corso — consumer coach legacy:
   `coach_profiles`, `season_profiles` e `account_roles`;
 - rimuovere il controllo legacy dalla modifica collaboratori;
 - usare l’endpoint account/domain-based nei filtri coach di Teams e Bilancio;
-- verificare che coach senza account restino visibili e che coach sospesi/disabilitati siano
-  esclusi dalle liste operative.
+- verificare che coach senza account ma con collegamento stagionale attivo restino visibili e
+  che coach rimossi dalla stagione o sospesi/disabilitati siano esclusi dalle liste operative.
 
 Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
 ruoli o policy legacy. Restano da completare le route admin di gestione profili/account,

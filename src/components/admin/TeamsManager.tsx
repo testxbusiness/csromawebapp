@@ -531,7 +531,7 @@ function TeamForm({
             <option value="">Nessun allenatore assegnato</option>
             {coaches.map((coach) => (
               <option key={coach.id} value={coach.id}>
-                {coach.first_name} {coach.last_name} ({coach.email})
+                {coach.first_name} {coach.last_name}
               </option>
             ))}
           </select>

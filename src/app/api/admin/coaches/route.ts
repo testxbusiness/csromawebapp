@@ -10,31 +10,26 @@ export async function GET() {
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
 
-    const [{ data: profiles, error: profilesError }, { data: coachProfiles, error: coachProfilesError }, { data: seasonProfiles, error: seasonProfilesError }, { data: accounts, error: accountsError }, { data: accountRoles, error: accountRolesError }] = await Promise.all([
+    const [{ data: profiles, error: profilesError }, { data: coachProfiles, error: coachProfilesError }, { data: seasonProfiles, error: seasonProfilesError }, { data: accounts, error: accountsError }] = await Promise.all([
       adminClient.from('profiles').select('id, email, first_name, last_name, phone, birth_date, created_at, updated_at').order('created_at', { ascending: false }),
       adminClient.from('coach_profiles').select('profile_id, level, specialization, started_on'),
-      adminClient.from('season_profiles').select('profile_id, profile_type'),
+      adminClient.from('season_profiles').select('profile_id, profile_type, status'),
       adminClient.from('app_accounts').select('auth_user_id, owner_profile_id, status'),
-      adminClient.from('account_roles').select('auth_user_id, role'),
     ])
 
-    if (profilesError || coachProfilesError || seasonProfilesError || accountsError || accountRolesError) {
-      console.error('Errore caricamento collaboratori:', profilesError || coachProfilesError || seasonProfilesError || accountsError || accountRolesError)
+    if (profilesError || coachProfilesError || seasonProfilesError || accountsError) {
+      console.error('Errore caricamento collaboratori:', profilesError || coachProfilesError || seasonProfilesError || accountsError)
       return NextResponse.json({ error: 'Impossibile caricare i collaboratori' }, { status: 500 })
     }
 
-    const coachProfileIds = new Set((coachProfiles || []).map((profile) => profile.profile_id))
-    const coachSeasonIds = new Set((seasonProfiles || []).filter((profile) => profile.profile_type === 'coach').map((profile) => profile.profile_id))
-    const rolesByAuthUser = new Map<string, string[]>()
-    for (const row of accountRoles || []) {
-      rolesByAuthUser.set(row.auth_user_id, [...(rolesByAuthUser.get(row.auth_user_id) || []), row.role])
-    }
+    const coachSeasonIds = new Set((seasonProfiles || [])
+      .filter((profile) => profile.profile_type === 'coach' && profile.status === 'active')
+      .map((profile) => profile.profile_id))
     const accountByProfile = new Map((accounts || []).map((account) => [account.owner_profile_id, account]))
     const coaches = (profiles || []).filter((profile) => {
       const account = accountByProfile.get(profile.id)
       if (account?.status === 'disabled' || account?.status === 'suspended') return false
-      const accountIsCoach = account ? rolesByAuthUser.get(account.auth_user_id)?.includes('coach') : false
-      return coachProfileIds.has(profile.id) || coachSeasonIds.has(profile.id) || accountIsCoach
+      return coachSeasonIds.has(profile.id)
     })
 
     if (!coaches || coaches.length === 0) {
