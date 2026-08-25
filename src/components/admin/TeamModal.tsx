@@ -322,7 +322,7 @@ export default function TeamModal({
               <option value="">Nessun allenatore assegnato</option>
               {coaches.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.first_name} {c.last_name} ({c.email})
+                  {c.first_name} {c.last_name}
                 </option>
               ))}
             </select>
