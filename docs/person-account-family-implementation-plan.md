@@ -1524,6 +1524,32 @@ della rimozione legacy serve una decisione esplicita sul destino delle fixture (
 RLS Test`, `nuovo test`, `staff test`) e un test di regressione finale che dimostri che
 nessun flusso applicativo dipende dai dati legacy residui.
 
+### Gate obbligatorio pre-deploy produzione — inventario completo dei profili
+
+Prima del go-live del nuovo modello account/persona deve essere eseguito un inventario
+read-only sull’intero database di produzione, non limitato agli atleti. Il deploy deve
+essere bloccato finché ogni profilo non risulta classificato e riconciliato oppure
+esplicitamente registrato come eccezione documentata.
+
+Il controllo deve verificare almeno:
+
+- ogni profilo e il relativo `app_accounts`, incluso lo stato (`invited`, `active`,
+  `suspended`, `disabled`);
+- coerenza tra `profiles.role`, `user_roles`, `account_roles`, `athlete_profiles`,
+  `coach_profiles` e `season_profiles`;
+- profili senza account e account senza profilo;
+- account senza ruolo globale e ruoli globali senza mapping coerente;
+- atleti senza `athlete_profiles` o senza stagione attiva;
+- coach, staff e admin senza classificazione stagionale prevista;
+- relazioni familiari, stato e permessi delle relazioni;
+- fixture, profili storici, duplicati e profili intenzionalmente senza accesso;
+- profili con `must_change_password` o altri campi legacy incoerenti.
+
+L’output deve contenere conteggi, identificativi, classificazione attesa, azione
+correttiva e responsabile. Le correzioni devono essere applicate e riverificate prima
+del deploy; nessun ruolo deve essere assegnato automaticamente soltanto sulla base di
+`profiles.role` senza il mapping dominio/account richiesto.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
