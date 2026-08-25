@@ -150,16 +150,28 @@ export async function PATCH(request: NextRequest) {
     if (!parsed.success) return NextResponse.json({ error: 'Dati collaboratore non validi' }, { status: 400 })
     const payload = parsed.data
     const adminClient = createAdminClient()
-    const { data: profile } = await adminClient.from('profiles').select('id, role').eq('id', payload.id).maybeSingle()
+    const [{ data: profile }, { data: coachProfile }, { data: seasonProfile }, { data: account }] = await Promise.all([
+      adminClient.from('profiles').select('id').eq('id', payload.id).maybeSingle(),
+      adminClient.from('coach_profiles').select('profile_id').eq('profile_id', payload.id).maybeSingle(),
+      adminClient.from('season_profiles').select('profile_type').eq('profile_id', payload.id).eq('season_id', payload.season_id).maybeSingle(),
+      adminClient.from('app_accounts').select('auth_user_id').eq('owner_profile_id', payload.id).maybeSingle(),
+    ])
     if (!profile) return NextResponse.json({ error: 'Collaboratore non trovato' }, { status: 404 })
-    const type = payload.collaborator_type || (profile.role === 'coach' ? 'coach' : 'staff')
+    let accountRole: string | null = null
+    if (account?.auth_user_id) {
+      const { data: roleRow } = await adminClient.from('account_roles').select('role').eq('auth_user_id', account.auth_user_id).in('role', ['admin', 'coach', 'staff']).limit(1).maybeSingle()
+      accountRole = roleRow?.role || null
+    }
+    const type: CollaboratorType = payload.collaborator_type
+      || (seasonProfile?.profile_type as CollaboratorType | undefined)
+      || (accountRole as CollaboratorType | undefined)
+      || (coachProfile ? 'coach' : 'staff')
     const teamIdsPayload = payload.team_ids || []
     const teamRolesPayload = payload.team_roles || {}
     try { await validateTeams(adminClient, payload.season_id, type, teamIdsPayload) } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 }) }
 
     const profileUpdate: Record<string, string | null> = {}
     for (const field of ['first_name', 'last_name', 'email', 'phone', 'birth_date'] as const) if (field in payload) profileUpdate[field] = payload[field] ?? null
-    if (payload.collaborator_type) profileUpdate.role = type === 'coach' || type === 'admin' ? type : null
     if (Object.keys(profileUpdate).length) {
       const { error } = await adminClient.from('profiles').update(profileUpdate).eq('id', payload.id)
       if (error) return NextResponse.json({ error: 'Impossibile aggiornare l’anagrafica' }, { status: 400 })

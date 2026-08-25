@@ -161,14 +161,10 @@ export default function TeamsManager() {
   }, [supabase])
 
   const loadCoaches = useCallback(async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .eq('role', 'coach')
-      .order('first_name')
-
-    setCoaches(data || [])
-  }, [supabase])
+    const response = await fetch('/api/admin/coaches', { cache: 'no-store' })
+    const payload = await response.json().catch(() => null) as { coaches?: Coach[] } | null
+    setCoaches(response.ok ? payload?.coaches || [] : [])
+  }, [])
 
   const loadGyms = useCallback(async () => {
     const { data } = await supabase

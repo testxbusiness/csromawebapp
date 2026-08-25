@@ -1465,6 +1465,15 @@ Fase 6, slice applicative iniziali completate tra il 21 e il 24 agosto 2026:
 - ogni slice è stata verificata con Jest 3/3 e build Next.js, poi committata e pushata sulla
   branch `codex/person-account-family-model`.
 
+Slice in corso — consumer coach legacy:
+
+- migrare `GET /api/admin/coaches` dalla selezione `profiles.role = 'coach'` a
+  `coach_profiles`, `season_profiles` e `account_roles`;
+- rimuovere il controllo legacy dalla modifica collaboratori;
+- usare l’endpoint account/domain-based nei filtri coach di Teams e Bilancio;
+- verificare che coach senza account restino visibili e che coach sospesi/disabilitati siano
+  esclusi dalle liste operative.
+
 Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
 ruoli o policy legacy. Restano da completare le route admin di gestione profili/account,
 reset password e messaggi, oltre ai consumer UI che interrogano direttamente `profiles.role`;
