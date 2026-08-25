@@ -1680,6 +1680,16 @@ Il risultato è idoneo per un dry-run applicativo, ma non sostituisce una copia 
 prima di applicare migration in produzione serve ancora un backup verificabile e una
 procedura di rollback. Le migration account/persona non sono state applicate.
 
+Backup locale completato il 25 agosto 2026 tramite pooler PostgreSQL compatibile con
+PostgreSQL 17. Il dump completo degli schemi `public` e `auth` è salvato in
+`backups/production-20260825/csromawebapp-production.dump`, insieme allo schema SQL
+leggibile `csromawebapp-production-schema.sql`. Il dump custom contiene 735 entry ed è
+stato verificato con `pg_restore --list`; la cartella è esclusa da Git e non viene
+pubblicata. Checksum SHA-256:
+
+- dump: `db7c9438b9939509acb62d7463b42ce4ac26b03009398b809c810f688d022cfd`;
+- schema: `feda8e80f930f017ecbc4de67f7e125cfb96edda04cfb561eea3c70cd70059d4`.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
