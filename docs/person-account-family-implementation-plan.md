@@ -1659,6 +1659,27 @@ profili rimasti. Il go-live resta comunque bloccato finché non viene verificato
 report di mapping su una copia della produzione e non sono stati preservati gli stati
 `must_change_password` e di mancato primo accesso.
 
+#### Dry-run logico produzione — 25 agosto 2026
+
+È stata richiesta una branch Supabase temporanea per creare una copia isolata, ma il
+progetto `csromawebapp` non espone branch disponibili e la creazione della preview
+branch è stata rifiutata. Non è stata quindi creata alcuna risorsa persistente né sono
+stati addebitati costi. In attesa di una copia fisica o di un dump controllato, è stato
+eseguito un dry-run logico in sola lettura direttamente sulla produzione.
+
+Il dry-run proietta il backfill sui 45 profili rimasti e restituisce:
+
+- 45 `app_accounts` e 45 `season_profiles`, con una sola stagione attiva;
+- 2 ruoli globali `admin`, 2 `coach` e 41 `athlete` riconciliati con i profili operativi;
+- nessun mismatch tra conteggio `profiles` e `auth.users` e nessun ID Auth orfano;
+- nessun ruolo sconosciuto, atleta senza squadra o coach senza assegnazione;
+- 17 profili con `must_change_password = true` e 16 account mai entrati, da preservare
+  nel mapping dello stato account.
+
+Il risultato è idoneo per un dry-run applicativo, ma non sostituisce una copia fisica:
+prima di applicare migration in produzione serve ancora un backup verificabile e una
+procedura di rollback. Le migration account/persona non sono state applicate.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
