@@ -1616,6 +1616,41 @@ definire esplicitamente la regola per i coach senza account e per i familiari se
 partecipazione stagionale. Solo dopo questa approvazione si potrà eseguire un dry-run
 equivalente sulla copia della produzione.
 
+#### Classificazione produzione — 25 agosto 2026
+
+Il report read-only sui 48 profili di produzione ha prodotto questa classificazione:
+
+| Gruppo | Conteggio | Esito previsto |
+| --- | ---: | --- |
+| Admin attivi con Auth e profilo coerente | 2 | Backfill automatico `app_accounts` + `account_roles.admin` |
+| Coach attivi con `coach_profiles` e assegnazioni squadra | 2 | Backfill automatico `app_accounts` + `account_roles.coach` e relazione stagionale |
+| Atleti attivi con `athlete_profiles` e almeno una squadra | 41 | Backfill automatico account/ruolo atleta e relazione stagionale |
+| Atleti attivi senza squadra | 3 | Revisione manuale prima del backfill stagionale |
+
+I tre casi da revisionare sono:
+
+- `test email` — `f90e8a38-641a-4aa0-a5f1-2d883a0a4a7d`;
+- `Giorgio Politi` — `4c5df08f-6965-4388-850f-f23de80628cf`;
+- `Vesna Politi` — `47075c85-8340-4da5-ad65-3e73fe4fdcd2`.
+
+Sono tutti profili attivi, autenticati e con `athlete_profiles`, ma senza
+`team_members`. Non devono ricevere automaticamente una squadra; occorre decidere se
+mantenerli come atleti senza assegnazione, assegnarli a una squadra o marcarli come
+storici/inattivi secondo il dato gestionale corretto.
+
+Controlli di stato da preservare nel backfill:
+
+- tutti i 48 profili sono attivi e hanno un utente in `auth.users`;
+- 17 profili hanno `must_change_password = true` e 16 account non hanno ancora fatto
+  login: il backfill deve conservare questi stati nel nuovo modello;
+- non risultano profili staff o familiari nel dataset legacy di produzione: non vanno
+  creati ruoli o relazioni familiari per inferenza;
+- non risultano gap tra `profiles.role`, `athlete_profiles` e `coach_profiles`.
+
+La classificazione consente di preparare il dry-run della migrazione per 45 profili,
+ma il go-live resta bloccato finché i tre atleti senza squadra non hanno una decisione
+esplicita e non viene verificato il report di mapping su una copia della produzione.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
