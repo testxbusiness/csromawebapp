@@ -1465,7 +1465,7 @@ Fase 6, slice applicative iniziali completate tra il 21 e il 24 agosto 2026:
 - ogni slice è stata verificata con Jest 3/3 e build Next.js, poi committata e pushata sulla
   branch `codex/person-account-family-model`.
 
-Slice in corso — consumer coach legacy:
+Slice consumer coach legacy:
 
 - migrare `GET /api/admin/coaches` dalla selezione `profiles.role = 'coach'` a
   `coach_profiles`, `season_profiles` e `account_roles`;
@@ -1473,6 +1473,29 @@ Slice in corso — consumer coach legacy:
 - usare l’endpoint account/domain-based nei filtri coach di Teams e Bilancio;
 - verificare che coach senza account ma con collegamento stagionale attivo restino visibili e
   che coach rimossi dalla stagione o sospesi/disabilitati siano esclusi dalle liste operative.
+
+Inventario staging ripetuto il 25 agosto 2026 (verifica read-only tramite API admin):
+
+- `profiles`: 15 record; 14 attivi e 1 inattivo;
+- `app_accounts`: 12 account attivi; 3 profili senza account (`coach noaccount`,
+  `staff test`, `nuovo test`);
+- i ruoli derivati risultano: 6 atleti, 2 family member, 4 coach, 1 staff e 1 admin;
+  un profilo (`Atleta RLS Test`) ha account attivo ma nessun ruolo globale, quindi resta
+  da analizzare prima della rimozione di `user_roles`;
+- `/api/admin/coaches` restituisce 4 coach operativi, tutti con collegamento stagionale
+  attivo; `coach noaccount`, senza collegamento stagionale attivo, non compare nei
+  selector operativi;
+- i profili senza account restano visibili nell’elenco persone; `staff test` e
+  `nuovo test` restano fixture intenzionali senza account;
+- la mail non viene più mostrata nei selector squadra, né nella lista principale né nel
+  modal di creazione/modifica squadra;
+- non sono state applicate modifiche al database durante questo inventario. La verifica
+  della migration history, delle policy e dei record `user_roles` richiede ancora una
+  query SQL read-only diretta sul progetto Supabase staging.
+
+Il consumer coach legacy è quindi verificato a livello applicativo/staging API. Prima di
+procedere con la Fase 6 resta da completare il controllo SQL read-only della history,
+delle policy e dei mapping globali, con priorità al caso `Atleta RLS Test`.
 
 Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
 ruoli o policy legacy. Restano da completare le route admin di gestione profili/account,
