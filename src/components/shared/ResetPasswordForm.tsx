@@ -28,15 +28,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('must_change_password')
-        .eq('id', session.user.id)
-        .single()
-
-      const mustChange =
-        session.user.app_metadata?.must_change_password === true ||
-        profile?.must_change_password === true
+      const mustChange = session.user.app_metadata?.must_change_password === true
 
       setIsMandatoryChange(mustChange)
       dbg('[ResetPassword] checkMandatoryChange: mustChange =', mustChange)

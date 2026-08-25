@@ -1514,11 +1514,16 @@ Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 | Bassa | `src/components/admin/MessagesManager.tsx` | Visualizza `mr.profiles.role` | Sola visualizzazione |
 | Bassa | `src/components/admin/DocumentsManager.tsx` | Legge `profiles.role` per la sezione documenti admin | Migration 15 rinviata |
 
-Il prossimo slice applicativo è la rimozione dei fallback legacy di stato account e ruolo
-nei consumer Media (`useAuth`, `LayoutShell`, `ResetPasswordForm`), senza modificare il
-flusso email e senza intervenire ancora su `DocumentsManager`. I consumer Media vanno poi
-verificati in login, cambio password obbligatorio e logout; solo dopo si può affrontare
-la pulizia dei fallback di sola visualizzazione.
+Slice Media completato il 25 agosto 2026: `useAuth` risolve il ruolo esclusivamente da
+`account_roles`, `LayoutShell` usa `account.mustChangePassword` e
+`ResetPasswordForm` usa il claim `app_metadata.must_change_password`, necessario anche
+per gli account invitati che non possono ancora passare dal contesto account attivo. Non
+è stato modificato il flusso di invio email e `DocumentsManager` resta rinviato con
+Migration 15.
+
+Verifica locale dello slice: Jest 3/3 e build Next.js completate. Restano da verificare
+manualmente login, cambio password obbligatorio e logout su staging; dopo questo gate si
+potrà affrontare la pulizia dei fallback di sola visualizzazione.
 
 Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
 ruoli o policy legacy. Restano da completare le route admin di gestione profili/account,

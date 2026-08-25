@@ -11,8 +11,7 @@ type ProfileRow = {
   last_name: string
   date_of_birth?: string | null
   avatar_url?: string | null
-  // Legacy UI components still require a string; the resolver remains authoritative
-  // for account access while this field is retained for dashboard compatibility.
+  // Retained only for profile display compatibility; account roles are authoritative.
   role: 'admin' | 'coach' | 'athlete' | string
   must_change_password: boolean | null
   created_at: string | null
@@ -136,12 +135,9 @@ function useAuthState(): UseAuthReturn {
 
       if (!skipCache) {
         const cachedProfile = loadProfileFromCache(uid)
-        // Coach/admin pages require the account resolver. Older cache entries
-        // (created while /api/me/profile was failing) may contain only the
-        // legacy profile and account: null; do not let those entries suppress
-        // the server refresh indefinitely. Athletes can legitimately rely on
-        // the legacy profile fallback when no app account exists.
-        const cacheHasRequiredAccount = Boolean(cachedProfile?.account) || cachedProfile?.profile.role === 'athlete'
+        // Authenticated UI pages require an account-based resolver. Older cache
+        // entries containing only the legacy profile must not suppress refresh.
+        const cacheHasRequiredAccount = Boolean(cachedProfile?.account)
         if (cachedProfile && cacheHasRequiredAccount) {
           console.log('[useAuth] Profile loaded from cache for', uid)
           setProfile(cachedProfile.profile)
@@ -228,12 +224,8 @@ function useAuthState(): UseAuthReturn {
             : account?.roles.includes('family_member')
               ? 'family_member'
               : null
-    const raw = account
-      ? accountRole ?? (profile?.role === 'athlete' ? 'athlete' : null)
-      : profile?.role ?? (user as any)?.app_metadata?.role ?? null
-    if (raw == null) return null
-    return String(raw).trim().toLowerCase()
-  }, [account, profile?.role, user])
+    return accountRole
+  }, [account])
 
   const refreshProfile = useCallback(async () => {
     const uid = currentUserIdRef.current
