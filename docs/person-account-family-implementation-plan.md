@@ -1766,6 +1766,13 @@ di `codex/person-account-family-model` in `main` occorre creare un riferimento G
 backup di `main`; il deploy Vercel di `main` va promosso solo dopo il merge e i test
 smoke immediati.
 
+Il riferimento di sicurezza `safety/main-pre-account-model-20260825` è stato creato
+su GitHub al commit `7f828ce`. Dopo una build locale completata con successo, la branch
+`codex/person-account-family-model` è stata integrata in `main` con il commit di merge
+`1fe8d7a` e pubblicata. La pagina pubblica di login del deployment di produzione
+risponde correttamente; restano da eseguire gli smoke test autenticati per admin,
+coach, atleta e genitore.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
