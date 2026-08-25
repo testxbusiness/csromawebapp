@@ -1497,6 +1497,29 @@ Il consumer coach legacy è quindi verificato a livello applicativo/staging API.
 procedere con la Fase 6 resta da completare il controllo SQL read-only della history,
 delle policy e dei mapping globali, con priorità al caso `Atleta RLS Test`.
 
+Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
+
+| Priorità | Consumer | Stato attuale | Impatto |
+| --- | --- | --- | --- |
+| Alta | `src/app/api/admin/collaborators/route.ts` | Migrato: usa `season_profiles`, `account_roles` e stato account; non legge più `profiles.role` | Autorizzazione/classificazione verificata |
+| Alta | `src/app/api/admin/coaches/route.ts` | Migrato: usa `coach_profiles`, `season_profiles` e account | Lista coach coerente con il dominio |
+| Alta | `src/components/admin/TeamsManager.tsx` | Migrato: carica `/api/admin/coaches` | UI operativa coerente |
+| Alta | `src/components/admin/BalanceDashboard.tsx` | Migrato: carica `/api/admin/coaches` | Filtro coach coerente |
+| Media | `src/app/api/admin/messages/route.ts` | Ancora legacy: seleziona `profiles.role` e lo usa come fallback di visualizzazione | Report/destinatari |
+| Media | `src/hooks/useAuth.ts` | Ancora fallback legacy: cache e compatibilità usano `profile.role` | Login/UI; il resolver account resta autorevole |
+| Media | `src/components/navigation/LayoutShell.tsx` | Ancora legacy: legge `profile.must_change_password` | Guardia UI duplicata |
+| Media | `src/components/shared/ResetPasswordForm.tsx` | Ancora fallback legacy: legge `profiles.must_change_password` | Compatibilità reset |
+| Bassa | `src/components/admin/AdminDashboard.tsx` | Visualizza `profile.role` | Sola visualizzazione |
+| Bassa | `src/components/shared/UserProfile.tsx` | Nessun consumer legacy rilevato nel file attuale | Nessun intervento richiesto |
+| Bassa | `src/components/admin/MessagesManager.tsx` | Visualizza `mr.profiles.role` | Sola visualizzazione |
+| Bassa | `src/components/admin/DocumentsManager.tsx` | Legge `profiles.role` per la sezione documenti admin | Migration 15 rinviata |
+
+Il prossimo slice applicativo è la rimozione dei fallback legacy di stato account e ruolo
+nei consumer Media (`useAuth`, `LayoutShell`, `ResetPasswordForm`), senza modificare il
+flusso email e senza intervenire ancora su `DocumentsManager`. I consumer Media vanno poi
+verificati in login, cambio password obbligatorio e logout; solo dopo si può affrontare
+la pulizia dei fallback di sola visualizzazione.
+
 Queste modifiche sono migrazioni applicative compatibili e non eliminano ancora colonne,
 ruoli o policy legacy. Restano da completare le route admin di gestione profili/account,
 reset password e messaggi, oltre ai consumer UI che interrogano direttamente `profiles.role`;
