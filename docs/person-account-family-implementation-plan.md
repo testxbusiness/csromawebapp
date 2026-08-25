@@ -1497,6 +1497,33 @@ Il consumer coach legacy è quindi verificato a livello applicativo/staging API.
 procedere con la Fase 6 resta da completare il controllo SQL read-only della history,
 delle policy e dei mapping globali, con priorità al caso `Atleta RLS Test`.
 
+Inventario SQL read-only staging completato il 25 agosto 2026 sul progetto
+`csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`):
+
+- migration history allineata fino a `20260819130000_allow_coach_message_reads`;
+- `profiles`: 15 record, 8 con `profiles.role` ancora valorizzato e tutti i 15 con
+  `profiles.must_change_password` valorizzato;
+- `app_accounts`: 12 record, tutti `active`, nessuno con `must_change_password = true`;
+- `account_roles`: 11 record;
+- `user_roles`: 3 record: admin e coach coerenti con `account_roles`, mentre il ruolo
+  `athlete` di `Atleta RLS Test` non ha corrispondenza in `account_roles`;
+- esiste 1 account senza ruolo globale (`Atleta RLS Test`), 0 account senza profilo e
+  3 profili senza account;
+- le tabelle controllate risultano con RLS abilitato; nelle policy di `profiles`,
+  `user_roles`, account, messaggi, documenti e domini operativi non sono stati trovati
+  riferimenti diretti a `profiles.role` o `user_roles`;
+- le funzioni `public.messages_set_created_by()` e
+  `public.sync_championship_match_event()` restano `SECURITY DEFINER`, ma il controllo
+  della definizione non rileva riferimenti diretti a `profiles.role` o `user_roles`;
+- `user_roles`, `profiles.role` e `profiles.must_change_password` non sono quindi ancora
+  eliminabili: il caso `Atleta RLS Test` è una fixture RLS documentata e va escluso da
+  qualsiasi correzione automatica.
+
+Il gate SQL conferma che non serve una nuova migration correttiva in questa fase. Prima
+della rimozione legacy serve una decisione esplicita sul destino delle fixture (`Atleta
+RLS Test`, `nuovo test`, `staff test`) e un test di regressione finale che dimostri che
+nessun flusso applicativo dipende dai dati legacy residui.
+
 Inventario aggiornato dei consumer legacy nel codice (25 agosto 2026):
 
 | Priorità | Consumer | Stato attuale | Impatto |
