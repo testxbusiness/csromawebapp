@@ -16,41 +16,41 @@ export async function POST(request: NextRequest) {
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
 
-    const { data: profile, error: profileLookupError } = await adminClient
-      .from('profiles')
-      .select('email')
-      .eq('id', user_id)
-      .maybeSingle()
+    const [{ data: profile, error: profileLookupError }, { data: account, error: accountLookupError }] = await Promise.all([
+      adminClient
+        .from('profiles')
+        .select('email')
+        .eq('id', user_id)
+        .maybeSingle(),
+      adminClient
+        .from('app_accounts')
+        .select('auth_user_id, owner_profile_id')
+        .eq('owner_profile_id', user_id)
+        .maybeSingle(),
+    ])
 
-    if (profileLookupError || !profile?.email) {
+    if (profileLookupError || accountLookupError) {
+      return NextResponse.json({ error: 'Impossibile verificare l’account' }, { status: 500 })
+    }
+    if (!profile?.email || !account) {
       return NextResponse.json({ error: 'Utente non trovato' }, { status: 404 })
     }
 
-    const { data: authUserData, error: authUserLookupError } = await adminClient.auth.admin.getUserById(user_id)
+    const { data: authUserData, error: authUserLookupError } = await adminClient.auth.admin.getUserById(account.auth_user_id)
     const currentAppMetadata = authUserData?.user?.app_metadata || {}
     const { error: metadataError } = authUserLookupError
       ? { error: authUserLookupError }
-      : await adminClient.auth.admin.updateUserById(user_id, {
+      : await adminClient.auth.admin.updateUserById(account.auth_user_id, {
           app_metadata: { ...currentAppMetadata, must_change_password: true },
         })
     if (metadataError) {
       console.warn('Metadati auth non aggiornati:', metadataError)
     }
 
-    // Mark profile to require password change
-    const { error: profileError } = await adminClient
-      .from('profiles')
-      .update({ must_change_password: true })
-      .eq('id', user_id)
-
-    if (profileError) {
-      console.warn('Profilo non aggiornato (must_change_password):', profileError)
-    }
-
     const { error: accountError } = await adminClient
       .from('app_accounts')
       .update({ must_change_password: true })
-      .eq('owner_profile_id', user_id)
+      .eq('auth_user_id', account.auth_user_id)
 
     if (accountError) {
       console.warn('Account non aggiornato (must_change_password):', accountError)

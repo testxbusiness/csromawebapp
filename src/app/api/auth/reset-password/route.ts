@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const admin = createAdminClient()
     const { data: account, error: accountLookupError } = await admin
       .from('app_accounts')
-      .select('auth_user_id, owner_profile_id, status')
+      .select('auth_user_id, status')
       .eq('auth_user_id', user.id)
       .maybeSingle()
 
@@ -50,14 +50,6 @@ export async function POST(req: Request) {
       .eq('auth_user_id', account.auth_user_id)
     if (accountUpdateError) {
       return NextResponse.json({ error: 'Errore aggiornamento account' }, { status: 500 })
-    }
-
-    const { error: profileUpdateError } = await admin
-      .from('profiles')
-      .update({ must_change_password: false })
-      .eq('id', account.owner_profile_id)
-    if (profileUpdateError) {
-      return NextResponse.json({ error: 'Errore aggiornamento profilo' }, { status: 500 })
     }
 
     return NextResponse.json({ ok: true })
