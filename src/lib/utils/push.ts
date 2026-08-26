@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import webPush from 'web-push'
 
 type PushPayload = {
   title: string
@@ -8,24 +9,15 @@ type PushPayload = {
   badge?: string
 }
 
-async function getWebPush() {
-  try {
-    // Use eval('require') to avoid bundler static resolution when dependency is missing
-    // This lets the app build even if 'web-push' is not yet installed.
-    // At runtime, if the module is missing, we catch and skip gracefully.
-    // eslint-disable-next-line no-eval
-    const req: any = eval('require')
-    const webPush = req('web-push') as any
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-    const privateKey = process.env.VAPID_PRIVATE_KEY
-    const subject = process.env.VAPID_SUBJECT || 'mailto:no-reply@csroma.it'
-    if (!publicKey || !privateKey) throw new Error('Missing VAPID keys')
-    webPush.setVapidDetails(subject, publicKey, privateKey)
-    return webPush
-  } catch (e) {
-    console.warn('[push] web-push unavailable or VAPID missing. Install "web-push" and set VAPID keys. Skipping push send. Error:', e)
-    return null
+function configureWebPush() {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+  const subject = process.env.VAPID_SUBJECT || 'mailto:no-reply@csroma.it'
+  if (!publicKey || !privateKey) {
+    return { configured: false as const, reason: 'VAPID keys are not configured on the server' }
   }
+  webPush.setVapidDetails(subject, publicKey, privateKey)
+  return { configured: true as const }
 }
 
 async function fetchUserSubscriptions(profileId: string) {
@@ -47,16 +39,23 @@ async function fetchUserSubscriptions(profileId: string) {
 }
 
 export async function sendToUser(profileId: string, payload: PushPayload) {
-  const webPush = await getWebPush()
-  if (!webPush) return { skipped: true }
+  const configuration = configureWebPush()
+  if (!configuration.configured) {
+    console.warn(`[push] skipped: ${configuration.reason}`)
+    return { skipped: true, sent: 0, failed: 0, reason: configuration.reason }
+  }
   const subs = await fetchUserSubscriptions(profileId)
+  let sent = 0
+  let failed = 0
   await Promise.all(subs.map(async (s: any) => {
     try {
       await webPush.sendNotification({
         endpoint: s.endpoint,
         keys: { p256dh: s.p256dh, auth: s.auth },
       }, JSON.stringify(payload))
+      sent += 1
     } catch (e: any) {
+      failed += 1
       if (e?.statusCode === 404 || e?.statusCode === 410) {
         const admin = createAdminClient()
         await admin.from('push_subscriptions').update({ revoked: true }).eq('id', s.id)
@@ -65,6 +64,7 @@ export async function sendToUser(profileId: string, payload: PushPayload) {
       }
     }
   }))
+  return { skipped: false, subscriptions: subs.length, sent, failed }
 }
 
 export async function sendToUsers(userIds: string[], payload: PushPayload) {

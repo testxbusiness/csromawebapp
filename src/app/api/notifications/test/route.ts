@@ -12,14 +12,23 @@ export async function POST(req: NextRequest) {
     const parsed = pushTestSchema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) return NextResponse.json({ error: 'Notifica non valida' }, { status: 400 })
     const payload = parsed.data
-    await sendToUser(account.ownerProfileId, {
+    const result = await sendToUser(account.ownerProfileId, {
       title: payload?.title || 'Notifica di test',
       body: payload?.body || 'Le push sono attive su questo dispositivo',
       url: payload?.url || '/dashboard',
       icon: payload?.icon || '/images/logo_CSRoma.png',
       badge: payload?.badge || '/favicon.ico',
     })
-    return NextResponse.json({ success: true })
+    if (result.skipped) {
+      return NextResponse.json({ success: false, error: result.reason }, { status: 503 })
+    }
+    if (result.subscriptions === 0) {
+      return NextResponse.json({ success: false, error: 'Nessuna subscription push attiva per questo account' }, { status: 404 })
+    }
+    if (result.sent === 0) {
+      return NextResponse.json({ success: false, error: 'Invio push fallito', failed: result.failed }, { status: 502 })
+    }
+    return NextResponse.json({ success: true, sent: result.sent, failed: result.failed })
   } catch (e) {
     if (e instanceof AccountContextError) {
       return NextResponse.json({ error: e.message }, { status: e.status })
