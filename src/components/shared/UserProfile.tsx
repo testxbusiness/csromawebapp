@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { JerseyCard } from '@/components/athlete/JerseyCard'
 import { usePush } from '@/hooks/usePush'
+import InstallPwaButton from '@/components/pwa/InstallPwaButton'
 
 interface ProfileData {
   first_name: string
@@ -466,6 +467,14 @@ export default function UserProfile({ userRole }: UserProfileProps) {
                 )}
               </div>
             )}
+          </div>
+
+          <div className="cs-card cs-card--primary flex flex-wrap items-center justify-between gap-4 p-6">
+            <div>
+              <h2 className="text-xl font-semibold mb-1">App CSRoma</h2>
+              <p className="text-sm text-secondary">Installa CSRoma per un accesso più rapido dal dispositivo.</p>
+            </div>
+            <InstallPwaButton />
           </div>
             
         </div>

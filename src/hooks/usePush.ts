@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback } from 'react'
+import { registerServiceWorker } from '@/lib/pwa/service-worker-registration'
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -13,9 +14,7 @@ function urlBase64ToUint8Array(base64String: string) {
 
 export function usePush() {
   const registerSW = useCallback(async () => {
-    if (!('serviceWorker' in navigator)) return null
-    const reg = await navigator.serviceWorker.register('/push-sw.js')
-    return reg
+    return registerServiceWorker()
   }, [])
 
   const subscribe = useCallback(async (label?: string) => {
@@ -27,10 +26,14 @@ export function usePush() {
     const vapid = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
     if (!vapid) throw new Error('Missing VAPID public key')
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapid) })
+    const json = sub.toJSON()
+    const keys = json.keys
+    if (!keys?.p256dh || !keys.auth) throw new Error('Push subscription keys unavailable')
+
     const res = await fetch('/api/notifications/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endpoint: sub.endpoint, keys: (sub as any).toJSON().keys, user_agent: navigator.userAgent, device_label: label || null })
+      body: JSON.stringify({ endpoint: sub.endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth }, user_agent: navigator.userAgent, device_label: label || null })
     })
     if (!res.ok) throw new Error('Subscription save failed')
     return sub
@@ -48,4 +51,3 @@ export function usePush() {
 
   return { registerSW, subscribe, unsubscribe }
 }
-

@@ -50,6 +50,11 @@ export default defineConfig({
       testMatch: /family-profile-selection\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'pwa-chromium',
+      testMatch: /pwa\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
   ],
 
   globalSetup: require.resolve('./tests/e2e/global-setup'),
