@@ -122,16 +122,18 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 ## 5. Piano di implementazione per fasi
 
+> Stato aggiornato al 26/08/2026. `[x]` indica implementazione o verifica completata; `[ ]` indica attività ancora da eseguire o da validare su staging/dispositivi reali.
+
 ### Fase 0 — Baseline e criteri di prodotto
 
 **Obiettivo:** fissare comportamento corrente e perimetro della release.
 
-- [ ] Creare un branch `codex/pwa` o equivalente.
-- [ ] Eseguire e salvare l'esito baseline di `npm test`, `npx tsc --noEmit` e `npm run build`.
-- [ ] Verificare separatamente `npm run lint`: con Next.js 15 lo script `next lint` può essere un debito preesistente; se fallisce per comando rimosso, registrarlo senza mescolarne la correzione al lavoro PWA.
-- [ ] Confermare i colori installazione: `theme_color` CSRoma rosso `#d71920`, `background_color` chiaro `#f7f7fb`.
-- [ ] Confermare naming: nome esteso `CSRoma Control Center`, nome breve `CSRoma`.
-- [ ] Concordare che l'MVP è “installabile + fallback offline”, non “gestionale completamente utilizzabile offline”.
+- [x] Creare un branch `codex/pwa` o equivalente e pubblicarlo su GitHub.
+- [x] Eseguire e salvare l'esito baseline di `npm test`, `npx tsc --noEmit` e `npm run build`.
+- [x] Verificare separatamente `npm run lint`: con Next.js 15 lo script è deprecato ma nel repository passa senza errori.
+- [x] Confermare i colori installazione: `theme_color` CSRoma rosso `#d71920`, `background_color` chiaro `#f7f7fb`.
+- [x] Confermare naming: nome esteso `CSRoma Control Center`, nome breve `CSRoma`.
+- [x] Concordare che l'MVP è “installabile + fallback offline”, non “gestionale completamente utilizzabile offline”.
 - [ ] Acquisire screenshot Lighthouse/PWA e misure iniziali su staging HTTPS.
 
 **Uscita:** baseline riproducibile e scope firmato.
@@ -140,8 +142,8 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 **File:** `src/app/manifest.ts`, `src/app/layout.tsx`, `public/icons/*`.
 
-- [ ] Creare `src/app/manifest.ts` usando il tipo `MetadataRoute.Manifest`.
-- [ ] Configurare nel manifest:
+- [x] Creare `src/app/manifest.ts` usando il tipo `MetadataRoute.Manifest`.
+- [x] Configurare nel manifest:
   - `id: "/"`;
   - `name: "CSRoma Control Center"`;
   - `short_name: "CSRoma"`;
@@ -153,9 +155,9 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
   - `background_color: "#f7f7fb"`;
   - `theme_color: "#d71920"`;
   - icone 192, 512 e maskable 512 con `purpose` corretto.
-- [ ] Generare le icone da una tavola quadrata, non deformando il logo rettangolare. Lasciare area sicura di almeno il 20% per l'icona maskable.
+- [x] Generare le icone da una tavola quadrata, non deformando il logo rettangolare. Lasciare area sicura di almeno il 20% per l'icona maskable.
 - [ ] Controllare visivamente le icone su sfondo chiaro, scuro e con crop circolare/squircle.
-- [ ] Aggiornare `src/app/layout.tsx`:
+- [x] Aggiornare `src/app/layout.tsx`:
   - cambiare `<html lang="en">` in `<html lang="it">`;
   - aggiungere `applicationName`, `manifest`, `appleWebApp` e icone Apple;
   - impostare `themeColor` nel viewport per tema chiaro/scuro;
@@ -173,10 +175,10 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 **File:** `public/sw.js`, `public/push-sw.js`, `src/lib/pwa/service-worker-registration.ts`, `src/components/pwa/PwaBootstrap.tsx`, `src/hooks/usePush.ts`, `src/components/navigation/LayoutShell.tsx`.
 
-- [ ] Copiare nel nuovo `public/sw.js` i listener `push` e `notificationclick` esistenti prima di aggiungere logica cache.
-- [ ] Definire nomi cache versionati e separati, ad esempio `csroma-precache-v1`, `csroma-static-v1`, `csroma-images-v1`.
-- [ ] Precacheare soltanto `offline.html` e le icone essenziali. Non precacheare `/dashboard`, `/login`, bundle Next o immagini grandi.
-- [ ] Implementare `fetch` con guard clause, nell'ordine:
+- [x] Copiare nel nuovo `public/sw.js` i listener `push` e `notificationclick` esistenti prima di aggiungere logica cache.
+- [x] Definire nomi cache versionati e separati (`csroma-precache-v2`, `csroma-static-v1`, `csroma-images-v1`).
+- [x] Precacheare soltanto `offline.html`, icone essenziali e loghi CSRoma. Non precacheare `/dashboard`, `/login`, bundle Next o immagini grandi.
+- [x] Implementare `fetch` con guard clause, nell'ordine:
   1. ignorare richieste non `GET`;
   2. lasciare network-only `/api/**`;
   3. lasciare network-only richieste cross-origin, incluse quelle Supabase;
@@ -184,16 +186,16 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
   5. per `request.mode === "navigate"`, tentare la rete e restituire `offline.html` solo in caso di errore di rete;
   6. applicare cache-first a `/_next/static/**`;
   7. applicare stale-while-revalidate alle sole immagini locali.
-- [ ] Limitare la cache immagini (es. 30 entry) ed eliminare le entry più vecchie quando si supera il limite.
-- [ ] Durante `activate`, eliminare solo cache CSRoma con versione precedente; non eliminare cache di altri software/origini.
-- [ ] Implementare la validazione same-origin delle URL push e correggere la navigazione dei client già aperti.
-- [ ] Creare un helper singleton `getServiceWorkerRegistration()` che:
+- [x] Limitare la cache immagini a 30 entry ed eliminare le entry più vecchie quando si supera il limite.
+- [x] Durante `activate`, eliminare solo cache CSRoma con versione precedente; non eliminare cache di altri software/origini.
+- [x] Implementare la validazione same-origin delle URL push e correggere la navigazione dei client già aperti.
+- [x] Creare un helper singleton per la registrazione del service worker che:
   - ritorna `null` fuori dal browser o se il browser non supporta i worker;
   - registra `/sw.js` con scope `/` una sola volta;
   - espone errori diagnostici senza bloccare il rendering.
-- [ ] Montare `PwaBootstrap` in `src/app/layout.tsx`.
-- [ ] Rimuovere la registrazione del worker da `LayoutShell`; il layout non deve conoscere i dettagli push/PWA.
-- [ ] Modificare `usePush` perché recuperi la stessa registrazione `/sw.js`; eliminare cast `any` delle chiavi della subscription introducendo un tipo/guard per `PushSubscriptionJSON`.
+- [x] Montare `PwaBootstrap` in `src/app/layout.tsx`.
+- [x] Rimuovere la registrazione del worker da `LayoutShell`; il layout non deve conoscere i dettagli push/PWA.
+- [x] Modificare `usePush` perché recuperi la stessa registrazione `/sw.js` ed eliminare il cast `any` delle chiavi della subscription.
 - [ ] Dopo almeno una release di migrazione, rimuovere `public/push-sw.js`. Prima della rimozione verificare che registrare `/sw.js` sullo stesso scope aggiorni effettivamente la registrazione esistente su un browser che aveva già `/push-sw.js`.
 
 **Criteri di accettazione:**
@@ -208,19 +210,19 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 **File:** `src/middleware.ts`, `next.config.js`.
 
-- [ ] Trattare come pubblici/bypass nel middleware:
+- [x] Trattare come pubblici/bypass nel middleware:
   - `/manifest.webmanifest`;
   - `/sw.js`;
   - `/offline.html`;
   - `/icons/**`.
-- [ ] Aggiornare anche `config.matcher`, non soltanto le guard clause interne, per evitare lavoro SSR e redirect sugli asset PWA.
-- [ ] Conservare temporaneamente l'eccezione `/push-sw.js` durante la release di migrazione.
-- [ ] Aggiungere `headers()` in `next.config.js`:
+- [x] Aggiornare anche `config.matcher`, non soltanto le guard clause interne, per evitare lavoro SSR e redirect sugli asset PWA.
+- [x] Conservare temporaneamente l'eccezione `/push-sw.js` durante la release di migrazione.
+- [x] Aggiungere `headers()` in `next.config.js`:
   - `/sw.js`: `Cache-Control: no-cache, no-store, must-revalidate`;
   - `/manifest.webmanifest`: cache breve con revalidation;
   - `/icons/**`: cache lunga e immutable quando i filename sono versionati;
   - `X-Content-Type-Options: nosniff` almeno per worker e manifest.
-- [ ] Verificare che `/sw.js` risponda con JavaScript e non con una pagina HTML/redirect autenticazione.
+- [ ] Verificare che `/sw.js` risponda con JavaScript e non con una pagina HTML/redirect autenticazione su Preview Vercel.
 - [ ] Verificare HTTPS in staging/produzione; in sviluppo il service worker è consentito su `localhost`.
 
 **Criteri di accettazione:** `curl -I` su manifest, worker, fallback e icone restituisce `200`, content type corretto e nessun `Location: /login`.
@@ -229,17 +231,17 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 **File:** `public/offline.html`, `src/components/pwa/ConnectivityBanner.tsx`, `src/components/pwa/InstallPwaButton.tsx`, `src/components/pwa/PwaBootstrap.tsx`, `src/components/shared/UserProfile.tsx`, `src/app/globals.css`.
 
-- [ ] Creare `offline.html` autonomo: CSS inline minimo, logo/icona locale, testo in italiano, pulsante “Riprova” e nessuna informazione utente.
-- [ ] Inserire un banner globale quando `navigator.onLine === false`; usare `role="status"`/`aria-live="polite"` e un testo che chiarisca che le modifiche non sono disponibili.
-- [ ] Al ritorno online, nascondere il banner e lasciare ai moduli esistenti il normale refresh su focus/visibility.
-- [ ] Non intercettare o accodare automaticamente submit, upload, DELETE/PATCH/POST. Un retry non idempotente potrebbe duplicare pagamenti, messaggi, presenze o eventi.
-- [ ] Implementare `InstallPwaButton` nel profilo utente:
+- [x] Creare `offline.html` autonomo: CSS inline minimo, logo/icona locale, testo in italiano, pulsante “Riprova” e nessuna informazione utente.
+- [x] Inserire un banner globale quando `navigator.onLine === false`; usare `role="status"`/`aria-live="polite"` e un testo che chiarisca che le modifiche non sono disponibili.
+- [x] Al ritorno online, nascondere il banner e lasciare ai moduli esistenti il normale refresh su focus/visibility.
+- [x] Non intercettare o accodare automaticamente submit, upload, DELETE/PATCH/POST. Un retry non idempotente potrebbe duplicare pagamenti, messaggi, presenze o eventi.
+- [x] Implementare `InstallPwaButton` nel profilo utente:
   - catturare `beforeinstallprompt` dove supportato;
   - nascondere il comando se l'app è già standalone;
   - su iOS mostrare istruzioni “Condividi → Aggiungi alla schermata Home”;
   - non mostrare popup automatici al primo accesso.
-- [ ] Gestire l'evento `appinstalled` per aggiornare lo stato UI.
-- [ ] Mostrare l'update prompt soltanto quando un worker nuovo è `waiting`; al click inviare `SKIP_WAITING` e ricaricare una sola volta.
+- [x] Gestire l'evento `appinstalled` per aggiornare lo stato UI.
+- [x] Mostrare l'update prompt soltanto quando un worker nuovo è `waiting`; al click inviare `SKIP_WAITING` e ricaricare una sola volta.
 - [ ] Aggiungere CSS `@media (display-mode: standalone)` soltanto per adattamenti realmente necessari (safe area, altezza e spaziature).
 
 **Criteri di accettazione:**
@@ -253,12 +255,12 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 **File:** `src/hooks/useAuth.ts`, `src/components/navigation/LayoutShell.tsx`, worker e registrazione PWA.
 
-- [ ] Documentare con un test che Cache Storage non contiene URL `/api/`, query `_rsc`, URL Supabase, signed URL o HTML di route protette.
-- [ ] Su logout continuare a rimuovere `csroma_profile_cache` da `sessionStorage` e inviare al worker un messaggio `CLEAR_RUNTIME_CACHES`.
-- [ ] `CLEAR_RUNTIME_CACHES` deve svuotare solo cache runtime pubbliche CSRoma, non disiscrivere automaticamente le push. La disiscrizione push resta un'azione esplicita dell'utente.
-- [ ] Non includere nomi, ruoli, eventi, messaggi o importi nel fallback offline.
-- [ ] Verificare che il payload push non consenta navigazione cross-origin.
-- [ ] Verificare che il worker non aggiunga header auth, non legga token e non serializzi cookie/sessioni.
+- [ ] Documentare con un test eseguito che Cache Storage non contiene URL `/api/`, query `_rsc`, URL Supabase, signed URL o HTML di route protette (test Playwright scritto, esecuzione ancora da completare).
+- [x] Su logout continuare a rimuovere `csroma_profile_cache` da `sessionStorage` e inviare al worker un messaggio `CLEAR_RUNTIME_CACHES`.
+- [x] `CLEAR_RUNTIME_CACHES` svuota solo cache runtime pubbliche CSRoma e non disiscrive automaticamente le push.
+- [x] Non includere nomi, ruoli, eventi, messaggi o importi nel fallback offline.
+- [x] Verificare nel codice che il payload push non consenta navigazione cross-origin.
+- [x] Verificare nel codice che il worker non aggiunga header auth, non legga token e non serializzi cookie/sessioni.
 - [ ] Aggiungere una nota privacy su dati conservati localmente: nell'MVP sono solo asset pubblici e preferenze esistenti.
 
 **Criteri di accettazione:** cambio account sullo stesso dispositivo senza riavviare il browser non mostra dati o schermate del precedente account.
@@ -269,14 +271,14 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 #### Test Playwright Chromium
 
-- [ ] Aggiungere un progetto `pwa-chromium` che includa `pwa.spec.ts`; i progetti attuali hanno `testMatch` restrittivi.
-- [ ] Testare `GET /manifest.webmanifest`: status, campi obbligatori, start URL e icone.
-- [ ] Testare `GET /sw.js`: status, content type e assenza di redirect.
-- [ ] Aprire `/login`, attendere `navigator.serviceWorker.ready` e verificare scope/script URL.
-- [ ] Portare il browser context offline, navigare a una route e verificare titolo/testo del fallback.
-- [ ] Ispezionare `caches.keys()` e le request memorizzate; fallire se compaiono `/api/`, `_rsc`, host Supabase o route protette.
+- [x] Aggiungere un progetto `pwa-chromium` che includa `pwa.spec.ts`; i progetti attuali hanno `testMatch` restrittivi.
+- [x] Scrivere il test `GET /manifest.webmanifest`: status, campi obbligatori, start URL e icone.
+- [x] Scrivere il test `GET /sw.js`: status, content type e assenza di redirect.
+- [x] Scrivere il test per `/login`, `navigator.serviceWorker.ready` e scope/script URL.
+- [x] Scrivere il test di navigazione offline verso il fallback.
+- [x] Scrivere il controllo che Cache Storage non contenga `/api/`, `_rsc`, host Supabase o route protette.
 - [ ] Simulare messaggi del worker per verificare il flusso update senza reload multipli.
-- [ ] Ripristinare sempre la rete in `finally` per non contaminare i test successivi.
+- [x] Ripristinare sempre la rete in `finally` per non contaminare i test successivi.
 
 #### Test unitari
 
@@ -304,7 +306,7 @@ npm run build
 npm run test:e2e -- --project=pwa-chromium
 ```
 
-Eseguire inoltre Lighthouse in modalità mobile sulla build di produzione/staging, non sul dev server. Verificare almeno manifest installabile, service worker controllante, HTTPS, viewport e assenza di errori console.
+Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build` e `npm run lint` sono passati. Il comando Playwright è stato aggiunto ma non ha completato l'avvio nel sandbox gestito per un errore di binding/browser; va eseguito in CI o su staging. Eseguire inoltre Lighthouse in modalità mobile sulla build di produzione/staging, non sul dev server. Verificare almeno manifest installabile, service worker controllante, HTTPS, viewport e assenza di errori console.
 
 ### Fase 7 — Rollout, osservabilità e rollback
 
@@ -319,7 +321,7 @@ Eseguire inoltre Lighthouse in modalità mobile sulla build di produzione/stagin
   - errori di caricamento chunk dopo deploy.
 - [ ] Rendere diagnostica la versione del worker, senza includere dati utente.
 - [ ] Preparare un worker di rollback che in `activate` elimina le sole cache `csroma-*`, chiama `unregister()` e forza i client a ricaricare online.
-- [ ] Conservare il vecchio endpoint `/push-sw.js` per una release di transizione; rimuoverlo solo dopo verifica della migrazione.
+- [x] Conservare il vecchio endpoint `/push-sw.js` per una release di transizione; rimuoverlo solo dopo verifica della migrazione.
 - [ ] Aggiornare `README.md` con installazione, comportamento offline, HTTPS/VAPID, procedura di debug e rollback.
 
 **Go/no-go produzione:** nessuna regressione auth/RBAC, push funzionanti, nessun dato autenticato in cache, test PWA verdi e upgrade del worker verificato su almeno un device per piattaforma target.
@@ -400,13 +402,13 @@ Non implementare background sync generico per pagamenti, presenze, messaggi, upl
 
 La trasformazione PWA è conclusa quando:
 
-- [ ] l'app è installabile con nome, icone e colori corretti;
+- [ ] l'app è installabile con nome, icone e colori corretti (manifest verificato, installazione reale ancora da completare);
 - [ ] l'avvio standalone porta a `/dashboard` e rispetta il flusso auth;
-- [ ] esiste una sola registration service worker a scope `/`;
+- [x] esiste una sola registration service worker a scope `/`;
 - [ ] le notifiche push continuano a funzionare su subscription nuove ed esistenti;
-- [ ] il fallback offline è accessibile, leggibile e non contiene dati personali;
-- [ ] nessun dato/API/RSC autenticato è persistito dal worker;
+- [x] il fallback offline è accessibile, leggibile e non contiene dati personali;
+- [ ] nessun dato/API/RSC autenticato è persistito dal worker (test automatico scritto, esecuzione da completare);
 - [ ] aggiornamenti e rollback del worker sono controllati;
 - [ ] i test automatici e la matrice dispositivi sono completati;
-- [ ] build, TypeScript e suite di regressione passano;
+- [x] build, TypeScript, lint e suite Jest passano;
 - [ ] README e runbook operativo sono aggiornati.
