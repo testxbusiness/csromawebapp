@@ -1,9 +1,15 @@
 /* CSRoma PWA + Push service worker. Keep this file dependency-free. */
 
-const PRECACHE = 'csroma-precache-v1'
+const PRECACHE = 'csroma-precache-v2'
 const STATIC_CACHE = 'csroma-static-v1'
 const IMAGE_CACHE = 'csroma-images-v1'
-const PRECACHE_URLS = ['/offline.html', '/icons/icon-192.png', '/icons/icon-512.png']
+const PRECACHE_URLS = [
+  '/offline.html',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/images/logo_CSRoma.svg',
+  '/images/logo_CSRoma.png',
+]
 const MAX_IMAGE_ENTRIES = 30
 
 function isSameOrigin(requestUrl) {
