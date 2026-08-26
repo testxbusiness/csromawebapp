@@ -206,6 +206,26 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 - click su push porta alla route corretta sia con app chiusa sia con app già aperta;
 - nessuna risposta `/api/**`, RSC o Supabase compare in Cache Storage.
 
+### Fase 2.5 — Badge notifiche non lette (incremento post-MVP)
+
+**Obiettivo:** mostrare sull’icona della PWA il numero di messaggi non letti, mantenendolo coerente con l’account attivo senza considerarlo una fonte autorevole.
+
+- [ ] Calcolare lato server il conteggio non letto per account, includendo destinatari diretti, squadre e profili familiari autorizzati.
+- [ ] Estendere il payload push con un campo numerico `unreadCount` personalizzato per ogni account destinatario. Non raggruppare invii con conteggi diversi nello stesso payload.
+- [ ] Nel service worker, usare `setAppBadge(unreadCount)` quando la Badging API è disponibile; usare `clearAppBadge()` quando il conteggio è zero.
+- [ ] Ricalcolare il conteggio quando la PWA torna in foreground o diventa visibile, così da correggere push perse o letture effettuate da un altro dispositivo.
+- [ ] Aggiornare/azzerare il badge dopo la lettura dei messaggi e gestire il logout senza usare il badge come meccanismo di autorizzazione.
+- [ ] Prevedere fallback silenzioso per browser, launcher o versioni iOS che non espongono la Badging API.
+- [ ] Testare separatamente: iOS PWA Home Screen, Android PWA installata, browser desktop, più dispositivi dello stesso account e cambio account sullo stesso dispositivo.
+
+**Criteri di accettazione:**
+
+- il conteggio visualizzato è specifico per account e non espone dati di altri utenti;
+- dopo una push il badge viene aggiornato quando la piattaforma lo supporta;
+- aprendo l’app il badge viene riallineato al conteggio server-side;
+- leggendo tutti i messaggi il badge viene azzerato;
+- se la Badging API non è disponibile, l’app continua a funzionare senza errori né regressioni sulle push.
+
 ### Fase 3 — Routing, middleware e header HTTP
 
 **File:** `src/middleware.ts`, `next.config.js`.
@@ -365,6 +385,14 @@ La PR è rilasciabile ma non registra ancora il nuovo worker.
 - aggiornamento README;
 - rimozione del worker legacy solo dopo la finestra di transizione.
 
+### PR 5 — Badge notifiche non lette (opzionale, post-MVP)
+
+- conteggio non letto server-side per account;
+- payload push con `unreadCount` per destinatario;
+- aggiornamento e pulizia badge nel worker e al ritorno in foreground;
+- fallback per piattaforme senza Badging API;
+- test multi-account e multi-dispositivo.
+
 ## 7. Stima e dipendenze
 
 | Attività | Stima indicativa |
@@ -374,6 +402,7 @@ La PR è rilasciabile ma non registra ancora il nuovo worker.
 | UX offline/install/update e logout | 1 giorno |
 | Test automatici e regressione auth/push | 1–1,5 giorni |
 | Staging, device test, documentazione e rollout | 0,5–1 giorno |
+| Badge notifiche non lette (post-MVP) | 1–2 giorni |
 | **Totale MVP** | **4–6 giorni persona** |
 
 Dipendenze esterne:
