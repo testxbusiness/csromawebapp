@@ -332,7 +332,8 @@ Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build` e `npm run lint` 
 
 - [x] Rendere il sender push compatibile con il bundle serverless Vercel usando l'import statico di `web-push`.
 - [x] Rendere `/api/notifications/test` diagnostico: segnala VAPID mancanti, subscription assenti e invii falliti invece di restituire falsi successi.
-- [ ] Distribuire prima su staging HTTPS con VAPID reali di staging.
+- [x] Distribuire prima su staging HTTPS con VAPID reali di staging.
+- [x] Verificare manualmente le notifiche push su iPhone e Android: attivazione, ricezione con app chiusa e apertura tramite click.
 - [ ] Testare upgrade da una sessione che possiede già `push-sw.js`, non soltanto installazioni pulite.
 - [ ] Distribuire in produzione a un gruppo pilota interno (admin + un coach + un atleta/familiare).
 - [ ] Monitorare per 48–72 ore:
