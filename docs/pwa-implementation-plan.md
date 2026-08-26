@@ -226,6 +226,29 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 - leggendo tutti i messaggi il badge viene azzerato;
 - se la Badging API non è disponibile, l’app continua a funzionare senza errori né regressioni sulle push.
 
+### Fase 2.6 — Notifiche di dominio: convocazioni (estensione post-MVP)
+
+**Obiettivo:** riutilizzare l’infrastruttura Web Push per notificare eventi applicativi diversi dai messaggi, iniziando dalle convocazioni di campionato.
+
+- [ ] Definire l’evento di pubblicazione: notificare solo la prima pubblicazione o i nuovi atleti aggiunti, non ogni salvataggio indistinto.
+- [ ] Spostare il salvataggio della convocazione dietro un Route Handler/server action con verifica server-side del ruolo admin/coach e della squadra gestita.
+- [ ] Salvare la convocazione e determinare i nuovi membri convocati prima di avviare l’invio; un errore push non deve annullare il salvataggio.
+- [ ] Risolvere gli atleti destinatari da `championship_match_convocation_members.profile_id` e i familiari autorizzati tramite `profile_relationships` con relazione attiva, validità temporale e `can_receive_messages = true`.
+- [ ] Inviare payload dedicati: titolo “Nuova convocazione”, riepilogo gara e URL atleta `/athlete/campionati` oppure area familiare `/dashboard`.
+- [ ] Rendere l’operazione idempotente per evitare notifiche duplicate in caso di doppio salvataggio, retry o modifica delle note.
+- [ ] Registrare log tecnici aggregati di destinatari, invii riusciti, fallimenti e subscription revocate senza includere contenuti sensibili oltre il necessario.
+- [ ] Prevedere successivamente lo stesso pattern per scadenze, variazioni calendario, pagamenti e altri eventi, con resolver destinatari specifici per dominio.
+
+**Criteri di accettazione:**
+
+- un atleta convocato riceve una sola push per pubblicazione;
+- un atleta non convocato non riceve la push;
+- un familiare autorizzato del convocato riceve la push;
+- un familiare senza `can_receive_messages` non riceve la push;
+- modificare note o salvare senza nuovi convocati non genera duplicati;
+- il click apre la sezione corretta e mantiene i controlli di autorizzazione;
+- il salvataggio resta riuscito anche se una o più push falliscono.
+
 ### Fase 3 — Routing, middleware e header HTTP
 
 **File:** `src/middleware.ts`, `next.config.js`.
@@ -394,6 +417,14 @@ La PR è rilasciabile ma non registra ancora il nuovo worker.
 - fallback per piattaforme senza Badging API;
 - test multi-account e multi-dispositivo.
 
+### PR 6 — Notifiche di dominio: convocazioni (post-MVP)
+
+- endpoint server-side per pubblicazione e salvataggio convocazioni;
+- resolver destinatari atleta/familiari autorizzati;
+- payload push con deep link a campionati o area familiare;
+- idempotenza e prevenzione notifiche duplicate;
+- test di autorizzazione e regressione multi-dispositivo.
+
 ## 7. Stima e dipendenze
 
 | Attività | Stima indicativa |
@@ -404,6 +435,7 @@ La PR è rilasciabile ma non registra ancora il nuovo worker.
 | Test automatici e regressione auth/push | 1–1,5 giorni |
 | Staging, device test, documentazione e rollout | 0,5–1 giorno |
 | Badge notifiche non lette (post-MVP) | 1–2 giorni |
+| Notifiche convocazioni (post-MVP) | 1,5–2,5 giorni |
 | **Totale MVP** | **4–6 giorni persona** |
 
 Dipendenze esterne:
