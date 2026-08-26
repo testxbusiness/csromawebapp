@@ -1,14 +1,15 @@
 import { chromium, type FullConfig } from '@playwright/test'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { e2eEnv } from './test-env'
 
 const authFile = path.resolve('test-results/.auth/admin.json')
 
 export default async function globalSetup(config: FullConfig) {
   await mkdir(path.dirname(authFile), { recursive: true })
 
-  const email = process.env.E2E_ADMIN_EMAIL
-  const password = process.env.E2E_ADMIN_PASSWORD
+  const email = e2eEnv('E2E_ADMIN_EMAIL')
+  const password = e2eEnv('E2E_ADMIN_PASSWORD')
 
   if (!email || !password) {
     await writeFile(authFile, JSON.stringify({ cookies: [], origins: [] }))

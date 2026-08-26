@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { e2eEnv } from './test-env'
 
 test('preserves the selected athlete profile for a family account', async ({ page }) => {
-  const email = process.env.E2E_GENITORE_EMAIL
-  const password = process.env.E2E_GENITORE_PASSWORD
+  const email = e2eEnv('E2E_GENITORE_EMAIL')
+  const password = e2eEnv('E2E_GENITORE_PASSWORD')
 
   test.skip(!email || !password, 'Family E2E credentials are not configured')
 

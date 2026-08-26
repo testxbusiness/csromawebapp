@@ -1,12 +1,13 @@
 import { expect, test, type Page } from '@playwright/test'
+import { e2eEnv } from './test-env'
 
-const coachEmail = process.env.E2E_COACH_EMAIL
-const coachPassword = process.env.E2E_COACH_PASSWORD
-const athleteEmail = process.env.E2E_ATHLETE_EMAIL
-const athletePassword = process.env.E2E_ATHLETE_PASSWORD
+const coachEmail = e2eEnv('E2E_COACH_EMAIL')
+const coachPassword = e2eEnv('E2E_COACH_PASSWORD')
+const athleteEmail = e2eEnv('E2E_ATHLETE_EMAIL')
+const athletePassword = e2eEnv('E2E_ATHLETE_PASSWORD')
 
-const foreignMessageId = process.env.E2E_BOLA_MESSAGE_ID
-const foreignEventId = process.env.E2E_BOLA_EVENT_ID
+const foreignMessageId = e2eEnv('E2E_BOLA_MESSAGE_ID')
+const foreignEventId = e2eEnv('E2E_BOLA_EVENT_ID')
 
 async function login(page: Page, email: string, password: string) {
   await page.goto('/login')
