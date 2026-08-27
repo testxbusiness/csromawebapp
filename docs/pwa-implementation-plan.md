@@ -298,13 +298,13 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 **File:** `src/hooks/useAuth.ts`, `src/components/navigation/LayoutShell.tsx`, worker e registrazione PWA.
 
-- [ ] Documentare con un test eseguito che Cache Storage non contiene URL `/api/`, query `_rsc`, URL Supabase, signed URL o HTML di route protette (test Playwright scritto, esecuzione ancora da completare).
+- [x] Verificare e documentare che Cache Storage contiene soltanto asset pubblici (`offline.html`, icone, `/_next/static/**` e immagini locali) e non contiene URL `/api/`, query `_rsc`, URL Supabase, signed URL o HTML di route protette.
 - [x] Su logout continuare a rimuovere `csroma_profile_cache` da `sessionStorage` e inviare al worker un messaggio `CLEAR_RUNTIME_CACHES`.
 - [x] `CLEAR_RUNTIME_CACHES` svuota solo cache runtime pubbliche CSRoma e non disiscrive automaticamente le push.
 - [x] Non includere nomi, ruoli, eventi, messaggi o importi nel fallback offline.
 - [x] Verificare nel codice che il payload push non consenta navigazione cross-origin.
 - [x] Verificare nel codice che il worker non aggiunga header auth, non legga token e non serializzi cookie/sessioni.
-- [ ] Aggiungere una nota privacy su dati conservati localmente: nell'MVP sono solo asset pubblici e preferenze esistenti.
+- [x] Aggiungere una nota privacy su dati conservati localmente: nell'MVP sono solo asset pubblici e preferenze esistenti.
 
 **Criteri di accettazione:** cambio account sullo stesso dispositivo senza riavviare il browser non mostra dati o schermate del precedente account.
 
@@ -351,7 +351,7 @@ npm run build
 npm run test:e2e -- --project=pwa-chromium
 ```
 
-Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, i test Playwright PWA/famiglia e gli scenari E2E autorizzativi (admin, BOLA, coach, atleta/genitore) eseguiti sul Preview Vercel sono passati. Sono inoltre stati verificati sul Preview manifest, icone, endpoint pubblici del worker, registration del service worker e fallback offline con ritorno online. La validazione familiare conferma che il profilo atleta personale non viene trattato come relazione familiare. Restano da completare privacy/cache, la matrice dispositivi, il flusso di update del worker e Lighthouse/installazione su staging/produzione.
+Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, i test Playwright PWA/famiglia e gli scenari E2E autorizzativi (admin, BOLA, coach, atleta/genitore) eseguiti sul Preview Vercel sono passati. Sono inoltre stati verificati sul Preview manifest, icone, endpoint pubblici del worker, registration del service worker, fallback offline con ritorno online, contenuto della Cache Storage e isolamento tra account dopo logout/login. La validazione familiare conferma che il profilo atleta personale non viene trattato come relazione familiare. Restano da completare la matrice dispositivi, il flusso di update del worker e Lighthouse/installazione su staging/produzione.
 
 ### Fase 7 — Rollout, osservabilità e rollback
 
