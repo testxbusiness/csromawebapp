@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test'
+import { e2eEnv } from './test-env'
 
-const adminEmail = process.env.E2E_ADMIN_EMAIL
-const adminPassword = process.env.E2E_ADMIN_PASSWORD
+const adminEmail = e2eEnv('E2E_ADMIN_EMAIL')
+const adminPassword = e2eEnv('E2E_ADMIN_PASSWORD')
 
 test.describe('admin authenticated smoke test', () => {
   test.skip(

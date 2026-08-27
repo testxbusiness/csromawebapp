@@ -3,6 +3,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { clearPwaRuntimeCaches } from '@/lib/pwa/service-worker-registration'
 
 type ProfileRow = {
   id: string
@@ -423,6 +424,7 @@ function useAuthState(): UseAuthReturn {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
+    clearPwaRuntimeCaches()
     setUser(null)
     setSession(null)
     setProfile(null)

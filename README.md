@@ -79,13 +79,52 @@ npm start
 - `src/app` – App Router, pagine protette per ruolo e API routes (`/api/*`).
 - `src/components` – UI e moduli di dominio (admin/coach/athlete).
 - `src/lib` – client Supabase, utilità (email, push, excel, notifiche).
-- `public` – asset statici e service worker push (`push-sw.js`).
+- `public` – manifest asset offline e service worker unificato (`sw.js`).
 - `supabase/migrations` – schema iniziale del database.
 
 ## Note operative
 - Il login richiede account creati in Supabase (registrazioni aperte disabilitate). Il reset password passa da `/reset-password`.
 - Le notifiche push funzionano solo con HTTPS o `localhost` e richiedono chiavi VAPID valide.
 - Per ambienti cloud, esponi le variabili come secret/ENV e aggiorna `NEXT_PUBLIC_APP_URL` con il dominio pubblico.
+
+## PWA e runbook operativo
+
+La PWA CSRoma usa un unico service worker (`/sw.js`) per caching pubblico, fallback offline e notifiche push. Non vengono memorizzati in Cache Storage dati autenticati, risposte `/api`, richieste Supabase, RSC o pagine protette.
+
+### Installazione e verifica
+
+- **Android/Chrome**: apri il dominio HTTPS, scegli “Installa app” e avvia CSRoma dalla schermata Home.
+- **iPhone/iPad**: apri il sito in Safari, scegli Condividi → “Aggiungi alla schermata Home”.
+- **Desktop Chrome/Edge**: usa l’icona di installazione nella barra degli indirizzi.
+
+Per verificare il worker in Chrome: `F12` → **Application** → **Service Workers**. Deve esserci una sola registrazione con script `/sw.js`, scope `/` e stato `activated and is running`.
+
+### Test offline
+
+Con l’app già caricata, attiva la modalità aereo o disabilita la rete e apri una nuova pagina. Deve apparire il fallback “Connessione assente” con logo CSRoma. Dopo il ripristino della rete, il pulsante “Riprova” deve riportare alla pagina richiesta.
+
+Le mutazioni (messaggi, eventi, presenze, pagamenti, upload e profili) restano online-only: non devono essere ritentate automaticamente offline.
+
+### Aggiornamento del service worker
+
+Dopo un deploy, il worker nuovo può mostrare il banner “È disponibile una nuova versione”. Premendo **Aggiorna**, il worker in attesa viene attivato e l’app ricaricata. Se il banner non compare, chiudi e riapri la PWA con connessione attiva; come ultima risorsa elimina i dati del solo dominio dalle impostazioni del browser e reinstalla.
+
+### Push: configurazione e debug
+
+Le notifiche richiedono HTTPS (oppure `localhost` in sviluppo), permesso del browser e chiavi VAPID configurate in Vercel (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`). Il test diagnostico è disponibile nell’area amministrativa/API notifiche: controllare subscription presenti, risposta di invio e eventuali subscription revocate. Non inserire mai chiavi private o service role nel client o nel repository.
+
+### Deploy e rollback
+
+Prima del deploy eseguire:
+
+```bash
+npx tsc --noEmit
+npm test
+npm run build
+npm run test:e2e -- --project=pwa-chromium
+```
+
+Dopo il deploy verificare manifest, `/sw.js`, installazione e push su almeno un dispositivo iOS e Android. In caso di regressione, promuovere su Vercel l’ultimo commit noto funzionante; quindi riaprire l’app online per consentire l’aggiornamento del worker. Per un dispositivo bloccato, rimuovere i dati del solo dominio e reinstallare la PWA.
 
 ---
 
