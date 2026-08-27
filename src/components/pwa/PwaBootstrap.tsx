@@ -8,6 +8,7 @@ export default function PwaBootstrap() {
   const [offline, setOffline] = useState(false)
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const updateApplied = useRef(false)
+  const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
 
   useEffect(() => {
     const updateConnectivity = () => setOffline(!navigator.onLine)
@@ -28,6 +29,7 @@ export default function PwaBootstrap() {
 
     void registerServiceWorker().then((nextRegistration) => {
       registration = nextRegistration
+      registrationRef.current = nextRegistration
       if (!registration) return
 
       const showUpdate = () => {
@@ -62,14 +64,17 @@ export default function PwaBootstrap() {
       if (installingWorker && installingStateListener) {
         installingWorker.removeEventListener('statechange', installingStateListener)
       }
+      registrationRef.current = null
       navigator.serviceWorker?.removeEventListener('controllerchange', handleControllerChange)
     }
   }, [])
 
   const applyUpdate = () => {
-    if (!navigator.serviceWorker.controller) return
+    const waitingWorker = registrationRef.current?.waiting
+    if (!waitingWorker) return
     updateApplied.current = true
-    navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' })
+    setUpdateAvailable(false)
+    waitingWorker.postMessage({ type: 'SKIP_WAITING' })
   }
 
   return (
