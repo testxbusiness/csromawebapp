@@ -332,6 +332,8 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 #### Matrice manuale su staging HTTPS
 
+Verifiche completate su Preview Vercel: installazione e avvio standalone su iPhone, Android e desktop; fallback offline con modalità aereo e ripristino tramite “Riprova”; logo presente nel fallback; aggiornamento del worker tramite il banner “Aggiorna” verificato su iPhone.
+
 | Ambiente | Installazione | Avvio standalone | Offline fallback | Push | Deep link push | Update |
 |---|---:|---:|---:|---:|---:|---:|
 | Android / Chrome | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -359,7 +361,7 @@ Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, 
 - [x] Rendere `/api/notifications/test` diagnostico: segnala VAPID mancanti, subscription assenti e invii falliti invece di restituire falsi successi.
 - [x] Distribuire prima su staging HTTPS con VAPID reali di staging.
 - [x] Verificare manualmente le notifiche push su iPhone e Android: attivazione, ricezione con app chiusa e apertura tramite click.
-- [ ] Testare upgrade da una sessione che possiede già `push-sw.js`, non soltanto installazioni pulite.
+- [x] Testare l'upgrade da una sessione già installata: il banner “Aggiorna” attiva il worker in attesa e ricarica correttamente l'app, verificato su iPhone.
 - [ ] Distribuire in produzione a un gruppo pilota interno (admin + un coach + un atleta/familiare).
 - [ ] Monitorare per 48–72 ore:
   - errori registrazione/aggiornamento worker;
@@ -468,12 +470,12 @@ Non implementare background sync generico per pagamenti, presenze, messaggi, upl
 
 La trasformazione PWA è conclusa quando:
 
-- [ ] l'app è installabile con nome, icone e colori corretti (manifest verificato, installazione reale ancora da completare);
+- [x] l'app è installabile con nome, icone e colori corretti su iPhone, Android e desktop;
 - [ ] l'avvio standalone porta a `/dashboard` e rispetta il flusso auth;
 - [x] esiste una sola registration service worker a scope `/`;
-- [ ] le notifiche push continuano a funzionare su subscription nuove ed esistenti;
+- [x] le notifiche push continuano a funzionare su subscription nuove ed esistenti;
 - [x] il fallback offline è accessibile, leggibile e non contiene dati personali;
-- [ ] nessun dato/API/RSC autenticato è persistito dal worker (test automatico scritto, esecuzione da completare);
+- [x] nessun dato/API/RSC autenticato è persistito dal worker (verificato via Cache Storage e test automatico);
 - [ ] aggiornamenti e rollback del worker sono controllati;
 - [ ] i test automatici e la matrice dispositivi sono completati;
 - [x] build, TypeScript, lint e suite Jest passano;
