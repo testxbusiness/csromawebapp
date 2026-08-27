@@ -372,7 +372,7 @@ Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, 
 - [ ] Rendere diagnostica la versione del worker, senza includere dati utente.
 - [ ] Preparare un worker di rollback che in `activate` elimina le sole cache `csroma-*`, chiama `unregister()` e forza i client a ricaricare online.
 - [x] Conservare il vecchio endpoint `/push-sw.js` per una release di transizione; rimuoverlo solo dopo verifica della migrazione.
-- [ ] Aggiornare `README.md` con installazione, comportamento offline, HTTPS/VAPID, procedura di debug e rollback.
+- [x] Aggiornare `README.md` con installazione, comportamento offline, HTTPS/VAPID, procedura di debug e rollback.
 
 **Go/no-go produzione:** nessuna regressione auth/RBAC, push funzionanti, nessun dato autenticato in cache, test PWA verdi e upgrade del worker verificato su almeno un device per piattaforma target.
 
