@@ -41,6 +41,7 @@ test.describe('PWA foundation', () => {
       await page.goto('/dashboard', { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { name: 'Connessione assente' })).toBeVisible()
       await expect(page.getByText(/CSRoma tornerà disponibile/)).toBeVisible()
+      await expect(page.locator('img[alt="CSRoma"]')).toHaveJSProperty('naturalWidth', 192)
     } finally {
       await context.setOffline(false)
     }

@@ -85,6 +85,14 @@ self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(request.url)
   if (!isSameOrigin(requestUrl) || isApiRequest(requestUrl) || isRscRequest(request)) return
 
+  // Serve install-time icons from the precache while offline. Without this
+  // branch, an <img> in offline.html falls through to the network even though
+  // the asset is already present in the precache.
+  if (requestUrl.pathname.startsWith('/icons/')) {
+    event.respondWith(caches.match(request).then((response) => response || fetch(request)))
+    return
+  }
+
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(async () => (await caches.match('/offline.html')) || Response.error())
