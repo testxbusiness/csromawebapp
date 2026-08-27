@@ -122,7 +122,7 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 ## 5. Piano di implementazione per fasi
 
-> Stato aggiornato al 26/08/2026. `[x]` indica implementazione o verifica completata; `[ ]` indica attività ancora da eseguire o da validare su staging/dispositivi reali.
+> Stato aggiornato al 27/08/2026. `[x]` indica implementazione o verifica completata; `[ ]` indica attività ancora da eseguire o da validare su staging/dispositivi reali.
 
 ### Fase 0 — Baseline e criteri di prodotto
 
@@ -322,6 +322,7 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 - [x] Scrivere il controllo che Cache Storage non contenga `/api/`, `_rsc`, host Supabase o route protette.
 - [ ] Simulare messaggi del worker per verificare il flusso update senza reload multipli.
 - [x] Ripristinare sempre la rete in `finally` per non contaminare i test successivi.
+- [x] Validare il flusso familiare con l'account dual-role di test `genitore3` su Preview Vercel: accesso all'Area familiare, due profili collegati (U14/U17), selezione di un atleta e persistenza del profilo dopo il reload.
 
 #### Test unitari
 
@@ -349,7 +350,7 @@ npm run build
 npm run test:e2e -- --project=pwa-chromium
 ```
 
-Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build` e `npm run lint` sono passati. Il comando Playwright è stato aggiunto ma non ha completato l'avvio nel sandbox gestito per un errore di binding/browser; va eseguito in CI o su staging. Eseguire inoltre Lighthouse in modalità mobile sulla build di produzione/staging, non sul dev server. Verificare almeno manifest installabile, service worker controllante, HTTPS, viewport e assenza di errori console.
+Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint` e i test Playwright PWA/famiglia eseguiti sul Preview Vercel sono passati. La validazione familiare conferma che il profilo atleta personale non viene trattato come relazione familiare. Restano da completare i test E2E amministrativi completi, la matrice dispositivi e le verifiche Lighthouse/installazione su staging/produzione. Eseguire Lighthouse in modalità mobile sulla build di produzione/staging, non sul dev server; verificare almeno manifest installabile, service worker controllante, HTTPS, viewport e assenza di errori console.
 
 ### Fase 7 — Rollout, osservabilità e rollback
 
