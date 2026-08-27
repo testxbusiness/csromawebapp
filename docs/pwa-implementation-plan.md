@@ -156,7 +156,7 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
   - `theme_color: "#d71920"`;
   - icone 192, 512 e maskable 512 con `purpose` corretto.
 - [x] Generare le icone da una tavola quadrata, non deformando il logo rettangolare. Lasciare area sicura di almeno il 20% per l'icona maskable.
-- [ ] Controllare visivamente le icone su sfondo chiaro, scuro e con crop circolare/squircle.
+- [x] Controllare visivamente le icone su sfondo chiaro, scuro e con crop circolare/squircle.
 - [x] Aggiornare `src/app/layout.tsx`:
   - cambiare `<html lang="en">` in `<html lang="it">`;
   - aggiungere `applicationName`, `manifest`, `appleWebApp` e icone Apple;
@@ -265,7 +265,7 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
   - `/manifest.webmanifest`: cache breve con revalidation;
   - `/icons/**`: cache lunga e immutable quando i filename sono versionati;
   - `X-Content-Type-Options: nosniff` almeno per worker e manifest.
-- [ ] Verificare che `/sw.js` risponda con JavaScript e non con una pagina HTML/redirect autenticazione su Preview Vercel.
+- [x] Verificare che `/sw.js` risponda con JavaScript e non con una pagina HTML/redirect autenticazione su Preview Vercel.
 - [ ] Verificare HTTPS in staging/produzione; in sviluppo il service worker è consentito su `localhost`.
 
 **Criteri di accettazione:** `curl -I` su manifest, worker, fallback e icone restituisce `200`, content type corretto e nessun `Location: /login`.
@@ -351,7 +351,7 @@ npm run build
 npm run test:e2e -- --project=pwa-chromium
 ```
 
-Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, i test Playwright PWA/famiglia e gli scenari E2E autorizzativi (admin, BOLA, coach, atleta/genitore) eseguiti sul Preview Vercel sono passati. La validazione familiare conferma che il profilo atleta personale non viene trattato come relazione familiare. Restano da completare le verifiche manifest/asset, privacy/cache, la matrice dispositivi e Lighthouse/installazione su staging/produzione. Eseguire Lighthouse in modalità mobile sulla build di produzione/staging, non sul dev server; verificare almeno manifest installabile, service worker controllante, HTTPS, viewport e assenza di errori console.
+Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, i test Playwright PWA/famiglia e gli scenari E2E autorizzativi (admin, BOLA, coach, atleta/genitore) eseguiti sul Preview Vercel sono passati. Sono inoltre stati verificati sul Preview manifest, icone, endpoint pubblici del worker, registration del service worker e fallback offline con ritorno online. La validazione familiare conferma che il profilo atleta personale non viene trattato come relazione familiare. Restano da completare privacy/cache, la matrice dispositivi, il flusso di update del worker e Lighthouse/installazione su staging/produzione.
 
 ### Fase 7 — Rollout, osservabilità e rollback
 
