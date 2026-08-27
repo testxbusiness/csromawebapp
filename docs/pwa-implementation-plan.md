@@ -332,7 +332,7 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 
 #### Matrice manuale su staging HTTPS
 
-Verifiche completate su Preview Vercel: installazione e avvio standalone su iPhone, Android e desktop; fallback offline con modalità aereo e ripristino tramite “Riprova”; logo presente nel fallback; aggiornamento del worker tramite il banner “Aggiorna” verificato su iPhone.
+Verifiche completate su Preview Vercel: installazione e avvio standalone su iPhone, Android e desktop; fallback offline con modalità aereo e ripristino tramite “Riprova”; logo presente nel fallback; notifiche push e apertura del deep link verificate su più dispositivi/ruoli; aggiornamento del worker tramite il banner “Aggiorna” verificato su iPhone e Android.
 
 | Ambiente | Installazione | Avvio standalone | Offline fallback | Push | Deep link push | Update |
 |---|---:|---:|---:|---:|---:|---:|
@@ -361,7 +361,7 @@ Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, 
 - [x] Rendere `/api/notifications/test` diagnostico: segnala VAPID mancanti, subscription assenti e invii falliti invece di restituire falsi successi.
 - [x] Distribuire prima su staging HTTPS con VAPID reali di staging.
 - [x] Verificare manualmente le notifiche push su iPhone e Android: attivazione, ricezione con app chiusa e apertura tramite click.
-- [x] Testare l'upgrade da una sessione già installata: il banner “Aggiorna” attiva il worker in attesa e ricarica correttamente l'app, verificato su iPhone.
+- [x] Testare l'upgrade da una sessione già installata: il banner “Aggiorna” attiva il worker in attesa e ricarica correttamente l'app, verificato su iPhone e Android.
 - [ ] Distribuire in produzione a un gruppo pilota interno (admin + un coach + un atleta/familiare).
 - [ ] Monitorare per 48–72 ore:
   - errori registrazione/aggiornamento worker;
