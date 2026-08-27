@@ -315,6 +315,7 @@ Non creare un secondo provider globale. `PwaBootstrap` deve essere un piccolo Cl
 #### Test Playwright Chromium
 
 - [x] Aggiungere un progetto `pwa-chromium` che includa `pwa.spec.ts`; i progetti attuali hanno `testMatch` restrittivi.
+- [x] Validare gli scenari E2E autorizzativi su staging/Preview: admin (creazione/modifica atleta e account), BOLA (evento riservato all'admin), coach (eventi delle sole squadre assegnate), atleta/genitore (soli profili autorizzati).
 - [x] Scrivere il test `GET /manifest.webmanifest`: status, campi obbligatori, start URL e icone.
 - [x] Scrivere il test `GET /sw.js`: status, content type e assenza di redirect.
 - [x] Scrivere il test per `/login`, `navigator.serviceWorker.ready` e scope/script URL.
@@ -350,7 +351,7 @@ npm run build
 npm run test:e2e -- --project=pwa-chromium
 ```
 
-Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint` e i test Playwright PWA/famiglia eseguiti sul Preview Vercel sono passati. La validazione familiare conferma che il profilo atleta personale non viene trattato come relazione familiare. Restano da completare i test E2E amministrativi completi, la matrice dispositivi e le verifiche Lighthouse/installazione su staging/produzione. Eseguire Lighthouse in modalità mobile sulla build di produzione/staging, non sul dev server; verificare almeno manifest installabile, service worker controllante, HTTPS, viewport e assenza di errori console.
+Stato attuale: `npx tsc --noEmit`, `npm test`, `npm run build`, `npm run lint`, i test Playwright PWA/famiglia e gli scenari E2E autorizzativi (admin, BOLA, coach, atleta/genitore) eseguiti sul Preview Vercel sono passati. La validazione familiare conferma che il profilo atleta personale non viene trattato come relazione familiare. Restano da completare le verifiche manifest/asset, privacy/cache, la matrice dispositivi e Lighthouse/installazione su staging/produzione. Eseguire Lighthouse in modalità mobile sulla build di produzione/staging, non sul dev server; verificare almeno manifest installabile, service worker controllante, HTTPS, viewport e assenza di errori console.
 
 ### Fase 7 — Rollout, osservabilità e rollback
 
