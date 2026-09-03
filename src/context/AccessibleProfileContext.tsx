@@ -41,6 +41,7 @@ type AccessibleProfileContextValue = {
 
 const AccessibleProfileContext = createContext<AccessibleProfileContextValue | null>(null)
 const STORAGE_KEY = 'csroma_active_subject_profile_id'
+const AREA_STORAGE_KEY = 'csroma_active_area'
 export const SUBJECT_CONTEXT_CHANGED_EVENT = 'csroma:subject-context-changed'
 export type SubjectContextChangedDetail = { subjectProfileId: string | null }
 
@@ -54,7 +55,10 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const { account, user, loading: authLoading } = useAuth()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [selectedProfileId, setSelectedProfileIdState] = useState<string | null>(null)
-  const [activeArea, setActiveArea] = useState<'personal' | 'family'>('personal')
+  const [activeArea, setActiveAreaState] = useState<'personal' | 'family'>(() => {
+    if (typeof window === 'undefined') return 'personal'
+    return window.localStorage.getItem(AREA_STORAGE_KEY) === 'family' ? 'family' : 'personal'
+  })
   const [loading, setLoading] = useState(false)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,7 +77,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     if (!user) {
       setProfiles([])
       setSelectedProfileIdState(null)
-      setActiveArea('personal')
+      setActiveAreaState('personal')
       setProfilesLoaded(true)
       return
     }
@@ -137,8 +141,16 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
 
   useEffect(() => {
     if (!account?.authUserId) return
-    setActiveArea(isFamilyOnlyAccount ? 'family' : 'personal')
+    if (isFamilyOnlyAccount) {
+      setActiveAreaState('family')
+      if (typeof window !== 'undefined') window.localStorage.setItem(AREA_STORAGE_KEY, 'family')
+    }
   }, [account?.authUserId, isFamilyOnlyAccount])
+
+  const setActiveArea = useCallback((area: 'personal' | 'family') => {
+    setActiveAreaState(area)
+    if (typeof window !== 'undefined') window.localStorage.setItem(AREA_STORAGE_KEY, area)
+  }, [])
 
   const setSelectedProfileId = useCallback((profileId: string | null) => {
     if (profileId && !profiles.some((entry) => entry.profile.id === profileId)) return
@@ -170,7 +182,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     profilesLoaded,
     error,
     refresh,
-  }), [activeArea, error, loading, profiles, profilesLoaded, refresh, selectedProfile, selectedProfileId, setSelectedProfileId])
+  }), [activeArea, error, loading, profiles, profilesLoaded, refresh, selectedProfile, selectedProfileId, setActiveArea, setSelectedProfileId])
 
   return <AccessibleProfileContext.Provider value={value}>{children}</AccessibleProfileContext.Provider>
 }

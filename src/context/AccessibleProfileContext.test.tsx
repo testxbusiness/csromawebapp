@@ -48,4 +48,14 @@ describe('AccessibleProfileProvider initial family selection', () => {
     await waitFor(() => expect(screen.getByTestId('selected').textContent).toBe(''))
     expect(window.localStorage.getItem('csroma_active_subject_profile_id')).toBeNull()
   })
+
+  it('restores the active family area across a full navigation', async () => {
+    window.localStorage.setItem('csroma_active_area', 'family')
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ profiles: [oneProfile, { ...oneProfile, profile: { ...oneProfile.profile, id: 'child-2', first_name: 'Anna' } }] }) }) as jest.Mock
+
+    render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('selected').textContent).toBe(''))
+    expect(window.localStorage.getItem('csroma_active_area')).toBe('family')
+  })
 })
