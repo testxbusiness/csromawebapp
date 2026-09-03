@@ -118,7 +118,7 @@ export default function MessageDetailModal({
           </span>
         </span>
       }
-      description="Messaggio e destinatari pertinenti"
+      description={<span className="sr-only">Messaggio e destinatari pertinenti</span>}
       centeredOnMobile
       size="md"
     >
@@ -132,7 +132,7 @@ export default function MessageDetailModal({
             {readRequest === 'error' ? <span role="alert" className="text-sm text-[var(--cs-danger-canonical)]">Lettura non sincronizzata</span> : null}
           </div>
 
-          <dl className="grid gap-4 sm:grid-cols-2">
+          <dl className="grid grid-cols-1 gap-4 min-[380px]:grid-cols-2">
             <div>
               <dt className="text-xs font-bold uppercase tracking-wide text-secondary">Mittente</dt>
               <dd className="mt-1 flex items-center gap-2"><UserRound size={17} aria-hidden="true" />{sender}{role ? <span className="text-sm text-secondary">· {role}</span> : null}</dd>

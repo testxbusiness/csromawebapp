@@ -29,6 +29,7 @@ describe('MessageDetailModal', () => {
     />)
 
     expect(screen.getByText('Convocazione')).toBeTruthy()
+    expect(screen.getByRole('dialog').className).toContain('cs-responsive-detail--centered-mobile')
     await waitFor(() => expect(onReadStateChange).toHaveBeenCalledWith({ is_read: true, read_at: '2026-08-28T12:00:00Z' }))
     expect(fetchMock).toHaveBeenCalledWith('/api/messages/read', expect.objectContaining({ method: 'POST' }))
   })

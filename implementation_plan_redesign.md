@@ -4238,6 +4238,25 @@ l’azione “Aggiorna ora” ha completato il reload controllato. La verifica
 definitiva del cambio versione richiede comunque due deploy/versioni distinte
 di `sw.js` con una scheda/PWA già aperta.
 
+## Verifica Preview coach — modal evento e messaggio — 3 settembre 2026
+
+- **Rilievo:** dopo la correzione del posizionamento i dettagli erano visibili,
+  ma su mobile restavano a tutta altezza e non replicavano la UX della
+  produzione: card centrata, angoli arrotondati, intestazione con icona e
+  metadati compatti.
+- **Intervento:** introdotta la modalità `centeredOnMobile` in
+  `ResponsiveDetail`; i modal evento e messaggio ora usano card centrate con
+  altezza massima scrollabile, intestazioni coerenti con la produzione e
+  griglia a due colonne dai 380px in su. Le descrizioni accessibili restano
+  disponibili agli screen reader senza duplicare il testo visibile.
+- **File modificati:** `src/components/ui/ResponsiveDetail.tsx`,
+  `src/components/shared/EventDetailModal.tsx`,
+  `src/components/shared/MessageDetailModal.tsx`,
+  `src/app/globals.css` e i test dei due modal.
+- **Verifiche locali:** suite mirate 2/2, 8/8 test; typecheck, build e
+  `git diff --check` superati. Da verificare su Preview dopo il deploy:
+  card centrata a 320/375/390px e contenuto scrollabile senza clipping.
+
 ## G10.10 — Remediation certificati medici admin
 
 **Problema registrato — 3 settembre 2026**

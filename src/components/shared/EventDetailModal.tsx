@@ -89,7 +89,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
           </span>
         </span>
       }
-      description="Informazioni sull’evento"
+      description={<span className="sr-only">Informazioni sull’evento</span>}
       size="lg"
       centeredOnMobile
     >
@@ -102,7 +102,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
       ) : !data ? (
             <LoadingState label="Caricamento evento..." />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 min-[380px]:grid-cols-2">
               {/* Orario */}
               <div id="event-detail-time">
                 <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Orario</div>
