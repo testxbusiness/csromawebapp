@@ -27,7 +27,7 @@ describe('EventDetailModal', () => {
     )
 
     expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Dettaglio: Allenamento U16' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: /Dettaglio evento Allenamento U16/i })).toBeTruthy()
     expect(screen.getByText('Allenamento')).toBeTruthy()
     expect(screen.getByText('Palestra CSRoma')).toBeTruthy()
     expect(screen.getByText('U16')).toBeTruthy()

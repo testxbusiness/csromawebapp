@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { Clock3, Paperclip, UserRound } from 'lucide-react'
+import { Clock3, Mail, Paperclip, UserRound } from 'lucide-react'
 import { ResponsiveDetail, StatusBadge } from '@/components/ui'
 import { emitMessageReadStateChanged } from '@/lib/messages/read-state-events'
 
@@ -109,9 +109,17 @@ export default function MessageDetailModal({
     <ResponsiveDetail
       open={open}
       onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}
-      title={data?.subject ?? 'Dettaglio messaggio'}
+      title={
+        <span className="cs-detail-heading">
+          <span className="cs-detail-heading__icon" aria-hidden="true"><Mail size={24} /></span>
+          <span className="cs-detail-heading__copy">
+            <span className="cs-detail-heading__eyebrow">Dettaglio messaggio</span>
+            <span className="cs-detail-heading__title">{data?.subject ?? 'Dettaglio messaggio'}</span>
+          </span>
+        </span>
+      }
       description="Messaggio e destinatari pertinenti"
-      fullscreenOnMobile
+      centeredOnMobile
       size="md"
     >
       {!data ? (

@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from 'react'
+import { CalendarDays } from 'lucide-react'
 import { ErrorState, LoadingState, ResponsiveDetail } from '@/components/ui'
 import AttendanceControl from '@/components/athlete/AttendanceControl'
 import type { AttendanceStatus } from '@/types/attendance'
@@ -78,10 +79,19 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
     <ResponsiveDetail
       open={open}
       onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}
-      title={data?.title ? `Dettaglio: ${data.title}` : 'Dettaglio evento'}
-      description={data?.event_kind ? humanKind(data.event_kind) : 'Informazioni sull’evento'}
+      title={
+        <span className="cs-detail-heading">
+          <span className="cs-detail-heading__icon" aria-hidden="true"><CalendarDays size={24} /></span>
+          <span className="cs-detail-heading__copy">
+            <span className="cs-detail-heading__eyebrow">Dettaglio evento</span>
+            <span className="cs-detail-heading__title">{data?.title ?? 'Dettaglio evento'}</span>
+            {data?.event_kind ? <span className="cs-detail-heading__subtitle">{humanKind(data.event_kind)}</span> : null}
+          </span>
+        </span>
+      }
+      description="Informazioni sull’evento"
       size="lg"
-      fullscreenOnMobile
+      centeredOnMobile
     >
       {error ? (
         <ErrorState
