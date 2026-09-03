@@ -18,6 +18,14 @@
   --color-brand-red: var(--cs-brand-red);
   --color-brand-red-dark: var(--cs-brand-red-dark);
   --color-navy: var(--cs-navy);
+  --color-event-training: var(--cs-event-training);
+  --color-event-training-surface: var(--cs-event-training-surface);
+  --color-event-match: var(--cs-event-match);
+  --color-event-match-surface: var(--cs-event-match-surface);
+  --color-event-meeting: var(--cs-event-meeting);
+  --color-event-meeting-surface: var(--cs-event-meeting-surface);
+  --color-event-other: var(--cs-event-other);
+  --color-event-other-surface: var(--cs-event-other-surface);
   --color-success: var(--cs-success-canonical);
   --color-warning: var(--cs-warning-canonical);
   --color-danger: var(--cs-danger-canonical);
@@ -74,6 +82,23 @@
   --cs-brand-red: #D71920;
   --cs-brand-red-dark: #B3121A;
   --cs-navy: #243149;
+  /* Event-kind tokens: category only, never operational status. */
+  --cs-event-training: #3730A3;
+  --cs-event-training-surface: #EEF2FF;
+  --cs-event-training-foreground: #312E81;
+  --cs-event-training-border: #A5B4FC;
+  --cs-event-match: #D71920;
+  --cs-event-match-surface: #FDECEE;
+  --cs-event-match-foreground: #B3121A;
+  --cs-event-match-border: #F3A4A8;
+  --cs-event-meeting: #0F766E;
+  --cs-event-meeting-surface: #CCFBF1;
+  --cs-event-meeting-foreground: #115E59;
+  --cs-event-meeting-border: #5EEAD4;
+  --cs-event-other: #475569;
+  --cs-event-other-surface: #F1F5F9;
+  --cs-event-other-foreground: #334155;
+  --cs-event-other-border: #CBD5E1;
   --cs-success-canonical: #12B76A;
   --cs-warning-canonical: #F79009;
   --cs-danger-canonical: #B42318;
@@ -182,6 +207,22 @@
   --cs-warning-canonical: #FDB022;
   --cs-danger-canonical: #F97066;
   --cs-info: #53B1FD;
+  --cs-event-training: #818CF8;
+  --cs-event-training-surface: #25235B;
+  --cs-event-training-foreground: #C7D2FE;
+  --cs-event-training-border: #6366F1;
+  --cs-event-match: #FF6B72;
+  --cs-event-match-surface: #51232C;
+  --cs-event-match-foreground: #FFD6D8;
+  --cs-event-match-border: #FF9A9F;
+  --cs-event-meeting: #2DD4BF;
+  --cs-event-meeting-surface: #123D3B;
+  --cs-event-meeting-foreground: #99F6E4;
+  --cs-event-meeting-border: #14B8A6;
+  --cs-event-other: #CBD5E1;
+  --cs-event-other-surface: #263244;
+  --cs-event-other-foreground: #E2E8F0;
+  --cs-event-other-border: #64748B;
   --cs-bg: #0B1220;
   --cs-surface: #111B2E;
   --cs-surface-2: #0F172A;
@@ -343,6 +384,53 @@ a{ color:inherit; text-decoration:none }
 .cs-badge--neutral{ background: color-mix(in oklab, var(--cs-text-secondary), white 85%); color: var(--cs-text-secondary) }
 .cs-badge--warning{ background: color-mix(in oklab, var(--cs-warning), white 85%); color: var(--cs-warning) }
 .cs-badge--danger{ background: color-mix(in oklab, var(--cs-danger), white 85%); color: var(--cs-danger) }
+
+/* Event kind is a visual category. It must not be substituted for an
+   operational status such as attendance, conflict, error or selection. */
+.cs-event-kind{
+  --_event-color: var(--cs-event-other);
+  --_event-surface: var(--cs-event-other-surface);
+  --_event-foreground: var(--cs-event-other-foreground);
+  --_event-border: var(--cs-event-other-border);
+  display:inline-flex; align-items:center; gap:6px; min-height:28px;
+  padding:4px 10px; border:1px solid var(--_event-border);
+  border-radius:var(--cs-r-pill); background:var(--_event-surface);
+  color:var(--_event-foreground); font-size:var(--cs-type-label-size);
+  line-height:var(--cs-type-label-leading); font-weight:700; white-space:nowrap;
+}
+.cs-event-kind--training{
+  --_event-color:var(--cs-event-training);
+  --_event-surface:var(--cs-event-training-surface);
+  --_event-foreground:var(--cs-event-training-foreground);
+  --_event-border:var(--cs-event-training-border);
+}
+.cs-event-kind--match{
+  --_event-color:var(--cs-event-match);
+  --_event-surface:var(--cs-event-match-surface);
+  --_event-foreground:var(--cs-event-match-foreground);
+  --_event-border:var(--cs-event-match-border);
+}
+.cs-event-kind--meeting{
+  --_event-color:var(--cs-event-meeting);
+  --_event-surface:var(--cs-event-meeting-surface);
+  --_event-foreground:var(--cs-event-meeting-foreground);
+  --_event-border:var(--cs-event-meeting-border);
+}
+.cs-event-kind--other{
+  --_event-color:var(--cs-event-other);
+  --_event-surface:var(--cs-event-other-surface);
+  --_event-foreground:var(--cs-event-other-foreground);
+  --_event-border:var(--cs-event-other-border);
+}
+.cs-event-kind::before{
+  width:7px; height:7px; flex:none; border-radius:50%;
+  background:var(--_event-color); content:"";
+}
+.cs-event-kind--solid{
+  border-color:var(--_event-color); background:var(--_event-color);
+  color:#fff;
+}
+.cs-event-kind--solid::before{ background:currentColor; }
 
 .cs-status-badge{
   display:inline-flex; align-items:center; gap:6px; min-height:28px;

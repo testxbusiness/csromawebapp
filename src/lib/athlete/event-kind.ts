@@ -1,14 +1,7 @@
-export type AthleteEventKind = 'training' | 'match' | 'meeting' | 'other'
-
-const EVENT_KIND_LABELS: Record<AthleteEventKind, string> = {
-  training: 'Allenamento',
-  match: 'Partita',
-  meeting: 'Riunione',
-  other: 'Altro',
-}
-
-/** Returns a user-facing label only for event kinds supported by the contract. */
-export function eventKindLabel(kind: string | null | undefined): string | null {
-  if (!kind || !(kind in EVENT_KIND_LABELS)) return null
-  return EVENT_KIND_LABELS[kind as AthleteEventKind]
-}
+// Compatibility entry point for existing athlete consumers. The visual
+// contract itself is shared across roles in src/lib/events/event-kind.ts.
+export { EVENT_KINDS, eventKindLabel, eventKindVisual } from '@/lib/events/event-kind'
+export type {
+  EventKind as AthleteEventKind,
+  EventKindVisual,
+} from '@/lib/events/event-kind'
