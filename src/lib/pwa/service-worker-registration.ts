@@ -1,6 +1,7 @@
 'use client'
 
 const SERVICE_WORKER_URL = '/sw.js'
+const APP_VERSION_URL = '/api/app-version'
 
 let registrationPromise: Promise<ServiceWorkerRegistration | null> | null = null
 
@@ -42,6 +43,23 @@ export async function checkForServiceWorkerUpdate(
   } catch {
     // An update check can fail while offline or when the worker is being
     // replaced. The current worker remains valid, so this is non-fatal.
+    return null
+  }
+}
+
+/** Read the current deployment identifier without allowing an intermediary to cache it. */
+export async function fetchAppVersion(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const response = await fetch(`${APP_VERSION_URL}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    })
+    if (!response.ok) return null
+    const payload = await response.json() as { version?: unknown }
+    return typeof payload.version === 'string' && payload.version.length > 0 ? payload.version : null
+  } catch {
     return null
   }
 }

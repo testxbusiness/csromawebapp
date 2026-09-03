@@ -1,4 +1,4 @@
-import { checkForServiceWorkerUpdate, clearPwaClientState, clearPwaRuntimeCaches } from './service-worker-registration'
+import { checkForServiceWorkerUpdate, clearPwaClientState, clearPwaRuntimeCaches, fetchAppVersion } from './service-worker-registration'
 
 describe('PWA client state', () => {
   beforeEach(() => {
@@ -42,5 +42,15 @@ describe('PWA client state', () => {
     const registration = { update: jest.fn().mockRejectedValue(new Error('offline')) } as unknown as ServiceWorkerRegistration
 
     await expect(checkForServiceWorkerUpdate(registration)).resolves.toBeNull()
+  })
+
+  it('reads the current deployment version without caching it', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ version: 'deploy-123' }) }) as jest.Mock
+
+    await expect(fetchAppVersion()).resolves.toBe('deploy-123')
+    expect(globalThis.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/app-version\?t=/), {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    })
   })
 })

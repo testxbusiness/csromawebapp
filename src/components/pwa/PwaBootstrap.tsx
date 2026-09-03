@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ConnectivityBanner } from './ConnectivityBanner'
-import { checkForServiceWorkerUpdate, registerServiceWorker } from '@/lib/pwa/service-worker-registration'
+import { checkForServiceWorkerUpdate, fetchAppVersion, registerServiceWorker } from '@/lib/pwa/service-worker-registration'
+
+const APP_VERSION_STORAGE_KEY = 'csroma_pwa_app_version'
 
 export default function PwaBootstrap() {
   const [offline, setOffline] = useState(false)
@@ -35,6 +37,21 @@ export default function PwaBootstrap() {
     let installingStateListener: (() => void) | null = null
     let showUpdate = () => {}
 
+    const checkDeploymentVersion = () => {
+      if (navigator.onLine === false) return
+      void fetchAppVersion().then((version) => {
+        if (!version) return
+        const previousVersion = window.localStorage.getItem(APP_VERSION_STORAGE_KEY)
+        if (!previousVersion) {
+          window.localStorage.setItem(APP_VERSION_STORAGE_KEY, version)
+          return
+        }
+        if (previousVersion === version) return
+        window.localStorage.setItem(APP_VERSION_STORAGE_KEY, version)
+        setUpdateAvailable(true)
+      })
+    }
+
     const checkForUpdate = () => {
       if (!registration) return
       void checkForServiceWorkerUpdate(registration).then(showUpdate)
@@ -43,6 +60,7 @@ export default function PwaBootstrap() {
     const handlePageActivity = () => {
       if (document.visibilityState === 'hidden') return
       checkForUpdate()
+      checkDeploymentVersion()
     }
 
     const handleControllerChange = () => {
@@ -75,11 +93,13 @@ export default function PwaBootstrap() {
       watchInstallingWorker()
       showUpdate()
       checkForUpdate()
+      checkDeploymentVersion()
     })
 
     navigator.serviceWorker?.addEventListener('controllerchange', handleControllerChange)
     document.addEventListener('visibilitychange', handlePageActivity)
     window.addEventListener('focus', handlePageActivity)
+    const deploymentPoll = window.setInterval(checkDeploymentVersion, 60_000)
 
     return () => {
       window.removeEventListener('online', updateConnectivity)
@@ -95,15 +115,22 @@ export default function PwaBootstrap() {
       navigator.serviceWorker?.removeEventListener('controllerchange', handleControllerChange)
       document.removeEventListener('visibilitychange', handlePageActivity)
       window.removeEventListener('focus', handlePageActivity)
+      window.clearInterval(deploymentPoll)
     }
   }, [])
 
-  const applyUpdate = () => {
-    const waitingWorker = registrationRef.current?.waiting
-    if (!waitingWorker) return
+  const applyUpdate = async () => {
     updateApplied.current = true
     setUpdateAvailable(false)
-    waitingWorker.postMessage({ type: 'SKIP_WAITING' })
+    const registration = await checkForServiceWorkerUpdate(registrationRef.current)
+    const waitingWorker = registration?.waiting ?? registrationRef.current?.waiting
+    if (waitingWorker) {
+      waitingWorker.postMessage({ type: 'SKIP_WAITING' })
+      return
+    }
+    // A deployment can change React/CSS assets without changing sw.js. In
+    // that case there is no waiting worker, so reload directly to fetch them.
+    window.location.reload()
   }
 
   return (
