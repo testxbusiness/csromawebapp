@@ -15,7 +15,7 @@ describe('FamilyMemberDashboard', () => {
             type: 'parent',
             permissions: {
               view_schedule: true, confirm_attendance: true, view_payments: false,
-              view_medical_status: false, view_documents: false, sign_documents: false,
+              view_medical_status: false, view_documents: false, sign_documents: true,
               receive_messages: true,
             },
           },
@@ -47,6 +47,7 @@ describe('FamilyMemberDashboard', () => {
     expect(screen.getByRole('button', { name: 'Apri profilo di Luca Rossi' })).toBeTruthy()
     expect(screen.getByText(/Calendario e campionato, Conferma presenze, Messaggi/)).toBeTruthy()
     expect(screen.getByText('Sezioni disponibili: Quote associative')).toBeTruthy()
+    expect(screen.queryByText(/Firma documenti/)).toBeNull()
     expect(screen.queryByText(/view_schedule|receive_messages|view_payments/)).toBeNull()
   })
 })

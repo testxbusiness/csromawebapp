@@ -23,7 +23,6 @@ function allowedSections(entry: AccessibleProfile) {
     permissions.view_payments ? 'Quote associative' : null,
     permissions.view_medical_status ? 'Stato certificato medico' : null,
     permissions.view_documents ? 'Documenti' : null,
-    permissions.sign_documents ? 'Firma documenti' : null,
   ].filter((section): section is string => Boolean(section))
 }
 
