@@ -2,24 +2,34 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { NextStepViewport } from 'nextstepjs'
-import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, Menu, X } from 'lucide-react'
+import Link from 'next/link'
+import { X } from 'lucide-react'
 import RoleSidebar from './RoleSidebar'
 import { useAuth } from '@/hooks/useAuth'
 import ThemeToggle from '@/components/ui/ThemeToggle'
-import Image from 'next/image'
+import AppHeader from './AppHeader'
+import { BottomNavigation } from './BottomNavigation'
+import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import { SubjectSwitcher } from './SubjectSwitcher'
+import { TeamSwitcher } from './TeamSwitcher'
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || ''
   const showAuthenticatedLayout = /^\/(admin|coach|athlete|dashboard)(\/|$)/.test(pathname)
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [headerContextMounted, setHeaderContextMounted] = useState(false)
 
   const { profile, account, role, user, loading, profileLoading, signOut, silentRefresh } = useAuth()
+  const { activeArea, selectedProfile } = useAccessibleProfiles()
   const router = useRouter()
   const prevPathRef = useRef(pathname)
   const lastRefreshedPathRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    setHeaderContextMounted(true)
+  }, [])
 
   useEffect(() => {
     const prev = prevPathRef.current
@@ -92,6 +102,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     : 'CS'
 
   const roleLabel = role ? roleName(role) : user ? 'Utente' : ''
+  const isAdminShell = role === 'admin' && (/^\/admin(\/|$)/.test(pathname) || pathname === '/dashboard')
+  const profileHref = role === 'admin' ? '/admin/profile' : role === 'coach' ? '/coach/profile' : role === 'athlete' ? '/athlete/profile' : '/dashboard'
+  const showBottomNavigation = role === 'coach' || ((role === 'athlete' || role === 'family_member') && (activeArea === 'personal' || (activeArea === 'family' && Boolean(selectedProfile))))
 
   const UserBadge = () => {
     if (shouldShowSkeleton) {
@@ -107,7 +120,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     }
 
     return (
-      <div className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
+      <Link href={profileHref} aria-label="Apri il profilo account" className="flex items-center gap-3 rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-3 py-1.5 text-left shadow-sm">
         <div className="cs-avatar cs-bg-primary">
           <span className="text-sm font-semibold">{initials}</span>
         </div>
@@ -122,79 +135,49 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             </p>
           )}
         </div>
-      </div>
+      </Link>
     )
   }
 
   return (
     <div className="cs-page">
-      <header className="cs-navbar">
-        <div className="cs-navbar__inner cs-container">
-          <div className="flex items-center gap-4">
-            <button
-              type="button"
-              className="cs-btn cs-btn--ghost cs-btn--icon lg:!hidden"
-              onClick={() => setMobileMenuOpen(true)}
-              aria-label="Apri navigazione"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
+      <AppHeader
+        variant={isAdminShell ? 'admin' : pathname === '/dashboard' ? 'mobile-root' : 'mobile-detail'}
+        onMenuOpen={() => setMobileMenuOpen(true)}
+        onBack={() => router.back()}
+        onSignOut={handleSignOut}
+        account={<UserBadge />}
+        context={headerContextMounted ? (
+          <>
+            {isAdminShell ? <span className="cs-admin-topbar__section">Amministrazione</span> : null}
+            {activeArea === 'family' ? (
+              <>
+                <SubjectSwitcher variant="desktop" />
+                <SubjectSwitcher variant="mobile" />
+              </>
+            ) : null}
+            {(role === 'athlete' || role === 'coach' || activeArea === 'family') ? (
+              <>
+                <TeamSwitcher variant="desktop" />
+                <TeamSwitcher variant="mobile" />
+              </>
+            ) : null}
+          </>
+        ) : null}
+        utilities={<ThemeToggle />}
+      />
 
-            <Link href="/dashboard" className="flex items-center gap-2 lg:hidden" aria-label="CSRoma – Dashboard">
-              <div className="relative h-8 w-8">
-                <Image
-                  src="/images/logo_CSRoma.png"
-                  alt="CSRoma"
-                  fill
-                  className="object-contain select-none"
-                  sizes="32px"
-                  priority
-                />
-              </div>
-            </Link>
-
-            <Link href="/dashboard" className="hidden lg:flex items-center gap-3" aria-label="CSRoma – Dashboard">
-              <div className="relative h-16 w-16 xl:h-20 xl:w-20">
-                <Image
-                  src="/images/logo_CSRoma.svg"
-                  alt="CSRoma"
-                  fill
-                  className="object-contain select-none"
-                  sizes="(max-width: 1280px) 40px, 48px"
-                  priority
-                />
-              </div>
-              <div className="hidden xl:block">
-                <p className="text-sm font-semibold text-[color:var(--cs-text-secondary)] leading-none">CSRoma</p>
-                <p className="text-lg font-semibold text-[color:var(--cs-primary)] leading-none">Control Center</p>
-              </div>
-            </Link>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <ThemeToggle />
-            <button type="button" className="cs-btn cs-btn--ghost cs-btn--icon" aria-label="Notifiche">
-              <Bell className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={handleSignOut} className="hidden sm:inline-flex cs-btn cs-btn--primary">
-              Esci
-            </button>
-            <div className="hidden sm:block">
-              <UserBadge />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="cs-layout">
-        <aside className="cs-sidebar">
-          <RoleSidebar />
+      <div className={isAdminShell ? 'cs-layout cs-admin-layout' : 'cs-layout'}>
+        <aside className={isAdminShell ? 'cs-sidebar cs-sidebar--admin' : role === 'coach' ? 'cs-sidebar cs-sidebar--coach' : 'cs-sidebar'}>
+          <RoleSidebar variant={isAdminShell ? 'admin' : 'desktop'} />
         </aside>
 
-        <main className="cs-main">
+        <main className={isAdminShell ? 'cs-main cs-admin-workspace' : showBottomNavigation ? 'cs-main cs-main--athlete cs-main--with-bottomnav' : 'cs-main'}>
           <NextStepViewport id="app-viewport">{children}</NextStepViewport>
         </main>
       </div>
+
+      <BottomNavigation />
 
       {mobileMenuOpen && (
         <div className="lg:hidden">

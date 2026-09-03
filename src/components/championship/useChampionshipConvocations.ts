@@ -1,15 +1,32 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { requestErrorState, responseErrorState, type RequestState } from '@/lib/http/request-state'
 import { toast } from '@/components/ui'
+import { SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail } from '@/context/AccessibleProfileContext'
 import { firstRelation, type Convocation, type Match, type TeamMember } from '@/components/championship/types'
 
-export function useChampionshipConvocations() {
+export function useChampionshipConvocations({ subjectProfileId, enabled = true, coachAuthorized = false }: { subjectProfileId?: string | null; enabled?: boolean; coachAuthorized?: boolean } = {}) {
   const supabase = useMemo(() => createClient(), [])
-  const [convocationLoading, setConvocationLoading] = useState(false)
+  const [convocationStatus, setConvocationStatus] = useState<RequestState>('idle')
   const [convocationSaving, setConvocationSaving] = useState(false)
   const [convocation, setConvocation] = useState<Convocation | null>(null)
   const [convocationSelection, setConvocationSelection] = useState<Set<string>>(new Set())
   const [convocationTeamMembers, setConvocationTeamMembers] = useState<TeamMember[]>([])
+  const requestRef = useRef<AbortController | null>(null)
+  const subjectRef = useRef<string | null | undefined>(subjectProfileId)
+
+  useEffect(() => {
+    const handleSubjectChange = (event: Event) => {
+      subjectRef.current = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? null
+      requestRef.current?.abort()
+      setConvocation(null)
+      setConvocationSelection(new Set())
+      setConvocationTeamMembers([])
+      setConvocationStatus('idle')
+    }
+    window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+    return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+  }, [])
 
   const loadTeamMembers = useCallback(async (teamId: string | null) => {
     if (!teamId) {
@@ -36,9 +53,52 @@ export function useChampionshipConvocations() {
     })) as TeamMember[])
   }, [supabase])
 
-  const loadConvocationData = useCallback(async (match: Match, clubTeamId: string, teamId: string | null) => {
-    setConvocationLoading(true)
+  const loadConvocationData = useCallback(async (match: Match, clubTeamId: string, teamId: string | null): Promise<Convocation | null> => {
+    if (!enabled) return null
+    subjectRef.current = subjectProfileId
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    setConvocationStatus('loading')
     try {
+      if (subjectProfileId !== undefined) {
+        const params = new URLSearchParams({
+          view: 'convocation',
+          matchId: match.id,
+          clubTeamId,
+        })
+        if (subjectProfileId) params.set('subjectProfileId', subjectProfileId)
+        const response = await fetch(`/api/athlete/championships?${params.toString()}`, { cache: 'no-store', signal: controller.signal })
+        const payload = await response.json().catch(() => null) as { convocation?: any; error?: string } | null
+        if (controller.signal.aborted || subjectRef.current !== subjectProfileId) return null
+        if (!response.ok) {
+          setConvocationStatus(responseErrorState(response.status))
+          return null
+        }
+        const data = payload?.convocation
+        const normalizedConvocation = data ? {
+          ...data,
+          championship_club_teams: firstRelation(data.championship_club_teams),
+          championship_match_convocation_members: (data.championship_match_convocation_members || []).map((member: any) => ({
+            ...member,
+            profiles: firstRelation(member.profiles),
+            team_members: firstRelation(member.team_members),
+          })),
+        } as Convocation : null
+        setConvocation(normalizedConvocation || {
+          match_id: match.id,
+          championship_club_team_id: clubTeamId,
+          team_id: teamId,
+        })
+        const selectedIds = new Set<string>()
+        data?.championship_match_convocation_members?.forEach((member: any) => {
+          if (member.team_member_id) selectedIds.add(member.team_member_id)
+        })
+        setConvocationSelection(selectedIds)
+        setConvocationTeamMembers([])
+        setConvocationStatus('ready')
+        return normalizedConvocation
+      }
+
       const { data, error } = await supabase
         .from('championship_match_convocations')
         .select(`
@@ -76,15 +136,18 @@ export function useChampionshipConvocations() {
       })
       setConvocationSelection(selectedIds)
       await loadTeamMembers(teamId)
+      setConvocationStatus('ready')
+      return normalizedConvocation
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return null
       console.error('Errore caricamento convocazioni', error)
       toast.error('Impossibile caricare le convocazioni')
-      setConvocation(null)
-      setConvocationSelection(new Set())
+      setConvocationStatus(requestErrorState(error))
+      return null
     } finally {
-      setConvocationLoading(false)
+      setConvocationStatus((current) => current === 'loading' ? 'error' : current)
     }
-  }, [loadTeamMembers, supabase])
+  }, [enabled, loadTeamMembers, subjectProfileId, supabase])
 
   const saveConvocation = useCallback(async ({ match, clubTeamId, teamId }: {
     match: Match
@@ -93,6 +156,13 @@ export function useChampionshipConvocations() {
   }) => {
     setConvocationSaving(true)
     try {
+      if (coachAuthorized) {
+        const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save_convocation', convocation_id: convocation?.id, match_id: match.id, club_team_id: clubTeamId, team_id: teamId, members: Array.from(convocationSelection).map((teamMemberId) => ({ team_member_id: teamMemberId, profile_id: convocationTeamMembers.find((member) => member.id === teamMemberId)?.profile_id || null })) }) })
+        if (!response.ok) throw new Error('Impossibile salvare le convocazioni')
+        toast.success('Convocazioni salvate')
+        await loadConvocationData(match, clubTeamId, teamId)
+        return
+      }
       const { data: upserted, error: upsertError } = await supabase
         .from('championship_match_convocations')
         .upsert({
@@ -131,18 +201,18 @@ export function useChampionshipConvocations() {
     } finally {
       setConvocationSaving(false)
     }
-  }, [convocation?.id, convocationSelection, convocationTeamMembers, loadConvocationData, supabase])
+  }, [coachAuthorized, convocation?.id, convocationSelection, convocationTeamMembers, loadConvocationData, supabase])
 
   return {
     convocation,
-    convocationLoading,
+    convocationLoading: convocationStatus === 'loading',
+    convocationStatus,
     convocationSaving,
     convocationSelection,
     convocationTeamMembers,
     loadConvocationData,
     saveConvocation,
     setConvocation,
-    setConvocationLoading,
     setConvocationSelection,
     setConvocationTeamMembers,
   }

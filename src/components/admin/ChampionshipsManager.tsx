@@ -40,9 +40,10 @@ import { ChampionshipGroupTeamsModal, type GroupTeamsSelection, type NewClubTeam
 
 interface ChampionshipsManagerProps {
   mode?: ManagerMode
+  embedded?: boolean
 }
 
-export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsManagerProps) {
+export default function ChampionshipsManager({ mode = 'admin', embedded = false }: ChampionshipsManagerProps) {
   const supabase = useMemo(() => createClient(), [])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
@@ -762,10 +763,10 @@ export default function ChampionshipsManager({ mode = 'admin' }: ChampionshipsMa
     <div className="space-y-6">
       <Card variant="primary" className="overflow-hidden">
         <div className="flex flex-col gap-5">
-          <div>
+          {!embedded ? <div>
             <CardTitle className="text-lg sm:text-xl">Campionati</CardTitle>
             <CardMeta>Console amministrativa per struttura campionato, calendari, risultati e sincronizzazione.</CardMeta>
-          </div>
+          </div> : null}
           <ChampionshipToolbar
             championshipSelect={(
               <Select

@@ -3,10 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, CardTitle, CardMeta, Table, Button, Input, Select, toast, Modal } from '@/components/ui'
+import { SUBJECT_CONTEXT_CHANGED_EVENT, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import { useTeamContext } from '@/context/TeamContext'
+import { Card, CardTitle, CardMeta, Button, Input, Select, toast, Modal, FeedbackState, EmptyState } from '@/components/ui'
+import type { RequestState } from '@/lib/http/request-state'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
-import { CalendarDays, ChevronDown, ChevronUp, Clock3, MapPin, Trophy, Users } from 'lucide-react'
-import { ChampionshipInfoPanel, ConvocationPublishedList, NextMatchPanel, StandingsPanel } from '@/components/championship/ChampionshipPanels'
+import { Clock3, MapPin, Trophy, Users } from 'lucide-react'
+import { ChampionshipInfoPanel, ChampionshipSchedulePanel, ConvocationPublishedList, NextMatchPanel, RecentResultsPanel, StandingsPanel } from '@/components/championship/ChampionshipPanels'
 import {
   firstRelation,
   STATUS_LABEL,
@@ -29,7 +32,10 @@ import { useChampionshipGroupDetails } from '@/components/championship/useChampi
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
 import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
 import { useChampionshipCalendarDeletion } from '@/components/championship/useChampionshipCalendarDeletion'
-import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
+import { formatChampionshipDate as formatDate, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
+import { AthleteChampionshipShell } from '@/components/athlete/AthleteChampionshipShell'
+import { StatusBadge } from '@/components/ui'
+import DelegatedAccessDenied from '@/components/athlete/DelegatedAccessDenied'
 
 interface ChampionshipsManagerProps {
   mode?: ManagerMode
@@ -37,6 +43,8 @@ interface ChampionshipsManagerProps {
 
 export default function ChampionshipsManager({ mode = 'athlete' }: ChampionshipsManagerProps) {
   const { account } = useAuth()
+  const { selectedProfileId, activeArea } = useAccessibleProfiles()
+  const { selectedTeamId, setTeams: setContextTeams } = useTeamContext()
   const supabase = useMemo(() => createClient(), [])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
@@ -70,12 +78,27 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const [resultModalOpen, setResultModalOpen] = useState(false)
   const [resultEditingMatch, setResultEditingMatch] = useState<Match | null>(null)
   const [coachTeamIds, setCoachTeamIds] = useState<Set<string>>(new Set())
-  const [athleteTeamIds, setAthleteTeamIds] = useState<Set<string>>(new Set())
+  const familySubjectReady = mode !== 'athlete' || activeArea !== 'family' || Boolean(selectedProfileId)
   const [nextMatch, setNextMatch] = useState<Match | null>(null)
-  const [showSchedule, setShowSchedule] = useState(false)
   const [convocationModalOpen, setConvocationModalOpen] = useState(false)
   const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
   const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
+  const [nextMatchConvocation, setNextMatchConvocation] = useState<Convocation | null>(null)
+
+  useEffect(() => {
+    const handleSubjectChange = () => {
+      setSelectedChampionshipId(null)
+      setSelectedGroupId(null)
+      setNextMatch(null)
+      setConvocation(null)
+      setConvocationSelection(new Set())
+      setConvocationTeamMembers([])
+      setConvocationModalOpen(false)
+      setResultModalOpen(false)
+    }
+    window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+    return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const {
     championships,
@@ -83,15 +106,42 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     activities,
     teams,
     loading: catalogLoading,
+    status: catalogStatus,
     reload: reloadChampionships,
-  } = useChampionshipCatalog({ mode, coachTeamIds, athleteTeamIds })
+  } = useChampionshipCatalog({ mode, coachTeamIds, subjectProfileId: mode === 'athlete' ? selectedProfileId : undefined, enabled: familySubjectReady })
   const {
     matches,
     standings,
     loading: groupLoading,
+    status: groupStatus,
     reload: reloadGroupDetails,
-  } = useChampionshipGroupDetails(selectedGroupId)
+  } = useChampionshipGroupDetails(selectedGroupId, mode === 'athlete' ? selectedProfileId : undefined, familySubjectReady)
+  const athleteTeamIds = useMemo(() => new Set(teams.map((team) => team.id)), [teams])
   const loading = catalogLoading || groupLoading
+  const catalogIssue = mode === 'athlete' && ['error', 'offline', 'denied'].includes(catalogStatus)
+  const showAthletePanels = mode !== 'athlete' || (catalogStatus === 'ready' && Boolean(selectedGroupId) && groupStatus === 'ready')
+  const renderRetryState = (status: RequestState, onRetry: () => void, title: string) => {
+    if (status !== 'error' && status !== 'offline' && status !== 'denied') return null
+    return <FeedbackState variant={status} title={title} action={<Button onClick={onRetry}>Riprova</Button>} />
+  }
+
+  const visibleChampionships = useMemo(
+    () => mode === 'athlete' && selectedTeamId
+      ? championships.filter((championship) => championship.team_ids?.includes(selectedTeamId))
+      : championships,
+    [championships, mode, selectedTeamId]
+  )
+  const selectedChampionship = useMemo(
+    () => visibleChampionships.find((championship) => championship.id === selectedChampionshipId) ?? null,
+    [selectedChampionshipId, visibleChampionships]
+  )
+  const visibleGroups = useMemo(
+    () => (selectedChampionship?.championship_groups ?? []).filter((group) => {
+      if (mode !== 'athlete' || !selectedTeamId) return true
+      return group.championship_group_teams?.some((groupTeam) => groupTeam.championship_club_teams?.team_id === selectedTeamId) ?? false
+    }),
+    [mode, selectedChampionship, selectedTeamId]
+  )
   const {
     changeStatus,
     saveResult: persistResult,
@@ -101,6 +151,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const {
     convocation,
     convocationLoading,
+    convocationStatus,
     convocationSaving,
     convocationSelection,
     convocationTeamMembers,
@@ -109,8 +160,12 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     setConvocation,
     setConvocationSelection,
     setConvocationTeamMembers,
-  } = useChampionshipConvocations()
+  } = useChampionshipConvocations({ subjectProfileId: mode === 'athlete' ? selectedProfileId : undefined, enabled: familySubjectReady })
   const { deleteCalendar: persistDeleteCalendar, deleting } = useChampionshipCalendarDeletion()
+
+  useEffect(() => {
+    if (mode === 'athlete') setContextTeams(teams.map((team) => ({ id: team.id, name: team.name, code: team.code })))
+  }, [mode, setContextTeams, teams])
 
   useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
@@ -146,23 +201,6 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     }
   }, [account?.ownerProfileId, supabase])
 
-  const loadAthleteTeams = useCallback(async () => {
-    try {
-      const ownerProfileId = account?.ownerProfileId
-      if (!ownerProfileId) return
-      const { data, error } = await supabase
-        .from('team_members')
-        .select('team_id')
-        .eq('profile_id', ownerProfileId)
-      if (error) throw error
-      const ids = new Set<string>()
-      data?.forEach((row: any) => row.team_id && ids.add(row.team_id))
-      setAthleteTeamIds(ids)
-    } catch (err) {
-      console.error('Errore caricamento squadre atleta', err)
-    }
-  }, [account?.ownerProfileId, supabase])
-
   const loadClubTeams = useCallback(async (championshipId: string) => {
     const { data, error } = await supabase
       .from('championship_club_teams')
@@ -180,8 +218,8 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   }, [supabase])
 
   const currentGroups = useMemo(() => {
-    return championships.find((c) => c.id === selectedChampionshipId)?.championship_groups || []
-  }, [championships, selectedChampionshipId])
+    return mode === 'athlete' ? visibleGroups : selectedChampionship?.championship_groups || []
+  }, [mode, selectedChampionship, visibleGroups])
 
   const groupTeamMap = useMemo(() => {
     const map = new Map<string, GroupTeam>()
@@ -459,12 +497,12 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     }
   }
 
-  const selectedChampionship = championships.find((c) => c.id === selectedChampionshipId)
   const standingsWithNames = standings.map((s) => {
-    const c = groupTeamMap.get(s.club_team_id)?.championship_club_teams
+    const c = groupTeamMap.get(s.club_team_id)?.championship_club_teams || clubTeams.find((clubTeam) => clubTeam.id === s.club_team_id)
     return {
       ...s,
-      team_name: c?.name || clubTeamName(s.club_team_id).replace(/\s*\([^)]*\)\s*$/, '')
+      team_name: s.team_name || c?.name || clubTeamName(s.club_team_id).replace(/\s*\([^)]*\)\s*$/, ''),
+      is_csr: Boolean(c?.team_id && athleteTeamIds.has(c.team_id)),
     }
   })
   const sortedStandings = [...standingsWithNames]
@@ -472,6 +510,36 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const convocationCSRTeams = convocationMatch ? matchCSRClubTeams(convocationMatch) : []
   const convocationClubTeam = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam || null
   const canEditConvocation = mode === 'admin' || (mode === 'coach' && !!(convocationClubTeam?.team_id && coachTeamIds.has(convocationClubTeam.team_id)))
+  const nextMatchClubTeam = nextMatch ? pickUserClubTeamForMatch(nextMatch) : null
+  const nextMatchSide = nextMatchClubTeam
+    ? nextMatchClubTeam.id === nextMatch?.home_club_team_id ? 'Casa' : 'Trasferta'
+    : undefined
+  const nextMatchOpponentId = nextMatch && nextMatchClubTeam
+    ? nextMatchClubTeam.id === nextMatch.home_club_team_id ? nextMatch.away_club_team_id : nextMatch.home_club_team_id
+    : null
+  const nextMatchConvocationStatus = mode !== 'athlete'
+    ? undefined
+    : !nextMatchConvocation
+      ? 'Convocazione non pubblicata'
+      : nextMatchConvocation.championship_match_convocation_members?.some((member) => {
+        const subjectId = selectedProfileId
+        return Boolean(subjectId && (member.profile_id === subjectId || member.team_members?.profile_id === subjectId))
+      })
+        ? 'Sei convocato'
+        : 'Non convocato'
+
+  useEffect(() => {
+    if (mode !== 'athlete' || !nextMatch || !nextMatchClubTeam?.id) {
+      setNextMatchConvocation(null)
+      return
+    }
+    let cancelled = false
+    void loadConvocationData(nextMatch, nextMatchClubTeam.id, nextMatchClubTeam.team_id || null)
+      .then((loaded) => {
+        if (!cancelled) setNextMatchConvocation(loaded)
+      })
+    return () => { cancelled = true }
+  }, [loadConvocationData, mode, nextMatch, nextMatchClubTeam?.id, nextMatchClubTeam?.team_id, selectedProfileId])
 
   function isCSRClubTeam(club?: ClubTeam | null) {
     return !!(club?.is_home_club || club?.team_id)
@@ -509,7 +577,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     setNextMatch(upcoming.length ? upcoming[0].match : null)
   }
 
-  const pickUserClubTeamForMatch = (m: Match) => {
+  function pickUserClubTeamForMatch(m: Match) {
     const csrTeams = matchCSRClubTeams(m)
     if (mode === 'admin') return csrTeams[0]?.clubTeam || null
     if (mode === 'coach') {
@@ -590,13 +658,23 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
 
   useEffect(() => {
     if (mode === 'coach') void loadCoachTeams()
-    else if (mode === 'athlete') void loadAthleteTeams()
-  }, [loadAthleteTeams, loadCoachTeams, mode])
+  }, [loadCoachTeams, mode])
 
   useEffect(() => {
-    if (selectedChampionshipId) void loadClubTeams(selectedChampionshipId)
-    else setClubTeams([])
-  }, [loadClubTeams, selectedChampionshipId])
+    if (!selectedChampionshipId) {
+      setClubTeams([])
+      return
+    }
+
+    if (mode === 'athlete') {
+      // Athlete labels come only from the subject-scoped catalog response.
+      // Never query all club teams for a championship from the browser.
+      setClubTeams(selectedChampionship?.clubTeams ?? [])
+      return
+    }
+
+    void loadClubTeams(selectedChampionshipId)
+  }, [loadClubTeams, mode, selectedChampionship, selectedChampionshipId])
 
   useEffect(() => {
     if (championships.length === 0) {
@@ -605,80 +683,65 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       setImportGroupId(null)
       return
     }
-    if (!selectedChampionshipId || !championships.some((championship) => championship.id === selectedChampionshipId)) {
-      setSelectedChampionshipId(championships[0].id)
+    if (!selectedChampionshipId || !visibleChampionships.some((championship) => championship.id === selectedChampionshipId)) {
+      // An athlete can have more than one authorized championship. Do not
+      // Never silently bind an athlete to the first catalog row when the
+      // resolver returned more than one authorized path.
+      setSelectedChampionshipId(mode === 'athlete' && visibleChampionships.length > 1 ? null : visibleChampionships[0]?.id ?? null)
     }
-  }, [championships, selectedChampionshipId])
+  }, [championships.length, mode, selectedChampionshipId, visibleChampionships])
 
   useEffect(() => {
     if (!selectedChampionshipId) return
-    const championship = championships.find((c) => c.id === selectedChampionshipId)
-    if (championship?.championship_groups && championship.championship_groups.length > 0) {
-      const firstGroupId = championship.championship_groups[0].id
-      setSelectedGroupId(firstGroupId)
-      setImportGroupId(firstGroupId)
-      initGroupTeamsSelection(firstGroupId)
+    if (visibleGroups.length > 0) {
+      const groups = visibleGroups
+      const groupId = mode === 'athlete' && groups.length > 1 ? null : groups[0].id
+      setSelectedGroupId(groupId)
+      setImportGroupId(groupId)
+      if (groupId) initGroupTeamsSelection(groupId)
     } else {
       setSelectedGroupId(null)
       setImportGroupId(null)
     }
-  }, [championships, initGroupTeamsSelection, selectedChampionshipId])
+  }, [initGroupTeamsSelection, mode, selectedChampionshipId, visibleGroups])
+
+  if (!familySubjectReady) {
+    return <DelegatedAccessDenied section="il campionato" />
+  }
 
   return (
     <div className="space-y-6 pb-4">
-      <Card variant="primary" className="overflow-hidden">
-        <div className="flex flex-col gap-5">
-          <div>
-            <CardTitle className="text-lg sm:text-xl">Campionati</CardTitle>
-            <CardMeta>Segui la prossima gara CSRoma, consulta le convocazioni e controlla la classifica del girone.</CardMeta>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Campionato</label>
-              <Select
-                value={selectedChampionshipId || ''}
-                onChange={(e) => setSelectedChampionshipId(e.target.value || null)}
-              >
-                {championships.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} · {c.sport} {c.status === 'published' ? '· Pubblicato' : ''}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Girone</label>
-              <Select
-                value={selectedGroupId || ''}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setSelectedGroupId(val || null)
-                  setImportGroupId(val || null)
-                  initGroupTeamsSelection(val || null)
-                }}
-                disabled={!currentGroups.length}
-              >
-                {currentGroups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name} · {g.phase}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
-              <Trophy className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
-              {selectedChampionship ? selectedChampionship.name : 'Seleziona un campionato'}
-            </div>
-            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
-              <Users className="h-4 w-4 text-[color:var(--cs-accent)]" aria-hidden="true" />
-              {currentGroups.length} {currentGroups.length === 1 ? 'girone' : 'gironi'}
-            </div>
-          </div>
-        </div>
-      </Card>
+      <AthleteChampionshipShell
+        teamLabel={selectedTeamId ? 'Squadra selezionata' : 'Tutte le squadre'}
+        championships={visibleChampionships}
+        selectedChampionship={selectedChampionship}
+        selectedChampionshipId={selectedChampionshipId}
+        onChampionshipChange={setSelectedChampionshipId}
+        groups={visibleGroups}
+        selectedGroupId={selectedGroupId}
+        onGroupChange={setSelectedGroupId}
+        onGroupSelected={(groupId) => { setImportGroupId(groupId); initGroupTeamsSelection(groupId) }}
+      />
 
+      {mode === 'athlete' && catalogStatus === 'loading' ? <FeedbackState variant="loading" title="Caricamento campionati..." /> : null}
+      {mode === 'athlete' ? renderRetryState(catalogStatus, () => { void reloadChampionships() }, 'Impossibile caricare i campionati') : null}
+      {mode === 'athlete' && !catalogIssue && catalogStatus === 'ready' && visibleChampionships.length === 0 ? (
+        <EmptyState
+          filtered={Boolean(selectedTeamId && championships.length > 0)}
+          title={selectedTeamId && championships.length > 0 ? 'Nessun campionato per questa squadra' : 'Nessun campionato disponibile'}
+          description={selectedTeamId && championships.length > 0 ? 'Prova a selezionare Tutte le squadre.' : 'Il subject selezionato non ha ancora un girone autorizzato.'}
+        />
+      ) : null}
+      {mode === 'athlete' && !catalogIssue && catalogStatus === 'ready' && visibleChampionships.length > 0 && !selectedChampionshipId ? (
+        <EmptyState filtered title="Seleziona un campionato" description="Scegli il campionato da visualizzare per continuare." />
+      ) : null}
+      {mode === 'athlete' && !catalogIssue && selectedChampionshipId && !selectedGroupId && visibleGroups.length > 0 ? (
+        <EmptyState filtered title="Seleziona un girone" description="Scegli il girone da visualizzare per continuare." />
+      ) : null}
+      {mode === 'athlete' && selectedGroupId && groupStatus === 'loading' ? <FeedbackState variant="loading" title="Caricamento dati del girone..." /> : null}
+      {mode === 'athlete' && selectedGroupId ? renderRetryState(groupStatus, () => { void reloadGroupDetails() }, 'Impossibile caricare il girone') : null}
+
+      {showAthletePanels ? <>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.8fr)]">
         <NextMatchPanel
           empty={!nextMatch}
@@ -686,6 +749,10 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
           roundLabel={nextMatch?.match_day ? `Giornata ${nextMatch.match_day}` : 'Turno da definire'}
           matchupLabel={nextMatch ? `${clubTeamPlainName(nextMatch.home_club_team_id)} vs ${clubTeamPlainName(nextMatch.away_club_team_id)}` : ''}
           locationLabel={nextMatch?.location_text || 'Luogo da definire'}
+          sideLabel={nextMatchSide}
+          opponentLabel={nextMatchOpponentId ? clubTeamPlainName(nextMatchOpponentId) : undefined}
+          convocationStatusLabel={nextMatchConvocationStatus}
+          meetingLabel="Ritrovo non indicato"
           onOpenConvocations={() => nextMatch && openConvocationModal(nextMatch)}
         />
 
@@ -702,110 +769,12 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
-        <StandingsPanel rows={sortedStandings} highlightTopThree />
-
-        <Card variant="primary" className="h-fit">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>Calendario partite</CardTitle>
-              <CardMeta>Per gli atleti resta secondario: lo mostriamo solo quando serve.</CardMeta>
-            </div>
-            <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-              <CalendarDays className="h-5 w-5" aria-hidden="true" />
-            </div>
-          </div>
-          <div className="mt-4 space-y-4">
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-600">
-              {matches.length === 0 ? 'Nessuna partita disponibile nel girone selezionato.' : `${matches.length} partite caricate per questo girone.`}
-            </div>
-            <Button variant="outline" block onClick={() => setShowSchedule((prev) => !prev)} aria-expanded={showSchedule}>
-              <CalendarDays className="h-4 w-4" aria-hidden="true" />
-              {showSchedule ? 'Nascondi calendario' : 'Mostra calendario'}
-              {showSchedule ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
-            </Button>
-          </div>
-        </Card>
+        <StandingsPanel rows={sortedStandings} />
       </div>
 
-      {showSchedule && (
-        <Card variant="primary">
-          <CardTitle>Partite del girone</CardTitle>
-          <CardMeta>Calendario completo consultabile su richiesta, ottimizzato per mobile.</CardMeta>
-          <div className="mt-4 overflow-x-auto hidden md:block">
-            <Table compact className="min-w-full">
-              <thead>
-                <tr>
-                  <th>Giornata</th>
-                  <th>Data/Ora</th>
-                  <th>Partita</th>
-                  <th>Risultato</th>
-                  <th>Set</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matches.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="text-center text-slate-400 py-4">Nessuna partita</td>
-                  </tr>
-                )}
-                {matches.map((m) => (
-                  <tr key={m.id}>
-                    <td>{m.match_day ?? '—'}</td>
-                    <td>
-                      {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}{' '}
-                      {m.start_time ? m.start_time.slice(0,5) : ''}
-                    </td>
-                    <td>
-                      <div className="font-semibold">
-                        {m.home_club_team?.name || clubTeamName(m.home_club_team_id)} vs {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
-                      </div>
-                      <div className="text-xs text-slate-500">{m.location_text || '—'}</div>
-                    </td>
-                    <td className="font-semibold">{formatScore(m.championship_match_sets)}</td>
-                    <td className="text-sm text-slate-600">{formatSetsDetail(m.championship_match_sets)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
-          </div>
-          <div className="mt-4 space-y-3 md:hidden">
-            {matches.length === 0 && (
-              <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
-                Nessuna partita
-              </div>
-            )}
-            {matches.map((m) => (
-              <div key={m.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                      {m.match_day ? `Giornata ${m.match_day}` : 'Giornata da definire'}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold text-slate-900">
-                      {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}
-                      {m.start_time ? ` · ${m.start_time.slice(0,5)}` : ''}
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-                    {formatScore(m.championship_match_sets)}
-                  </span>
-                </div>
-                <div className="mt-3 text-sm font-semibold text-slate-900">
-                  {m.home_club_team?.name || clubTeamName(m.home_club_team_id)}
-                </div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">vs</div>
-                <div className="text-sm font-semibold text-slate-900">
-                  {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
-                </div>
-                <div className="mt-3 space-y-1 text-sm text-slate-600">
-                  <div><span className="font-medium text-slate-700">Set:</span> {formatSetsDetail(m.championship_match_sets) || '—'}</div>
-                  <div><span className="font-medium text-slate-700">Luogo:</span> {m.location_text || '—'}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <RecentResultsPanel matches={matches} teamName={clubTeamPlainName} />
+      <ChampionshipSchedulePanel matches={matches} teamName={clubTeamPlainName} />
+      </> : null}
 
       <Modal
         open={resultModalOpen}
@@ -891,12 +860,28 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
                 : 'Seleziona una squadra CSRoma'}
             </div>
 
-            {convocationLoading && (
-              <div className="text-sm text-slate-500">Caricamento convocazioni...</div>
+            {convocationLoading && <FeedbackState variant="loading" title="Caricamento convocazioni..." />}
+            {!convocationLoading && (convocationStatus === 'error' || convocationStatus === 'offline' || convocationStatus === 'denied') && (
+              <FeedbackState
+                variant={convocationStatus}
+                title="Impossibile caricare la convocazione"
+                action={<Button onClick={() => convocationMatch && convocationClubTeamId && void loadConvocationData(convocationMatch, convocationClubTeamId, convocationClubTeam?.team_id || null)}>Riprova</Button>}
+              />
             )}
 
-            {!convocationLoading && mode === 'athlete' && (
+            {!convocationLoading && convocationStatus !== 'error' && convocationStatus !== 'offline' && convocationStatus !== 'denied' && mode === 'athlete' && (
               <>
+                <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-subdued)] px-4 py-3">
+                  <StatusBadge
+                    status={convocation && convocation.championship_match_convocation_members?.some((member) => {
+                      const subjectId = selectedProfileId
+                      return Boolean(subjectId && (member.profile_id === subjectId || member.team_members?.profile_id === subjectId))
+                    }) ? 'going' : convocation ? 'declined' : 'pending'}
+                  />
+                  <span className="text-sm text-[color:var(--cs-text-secondary)]">
+                    {convocation ? 'La convocazione pubblicata per questa gara.' : 'La convocazione non è ancora stata pubblicata.'}
+                  </span>
+                </div>
                 <ConvocationPublishedList
                   members={(convocation?.championship_match_convocation_members || []).map((cm) => {
                     const labelFromProfile = cm.profiles?.first_name || cm.profiles?.last_name
@@ -966,7 +951,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         )}
       </Modal>
 
-      {loading && (
+      {mode !== 'athlete' && loading && (
         <div className="text-center text-slate-500">Caricamento...</div>
       )}
 

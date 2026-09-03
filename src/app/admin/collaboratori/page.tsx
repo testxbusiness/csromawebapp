@@ -2,15 +2,14 @@
 
 import { Suspense } from 'react'
 import CoachesManager from '@/components/admin/CoachesManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function CollaboratoriPage() {
   return (
-      <>
-        <PageHeader title="Gestione Collaboratori" subtitle="Amministrazione CSRoma" />
+      <AdminManagementPage title="Collaboratori" context="Persone" description="Gestisci collaboratori, assegnazioni e accessi.">
         <Suspense fallback={<div className="text-center py-12">Caricamento gestione collaboratori...</div>}>
-          <CoachesManager />
+          <CoachesManager embedded />
         </Suspense>
-      </>
+      </AdminManagementPage>
   )
 }

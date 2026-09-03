@@ -33,12 +33,17 @@ export default defineConfig({
     {
       name: 'admin-chromium',
       testMatch: /admin-account-model\.spec\.ts/,
-      use: { ...devices['Desktop Chrome'], storageState: adminAuthFile },
+      use: { ...devices['Desktop Chrome'], storageState: adminAuthFile, navigationTimeout: 120_000 },
     },
     {
       name: 'admin-firefox',
       testMatch: /admin-account-model\.spec\.ts/,
       use: { ...devices['Desktop Firefox'], storageState: adminAuthFile },
+    },
+    {
+      name: 'admin-responsive-chromium',
+      testMatch: /admin-responsive\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'], storageState: adminAuthFile, navigationTimeout: 120_000 },
     },
     {
       name: 'api-bola-chromium',
@@ -48,6 +53,31 @@ export default defineConfig({
     {
       name: 'family-chromium',
       testMatch: /family-profile-selection\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'athlete-chromium',
+      testMatch: /athlete-dashboard\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'athlete-championships-chromium',
+      testMatch: /athlete-championships\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'athlete-calendar-chromium',
+      testMatch: /athlete-calendar\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'athlete-messages-chromium',
+      testMatch: /athlete-messages\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'athlete-fees-profile-chromium',
+      testMatch: /athlete-fees-profile\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
     },
     {

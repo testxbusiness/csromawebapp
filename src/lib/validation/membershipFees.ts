@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 const uuid = z.string().uuid('ID non valido')
 const money = z.coerce.number().finite().min(0).max(10_000_000)
+const months = z.coerce.number().finite().min(0).max(120).multipleOf(0.5, 'La durata deve essere espressa in mesi interi o mezzi mesi')
 const count = z.coerce.number().finite().int().min(0).max(120)
 const date = z.string().date()
 const installment = z.object({
@@ -17,7 +18,7 @@ export const membershipFeeSchema = z.object({
   enrollment_fee: money,
   insurance_fee: money,
   monthly_fee: money,
-  months_count: count,
+  months_count: months,
   installments_count: z.coerce.number().int().min(1).max(120),
   installments: z.array(installment).max(120).optional(),
 }).strict()

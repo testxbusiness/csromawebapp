@@ -33,6 +33,9 @@ export type Championship = {
   sport: string
   start_date?: string | null
   end_date?: string | null
+  team_ids?: string[]
+  /** Club-team labels already scoped by the server-side athlete resolver. */
+  clubTeams?: ClubTeam[]
   championship_groups?: ChampionshipGroup[]
 }
 
@@ -100,6 +103,8 @@ export type Standing = {
   class_points: number
   set_ratio: number | null
   point_ratio: number | null
+  /** Server-enriched label for teams in the selected group. */
+  team_name?: string | null
 }
 
 export type Season = { id: string; name: string }

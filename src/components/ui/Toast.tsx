@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'
 
 type ToastType = 'success' | 'error' | 'info'
 
@@ -98,8 +99,8 @@ function ToastCard({ item, onClose }: { item: ToastItem; onClose: () => void }) 
       className="cs-card shadow-md border flex items-start gap-3 p-3 animate-in fade-in slide-in-from-top-2"
       style={{ borderLeft: `4px solid ${color}` }}
     >
-      <div className="text-lg" aria-hidden>
-        {type === 'success' ? '✅' : type === 'error' ? '⚠️' : 'ℹ️'}
+      <div className="text-lg" aria-hidden="true">
+        {type === 'success' ? <CheckCircle2 /> : type === 'error' ? <AlertTriangle /> : <Info />}
       </div>
       <div className="flex-1">
         {title && <div className="font-medium leading-tight mb-0.5">{title}</div>}
@@ -110,7 +111,7 @@ function ToastCard({ item, onClose }: { item: ToastItem; onClose: () => void }) 
         className="cs-btn cs-btn--ghost cs-btn--sm"
         onClick={onClose}
       >
-        ✕
+        <X className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   )

@@ -4,7 +4,9 @@ import { useCallback, useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import PaymentModal from '@/components/admin/PaymentModal'
-import { LoadingState } from '@/components/ui'
+import { DeniedState, ErrorState, LoadingState, OfflineState } from '@/components/ui'
+import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
+import { BarChart3, CheckCircle2, RotateCcw } from 'lucide-react'
 
 interface Payment {
   id?: string
@@ -86,13 +88,14 @@ interface Payee extends Coach {
   type: 'coach' | 'staff'
 }
 
-export default function PaymentsManager() {
+export default function PaymentsManager({ embedded = false }: { embedded?: boolean }) {
   const [payments, setPayments] = useState<Payment[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [payees, setPayees] = useState<Payee[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [filterType, setFilterType] = useState<'all' | 'general_cost' | 'coach_payment' | 'person_payment'>('all')
@@ -108,18 +111,25 @@ export default function PaymentsManager() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPayments = async () => {
+    setLoading(true)
+    setLoadState('loading')
     try {
       const response = await fetch('/api/admin/payments')
       if (!response.ok) {
-        throw new Error('Failed to load payments')
+        setPayments([])
+        setLoadState(loadStateFromStatus(response.status))
+        return
       }
       const data = await response.json()
       setPayments(data)
+      setLoadState('ready')
     } catch (error) {
       console.error('Error loading payments:', error)
       setPayments([])
+      setLoadState(loadStateFromError(error))
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const loadGyms = async () => {
@@ -398,19 +408,22 @@ export default function PaymentsManager() {
   if (loading) {
     return <LoadingState label="Caricamento pagamenti..." />
   }
+  if (loadState === 'denied') return <DeniedState description="Non hai i permessi per visualizzare i pagamenti." action={<button onClick={() => void loadPayments()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'offline') return <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadPayments()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'error') return <ErrorState title="Impossibile caricare i pagamenti" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadPayments()} className="cs-btn cs-btn--outline">Riprova</button>} />
 
   const filteredPayments = filterPayments()
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Pagamenti</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Pagamenti</h2>}
         <div className="flex gap-3">
           <button
             onClick={exportPaymentsToExcel}
             className="cs-btn cs-btn--accent"
           >
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button
@@ -427,13 +440,13 @@ export default function PaymentsManager() {
 
       {/* Statistics */}
 <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
-  <div className="cs-card cs-card--primary p-6">
+  <div className="cs-card cs-card--primary p-6 tabular-nums">
     <div className="text-sm text-secondary">Totale Pagamenti</div>
     <div className="text-2xl font-bold">€{getTotalAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">{filteredPayments.length} pagamenti</div>
   </div>
 
-  <div className="cs-card cs-card--primary p-6">
+  <div className="cs-card cs-card--primary p-6 tabular-nums">
     <div className="text-sm text-secondary">Da Pagare</div>
     <div className="text-2xl font-bold">€{getPendingAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">
@@ -441,7 +454,7 @@ export default function PaymentsManager() {
     </div>
   </div>
 
-  <div className="cs-card cs-card--primary p-6">
+  <div className="cs-card cs-card--primary p-6 tabular-nums">
     <div className="text-sm text-secondary">Pagati</div>
     <div className="text-2xl font-bold">
       €{(getTotalAmount() - getPendingAmount()).toFixed(2)}
@@ -534,7 +547,7 @@ export default function PaymentsManager() {
             </td>
 
             <td className="p-4 whitespace-nowrap align-top">
-              <div className="text-sm font-semibold">
+              <div className="text-sm font-semibold tabular-nums">
                 €{payment.amount.toFixed(2)}
               </div>
             </td>
@@ -571,7 +584,7 @@ export default function PaymentsManager() {
                   className="cs-btn cs-btn--ghost cs-btn--sm mr-2"
                   title="Segna come pagato"
                 >
-                  ✅
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 </button>
               ) : (
                 <button
@@ -579,7 +592,7 @@ export default function PaymentsManager() {
                   className="cs-btn cs-btn--ghost cs-btn--sm mr-2"
                   title="Segna come da pagare"
                 >
-                  ↩️
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               <button
@@ -618,7 +631,7 @@ export default function PaymentsManager() {
         </div>
 
         <div className="mt-3 grid gap-2">
-          <div className="text-sm"><strong>Importo:</strong> €{payment.amount.toFixed(2)}</div>
+          <div className="text-sm tabular-nums"><strong>Importo:</strong> €{payment.amount.toFixed(2)}</div>
           <div className="text-sm">
             <strong>Stato:</strong>
             <span className={`ml-2 cs-badge ${payment.status === 'paid' ? 'cs-badge--success' : 'cs-badge--warning'}`}>

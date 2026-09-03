@@ -1,13 +1,12 @@
 'use client'
 
 import PaymentsManager from '@/components/admin/PaymentsManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function PaymentsPage() {
   return (
-    <>
-      <PageHeader title="Gestione Pagamenti" subtitle="Amministrazione CSRoma" />
-      <PaymentsManager />
-    </>
+    <AdminManagementPage title="Uscite" context="Amministrazione" description="Gestisci costi generali, compensi e pagamenti dello staff.">
+      <PaymentsManager embedded />
+    </AdminManagementPage>
   )
 }

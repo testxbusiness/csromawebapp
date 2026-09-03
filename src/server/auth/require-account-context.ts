@@ -17,7 +17,7 @@ export type AccountContext = {
 export class AccountContextError extends Error {
   constructor(
     message: string,
-    public readonly status: 401 | 403 | 500
+    public readonly status: 400 | 401 | 403 | 404 | 500
   ) {
     super(message)
     this.name = 'AccountContextError'

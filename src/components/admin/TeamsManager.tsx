@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { exportTeams } from '@/lib/utils/excelExport'
 import TeamModal from '@/components/admin/TeamModal'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { BarChart3, Users } from 'lucide-react'
 
 interface Team {
   id?: string
@@ -49,7 +50,7 @@ interface Gym {
   address?: string
 }
 
-export default function TeamsManager() {
+export default function TeamsManager({ embedded = false }: { embedded?: boolean }) {
   const [teams, setTeams] = useState<Team[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [coaches, setCoaches] = useState<Coach[]>([])
@@ -269,13 +270,13 @@ export default function TeamsManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Squadre</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Squadre</h2>}
         <div className="flex gap-3">
           <button
             onClick={() => exportTeams(teams)}
             className="cs-btn cs-btn--outline"
           >
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button
@@ -320,7 +321,7 @@ export default function TeamsManager() {
               <tr key={team.id}>
                 <td className="flex items-center">
                   <div className="flex items-center">
-                    <div className="text-2xl mr-3">👥</div>
+                    <Users className="mr-3 h-6 w-6 text-[color:var(--cs-brand-red)]" aria-hidden="true" />
                     <div>
                       <div className="text-sm font-medium ">{team.name}</div>
                       <div className="text-xs text-gray-500">

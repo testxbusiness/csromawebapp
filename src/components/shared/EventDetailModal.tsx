@@ -1,13 +1,11 @@
 "use client"
 
 import * as React from 'react'
-import { createPortal } from 'react-dom'
-import { NextStepViewport } from 'nextstepjs'
-import { LoadingState } from '@/components/ui'
+import { ErrorState, LoadingState, ResponsiveDetail } from '@/components/ui'
+import AttendanceControl from '@/components/athlete/AttendanceControl'
+import type { AttendanceStatus } from '@/types/attendance'
 
-type TeamLike = { id?: string; name: string } | string
-export type AttendanceStatus = 'going' | 'maybe' | 'declined'
-
+type TeamLike = { id?: string; name: string; code?: string | null } | string
 export type EventDetailData = {
   title?: string
   event_kind?: 'training'|'match'|'meeting'|'other'|string
@@ -28,38 +26,13 @@ type EventDetailModalProps = {
   onClose: () => void
   data: EventDetailData | null
   onAttendanceChange?: (status: AttendanceStatus) => Promise<void>
+  canRespond?: boolean
+  error?: string | null
+  onRetry?: () => void
   children?: React.ReactNode
 }
 
-export default function EventDetailModal({ open, onClose, data, onAttendanceChange, children }: EventDetailModalProps) {
-  const [mounted, setMounted] = React.useState(false)
-  const [attendanceStatus, setAttendanceStatus] = React.useState<AttendanceStatus | null>(null)
-  const [attendanceSaving, setAttendanceSaving] = React.useState(false)
-  const [attendanceError, setAttendanceError] = React.useState<string | null>(null)
-  React.useEffect(() => { setMounted(true) }, [])
-  React.useEffect(() => {
-    setAttendanceStatus(data?.my_attendance?.status ?? null)
-    setAttendanceError(null)
-  }, [data])
-
-  const handleAttendanceChange = async (status: AttendanceStatus) => {
-    if (!onAttendanceChange) return
-    setAttendanceSaving(true)
-    setAttendanceError(null)
-    try {
-      await onAttendanceChange(status)
-      setAttendanceStatus(status)
-    } catch (error) {
-      setAttendanceError(error instanceof Error ? error.message : 'Impossibile salvare la risposta')
-    } finally {
-      setAttendanceSaving(false)
-    }
-  }
-  const IconX = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
-      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth={2} strokeLinecap="round"/>
-    </svg>
-  )
+export default function EventDetailModal({ open, onClose, data, onAttendanceChange, canRespond = true, error = null, onRetry, children }: EventDetailModalProps) {
   const IconClock = (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth={2}/>
@@ -87,7 +60,12 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
     </svg>
   )
 
-  const humanKind = (k?: string) => ({ training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro' } as any)[k || ''] || k || ''
+  const humanKind = (kind?: string) => ({
+    training: 'Allenamento',
+    match: 'Partita',
+    meeting: 'Riunione',
+    other: 'Altro',
+  } as Record<string, string>)[kind ?? ''] ?? kind ?? ''
 
   const place = (d: EventDetailData | null) => {
     if (!d) return '—'
@@ -96,44 +74,25 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
     return '—'
   }
 
-  const attendanceLabel = (status: AttendanceStatus | null) => {
-    if (status === 'going') return 'Partecipo'
-    if (status === 'maybe') return 'Forse'
-    if (status === 'declined') return 'Non partecipo'
-    return 'Nessuna risposta'
-  }
-
-  if (!mounted || !open) return null
-
-  return createPortal(
-    <div
-      className="cs-overlay"
-      aria-hidden={open ? 'false' : 'true'}
-      style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 100 }}
+  return (
+    <ResponsiveDetail
+      open={open}
+      onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}
+      title={data?.title ? `Dettaglio: ${data.title}` : 'Dettaglio evento'}
+      description={data?.event_kind ? humanKind(data.event_kind) : 'Informazioni sull’evento'}
+      size="lg"
+      fullscreenOnMobile
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        className="cs-modal cs-modal--md"
-        data-state={open ? 'open' : 'closed'}
-        style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
-      >
-        <NextStepViewport id="event-detail-viewport">
-          <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
-
-          <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }} id="event-detail-title">
-            <div className="cs-modal__icon" aria-hidden>📅</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 className="cs-modal__title">Dettaglio Evento</h2>
-              {data?.title && <div style={{ marginTop: 4, fontWeight: 600 }}>{data.title}</div>}
-              {data?.event_kind && <div className="text-secondary" style={{ fontSize: 12 }}>{humanKind(data.event_kind)}</div>}
-            </div>
-          </div>
-
-          {!data ? (
+      {error ? (
+        <ErrorState
+          title="Impossibile caricare il dettaglio"
+          description={error}
+          action={onRetry ? <button type="button" className="cs-btn cs-btn--outline" onClick={onRetry}>Riprova</button> : undefined}
+        />
+      ) : !data ? (
             <LoadingState label="Caricamento evento..." />
           ) : (
-            <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {/* Orario */}
               <div id="event-detail-time">
                 <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Orario</div>
@@ -183,56 +142,26 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
 
               {/* Descrizione */}
               {data.description && (
-                <div style={{ gridColumn: '1 / -1' }} id="event-detail-description">
+                <div className="sm:col-span-2" id="event-detail-description">
                   <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Descrizione</div>
                   <p style={{ whiteSpace: 'pre-wrap' }}>{data.description}</p>
                 </div>
               )}
 
               {data.requires_confirmation && onAttendanceChange && (
-                <div style={{ gridColumn: '1 / -1' }} id="event-detail-attendance">
-                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>
-                    Conferma partecipazione
-                  </div>
-                  <p style={{ margin: '6px 0 12px' }}>
-                    Risposta attuale: <strong>{attendanceLabel(attendanceStatus)}</strong>
-                  </p>
-                  {data.confirmation_deadline && (
-                    <p className="text-secondary" style={{ fontSize: 12, margin: '0 0 12px' }}>
-                      Puoi rispondere fino al {new Date(data.confirmation_deadline).toLocaleString('it-IT')}
-                    </p>
-                  )}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {([
-                        ['going', 'Partecipo'],
-                        ['maybe', 'Forse'],
-                        ['declined', 'Non partecipo'],
-                      ] as const).map(([status, label]) => (
-                        <button
-                          key={status}
-                          type="button"
-                          className={`cs-btn ${attendanceStatus === status ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
-                          onClick={() => void handleAttendanceChange(status)}
-                          disabled={attendanceSaving}
-                          aria-pressed={attendanceStatus === status}
-                        >
-                          {attendanceSaving && attendanceStatus === status ? 'Salvataggio…' : label}
-                        </button>
-                      ))}
-                  </div>
-                  {attendanceError && (
-                    <p role="alert" style={{ color: '#b91c1c', fontSize: 13, margin: '10px 0 0' }}>
-                      {attendanceError}
-                    </p>
-                  )}
+                <div className="sm:col-span-2" id="event-detail-attendance">
+                  <AttendanceControl
+                    requiresConfirmation
+                    confirmationDeadline={data.confirmation_deadline}
+                    initialStatus={data.my_attendance?.status ?? null}
+                    canRespond={canRespond}
+                    onChange={onAttendanceChange}
+                  />
                 </div>
               )}
             </div>
           )}
-          {children}
-        </NextStepViewport>
-      </section>
-    </div>,
-    document.body
+      {children}
+    </ResponsiveDetail>
   )
 }

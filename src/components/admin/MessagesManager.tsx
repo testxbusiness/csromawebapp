@@ -7,6 +7,7 @@ import { exportToExcel } from '@/lib/utils/excelExport'
 import MessageModal, { type Message as MessageForm } from '@/components/admin/MessageModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import MessageReadReport from '@/components/admin/MessageReadReport'
+import { BarChart3, CircleUserRound, Trophy } from 'lucide-react'
 
 interface Message {
   id?: string
@@ -66,7 +67,7 @@ function formatRole(role: string | null | undefined) {
   return 'nessun ruolo'
 }
 
-export default function MessagesManager() {
+export default function MessagesManager({ embedded = false }: { embedded?: boolean }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [users, setUsers] = useState<User[]>([])
@@ -244,10 +245,10 @@ export default function MessagesManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Messaggi</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Messaggi</h2>}
         <div className="flex gap-3">
           <button onClick={exportMessagesToExcel} className="cs-btn cs-btn--outline">
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">
@@ -297,7 +298,7 @@ export default function MessagesManager() {
           </thead>
           <tbody>
             {messages.map((message) => (
-              <tr key={message.id} className="cursor-pointer" onClick={() => setSelectedMessage(message)}>
+              <tr key={message.id}>
                 <td>
                   <div>
                     <div className="font-medium">{message.subject}</div>
@@ -326,7 +327,7 @@ export default function MessagesManager() {
                       <div className="flex flex-wrap gap-1">
                         {message.message_recipients.map((mr) => (
                           <span key={mr.id} className="cs-badge cs-badge--neutral">
-                            {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name} (${formatRole(mr.profiles?.role)})`}
+                            {mr.teams ? <><Trophy className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.teams.name}</> : <><CircleUserRound className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.profiles?.first_name} {mr.profiles?.last_name} ({formatRole(mr.profiles?.role)})</>}
                           </span>
                         ))}
                       </div>
@@ -336,6 +337,7 @@ export default function MessagesManager() {
                   </div>
                 </td>
                 <td className="cs-table__actions" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => setSelectedMessage(message)} className="cs-btn cs-btn--ghost cs-btn--sm">Dettagli</button>
                   <button onClick={() => { setEditingMessage(message); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
                   <button onClick={() => handleDeleteMessage(message.id!)} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
                 </td>
@@ -349,7 +351,7 @@ export default function MessagesManager() {
         }
         <div className="md:hidden p-4 space-y-3">
           {messages.map((message) => (
-            <div key={message.id} className="cs-card" onClick={() => setSelectedMessage(message)}>
+            <article key={message.id} className="cs-card">
               <div className="font-semibold">{message.subject}</div>
               <div className="text-sm text-secondary line-clamp-3">{message.content}</div>
               {(message as any).attachments && (message as any).attachments.length > 0 && (
@@ -367,7 +369,7 @@ export default function MessagesManager() {
                     {message.message_recipients && message.message_recipients.length > 0 ? (
                       message.message_recipients.map((mr) => (
                         <span key={mr.id} className="cs-badge cs-badge--neutral">
-                          {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name} (${formatRole(mr.profiles?.role)})`}
+                          {mr.teams ? <><Trophy className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.teams.name}</> : <><CircleUserRound className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.profiles?.first_name} {mr.profiles?.last_name} ({formatRole(mr.profiles?.role)})</>}
                         </span>
                       ))
                     ) : (
@@ -377,10 +379,11 @@ export default function MessagesManager() {
                 </div>
               </div>
               <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                <button type="button" onClick={() => setSelectedMessage(message)} className="cs-btn cs-btn--ghost cs-btn--sm flex-1">Dettagli</button>
                 <button onClick={() => { setEditingMessage(message); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
                 <button onClick={() => handleDeleteMessage(message.id!)} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
               </div>
-            </div>
+            </article>
           ))}
         </div>
 

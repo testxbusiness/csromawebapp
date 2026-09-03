@@ -143,7 +143,7 @@ export default function ResetPasswordForm({ nextPath }: Props) {
             <div className="text-center" style={{ marginBottom: 16 }}>
               {/* Se vuoi evitare il warning <img>, usa sempre <Image /> */}
               <img
-                src="/images/logo_CSRoma.svg"
+                src="/images/new_csroma_logo_no_bg.svg"
                 alt="CSRoma"
                 className="h-16 mx-auto mb-2"
               />

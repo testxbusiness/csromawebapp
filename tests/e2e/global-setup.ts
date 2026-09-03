@@ -26,8 +26,9 @@ export default async function globalSetup(config: FullConfig) {
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
 
-    const loginResponsePromise = page.waitForResponse((response) =>
-      response.url().endsWith('/api/auth/login')
+    const loginResponsePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/auth/login'),
+      { timeout: 120_000 },
     )
     await page.getByRole('button', { name: 'Accedi' }).click()
     const loginResponse = await loginResponsePromise
@@ -36,7 +37,10 @@ export default async function globalSetup(config: FullConfig) {
       throw new Error(`E2E admin login failed with HTTP ${loginResponse.status()}`)
     }
 
-    await page.waitForURL(/\/dashboard/, { timeout: 15_000 })
+    // The local dev server compiles the authenticated shell and dashboard on
+    // first navigation; allow that cold-start cost without weakening the
+    // actual login status assertion above.
+    await page.waitForURL(/\/dashboard/, { timeout: 60_000 })
     await context.storageState({ path: authFile })
   } finally {
     await browser.close()

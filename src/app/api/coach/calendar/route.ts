@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const requestedTeamId = new URL(request.url).searchParams.get('team_id')
 
     // 1. Resolve assignments and team rows separately. Keeping the assignment
     // query independent avoids losing teams when PostgREST cannot expand the
@@ -25,6 +26,9 @@ export async function GET(request: NextRequest) {
     }
 
     const assignedTeamIds = [...new Set((coachTeams || []).map(row => row.team_id))]
+    if (requestedTeamId && !assignedTeamIds.includes(requestedTeamId)) {
+      return NextResponse.json({ error: 'Squadra non assegnata al coach' }, { status: 403 })
+    }
     if (assignedTeamIds.length === 0) {
       return NextResponse.json({ events: [], teams: [] })
     }
@@ -45,7 +49,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events: [], teams: [] })
     }
 
-    const teamIds = teamData.map(t => t.id)
+    const teamIds = requestedTeamId ? [requestedTeamId] : teamData.map(t => t.id)
 
     // 2. Get event-team relations (batch processing for large arrays)
     let eventIds: string[] = []

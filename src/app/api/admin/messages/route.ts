@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
     try {
       await notifyMessageRecipients({
         adminClient,
+        messageId: message.id,
         subject,
         senderProfileId: account.ownerProfileId,
         selectedTeamIds: selected_teams,

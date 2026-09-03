@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { X } from 'lucide-react'
 
 interface AthleteDetailDrawerProps {
   isOpen: boolean
@@ -63,6 +64,9 @@ export default function AthleteDetailDrawer({
   const [paymentHistory, setPaymentHistory] = useState<PaymentHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'installments' | 'payments'>('overview')
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const lastFocusedElementRef = useRef<HTMLElement | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -144,6 +148,46 @@ export default function AthleteDetailDrawer({
     }
   }, [athleteId, isOpen, loadAthleteData])
 
+  useEffect(() => {
+    if (!isOpen) {
+      lastFocusedElementRef.current?.focus()
+      return
+    }
+
+    lastFocusedElementRef.current = document.activeElement as HTMLElement | null
+    const timer = window.setTimeout(() => closeButtonRef.current?.focus(), 0)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab' || !drawerRef.current) return
+      const focusable = drawerRef.current.querySelectorAll<HTMLElement>(
+        "a[href], button:not([disabled]), textarea:not([disabled]), input:not([type='hidden']):not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])"
+      )
+      if (focusable.length === 0) {
+        event.preventDefault()
+        drawerRef.current.focus()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen, onClose])
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'not_due':
@@ -205,19 +249,22 @@ export default function AthleteDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-black bg-opacity-50" aria-hidden="true" onClick={onClose}></div>
 
-      <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
+      <div ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="athlete-drawer-title" tabIndex={-1} className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl">
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Dettaglio Atleta</h2>
+              <h2 id="athlete-drawer-title" className="text-lg font-semibold text-gray-900">Dettaglio Atleta</h2>
               <button
+                ref={closeButtonRef}
+                type="button"
                 onClick={onClose}
                 className="text-gray-400 hover:text-gray-600"
+                aria-label="Chiudi dettaglio atleta"
               >
-                ✕
+                <X className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </div>

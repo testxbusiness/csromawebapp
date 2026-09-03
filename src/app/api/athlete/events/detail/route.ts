@@ -29,6 +29,9 @@ export async function GET(request: NextRequest) {
       .in('team_id', teamIds)
       .eq('profile_id', athleteProfileId)
     if (!member || member.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Only expose team context that was authorized for this subject. An event
+    // may also be linked to teams where the subject is not a member.
+    const authorizedTeamIds = [...new Set(member.map((row) => row.team_id))]
 
     const { data: ev } = await dataClient
       .from('events')
@@ -43,8 +46,8 @@ export async function GET(request: NextRequest) {
       gym = data
     }
     let teams: any[] = []
-    if (teamIds.length) {
-      const { data } = await dataClient.from('teams').select('id, name, code').in('id', teamIds)
+    if (authorizedTeamIds.length) {
+      const { data } = await dataClient.from('teams').select('id, name, code').in('id', authorizedTeamIds)
       teams = data || []
     }
     let creator: any = null

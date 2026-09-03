@@ -1,606 +1,151 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useNextStep } from 'nextstepjs'
-import { createClient } from '@/lib/supabase/client'
-import DetailsDrawer from '@/components/shared/DetailsDrawer'
-import EventDetailModal from '@/components/shared/EventDetailModal'
-import MessageDetailModal from '@/components/shared/MessageDetailModal'
-import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
-import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
-import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
-import { EmptyState, LoadingState } from '@/components/ui'
+import Link from 'next/link'
+import { CalendarDays, ChevronRight, CircleAlert, MessageSquare, Trophy, UsersRound } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { DeniedState, ErrorState, FeedbackState, OfflineState, Panel, StatusBadge } from '@/components/ui'
+import { useTeamContext } from '@/context/TeamContext'
+import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
 
-interface User {
-  id: string
-  email?: string
+type User = { id: string; email?: string }
+type Profile = { id: string; first_name: string; last_name: string; role: string }
+type Team = { id: string; name: string; code?: string | null; activity?: string | null }
+type CoachEvent = { id: string; title: string; start_time: string; end_time?: string | null; location?: string | null; event_kind?: 'training' | 'match' | 'meeting' | 'other' | null; teams?: string[]; requires_confirmation?: boolean }
+type CoachMessage = { id: string; subject: string; content?: string; created_at?: string }
+type AttendanceCounts = { going: number; maybe: number; declined: number; no_response: number }
+type CoachDashboardProps = { user: User; profile: Profile }
+
+const eventLabels: Record<NonNullable<CoachEvent['event_kind']>, string> = { training: 'Allenamento', match: 'Partita', meeting: 'Riunione', other: 'Altro' }
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(value))
 }
 
-interface Profile {
-  id: string
-  first_name: string
-  last_name: string
-  role: string
+function formatTime(value: string) {
+  return new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(new Date(value))
 }
 
-interface Team {
-  id: string
-  name: string
-  code: string
-  activity_id?: string
-  activity: {
-    name: string
-  }
+function findConflicts(events: CoachEvent[]) {
+  const conflicts = new Set<string>()
+  events.forEach((event, index) => {
+    const start = new Date(event.start_time).getTime()
+    const end = new Date(event.end_time ?? event.start_time).getTime()
+    events.slice(index + 1).forEach((other) => {
+      if (start < new Date(other.end_time ?? other.start_time).getTime() && new Date(other.start_time).getTime() < end) {
+        conflicts.add(event.id)
+        conflicts.add(other.id)
+      }
+    })
+  })
+  return conflicts
 }
 
-interface Event {
-  id: string
-  title: string
-  start_date: string
-  end_date: string
-  location?: string
-  event_type: string
-  event_kind?: 'training' | 'match' | 'meeting' | 'other'
-  teams?: string
-  description?: string
+function SectionLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return <Link href={href} className="inline-flex items-center gap-1 text-sm font-semibold text-[color:var(--cs-brand-red)]">{children}<ChevronRight className="h-4 w-4" aria-hidden="true" /></Link>
 }
 
-interface CoachCalendarEvent {
-  id: string
-  title: string
-  description?: string | null
-  location?: string | null
-  start_time?: string | null
-  end_time?: string | null
-  is_recurring?: boolean
-  event_kind?: Event['event_kind']
-  teams?: string[] | string | null
+function CoachPanel({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
+  return <Panel><div className="mb-4"><h2 className="cs-type-h3">{title}</h2><p className="mt-1 text-sm text-[color:var(--cs-ink-muted)]">{description}</p></div>{children}</Panel>
 }
 
-function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
-  return Array.isArray(value) ? value[0] : value ?? undefined
-}
-
-interface Message {
-  id: string
-  subject: string
-  content: string
-  created_at: string
-  created_by?: string
-  unread_count?: number
-}
-
-interface Payment {
-  id: string
-  description: string
-  amount: number
-  status: string
-  due_date?: string
-}
-
-interface CoachDashboardProps {
-  user: User
-  profile: Profile
-}
-
-export default function CoachDashboard({ user, profile }: CoachDashboardProps) {
-  const { startNextStep } = useNextStep()
-  const [teams, setTeams] = useState<Team[]>([])
-  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
-  const [recentMessages, setRecentMessages] = useState<Message[]>([])
-  const [payments, setPayments] = useState<Payment[]>([])
+export default function CoachDashboard({ profile }: CoachDashboardProps) {
+  const { teams, selectedTeamId, setTeams } = useTeamContext()
+  const [events, setEvents] = useState<CoachEvent[]>([])
+  const [messages, setMessages] = useState<CoachMessage[]>([])
+  const [attendance, setAttendance] = useState<AttendanceCounts | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeSeason, setActiveSeason] = useState<any>(null)
-  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
-  const [messageDetail, setMessageDetail] = useState<any>(null)
-  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
-  const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
-  const supabase = useMemo(() => createClient(), [])
+  const [loadState, setLoadState] = useState<LoadState>('ready')
+  const [error, setError] = useState<string | null>(null)
 
-  // Enrich selected message on open
-  useEffect(() => {
-    const loadDetail = async () => {
-      if (!selectedMessage) { setMessageDetail(null); return }
-      try {
-        const res = await fetch(`/api/coach/messages?view=full&id=${selectedMessage.id}`)
-        const json = await res.json()
-        if (res.ok && json.messages && json.messages.length) {
-          setMessageDetail(json.messages[0])
-        }
-      } catch {}
-    }
-    loadDetail()
-  }, [selectedMessage])
-
-  const loadActiveSeason = useCallback(async () => {
-    const { data } = await supabase
-      .from('seasons')
-      .select('*')
-      .eq('is_active', true)
-      .single()
-    if (data) setActiveSeason(data)
-  }, [supabase])
-
-  const loadCoachTeams = useCallback(async () => {
-    const { data } = await supabase
-      .from('team_coaches')
-      .select('team_id, teams(id, name, code, activity_id)')
-      .eq('coach_id', profile.id)
-
-    if (!data || data.length === 0) {
-      setTeams([])
-      return []
-    }
-
-    const teamRecords = data
-      .map((row) => firstRelation(row.teams))
-      .filter(Boolean) as Array<{ id: string; name: string; code: string; activity_id?: string }>
-
-    const activityIds = [...new Set(teamRecords.map(team => team.activity_id).filter(Boolean))]
-    let activities: any[] = []
-
-    if (activityIds.length > 0) {
-      const { data: activitiesData } = await supabase
-        .from('activities')
-        .select('id, name')
-        .in('id', activityIds)
-
-      activities = activitiesData || []
-    }
-
-    const teamsWithActivities = teamRecords.map(team => ({
-      ...team,
-      activity: activities.find((activity: any) => activity.id === team.activity_id) || { name: 'N/A' }
-    }))
-
-    setTeams(teamsWithActivities as Team[])
-    return teamsWithActivities.map(team => team.id)
-  }, [profile.id, supabase])
-
-  const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
-    if (teamIds.length === 0) {
-      setUpcomingEvents([])
-      return
-    }
-
-    try {
-      // Use the same-origin API so the browser does not call Supabase REST
-      // directly and trigger a local CORS preflight.
-      const response = await fetch('/api/coach/calendar')
-      const result = await response.json().catch(() => ({}))
-
-      if (!response.ok) {
-        console.error('Error loading coach calendar:', result.error || response.status)
-        setUpcomingEvents([])
-        return
-      }
-
-      const events = (result.events || []) as CoachCalendarEvent[]
-      const normalizedEvents = events
-        .slice(0, 3)
-        .filter((event) => event.start_time && event.end_time)
-        .map((event): Event => ({
-          id: event.id,
-          title: event.title,
-          start_date: event.start_time!,
-          end_date: event.end_time!,
-          location: event.location ?? undefined,
-          event_type: event.is_recurring ? 'recurring' : 'one_time',
-          event_kind: event.event_kind,
-          description: event.description ?? undefined,
-          teams: Array.isArray(event.teams) ? event.teams.join(', ') : event.teams ?? '',
-        }))
-
-      setUpcomingEvents(normalizedEvents)
-    } catch (error) {
-      console.error('Error loading coach calendar:', error)
-      setUpcomingEvents([])
-    }
-  }, [])
-
-  const loadRecentMessages = useCallback(async (teamIds: string[]) => {
-    // Get recent messages sent to coach's teams
-    if (teamIds.length === 0) {
-      setRecentMessages([])
-      return
-    }
-
-    try {
-      console.log('Loading messages for team IDs:', teamIds)
-      
-      // Use API endpoint to avoid RLS recursion issues
-      const response = await fetch('/api/coach/messages', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) {
-        console.error('API error loading messages:', response.status)
-        setRecentMessages([])
-        return
-      }
-
-      const result = await response.json()
-      
-      if (result.error) {
-        console.error('Error from messages API:', result.error)
-        setRecentMessages([])
-        return
-      }
-
-      console.log('Coach messages from API:', result.messages)
-
-      if (result.messages && result.messages.length > 0) {
-        const messagesWithUnread = result.messages.map((msg: any) => ({
-          ...msg,
-          unread_count: 0 // Placeholder for unread count
-        }))
-        setRecentMessages(messagesWithUnread)
-      } else {
-        setRecentMessages([])
-      }
-    } catch (error) {
-      console.error('Error in loadRecentMessages:', error)
-      setRecentMessages([])
-    }
-  }, [])
-
-  const loadPayments = useCallback(async () => {
-    // Get coach payments
-    const { data } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('coach_id', profile.id)
-      .eq('type', 'coach_payment')
-      .order('due_date', { ascending: true })
-      .limit(5)
-
-    if (data) setPayments(data)
-  }, [profile.id, supabase])
-
-  const loadTeamDetail = useCallback(async (teamId: string) => {
-    try {
-      // 1. Team basic info
-      const { data: teamData } = await supabase
-        .from('teams')
-        .select('name, code, activity_id, activities(name)')
-        .eq('id', teamId)
-        .single()
-
-      if (!teamData) return
-
-      // 2. Training schedules with gyms
-      const { data: schedules } = await supabase
-        .from('team_training_schedules')
-        .select('day_of_week, start_time, end_time, gym_id, gyms(name, city)')
-        .eq('team_id', teamId)
-        .eq('is_active', true)
-        .order('day_of_week, start_time')
-
-      // 3. Coaches (without join)
-      const { data: coachesData } = await supabase
-        .from('team_coaches')
-        .select('coach_id, role')
-        .eq('team_id', teamId)
-
-      // 4. Athletes (without join)
-      const { data: membersData, error: membersError } = await supabase
-        .from('team_members')
-        .select('profile_id, jersey_number')
-        .eq('team_id', teamId)
-        .order('jersey_number')
-
-      console.warn('Coach loading members:', { membersData, membersError, teamId })
-
-      // 5. Load profiles separately to avoid RLS recursion
-      const coachIds = coachesData?.map(c => c.coach_id).filter(Boolean) || []
-      const memberIds = membersData?.map(m => m.profile_id).filter(Boolean) || []
-      const allProfileIds = [...coachIds, ...memberIds]
-
-      let profilesMap = new Map<string, any>()
-      if (allProfileIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .in('id', allProfileIds)
-
-        console.warn('Coach loading profiles:', { allProfileIds, profilesData, profilesError })
-
-        profilesData?.forEach(p => profilesMap.set(p.id, p))
-      }
-
-      // Build TeamDetailData
-      const detail: TeamDetailData = {
-        name: teamData.name,
-        code: teamData.code,
-        activity: firstRelation(teamData.activities) ? { name: firstRelation(teamData.activities)!.name } : undefined,
-        training_schedules: schedules?.map(s => ({
-          day_of_week: s.day_of_week,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          gym: {
-            name: firstRelation(s.gyms)?.name || 'N/D',
-            city: firstRelation(s.gyms)?.city
-          }
-        })) || [],
-        coaches: coachesData?.map(c => {
-          const profile = profilesMap.get(c.coach_id)
-          return {
-            id: c.coach_id,
-            first_name: profile?.first_name || '',
-            last_name: profile?.last_name || '',
-            role: c.role
-          }
-        }) || [],
-        athletes: membersData?.map(m => {
-          const profile = profilesMap.get(m.profile_id)
-          return {
-            id: m.profile_id,
-            first_name: profile?.first_name || '',
-            last_name: profile?.last_name || '',
-            jersey_number: m.jersey_number
-          }
-        }) || []
-      }
-
-      setTeamDetailData(detail)
-    } catch (error) {
-      console.error('Error loading team details:', error)
-      setTeamDetailData(null)
-    }
-  }, [supabase])
-
-  const loadCoachData = useCallback(async () => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true)
-
+    setError(null)
+    setLoadState('ready')
+    let classifiedLoadState: LoadState | null = null
     try {
-      // Stagione e squadre sono indipendenti: caricale in parallelo.
-      const [, teamIds] = await Promise.all([
-        loadActiveSeason(),
-        loadCoachTeams(),
+      const teamQuery = selectedTeamId ? `?team_id=${encodeURIComponent(selectedTeamId)}` : ''
+      const messageQuery = selectedTeamId ? `&team_id=${encodeURIComponent(selectedTeamId)}` : ''
+      const [calendarResponse, messagesResponse] = await Promise.all([
+        fetch(`/api/coach/calendar${teamQuery}`, { cache: 'no-store' }),
+        fetch(`/api/coach/messages?limit=3${messageQuery}`, { cache: 'no-store' }),
       ])
-
-      if (teamIds.length > 0) {
-        await Promise.all([
-          loadUpcomingEvents(teamIds),
-          loadRecentMessages(teamIds),
-          loadPayments()
-        ])
-      } else {
-        setUpcomingEvents([])
-        setRecentMessages([])
+      const calendar = await calendarResponse.json() as { events?: CoachEvent[]; teams?: Team[]; error?: string }
+      const messagePayload = await messagesResponse.json() as { messages?: CoachMessage[]; error?: string }
+      if (!calendarResponse.ok) {
+        classifiedLoadState = loadStateFromStatus(calendarResponse.status)
+        setLoadState(classifiedLoadState)
+        throw new Error(calendar.error || 'Calendario non disponibile')
       }
-    } catch (error) {
-      console.error('Error loading coach data:', error)
+      if (!messagesResponse.ok) {
+        classifiedLoadState = loadStateFromStatus(messagesResponse.status)
+        setLoadState(classifiedLoadState)
+        throw new Error(messagePayload.error || 'Messaggi non disponibili')
+      }
+      const nextEvents = calendar.events ?? []
+      setEvents(nextEvents)
+      setMessages(messagePayload.messages ?? [])
+      if (calendar.teams) setTeams(calendar.teams)
+
+      const nextTraining = nextEvents.find((event) => event.requires_confirmation && event.event_kind === 'training')
+      if (!nextTraining) {
+        setAttendance(null)
+        return
+      }
+      const attendanceResponse = await fetch(`/api/coach/events/attendance?event_id=${nextTraining.id}${selectedTeamId ? `&team_id=${encodeURIComponent(selectedTeamId)}` : ''}`, { cache: 'no-store' })
+      const attendancePayload = await attendanceResponse.json() as { counts?: AttendanceCounts }
+      setAttendance(attendanceResponse.ok ? attendancePayload.counts ?? null : null)
+    } catch (reason) {
+      setLoadState(classifiedLoadState ?? loadStateFromError(reason))
+      setError(reason instanceof Error ? reason.message : 'Impossibile caricare la home coach')
     } finally {
       setLoading(false)
     }
-  }, [loadActiveSeason, loadCoachTeams, loadPayments, loadRecentMessages, loadUpcomingEvents])
+  }, [selectedTeamId, setTeams])
 
-  useEffect(() => {
-    void loadCoachData()
-  }, [loadCoachData])
+  useEffect(() => { void loadDashboard() }, [loadDashboard])
 
-  // Ricarica quando si torna alla tab / finestra (con debounce e throttling)
-  useEffect(() => {
-    let lastRefreshTime = 0
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  const nextEvent = events[0]
+  const nextMatch = events.find((event) => event.event_kind === 'match')
+  const conflictIds = useMemo(() => findConflicts(events), [events])
+  const answered = attendance ? attendance.going + attendance.maybe + attendance.declined : 0
 
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      if (debounceTimer) clearTimeout(debounceTimer)
-
-      debounceTimer = setTimeout(() => {
-        const now = Date.now()
-        const timeSinceLastRefresh = now - lastRefreshTime
-        if (timeSinceLastRefresh > 30000) {
-          void loadCoachData()
-          lastRefreshTime = now
-        }
-      }, 1000)
-    }
-
-    window.addEventListener('visibilitychange', onVisible)
-    window.addEventListener('focus', onVisible)
-    return () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
-      window.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('focus', onVisible)
-    }
-  }, [loadCoachData])
-
-  // Load team details when team is selected
-  useEffect(() => {
-    if (selectedTeamId) {
-      void loadTeamDetail(selectedTeamId)
-    } else {
-      setTeamDetailData(null)
-    }
-  }, [loadTeamDetail, selectedTeamId])
-
-  if (loading) {
-    return <LoadingState label="Caricamento dashboard..." />
+  if (loading) return <FeedbackState variant="loading" title="Preparazione della tua giornata" description="Caricamento agenda, presenze e comunicazioni…" />
+  if (error && events.length === 0 && messages.length === 0) {
+    const action = <button type="button" className="cs-btn cs-btn--outline cs-btn--sm" onClick={() => void loadDashboard()}>Riprova</button>
+    if (loadState === 'denied') return <DeniedState title="Area coach non disponibile" description="Non hai i permessi per visualizzare questa panoramica." action={action} />
+    if (loadState === 'offline') return <OfflineState title="Home coach non disponibile offline" description="Controlla la connessione e riprova." action={action} />
+    return <ErrorState title="Home coach non disponibile" description={error} action={action} />
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="cs-card cs-card--primary">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="coach-welcome" className="text-xl font-semibold">
-          Bentornato, {profile.first_name} {profile.last_name}
-          </h2>
-          <button
-            id="coach-start-tour"
-            className="cs-btn cs-btn--ghost"
-            onClick={() => startNextStep('coach')}
-          >
-            Guida
-          </button>
-        </div>
-        
-        {activeSeason && (
-          <div className="cs-card cs-card--primary mb-4">
-            <h3 className="font-semibold">Stagione</h3>
-            <p>{activeSeason.name}</p>
-            <p className="text-secondary text-sm">
-              {new Date(activeSeason.start_date).toLocaleDateString('it-IT')} - 
-              {new Date(activeSeason.end_date).toLocaleDateString('it-IT')}
-            </p>
-          </div>
-        )}
+    <div className="mx-auto w-full max-w-6xl space-y-6">
+      {error ? <FeedbackState variant={loadState === 'denied' ? 'denied' : loadState === 'offline' ? 'offline' : 'error'} title="Aggiornamento parziale" description={loadState === 'denied' ? 'Alcuni dati non sono disponibili per il tuo account.' : loadState === 'offline' ? 'Alcuni dati non sono aggiornati: controlla la connessione.' : error} /> : null}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div><p className="cs-type-label text-[color:var(--cs-ink-muted)]">Area coach</p><h1 className="cs-type-display text-[color:var(--cs-ink)]">Bentornato, {profile.first_name}</h1><p className="cs-type-body mt-1 text-[color:var(--cs-ink-muted)]">La panoramica operativa delle tue squadre.</p></div>
+        <div className="flex items-center gap-2 text-sm text-[color:var(--cs-ink-muted)]"><UsersRound className="h-4 w-4" aria-hidden="true" /><span>{selectedTeamId ? teams.find((team) => team.id === selectedTeamId)?.name ?? 'Squadra selezionata' : `${teams.length} squadre`}</span></div>
+      </header>
 
-        <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
-  <div className="cs-card cs-card--primary p-6">
-    <div className="text-sm text-secondary">Squadre Assegnate</div>
-    <div className="text-2xl font-bold">{teams.length}</div>
-    <div className="text-xs text-secondary">in totale</div>
-  </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CoachPanel title="Cosa ho oggi?" description="Agenda aggregata sulle squadre assegnate.">
+          {nextEvent ? <div className="space-y-4"><div className="flex items-start gap-3"><div className="rounded-xl bg-[color:var(--cs-surface-selected)] p-3 text-[color:var(--cs-brand-red)]"><CalendarDays className="h-5 w-5" aria-hidden="true" /></div><div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--cs-ink-muted)]">Prossimo impegno</p><h2 className="cs-type-h3 truncate">{nextEvent.title}</h2><p className="text-sm text-[color:var(--cs-ink-muted)]">{formatDate(nextEvent.start_time)} · {formatTime(nextEvent.start_time)}{nextEvent.location ? ` · ${nextEvent.location}` : ''}</p></div>{nextEvent.event_kind ? <StatusBadge status={nextEvent.event_kind === 'match' ? 'danger' : 'info'} label={eventLabels[nextEvent.event_kind]} /> : null}</div>{conflictIds.size > 0 ? <div className="flex items-center gap-2 rounded-lg border border-[color:var(--cs-warning-canonical)]/40 bg-[color:var(--cs-warning-canonical)]/10 p-3 text-sm"><CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" /><span>{conflictIds.size} impegni coinvolti in una sovrapposizione.</span></div> : null}<SectionLink href="/coach/calendar">Apri calendario</SectionLink></div> : <FeedbackState variant="empty" title="Nessun impegno imminente" description="Non risultano eventi nei prossimi giorni." action={<SectionLink href="/coach/calendar">Apri calendario</SectionLink>} />}
+        </CoachPanel>
 
-  <div className="cs-card cs-card--primary p-6">
-    <div className="text-sm text-secondary">Prossimi Eventi</div>
-    <div className="text-2xl font-bold">{upcomingEvents.length}</div>
-    <div className="text-xs text-secondary">in calendario</div>
-  </div>
+        <CoachPanel title="Chi sarà presente?" description="Stato delle conferme per il prossimo allenamento.">
+          {attendance ? <div className="space-y-4"><div className="grid grid-cols-4 gap-2 text-center"><AttendanceStat label="Confermati" value={attendance.going} tone="success" /><AttendanceStat label="Forse" value={attendance.maybe} tone="warning" /><AttendanceStat label="No" value={attendance.declined} tone="danger" /><AttendanceStat label="In attesa" value={attendance.no_response} tone="neutral" /></div><p className="text-sm text-[color:var(--cs-ink-muted)]">{answered} risposte ricevute su {answered + attendance.no_response} atleti.</p><SectionLink href="/coach/calendar">Gestisci presenze</SectionLink></div> : <FeedbackState variant="empty" title="Nessuna conferma da mostrare" description="Il prossimo allenamento non richiede RSVP oppure non è ancora in calendario." />}
+        </CoachPanel>
 
-  <div className="cs-card cs-card--primary p-6">
-    <div className="text-sm text-secondary">Messaggi Recenti</div>
-    <div className="text-2xl font-bold">{recentMessages.length}</div>
-    <div className="text-xs text-secondary">ricevuti</div>
-  </div>
-</div>
+        <CoachPanel title="Qual è la prossima partita?" description="Il prossimo appuntamento agonistico delle tue squadre.">
+          {nextMatch ? <div className="flex items-center gap-3"><div className="rounded-xl bg-[color:var(--cs-surface-selected)] p-3 text-[color:var(--cs-brand-red)]"><Trophy className="h-5 w-5" aria-hidden="true" /></div><div className="min-w-0 flex-1"><h2 className="cs-type-h3 truncate">{nextMatch.title}</h2><p className="text-sm text-[color:var(--cs-ink-muted)]">{formatDate(nextMatch.start_time)} · {formatTime(nextMatch.start_time)}{nextMatch.location ? ` · ${nextMatch.location}` : ''}</p>{nextMatch.teams?.length ? <p className="mt-1 text-xs text-[color:var(--cs-ink-muted)]">{nextMatch.teams.join(' · ')}</p> : null}</div><SectionLink href="/coach/campionati">Dettagli</SectionLink></div> : <FeedbackState variant="empty" title="Nessuna partita imminente" description="Le prossime partite compariranno qui quando saranno disponibili." action={<SectionLink href="/coach/campionati">Apri campionati</SectionLink>} />}
+        </CoachPanel>
+
+        <CoachPanel title="Cosa devo comunicare?" description="Le comunicazioni più recenti delle tue squadre.">
+          {messages.length ? <div className="space-y-1">{messages.map((message) => <Link key={message.id} href={`/coach/messages?messageId=${message.id}`} className="flex items-start gap-3 rounded-lg p-3 transition-colors hover:bg-[color:var(--cs-surface-subdued)]"><MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-[color:var(--cs-brand-red)]" aria-hidden="true" /><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{message.subject}</strong><span className="block truncate text-xs text-[color:var(--cs-ink-muted)]">{message.content || 'Apri il messaggio per i dettagli.'}</span></span><ChevronRight className="h-4 w-4 shrink-0 text-[color:var(--cs-ink-faint)]" aria-hidden="true" /></Link>)}<SectionLink href="/coach/messages">Apri messaggi</SectionLink></div> : <FeedbackState variant="empty" title="Nessuna comunicazione recente" description="Puoi inviare un aggiornamento alle tue squadre." action={<SectionLink href="/coach/messages">Nuovo messaggio</SectionLink>} />}
+        </CoachPanel>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Teams Section */}
-        <div className="cs-card cs-card--primary">
-          <h3 id="coach-teams" className="font-semibold mb-4">Le Tue Squadre</h3>
-          {teams.length === 0 ? (
-            <p className="text-secondary text-sm">Nessuna squadra assegnata</p>
-          ) : (
-            <div className="cs-list">
-              {teams.map((team) => (
-                <div
-                  key={team.id}
-                  className="cs-list-item cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setSelectedTeamId(team.id)}
-                >
-                  <div>
-                    <div className="font-medium">{team.name}</div>
-                    <div className="text-sm text-secondary">Codice: {team.code}</div>
-                    <div className="text-sm text-secondary">Attività: {team.activity?.name}</div>
-                  </div>
-                  <div className="text-right">
-                    <span className="cs-badge cs-badge--success">Attiva</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Quick Actions removed: replaced by role-based sidebar */}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Events clean */}
-        <UpcomingEventsPanel
-          anchorId="coach-events"
-          items={upcomingEvents.map(ev => ({
-            id: ev.id!,
-            title: ev.title,
-            start: new Date(ev.start_date),
-            end: new Date(ev.end_date),
-            location: ev.location || null,
-            kind: (ev as any).event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
-            subtitle: ev.description || null,
-          }))}
-          viewAllHref="/coach/calendar"
-          onDetail={(id)=>{ const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
-        />
-
-        {/* Recent Messages & Payments */}
-        <div className="space-y-6">
-          {/* Recent Messages clean */}
-          <LatestMessagesPanel
-            anchorId="coach-messages"
-            items={recentMessages.slice(0,3).map(m => ({
-              id: m.id,
-              subject: m.subject,
-              preview: m.content,
-              created_at: m.created_at ? new Date(m.created_at) : undefined,
-              from: (m as any).from || ((m as any).created_by_profile ? `${(m as any).created_by_profile.first_name || ''} ${(m as any).created_by_profile.last_name || ''}`.trim() : undefined),
-            }))}
-            viewAllHref="/coach/messages"
-            onDetail={(id)=>{ const mm = recentMessages.find(x=>x.id===id); if (mm) setSelectedMessage(mm as any) }}
-          />
-
-          {/* Payments Summary */}
-          <div className="cs-card cs-card--primary">
-            <h3 id="coach-payments" className="font-semibold mb-4">Stato Pagamenti</h3>
-            {payments.length === 0 ? (
-              <p className="text-secondary text-sm">Nessun pagamento in sospeso</p>
-            ) : (
-              <div className="cs-list">
-                {payments.slice(0, 3).map((payment) => (
-                  <div key={payment.id} className="cs-list-item">
-                    <div className="text-sm">
-                      <div className="font-medium">{payment.description}</div>
-                      <div className="text-secondary">
-                        €{payment.amount} - {payment.status === 'paid' ? 'Pagato' : 'Da Pagare'}
-                      </div>
-                    </div>
-                    <span className={`cs-badge ${payment.status==='paid' ? 'cs-badge--success' : 'cs-badge--warning'}`}>
-                      {payment.status === 'paid' ? 'Pagato' : 'In Sospeso'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      {/* Modals dettagli */}
-      {selectedEvent && (
-        <EventDetailModal
-          open={true}
-          onClose={() => setSelectedEvent(null)}
-          data={{
-            title: selectedEvent.title,
-            event_kind: (selectedEvent as any).event_kind,
-            start_date: (selectedEvent as any).start_date,
-            end_date: (selectedEvent as any).end_date,
-            location: selectedEvent.location || undefined,
-            description: selectedEvent.description || undefined,
-          }}
-        />
-      )}
-      {selectedMessage && (
-        <MessageDetailModal
-          open={true}
-          onClose={() => setSelectedMessage(null)}
-          messageId={selectedMessage.id}
-          markAsRead={selectedMessage.created_by !== profile.id}
-          data={{
-            subject: messageDetail?.subject || selectedMessage.subject,
-            content: messageDetail?.content || selectedMessage.content,
-            created_at: messageDetail?.created_at || selectedMessage.created_at,
-            created_by_profile: messageDetail?.created_by_profile || (selectedMessage as any).created_by_profile || null,
-            message_recipients: (messageDetail?.message_recipients as any) || (selectedMessage as any).message_recipients || [],
-            attachments: (messageDetail?.attachments || (selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
-          }}
-        />
-      )}
-      {selectedTeamId && (
-        <TeamDetailModal
-          open={true}
-          onClose={() => setSelectedTeamId(null)}
-          data={teamDetailData}
-        />
-      )}
     </div>
   )
+}
+
+function AttendanceStat({ label, value, tone }: { label: string; value: number; tone: 'success' | 'warning' | 'danger' | 'neutral' }) {
+  return <div className="rounded-lg bg-[color:var(--cs-surface-subdued)] p-2"><div className="text-xl font-bold tabular-nums">{value}</div><StatusBadge status={tone} label={label} /></div>
 }

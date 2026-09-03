@@ -6,6 +6,7 @@ import { exportSeasons } from '@/lib/utils/excelExport'
 import { SeasonsModal } from './SeasonsModal'
 import { Button } from '@/components/ui/Button'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { BarChart3 } from 'lucide-react'
 
 interface Season {
   id?: string
@@ -17,7 +18,7 @@ interface Season {
   updated_at?: string
 }
 
-export default function SeasonsManager() {
+export default function SeasonsManager({ embedded = false }: { embedded?: boolean }) {
   const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
   const [editingSeason, setEditingSeason] = useState<Season | null>(null)
@@ -109,13 +110,13 @@ export default function SeasonsManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Stagioni Sportive</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Stagioni Sportive</h2>}
         <div className="flex gap-3">
           <Button
             onClick={() => exportSeasons(seasons)}
             variant="outline"
           >
-            📊 Export Excel
+            <><BarChart3 className="mr-2 inline h-4 w-4" aria-hidden="true" />Export Excel</>
           </Button>
           <Button
             onClick={() => {

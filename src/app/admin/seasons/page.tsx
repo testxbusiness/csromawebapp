@@ -1,13 +1,12 @@
 'use client'
 
 import SeasonsManager from '@/components/admin/SeasonsManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function SeasonsPage() {
   return (
-    <>
-      <PageHeader title="Gestione Stagioni" subtitle="Amministrazione CSRoma" />
-      <SeasonsManager />
-    </>
+    <AdminManagementPage title="Stagioni" context="Sport" description="Configura i periodi sportivi e la stagione attiva.">
+      <SeasonsManager embedded />
+    </AdminManagementPage>
   )
 }

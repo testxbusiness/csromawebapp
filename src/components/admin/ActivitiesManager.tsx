@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import ActivityModal from '@/components/admin/ActivityModal'
-import { EmptyState, LoadingState } from '@/components/ui'
+import { DeniedState, EmptyState, ErrorState, LoadingState, OfflineState } from '@/components/ui'
+import { loadStateFromSupabaseError, type LoadState } from '@/lib/ui/load-state'
+import { BarChart3, CircleDot } from 'lucide-react'
 
 interface Activity {
   id?: string
@@ -24,19 +26,27 @@ interface Season {
   is_active: boolean
 }
 
-export default function ActivitiesManager() {
+export default function ActivitiesManager({ embedded = false }: { embedded?: boolean }) {
   const [activities, setActivities] = useState<Activity[]>([])
   const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
   const [editingActivity, setEditingActivity] = useState<Activity | null>(null)
   const [showModal, setShowModal] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const loadActivities = useCallback(async () => {
-    const { data: activitiesData } = await supabase
-      .from('activities')
-      .select('*')
-      .order('created_at', { ascending: false })
+    setLoading(true)
+    setLoadState('loading')
+    const { data: activitiesData, error } = await supabase
+      .from('activities').select('*').order('created_at', { ascending: false })
+
+    if (error) {
+      setActivities([])
+      setLoadState(loadStateFromSupabaseError(error))
+      setLoading(false)
+      return
+    }
 
     if (activitiesData) {
       // Get season names for each activity
@@ -62,6 +72,7 @@ export default function ActivitiesManager() {
     } else {
       setActivities([])
     }
+    setLoadState('ready')
     setLoading(false)
   }, [supabase])
 
@@ -130,20 +141,23 @@ export default function ActivitiesManager() {
     })
   }
 
-  if (loading) {
+  if (loading || loadState === 'loading') {
     return <LoadingState label="Caricamento attività..." />
   }
+  if (loadState === 'denied') return <DeniedState description="Non hai i permessi per visualizzare le attività." action={<button onClick={() => void loadActivities()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'offline') return <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadActivities()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'error') return <ErrorState title="Impossibile caricare le attività" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadActivities()} className="cs-btn cs-btn--outline">Riprova</button>} />
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Discipline Sportive</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Discipline Sportive</h2>}
         <div className="flex gap-3">
           <button
             onClick={exportActivitiesToExcel}
             className="cs-btn cs-btn--outline"
           >
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button
@@ -184,7 +198,7 @@ export default function ActivitiesManager() {
               <tr key={activity.id}>
                 <td>
                   <div className="flex items-center">
-                    <div className="text-2xl mr-3">⚽</div>
+                    <CircleDot className="mr-3 h-6 w-6 text-[color:var(--cs-brand-red)]" aria-hidden="true" />
                     <div className="text-sm font-medium">{activity.name}</div>
                   </div>
                 </td>
@@ -224,7 +238,7 @@ export default function ActivitiesManager() {
           {activities.map((activity) => (
             <div key={activity.id} className="cs-card">
               <div className="flex items-start gap-3">
-                <div className="text-2xl">⚽</div>
+                <CircleDot className="h-6 w-6 text-[color:var(--cs-brand-red)]" aria-hidden="true" />
                 <div className="flex-1">
                   <div className="font-semibold">{activity.name}</div>
                   <div className="text-sm text-secondary">{activity.description || 'Nessuna descrizione'}</div>
@@ -284,14 +298,7 @@ function ActivityForm({
   }
 
   const predefinedActivities = [
-    { name: 'Calcio', icon: '⚽' },
-    { name: 'Pallavolo', icon: '🏐' },
-    { name: 'Basket', icon: '🏀' },
-    { name: 'Tennis', icon: '🎾' },
-    { name: 'Nuoto', icon: '🏊' },
-    { name: 'Atletica', icon: '🏃' },
-    { name: 'Pallamano', icon: '🤾' },
-    { name: 'Rugby', icon: '🏈' }
+    'Calcio', 'Pallavolo', 'Basket', 'Tennis', 'Nuoto', 'Atletica', 'Pallamano', 'Rugby'
   ]
 
   return (
@@ -320,13 +327,12 @@ function ActivityForm({
               <div className="flex flex-wrap gap-2">
                 {predefinedActivities.map((preset) => (
                   <button
-                    key={preset.name}
+                    key={preset}
                     type="button"
-                    onClick={() => setFormData({ ...formData, name: preset.name })}
+                    onClick={() => setFormData({ ...formData, name: preset })}
                     className="cs-btn cs-btn--ghost cs-btn--sm"
                   >
-                    <span className="mr-1">{preset.icon}</span>
-                    {preset.name}
+                    {preset}
                   </button>
                 ))}
               </div>

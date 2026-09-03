@@ -8,7 +8,9 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
-import { EmptyState, LoadingState } from '@/components/ui'
+import { Button, Card, DeniedState, EmptyState, ErrorState, FeedbackState, LoadingState, OfflineState, Panel, Select, StatusBadge, Table, TableActions } from '@/components/ui'
+import { useTeamContext } from '@/context/TeamContext'
+import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
 
 interface Event {
   id?: string
@@ -34,6 +36,7 @@ interface Activity { id: string; name: string }
 
 export default function CoachCalendarManager() {
   const { account } = useAuth()
+  const { selectedTeamId, setTeams: setContextTeams } = useTeamContext()
   const ownerProfileId = account?.ownerProfileId || null
   const supabase = useMemo(() => createClient(), [])
 
@@ -43,6 +46,8 @@ export default function CoachCalendarManager() {
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<LoadState>('ready')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
@@ -64,16 +69,19 @@ export default function CoachCalendarManager() {
     }
 
     setLoading(true)
+    setLoadState('ready')
+    setLoadError(null)
     try {
-      const response = await fetch('/api/coach/calendar', {
+      const query = selectedTeamId ? `?team_id=${encodeURIComponent(selectedTeamId)}` : ''
+      const response = await fetch(`/api/coach/calendar${query}`, {
         signal,
         cache: 'no-store',
         headers: { Accept: 'application/json' },
       })
       if (!response.ok) {
+        setLoadState(loadStateFromStatus(response.status))
+        setLoadError(response.status === 403 ? 'Non hai i permessi per visualizzare questo calendario.' : 'Calendario non disponibile.')
         console.error('Error loading coach calendar:', response.statusText)
-        setEvents([])
-        setTeams([])
         return
       }
 
@@ -90,16 +98,17 @@ export default function CoachCalendarManager() {
       const normalizedEvents = Array.isArray(result.events) ? result.events : []
 
       setTeams(normalizedTeams as Team[])
+      setContextTeams(normalizedTeams as Team[])
       setEvents(normalizedEvents as Event[])
     } catch (error: any) {
       if (error?.name === 'AbortError') return
+      setLoadState(loadStateFromError(error))
+      setLoadError('Impossibile caricare il calendario.')
       console.error('Error loading coach calendar:', error)
-      setEvents([])
-      setTeams([])
     } finally {
       setLoading(false)
     }
-  }, [ownerProfileId])
+  }, [ownerProfileId, selectedTeamId, setContextTeams])
 
   useEffect(() => {
     if (!ownerProfileId) {
@@ -132,6 +141,10 @@ export default function CoachCalendarManager() {
     setFilteredEvents(next)
   }, [events, filterEventKind, filterTeamId])
 
+  useEffect(() => {
+    setFilterTeamId(selectedTeamId ?? '')
+  }, [selectedTeamId])
+
   const filteredEventsForCalendar = useMemo(() => filteredEvents, [filteredEvents])
 
   const refreshEvents = useCallback(() => {
@@ -163,115 +176,29 @@ export default function CoachCalendarManager() {
 
   const saveEvent = async (eventData: Event) => {
     try {
-      if (editingEvent?.id) {
-        const { error: eventError } = await supabase
-          .from('events')
-          .update({
-            title: eventData.title,
-            description: eventData.description,
-            location: eventData.location,
-            start_date: eventData.start_time,
-            end_date: eventData.end_time,
-            event_kind: (eventData as any).event_kind || 'training',
-            requires_confirmation: !!eventData.requires_confirmation,
-            confirmation_deadline: eventData.requires_confirmation && eventData.confirmation_deadline
-              ? eventData.confirmation_deadline
-              : null,
-            // Legacy columns required by DB schema
-            name: eventData.title,
-            start_time: eventData.start_time,
-            end_time: eventData.end_time,
-            kind: 'spot',
-          })
-          .eq('id', editingEvent.id)
-        if (eventError) throw eventError
-
-        await supabase.from('event_teams').delete().eq('event_id', editingEvent.id)
-        if (eventData.selected_teams.length > 0) {
-          const teamAssociations = eventData.selected_teams.map(teamId => ({ event_id: editingEvent.id!, team_id: teamId }))
-          const { error: teamsError } = await supabase.from('event_teams').insert(teamAssociations)
-          if (teamsError) throw teamsError
-        }
-      } else {
-        const isRecurring = (document.querySelector('select[name="event_type"]') as HTMLSelectElement)?.value === 'recurring'
-        if (isRecurring) {
-          const freq = (document.querySelector('select[name="recurrence_frequency"]') as HTMLSelectElement)?.value as 'daily'|'weekly'|'monthly' || 'weekly'
-          const intervalVal = Number((document.querySelector('input[name="recurrence_interval"]') as HTMLInputElement)?.value || '1')
-          const untilStr = (document.querySelector('input[name="recurrence_end_date"]') as HTMLInputElement)?.value
-          const until = untilStr ? new Date(untilStr) : new Date(eventData.start_time)
-          const occurrences: { start_date: string; end_date: string }[] = []
-          let curStart = new Date(eventData.start_time)
-          let curEnd = new Date(eventData.end_time)
-          const interval = Math.max(1, intervalVal || 1)
-          while (curStart <= until) {
-            occurrences.push({ start_date: curStart.toISOString(), end_date: curEnd.toISOString() })
-            if (freq === 'daily') { curStart.setDate(curStart.getDate() + interval); curEnd.setDate(curEnd.getDate() + interval) }
-            else if (freq === 'weekly') { curStart.setDate(curStart.getDate() + 7*interval); curEnd.setDate(curEnd.getDate() + 7*interval) }
-            else { curStart.setMonth(curStart.getMonth() + interval); curEnd.setMonth(curEnd.getMonth() + interval) }
-          }
-          const rows = occurrences.map(o => ({
-            title: eventData.title,
-            description: eventData.description,
-            location: eventData.location,
-            start_date: o.start_date,
-            end_date: o.end_date,
-            event_type: 'recurring',
-            event_kind: (eventData as any).event_kind || 'training',
-            requires_confirmation: !!eventData.requires_confirmation,
-            confirmation_deadline: eventData.requires_confirmation && eventData.confirmation_deadline
-              ? eventData.confirmation_deadline
-              : null,
-            created_by: ownerProfileId,
-            // Legacy columns required by DB schema
-            name: eventData.title,
-            start_time: o.start_date,
-            end_time: o.end_date,
-            kind: 'spot',
-          }))
-          const { data: inserted, error: bulkErr } = await supabase.from('events').insert(rows).select('id')
-          if (bulkErr) throw bulkErr
-          const ids = (inserted || []).map(r => r.id)
-          if (ids.length > 0) {
-            const parentId = ids[0]
-            await supabase.from('events').update({ parent_event_id: parentId }).in('id', ids)
-          }
-          if (ids.length && eventData.selected_teams.length) {
-            const et = ids.flatMap(eid => eventData.selected_teams.map(teamId => ({ event_id: eid, team_id: teamId })))
-            const { error: teamsError } = await supabase.from('event_teams').insert(et)
-            if (teamsError) throw teamsError
-          }
-        } else {
-          const { data: newEvent, error: eventError } = await supabase
-            .from('events')
-            .insert([{
-              title: eventData.title,
-              description: eventData.description,
-              location: eventData.location,
-              start_date: eventData.start_time,
-              end_date: eventData.end_time,
-              event_type: 'one_time',
-              event_kind: (eventData as any).event_kind || 'training',
-              requires_confirmation: !!eventData.requires_confirmation,
-              confirmation_deadline: eventData.requires_confirmation && eventData.confirmation_deadline
-                ? eventData.confirmation_deadline
-                : null,
-              created_by: ownerProfileId,
-              // Legacy columns required by DB schema
-              name: eventData.title,
-              start_time: eventData.start_time,
-              end_time: eventData.end_time,
-              kind: 'spot',
-            }])
-            .select()
-            .single()
-          if (eventError) throw eventError
-          if (eventData.selected_teams.length > 0) {
-            const teamAssociations = eventData.selected_teams.map(teamId => ({ event_id: newEvent.id, team_id: teamId }))
-            const { error: teamsError } = await supabase.from('event_teams').insert(teamAssociations)
-            if (teamsError) throw teamsError
-          }
+      const isRecurring = !editingEvent && (document.querySelector('select[name="event_type"]') as HTMLSelectElement)?.value === 'recurring'
+      const occurrences: { start_date: string; end_date: string }[] = []
+      if (isRecurring) {
+        const frequency = (document.querySelector('select[name="recurrence_frequency"]') as HTMLSelectElement)?.value as 'daily' | 'weekly' | 'monthly' || 'weekly'
+        const interval = Math.max(1, Number((document.querySelector('input[name="recurrence_interval"]') as HTMLInputElement)?.value || '1'))
+        const untilValue = (document.querySelector('input[name="recurrence_end_date"]') as HTMLInputElement)?.value
+        const until = untilValue ? new Date(untilValue) : new Date(eventData.start_time)
+        let start = new Date(eventData.start_time)
+        let end = new Date(eventData.end_time)
+        while (start <= until) {
+          occurrences.push({ start_date: start.toISOString(), end_date: end.toISOString() })
+          if (frequency === 'daily') { start.setDate(start.getDate() + interval); end.setDate(end.getDate() + interval) }
+          else if (frequency === 'weekly') { start.setDate(start.getDate() + 7 * interval); end.setDate(end.getDate() + 7 * interval) }
+          else { start.setMonth(start.getMonth() + interval); end.setMonth(end.getMonth() + interval) }
         }
       }
+      const response = await fetch('/api/coach/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: editingEvent?.id ? 'update' : 'create', id: editingEvent?.id, event: eventData, occurrences }),
+      })
+      const result = await response.json() as { error?: string }
+      if (!response.ok) throw new Error(result.error || 'Impossibile salvare evento')
 
       setEditingEvent(null)
       setShowForm(false)
@@ -296,22 +223,19 @@ export default function CoachCalendarManager() {
       if (!window.confirm('Sei sicuro di voler eliminare questo evento?')) return
     }
 
-    if (deleteSeries) {
-      const seriesId = evt?.parent_event_id || evt?.id
-      if (!seriesId) return
-      const { data: seriesEvents } = await supabase
-        .from('events')
-        .select('id')
-        .or(`id.eq.${seriesId},parent_event_id.eq.${seriesId}`)
-      const ids = (seriesEvents || []).map(e => e.id)
-      if (ids.length) {
-        await supabase.from('event_teams').delete().in('event_id', ids)
-        const { error } = await supabase.from('events').delete().in('id', ids)
-        if (!error) refreshEvents()
+    try {
+      const response = await fetch('/api/coach/events', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, deleteSeries }),
+      })
+      if (!response.ok) {
+        const result = await response.json() as { error?: string }
+        throw new Error(result.error || 'Impossibile eliminare evento')
       }
-    } else {
-      const { error } = await supabase.from('events').delete().eq('id', id)
-      if (!error) refreshEvents()
+      refreshEvents()
+    } catch (error) {
+      console.error('Error deleting event:', error)
     }
   }
 
@@ -319,24 +243,34 @@ export default function CoachCalendarManager() {
     return <LoadingState label="Caricamento calendario..." />
   }
 
+  if (loadError && events.length === 0) {
+    const action = <button type="button" className="cs-btn cs-btn--outline" onClick={() => refreshEvents()}>Riprova</button>
+    if (loadState === 'denied') return <DeniedState title="Calendario non disponibile" description={loadError} action={action} />
+    if (loadState === 'offline') return <OfflineState title="Calendario non disponibile offline" description="Controlla la connessione e riprova." action={action} />
+    return <ErrorState title="Calendario non disponibile" description={loadError} action={action} />
+  }
+
   return (
     <>
-      <div className="cs-card cs-card--primary">
+      <Panel>
+        {loadError ? <FeedbackState variant={loadState === 'denied' ? 'denied' : loadState === 'offline' ? 'offline' : 'error'} title="Aggiornamento parziale" description={loadState === 'denied' ? 'Alcuni dati del calendario non sono disponibili per il tuo account.' : loadState === 'offline' ? 'Il calendario non è aggiornato: controlla la connessione.' : loadError} /> : null}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
+          <h2 className="cs-type-h2">I tuoi eventi</h2>
           <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
-            <button
+            <Button
+              type="button"
+              variant="danger"
               onClick={() => { setEditingEvent(null); setShowForm(true) }}
-              className="cs-btn cs-btn--danger"
             >
               Nuovo Evento
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-              className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--accent'}`}
+              variant={viewMode === 'list' ? 'outline' : 'accent'}
             >
               {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -344,7 +278,7 @@ export default function CoachCalendarManager() {
         <div className="mb-4 grid gap-4 sm:grid-cols-2">
           <div>
             <label className="cs-field__label">Tipo Evento</label>
-            <select
+            <Select
               value={filterEventKind}
               onChange={(e) => setFilterEventKind(e.target.value)}
               className="cs-select"
@@ -354,11 +288,11 @@ export default function CoachCalendarManager() {
               <option value="match">Partita</option>
               <option value="meeting">Riunione</option>
               <option value="other">Altro</option>
-            </select>
+            </Select>
           </div>
           <div>
             <label className="cs-field__label">Squadra</label>
-            <select
+            <Select
               value={filterTeamId}
               onChange={(e) => setFilterTeamId(e.target.value)}
               className="cs-select"
@@ -367,11 +301,13 @@ export default function CoachCalendarManager() {
               {teams.map(team => (
                 <option key={team.id} value={team.id}>{team.name}</option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
 
-        {viewMode === 'calendar' ? (
+        {viewMode === 'calendar' ? filteredEvents.length === 0 ? (
+          <EmptyState filtered={events.length > 0} title={events.length > 0 ? 'Nessun evento trovato' : 'Nessun evento'} description={events.length > 0 ? 'Prova a modificare i filtri.' : 'Non hai ancora eventi.'} />
+        ) : (
           <FullCalendarWidget
             initialDate={currentDate}
             view={calView}
@@ -416,14 +352,16 @@ export default function CoachCalendarManager() {
           <EmptyState title="Non hai squadre assegnate" description="Contatta l'amministratore per essere assegnato a una squadra" />
         ) : filteredEvents.length === 0 ? (
           <EmptyState
-            title="Nessun evento trovato"
-            action={events.length === 0 ? <button onClick={() => setShowForm(true)} className="cs-btn cs-btn--primary">Crea il tuo primo evento</button> : undefined}
+            filtered={events.length > 0}
+            title={events.length > 0 ? 'Nessun evento trovato' : 'Nessun evento'}
+            description={events.length > 0 ? 'Prova a modificare i filtri.' : 'Non hai ancora eventi.'}
+            action={events.length === 0 ? <Button type="button" onClick={() => setShowForm(true)}>Crea il tuo primo evento</Button> : undefined}
           />
         ) : (
           <div className="overflow-hidden">
             {/* Desktop */}
             <div className="hidden md:block">
-              <table className="cs-table">
+              <Table>
                 <thead>
                   <tr>
                     <th>Evento</th>
@@ -436,7 +374,7 @@ export default function CoachCalendarManager() {
                 </thead>
                 <tbody>
                   {filteredEvents.map((event) => (
-                    <tr key={event.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedEvent(event)}>
+                    <tr key={event.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
                         <div>
                           <div className="font-medium">{event.title}</div>
@@ -469,23 +407,33 @@ export default function CoachCalendarManager() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowForm(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
-                        <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
+                        <TableActions className="gap-2">
+                          <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedEvent(event)}>Dettagli</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowForm(true) }}>Modifica</Button>
+                          <Button type="button" size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); deleteEvent(event.id!) }}>Elimina</Button>
+                        </TableActions>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </Table>
             </div>
 
             {/* Mobile cards */}
             <div className="md:hidden p-4 space-y-3">
               {filteredEvents.map((event) => (
-                <div key={event.id} className="cs-card" onClick={() => setSelectedEvent(event)}>
-                  <div className="font-semibold">{event.title}</div>
-                  {event.description && (
-                    <div className="text-sm text-secondary line-clamp-3">{event.description}</div>
-                  )}
+                <Card key={event.id}>
+                  <button
+                    type="button"
+                    className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--cs-focus-ring)]"
+                    onClick={() => setSelectedEvent(event)}
+                    aria-label={`Apri dettaglio evento: ${event.title}`}
+                  >
+                    <span className="block font-semibold">{event.title}</span>
+                    {event.description && (
+                      <span className="mt-1 block text-sm text-secondary line-clamp-3">{event.description}</span>
+                    )}
+                  </button>
                   <div className="mt-2 grid gap-2 text-sm">
                     <div>
                       <strong>Data:</strong> {new Date(event.start_time).toLocaleDateString('it-IT')}
@@ -513,10 +461,10 @@ export default function CoachCalendarManager() {
                     </div>
                   </div>
                   <div className="mt-3 flex gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowForm(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
-                    <button onClick={(e) => { e.stopPropagation(); deleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
+                    <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => { setEditingEvent(event); setShowForm(true) }}>Modifica</Button>
+                    <Button type="button" size="sm" variant="danger" className="flex-1" onClick={() => deleteEvent(event.id!)}>Elimina</Button>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           </div>
@@ -690,7 +638,7 @@ export default function CoachCalendarManager() {
             </div>
           </div>
         )}
-      </div>
+      </Panel>
 
       {selectedEvent && (
         <EventDetails id={selectedEvent.id!} onClose={() => setSelectedEvent(null)} />
@@ -700,6 +648,7 @@ export default function CoachCalendarManager() {
 }
 
 function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
+  const { selectedTeamId } = useTeamContext()
   const [data, setData] = useState<any>(null)
   useEffect(() => {
     const run = async () => {
@@ -713,7 +662,7 @@ function EventDetails({ id, onClose }: { id: string; onClose: () => void }) {
   }, [id])
   return (
     <EventDetailModal open={true} onClose={onClose} data={data}>
-      {data?.requires_confirmation && <CoachEventAttendancePanel eventId={id} />}
+      {data?.requires_confirmation && <CoachEventAttendancePanel eventId={id} teamId={selectedTeamId} />}
     </EventDetailModal>
   )
 }
@@ -753,7 +702,7 @@ const emptyAttendanceReport: AttendanceReport = {
   counts: { going: 0, maybe: 0, declined: 0, no_response: 0 },
 }
 
-function CoachEventAttendancePanel({ eventId }: { eventId: string }) {
+function CoachEventAttendancePanel({ eventId, teamId }: { eventId: string; teamId: string | null }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<AttendanceReport>(emptyAttendanceReport)
@@ -762,7 +711,8 @@ function CoachEventAttendancePanel({ eventId }: { eventId: string }) {
     let active = true
     setLoading(true)
     setError(null)
-    fetch(`/api/coach/events/attendance?event_id=${eventId}`, { cache: 'no-store' })
+    const teamQuery = teamId ? `&team_id=${encodeURIComponent(teamId)}` : ''
+    fetch(`/api/coach/events/attendance?event_id=${eventId}${teamQuery}`, { cache: 'no-store' })
       .then(async (response) => {
         const result = await response.json() as Partial<AttendanceReport> & { error?: string }
         if (!response.ok) throw new Error(result.error || 'Errore caricamento conferme')
@@ -784,7 +734,7 @@ function CoachEventAttendancePanel({ eventId }: { eventId: string }) {
       })
 
     return () => { active = false }
-  }, [eventId])
+  }, [eventId, teamId])
 
   if (loading) return <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4 text-xs text-secondary">Caricamento conferme…</div>
   if (error) return <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4 text-xs text-secondary">{error}</div>
@@ -806,21 +756,22 @@ function CoachEventAttendancePanel({ eventId }: { eventId: string }) {
   return (
     <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4" aria-label="Report conferme partecipazione">
       <div className="text-sm font-semibold mb-3">Report conferme partecipazione</div>
+      <p className="mb-3 text-xs text-secondary">In attesa indica che l&apos;atleta non ha ancora risposto; non è un rifiuto.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">Confermati ({report.counts.going})</div>
+          <StatusBadge status="going" label={`Confermati · ${report.counts.going}`} />
           <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.going)}</div>
         </div>
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">Forse ({report.counts.maybe})</div>
+          <StatusBadge status="maybe" label={`Forse · ${report.counts.maybe}`} />
           <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.maybe)}</div>
         </div>
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">Non partecipano ({report.counts.declined})</div>
+          <StatusBadge status="declined" label={`Non partecipano · ${report.counts.declined}`} />
           <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.declined)}</div>
         </div>
         <div className="cs-card cs-card--primary p-3">
-          <div className="text-sm font-semibold mb-1">Nessuna risposta ({report.counts.no_response})</div>
+          <StatusBadge status="pending" label={`In attesa · ${report.counts.no_response}`} />
           <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.no_response)}</div>
         </div>
       </div>

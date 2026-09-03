@@ -23,7 +23,7 @@ interface CoachWithDetails extends Coach {
   }>
 }
 
-export default function CoachesManager() {
+export default function CoachesManager({ embedded = false }: { embedded?: boolean }) {
   const [coaches, setCoaches] = useState<CoachWithDetails[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
@@ -282,7 +282,7 @@ export default function CoachesManager() {
       <section className="cs-card cs-card--primary p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Collaboratori</h1>
+            {!embedded && <h1 className="text-2xl font-bold">Collaboratori</h1>}
             <p className="text-secondary mt-2">
               {filteredCoaches.length} collaboratori trovati • {selectedCoaches.size} selezionati
             </p>

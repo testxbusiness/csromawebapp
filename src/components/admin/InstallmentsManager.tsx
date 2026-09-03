@@ -8,6 +8,8 @@ import InstallmentsTable from './incassi/InstallmentsTable'
 import BulkActionsBar from './incassi/BulkActionsBar'
 import PaymentModal from './incassi/PaymentModal'
 import { toast } from '@/components/ui'
+import { DeniedState, ErrorState, OfflineState } from '@/components/ui'
+import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
 import AthleteDetailDrawer from './incassi/AthleteDetailDrawer'
 
 interface Installment {
@@ -80,6 +82,7 @@ export default function InstallmentsManager() {
     total_paid: 0
   })
   const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
   const [selectedInstallments, setSelectedInstallments] = useState<Set<string>>(new Set())
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedAthlete, setSelectedAthlete] = useState<string | null>(null)
@@ -119,6 +122,7 @@ export default function InstallmentsManager() {
   // Load installments with filters and pagination
   const loadInstallments = useCallback(async () => {
     setLoading(true)
+    setLoadState('loading')
     try {
       const params = new URLSearchParams()
 
@@ -155,9 +159,15 @@ export default function InstallmentsManager() {
       if (response.ok) {
         setInstallments(result.installments)
         setPagination(prev => ({ ...prev, total: result.total }))
+        setLoadState('ready')
+      } else {
+        setInstallments([])
+        setLoadState(loadStateFromStatus(response.status))
       }
     } catch (error) {
       console.error('Errore caricamento rate:', error)
+      setInstallments([])
+      setLoadState(loadStateFromError(error))
     } finally {
       setLoading(false)
     }
@@ -258,6 +268,10 @@ export default function InstallmentsManager() {
 
   return (
     <div className="space-y-6">
+      {loadState === 'denied' ? <DeniedState description="Non hai i permessi per visualizzare le rate." action={<button onClick={() => void loadInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+      {loadState === 'offline' ? <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+      {loadState === 'error' ? <ErrorState title="Impossibile caricare le rate" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+      {loadState !== 'denied' && loadState !== 'offline' && loadState !== 'error' ? <>
       {/* KPI Cards */}
       <KPICards
         data={kpiData}
@@ -321,6 +335,7 @@ export default function InstallmentsManager() {
         }}
         athleteId={selectedAthlete}
       />
+      </> : null}
     </div>
   )
 }

@@ -61,6 +61,11 @@ export default function FullCalendarWidget({
           center: 'title',
           right: 'dayGridMonth,timeGridWeek',
         }}
+        buttonText={{
+          today: 'Oggi',
+          month: 'Mese',
+          week: 'Settimana',
+        }}
         height="auto"
         events={fcEvents}
         selectable={true}

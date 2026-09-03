@@ -108,9 +108,9 @@ function createHTMLDocument(options: PDFGenerationOptions): string {
     month: 'long',
     day: 'numeric'
   })
-  const contentHasLogo = /(?:src|href)=["'][^"']*\/images\/logo_CSRoma\.png/i.test(options.content)
+  const contentHasLogo = /(?:src|href)=["'][^"']*\/images\/[^"']*csroma[^"']*\.png/i.test(options.content)
   const logoMarkup = options.hasLogo && !contentHasLogo
-    ? '<div class="logo"><img src="/images/logo_CSRoma.png" alt="CS Roma"></div>'
+    ? '<div class="logo"><img src="/images/new_csroma_logo_no_bg.png" alt="CSRoma"></div>'
     : '<div></div>'
 
   return `

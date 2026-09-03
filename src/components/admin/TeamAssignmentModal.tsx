@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { AlertTriangle, X } from 'lucide-react'
 
 interface Team {
   id: string
@@ -144,7 +145,7 @@ export default function TeamAssignmentModal({
   return (
     <div className="fixed inset-0 cs-overlay" aria-hidden="false">
       <div className="cs-modal cs-modal--sm" data-state="open">
-        <button className="cs-modal__close" onClick={handleClose} aria-label="Chiudi">✕</button>
+        <button className="cs-modal__close" onClick={handleClose} aria-label="Chiudi"><X className="h-4 w-4" aria-hidden="true" /></button>
         <div className="">
           <h2 className="cs-modal__title mb-2">
             Assegna {athleteIds.length} {userType === 'athletes' ? 'atlet' : 'collaborator'}{athleteIds.length > 1 ? 'i' : 'o'} {userType === 'coaches' ? 'alle squadre' : 'alla squadra'}
@@ -212,7 +213,7 @@ export default function TeamAssignmentModal({
                 </label>
                 {selectedTeamIds.size > 1 ? (
                   <div className="cs-alert cs-alert--warning text-sm">
-                    ⚠️ Per assegnare un piano di pagamento, seleziona una sola squadra
+                    <AlertTriangle className="mr-1 inline h-4 w-4 align-text-bottom" aria-hidden="true" /> Per assegnare un piano di pagamento, seleziona una sola squadra
                   </div>
                 ) : loadingFees ? (
                   <div className="text-sm text-secondary">Caricamento piani disponibili...</div>

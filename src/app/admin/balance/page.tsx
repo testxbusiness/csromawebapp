@@ -1,13 +1,12 @@
 'use client'
 
 import BalanceDashboard from '@/components/admin/BalanceDashboard'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function BalancePage() {
   return (
-    <>
-      <PageHeader title="Bilancio Finanziario" subtitle="Amministrazione CSRoma" />
+    <AdminManagementPage title="Bilancio" context="Amministrazione" description="Leggi consuntivo, previsioni e partite ancora da regolare.">
       <BalanceDashboard />
-    </>
+    </AdminManagementPage>
   )
 }

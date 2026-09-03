@@ -15,7 +15,14 @@ test.describe('PWA foundation', () => {
     expect(manifest.icons).toEqual(expect.arrayContaining([
       expect.objectContaining({ src: '/icons/icon-192.png', sizes: '192x192' }),
       expect.objectContaining({ src: '/icons/icon-512.png', sizes: '512x512' }),
+      expect.objectContaining({ src: '/icons/icon-maskable-512.png', sizes: '512x512', purpose: 'maskable' }),
     ]))
+
+    for (const asset of ['/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/icons/apple-touch-icon-180.png']) {
+      const assetResponse = await request.get(asset)
+      expect(assetResponse.ok()).toBeTruthy()
+      expect(assetResponse.headers()['content-type']).toContain('image/png')
+    }
 
     const serviceWorkerResponse = await request.get('/sw.js')
     expect(serviceWorkerResponse.ok()).toBeTruthy()

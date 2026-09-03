@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
       await requireSubjectAthleteContext(supabase, subjectProfileId, 'receive_messages')
     }
 
-    const { error } = await supabase
+    const { data: readRow, error } = await supabase
       .from('message_reads')
       .upsert({
         message_id: parsed.data.message_id,
@@ -27,13 +27,18 @@ export async function POST(request: NextRequest) {
         subject_profile_id: subjectProfileId,
         read_at: new Date().toISOString(),
       }, { onConflict: 'message_id,auth_user_id,subject_profile_id' })
+      .select('read_at')
+      .single()
 
     if (error) {
       console.error('Message read error:', error)
       return NextResponse.json({ error: 'Messaggio non accessibile' }, { status: 403 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      read_state: { is_read: true, read_at: readRow?.read_at ?? null },
+    })
   } catch (error) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })

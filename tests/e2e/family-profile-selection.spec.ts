@@ -17,7 +17,7 @@ test('allows a dual-role family account to select and preserve a linked athlete 
   await page.getByRole('link', { name: 'Area familiare', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Area familiare', exact: true })).toBeVisible()
 
-  const profileButtons = page.getByRole('button', { name: /^Visualizza area atleta di / })
+  const profileButtons = page.getByRole('button', { name: /^Apri profilo di / })
   // The account's own athlete profile is personal, not a family relation.
   await expect(profileButtons).toHaveCount(2)
 
@@ -25,7 +25,7 @@ test('allows a dual-role family account to select and preserve a linked athlete 
   expect(selectedButtonLabel).toBeTruthy()
   await profileButtons.nth(0).click()
 
-  await expect(page.getByRole('heading', { name: /^Bentornato, / })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /^Oggi, / })).toBeVisible()
   await expect(page.locator('#athlete-events')).toBeVisible()
   const selectedProfileId = await page.evaluate(() => window.localStorage.getItem('csroma_active_subject_profile_id'))
   expect(selectedProfileId).toBeTruthy()

@@ -1,9 +1,11 @@
-"use client"
+'use client'
 
 import * as React from 'react'
-import { createPortal } from 'react-dom'
-import { NextStepViewport } from 'nextstepjs'
-import { LoadingState } from '@/components/ui'
+import { Clock3, Paperclip, UserRound } from 'lucide-react'
+import { ResponsiveDetail, StatusBadge } from '@/components/ui'
+import { emitMessageReadStateChanged } from '@/lib/messages/read-state-events'
+
+export type MessageReadState = { is_read: boolean; read_at: string | null }
 
 type Recipient = {
   id: string
@@ -15,9 +17,21 @@ export type MessageDetailData = {
   subject?: string
   content?: string
   created_at?: string
-  created_by_profile?: { first_name: string; last_name: string } | null
+  created_by_profile?: { first_name: string; last_name: string; role?: string | null } | null
   message_recipients?: Recipient[]
-  attachments?: { file_name: string; download_url?: string | null }[]
+  attachments?: { id?: string; file_name: string; download_url?: string | null }[]
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Amministrazione',
+  coach: 'Coach',
+  staff: 'Staff',
+  athlete: 'Atleta',
+  family_member: 'Familiare',
+}
+
+function senderName(profile: MessageDetailData['created_by_profile']) {
+  return profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Mittente non disponibile' : 'Mittente non disponibile'
 }
 
 export default function MessageDetailModal({
@@ -27,6 +41,8 @@ export default function MessageDetailModal({
   messageId,
   subjectProfileId,
   markAsRead = false,
+  readState,
+  onReadStateChange,
   extraContent,
 }: {
   open: boolean
@@ -35,153 +51,121 @@ export default function MessageDetailModal({
   messageId?: string
   subjectProfileId?: string | null
   markAsRead?: boolean
+  readState?: MessageReadState
+  onReadStateChange?: (state: MessageReadState) => void
   extraContent?: React.ReactNode
 }) {
-  const [mounted, setMounted] = React.useState(false)
-  React.useEffect(() => { setMounted(true) }, [])
+  const [readRequest, setReadRequest] = React.useState<'idle' | 'loading' | 'error'>('idle')
+  const [attachmentUrls, setAttachmentUrls] = React.useState<Record<string, string>>({})
+  const [attachmentLoading, setAttachmentLoading] = React.useState<string | null>(null)
+  const [attachmentError, setAttachmentError] = React.useState<string | null>(null)
+
   React.useEffect(() => {
-    if (!open || !markAsRead || !messageId) return
+    if (!open || !markAsRead || !messageId || readState?.is_read) return
+    let active = true
+    setReadRequest('loading')
     void fetch('/api/messages/read', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message_id: messageId, subject_profile_id: subjectProfileId || undefined }),
-    }).catch(() => {})
-  }, [markAsRead, messageId, open, subjectProfileId])
-  const IconX = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
-      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth={2} strokeLinecap="round"/>
-    </svg>
-  )
-  const IconMail = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
-      <path d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2z" fill="none" stroke="currentColor" strokeWidth={2}/>
-      <path d="M22 7l-10 6L2 7" fill="none" stroke="currentColor" strokeWidth={2}/>
-    </svg>
-  )
-  const IconClock = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
-      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth={2}/>
-      <path d="M12 7v6l4 2" stroke="currentColor" strokeWidth={2} strokeLinecap="round"/>
-    </svg>
-  )
-  const IconUser = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
-      <circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth={2}/>
-      <path d="M4 20a8 8 0 0116 0" fill="none" stroke="currentColor" strokeWidth={2}/>
-    </svg>
-  )
-  const IconPaperclip = (props: React.SVGProps<SVGSVGElement>) => (
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
-      <path d="M21.44 11.05l-8.49 8.49a6 6 0 11-8.49-8.49l8.49-8.49a4 4 0 115.66 5.66l-8.49 8.49a2 2 0 11-2.83-2.83l7.07-7.07" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"/>
-    </svg>
-  )
+    })
+      .then(async (response) => {
+        const result = await response.json().catch(() => null)
+        if (!response.ok || !result?.read_state?.is_read) throw new Error('Lettura non confermata')
+        if (!active) return
+        setReadRequest('idle')
+        onReadStateChange?.({ is_read: true, read_at: result.read_state.read_at ?? null })
+        emitMessageReadStateChanged({ messageId, subjectProfileId: subjectProfileId ?? null })
+      })
+      .catch(() => {
+        if (active) setReadRequest('error')
+      })
+    return () => { active = false }
+  }, [markAsRead, messageId, onReadStateChange, open, readState?.is_read, subjectProfileId])
 
-  const recipients = (data?.message_recipients || [])
-  const teamBadges = recipients.filter(r => r.teams).map(r => r.teams!.name)
-  const userBadges = recipients.filter(r => r.profiles).map(r => `${r.profiles!.first_name} ${r.profiles!.last_name}`)
+  const loadAttachment = async (attachmentId: string) => {
+    setAttachmentLoading(attachmentId)
+    setAttachmentError(null)
+    try {
+      const response = await fetch(`/api/athlete/messages/attachments/${attachmentId}?${subjectProfileId ? `subjectProfileId=${encodeURIComponent(subjectProfileId)}` : ''}`, { cache: 'no-store' })
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.attachment?.download_url) throw new Error('Allegato non disponibile')
+      setAttachmentUrls((current) => ({ ...current, [attachmentId]: result.attachment.download_url }))
+    } catch {
+      setAttachmentError(attachmentId)
+    } finally {
+      setAttachmentLoading(null)
+    }
+  }
 
-  if (!mounted || !open) return null
+  const recipients = data?.message_recipients ?? []
+  const teamNames = [...new Set(recipients.flatMap((recipient) => recipient.teams ? [recipient.teams.name] : []))]
+  const userNames = [...new Set(recipients.flatMap((recipient) => recipient.profiles ? [`${recipient.profiles.first_name} ${recipient.profiles.last_name}`.trim()] : []))]
+  const sender = senderName(data?.created_by_profile ?? null)
+  const role = data?.created_by_profile?.role ? ROLE_LABELS[data.created_by_profile.role] ?? data.created_by_profile.role : null
+  const isRead = readState?.is_read === true
 
-  return createPortal(
-    <div
-      className="cs-overlay"
-      aria-hidden={open ? 'false' : 'true'}
-      style={{ position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 16, zIndex: 100 }}
+  return (
+    <ResponsiveDetail
+      open={open}
+      onOpenChange={(nextOpen) => { if (!nextOpen) onClose() }}
+      title={data?.subject ?? 'Dettaglio messaggio'}
+      description="Messaggio e destinatari pertinenti"
+      fullscreenOnMobile
+      size="md"
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        className="cs-modal cs-modal--md"
-        data-state={open ? 'open' : 'closed'}
-        style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
-      >
-        <NextStepViewport id="message-detail-viewport">
-          <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
-
-          <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }} id="message-detail-title">
-            <div className="cs-modal__icon" aria-hidden>✉️</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 className="cs-modal__title">Dettaglio Messaggio</h2>
-              {data?.subject && <div style={{ marginTop: 4, fontWeight: 600 }}>{data.subject}</div>}
-            </div>
+      {!data ? (
+        <div className="py-8 text-center text-secondary">Caricamento messaggio...</div>
+      ) : (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--cs-border-canonical)] pb-4">
+            <StatusBadge status={isRead ? 'success' : 'info'} label={isRead ? 'Letto' : 'Non letto'} />
+            {readRequest === 'loading' ? <span className="text-sm text-secondary">Salvataggio lettura…</span> : null}
+            {readRequest === 'error' ? <span role="alert" className="text-sm text-[var(--cs-danger-canonical)]">Lettura non sincronizzata</span> : null}
           </div>
 
-          {!data ? (
-            <LoadingState label="Caricamento messaggio..." />
-          ) : (
-            <div className="cs-grid" style={{ gap: 16, gridTemplateColumns: '1fr 1fr' }}>
-              {/* Mittente */}
-              <div id="message-detail-sender">
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Mittente</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <IconUser />
-                  <div>{data.created_by_profile && (data.created_by_profile.first_name || data.created_by_profile.last_name)
-                    ? `${data.created_by_profile.first_name || ''} ${data.created_by_profile.last_name || ''}`.trim()
-                    : '—'}</div>
-                </div>
-              </div>
-
-              {/* Data */}
-              <div id="message-detail-date">
-                <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Data</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <IconClock />
-                  <div>{data.created_at ? new Date(data.created_at).toLocaleString('it-IT') : '—'}</div>
-                </div>
-              </div>
-
-              {/* Destinatari squadre */}
-              {teamBadges.length > 0 && (
-                <div id="message-detail-recipients-teams">
-                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Destinatari (Squadre)</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {teamBadges.map((t, i) => (<span key={i} className="cs-badge cs-badge--neutral">{t}</span>))}
-                  </div>
-                </div>
-              )}
-
-              {/* Destinatari utenti */}
-              {userBadges.length > 0 && (
-                <div id="message-detail-recipients-users">
-                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Destinatari (Utenti)</div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {userBadges.map((u, i) => (<span key={i} className="cs-badge cs-badge--neutral">{u}</span>))}
-                  </div>
-                </div>
-              )}
-
-              {/* Contenuto */}
-              {data.content && (
-                <div style={{ gridColumn: '1 / -1' }} id="message-detail-content">
-                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Contenuto</div>
-                  <p style={{ whiteSpace: 'pre-wrap' }}>{data.content}</p>
-                </div>
-              )}
-
-              {/* Allegati */}
-              {data.attachments && data.attachments.length > 0 && (
-                <div style={{ gridColumn: '1 / -1' }} id="message-detail-attachments">
-                  <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Allegati</div>
-                  <div style={{ display: 'grid', gap: 6 }}>
-                    {data.attachments.map((a, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <IconPaperclip />
-                        {a.download_url ? (
-                          <a href={a.download_url} className="underline" target="_blank" rel="noreferrer">{a.file_name}</a>
-                        ) : (
-                          <span>{a.file_name}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <dl className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-bold uppercase tracking-wide text-secondary">Mittente</dt>
+              <dd className="mt-1 flex items-center gap-2"><UserRound size={17} aria-hidden="true" />{sender}{role ? <span className="text-sm text-secondary">· {role}</span> : null}</dd>
             </div>
-          )}
-        </NextStepViewport>
-        {extraContent}
-      </section>
-    </div>,
-    document.body
+            <div>
+              <dt className="text-xs font-bold uppercase tracking-wide text-secondary">Data completa</dt>
+              <dd className="mt-1 flex items-center gap-2"><Clock3 size={17} aria-hidden="true" />{data.created_at ? new Date(data.created_at).toLocaleString('it-IT') : 'Data non disponibile'}</dd>
+            </div>
+            {readState?.read_at ? <div><dt className="text-xs font-bold uppercase tracking-wide text-secondary">Letto il</dt><dd className="mt-1">{new Date(readState.read_at).toLocaleString('it-IT')}</dd></div> : null}
+          </dl>
+
+          {teamNames.length > 0 || userNames.length > 0 ? (
+            <section aria-labelledby="message-detail-recipients-title">
+              <h3 id="message-detail-recipients-title" className="text-xs font-bold uppercase tracking-wide text-secondary">Destinatari pertinenti</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {teamNames.map((name) => <span key={`team-${name}`} className="cs-badge cs-badge--neutral">{name}</span>)}
+                {userNames.map((name) => <span key={`user-${name}`} className="cs-badge cs-badge--neutral">{name}</span>)}
+              </div>
+            </section>
+          ) : null}
+
+          <section aria-labelledby="message-detail-content-title">
+            <h3 id="message-detail-content-title" className="text-xs font-bold uppercase tracking-wide text-secondary">Contenuto</h3>
+            <p className="mt-2 whitespace-pre-wrap leading-relaxed">{data.content || 'Nessun contenuto disponibile.'}</p>
+          </section>
+
+          {data.attachments && data.attachments.length > 0 ? (
+            <section aria-labelledby="message-detail-attachments-title">
+              <h3 id="message-detail-attachments-title" className="text-xs font-bold uppercase tracking-wide text-secondary">Allegati</h3>
+              <ul className="mt-2 space-y-2">
+                {data.attachments.map((attachment) => {
+                  const attachmentId = attachment.id
+                  const downloadUrl = attachment.download_url || (attachmentId ? attachmentUrls[attachmentId] : undefined)
+                  return <li key={attachment.id ?? attachment.file_name} className="flex flex-wrap items-center gap-2"><Paperclip size={16} aria-hidden="true" />{downloadUrl ? <a className="underline" href={downloadUrl} target="_blank" rel="noreferrer">{attachment.file_name}</a> : attachmentId ? <button type="button" className="underline" onClick={() => loadAttachment(attachmentId)} disabled={attachmentLoading === attachmentId}>{attachmentLoading === attachmentId ? 'Caricamento…' : attachment.file_name}</button> : <span>{attachment.file_name}</span>}{attachmentError === attachmentId ? <span role="alert" className="text-sm text-[var(--cs-danger-canonical)]">Allegato non disponibile</span> : null}</li>
+                })}
+              </ul>
+            </section>
+          ) : null}
+          {extraContent}
+        </div>
+      )}
+    </ResponsiveDetail>
   )
 }

@@ -231,8 +231,8 @@ export async function PATCH(request: NextRequest) {
             title: 'Pagamento registrato',
             body: `Il pagamento “${row.description ?? ''}” risulta pagato`,
             url: '/coach/payments',
-            icon: '/images/logo_CSRoma.png',
-            badge: '/favicon.ico',
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
           })
         }
       }

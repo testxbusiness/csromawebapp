@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useState, useEffect, useMemo } from 'react'
-import { EmptyState, LoadingState, toast } from '@/components/ui'
+import { DeniedState, EmptyState, ErrorState, LoadingState, OfflineState, toast } from '@/components/ui'
+import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
+import { AlertTriangle, BarChart3, XCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MembershipFeeModal from '@/components/admin/MembershipFeeModal'
@@ -74,11 +76,12 @@ interface FeeInstallment {
   }
 }
 
-export default function MembershipFeesManager() {
+export default function MembershipFeesManager({ embedded = false }: { embedded?: boolean }) {
   const [fees, setFees] = useState<MembershipFee[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [tab, setTab] = useState<'fees'|'athletes'>('fees')
   const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
   const [editingFee, setEditingFee] = useState<MembershipFee | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showInstallments, setShowInstallments] = useState<string | null>(null)
@@ -91,6 +94,7 @@ export default function MembershipFeesManager() {
   const [filterTo, setFilterTo] = useState<string>('')
   const [teamAthletes, setTeamAthletes] = useState<{ id: string; first_name: string; last_name: string }[]>([])
   const [flatInstallments, setFlatInstallments] = useState<any[]>([])
+  const [flatLoadState, setFlatLoadState] = useState<'idle' | 'loading' | LoadState>('idle')
   const [selectedInstallments, setSelectedInstallments] = useState<Set<string>>(new Set())
   const supabase = useMemo(() => createClient(), [])
 
@@ -105,14 +109,22 @@ export default function MembershipFeesManager() {
   }, [])
 
   const loadFees = async () => {
+    setLoading(true)
+    setLoadState('loading')
     try {
       const res = await fetch('/api/admin/membership-fees', { method: 'GET' })
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Errore caricamento quote')
+      if (!res.ok) {
+        setFees([])
+        setLoadState(loadStateFromStatus(res.status))
+        return
+      }
       setFees(json.fees || [])
+      setLoadState('ready')
     } catch (e) {
       console.error('Errore caricamento quote associative:', e)
       setFees([])
+      setLoadState(loadStateFromError(e))
     } finally {
       setLoading(false)
     }
@@ -148,20 +160,31 @@ export default function MembershipFeesManager() {
   }, [filterTeamId])
 
   const loadFlatInstallments = async () => {
+    setFlatLoadState('loading')
     const params = new URLSearchParams()
     if (filterTeamId) params.set('team_id', filterTeamId)
     if (filterAthleteId) params.set('profile_id', filterAthleteId)
     if (filterStatus) params.set('status', filterStatus)
     if (filterFrom) params.set('from', filterFrom)
     if (filterTo) params.set('to', filterTo)
-    const res = await fetch(`/api/admin/installments?${params.toString()}`)
-    const json = await res.json()
-    if (res.ok) setFlatInstallments(json.items || [])
-    else {
-      console.error('Errore caricamento rate per atleta:', json.error)
+    try {
+      const res = await fetch(`/api/admin/installments?${params.toString()}`)
+      const json = await res.json()
+      if (res.ok) {
+        setFlatInstallments(json.items || [])
+        setFlatLoadState('ready')
+      } else {
+        console.error('Errore caricamento rate per atleta:', json.error)
+        setFlatInstallments([])
+        setFlatLoadState(loadStateFromStatus(res.status))
+      }
+    } catch (error) {
+      console.error('Errore caricamento rate per atleta:', error)
       setFlatInstallments([])
+      setFlatLoadState(loadStateFromError(error))
+    } finally {
+      setSelectedInstallments(new Set())
     }
-    setSelectedInstallments(new Set())
   }
 
   const handleCreateFee = async (feeData: Omit<MembershipFee, 'id'> & { installments: InstallmentForm[] }) => {
@@ -426,11 +449,14 @@ export default function MembershipFeesManager() {
   if (loading) {
     return <LoadingState label="Caricamento quote associative..." />
   }
+  if (loadState === 'denied') return <DeniedState description="Non hai i permessi per visualizzare le quote associative." action={<button onClick={() => void loadFees()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'offline') return <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadFees()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'error') return <ErrorState title="Impossibile caricare le quote associative" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadFees()} className="cs-btn cs-btn--outline">Riprova</button>} />
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Quote Associative</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Quote Associative</h2>}
         <div className="flex gap-3">
           <button
             onClick={async () => {
@@ -445,7 +471,7 @@ export default function MembershipFeesManager() {
             onClick={exportFeesToExcel}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"
           >
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button
@@ -493,13 +519,13 @@ export default function MembershipFeesManager() {
           <tbody>
             {fees.map((fee) => (
               <tr key={fee.id}>
-                <td>
+                <td className="tabular-nums">
                   <div>
                     <div className="font-medium">{fee.name}</div>
                     <div className="text-secondary text-sm">{fee.description}</div>
                   </div>
                 </td>
-                <td>
+                <td className="tabular-nums">
                   <div>
                     {fee.teams?.name}
                   </div>
@@ -557,7 +583,7 @@ export default function MembershipFeesManager() {
 
               <div className="mt-2 grid gap-2 text-sm">
                 <div><strong>Squadra:</strong> {fee.teams?.name} <span className="text-secondary">{fee.teams?.code}</span></div>
-                <div><strong>Importo:</strong> €{(fee.total_amount ?? 0).toFixed(2)}</div>
+                <div className="tabular-nums"><strong>Importo:</strong> €{(fee.total_amount ?? 0).toFixed(2)}</div>
                 <div>
                   <strong>Dettagli:</strong>
                   <div>Iscrizione: €{fee.enrollment_fee.toFixed(2)}</div>
@@ -636,8 +662,13 @@ export default function MembershipFeesManager() {
             <button onClick={bulkMarkPaid} className="ml-auto cs-btn cs-btn--primary cs-btn--sm disabled:opacity-50" disabled={selectedInstallments.size===0}>Segna selezionate pagate</button>
           </div>
 
+          {flatLoadState === 'loading' ? <LoadingState label="Caricamento rate..." /> : null}
+          {flatLoadState === 'denied' ? <DeniedState description="Non hai i permessi per visualizzare queste rate." action={<button onClick={() => void loadFlatInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+          {flatLoadState === 'offline' ? <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadFlatInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+          {flatLoadState === 'error' ? <ErrorState title="Impossibile caricare le rate" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadFlatInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+
           {/* Desktop */}
-          <div className="hidden md:block">
+          <div className={flatLoadState === 'error' || flatLoadState === 'offline' || flatLoadState === 'denied' || flatLoadState === 'loading' ? 'hidden' : 'hidden md:block'}>
             <table className="cs-table">
               <thead>
                 <tr>
@@ -684,7 +715,7 @@ export default function MembershipFeesManager() {
             )}
           </div>
           {/* Mobile cards */}
-          <div className="md:hidden space-y-3">
+          <div className={flatLoadState === 'error' || flatLoadState === 'offline' || flatLoadState === 'denied' || flatLoadState === 'loading' ? 'hidden' : 'md:hidden space-y-3'}>
             {flatInstallments.map((row:any)=> (
               <div key={row.id} className="cs-card">
                 <div className="flex items-start gap-3">
@@ -1109,7 +1140,7 @@ function FeeForm({
                   className="text-red-600 hover:text-red-800 text-xs px-2 py-1"
                   title="Rimuovi rata"
                 >
-                  ❌
+                  <XCircle className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             ))}
@@ -1130,7 +1161,7 @@ function FeeForm({
             {Math.abs(installments.reduce((sum, inst) => sum + inst.amount, 0) - calculatedTotal) > 0.01 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2">
                 <p className="text-xs text-yellow-800">
-                  ⚠️ Attenzione: La somma delle rate (€{installments.reduce((sum, inst) => sum + inst.amount, 0).toFixed(2)}) 
+                  <AlertTriangle className="mr-1 inline h-4 w-4 align-text-bottom" aria-hidden="true" /> Attenzione: La somma delle rate (€{installments.reduce((sum, inst) => sum + inst.amount, 0).toFixed(2)})
                   non corrisponde all'importo totale (€{calculatedTotal.toFixed(2)})
                 </p>
               </div>

@@ -272,7 +272,7 @@ export default function BalanceDashboard() {
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             {/* Actual */}
-            <div className="cs-card">
+            <div className="cs-card tabular-nums">
               <h3 className="text-lg font-semibold mb-2">Consuntivo</h3>
               <div className="space-y-1">
                 <div className="flex justify-between">
@@ -297,7 +297,7 @@ export default function BalanceDashboard() {
             </div>
 
             {/* Forecast */}
-            <div className="cs-card">
+            <div className="cs-card tabular-nums">
               <h3 className="text-lg font-semibold mb-2">Forecast</h3>
               <div className="space-y-1">
                 <div className="flex justify-between">
@@ -322,7 +322,7 @@ export default function BalanceDashboard() {
             </div>
 
             {/* Outstanding */}
-            <div className="cs-card">
+            <div className="cs-card tabular-nums">
               <h3 className="text-lg font-semibold mb-2">Outstanding</h3>
               <div className="space-y-1">
                 <div className="flex justify-between">
@@ -347,7 +347,7 @@ export default function BalanceDashboard() {
             </div>
 
             {/* Total */}
-            <div className="cs-card p-4">
+            <div className="cs-card p-4 tabular-nums">
               <h3 className="text-lg font-semibold mb-2">Totale</h3>
               <div className="space-y-1">
                 <div className="flex justify-between">
@@ -375,7 +375,7 @@ export default function BalanceDashboard() {
           {/* Detailed Summary */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Income Breakdown */}
-            <div className="cs-card">
+            <div className="cs-card tabular-nums">
               <h4 className="text-lg font-semibold mb-3">Dettaglio Entrate</h4>
               <div className="space-y-2">
                 <div className="flex justify-between">
@@ -406,7 +406,7 @@ export default function BalanceDashboard() {
             </div>
 
             {/* Expenses Breakdown */}
-            <div className="cs-card">
+            <div className="cs-card tabular-nums">
               <h4 className="text-lg font-semibold mb-3">Dettaglio Uscite</h4>
               <div className="space-y-2">
                 <div className="flex justify-between">

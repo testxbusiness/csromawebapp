@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
+import { buildAthleteFeesContract } from '@/lib/athlete/fees-contract'
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load installments' }, { status: 400 })
     }
 
-    const feeIds = [...new Set((base || []).map((r: any) => r.membership_fee_id).filter(Boolean))]
+    const feeIds = [...new Set((base || []).map((r) => r.membership_fee_id).filter(Boolean))]
     if (feeIds.length === 0) {
       return NextResponse.json({ installments: [] })
     }
@@ -41,52 +42,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load fees' }, { status: 400 })
     }
 
-    const teamIds = [...new Set((fees || []).map((f: any) => f.team_id).filter(Boolean))]
+    const teamIds = [...new Set((fees || []).map((f) => f.team_id).filter(Boolean))]
     const { data: teams = [] } = teamIds.length
       ? await dataClient.from('teams').select('id, name, code, activity_id').in('id', teamIds)
       : { data: [] as any[] }
 
     const safeTeams = teams || []
-    const activityIds = [...new Set(safeTeams.map((t: any) => t.activity_id).filter(Boolean))]
+    const activityIds = [...new Set(safeTeams.map((t) => t.activity_id).filter(Boolean))]
     const { data: activities = [] } = activityIds.length
       ? await dataClient.from('activities').select('id, name').in('id', activityIds)
       : { data: [] as any[] }
 
-    const feeMap = new Map((fees || []).map((f: any) => [f.id, f]))
-    const teamMap = new Map((teams || []).map((t: any) => [t.id, t]))
-    const activityMap = new Map((activities || []).map((a: any) => [a.id, a]))
-
-    const composed = (base || []).map((row: any) => {
-      const fee = feeMap.get(row.membership_fee_id)
-      const team = fee ? teamMap.get(fee.team_id) : null
-      const activity = team ? activityMap.get(team.activity_id) : null
-      return {
-        id: row.id,
-        installment_number: row.installment_number,
-        due_date: row.due_date,
-        amount: row.amount,
-        status: row.status,
-        paid_at: row.paid_at || undefined,
-        membership_fee: {
-          id: fee?.id,
-          name: fee?.name || 'Quota',
-          description: fee?.description || undefined,
-          total_amount: fee?.total_amount || 0,
-          enrollment_fee: fee?.enrollment_fee || 0,
-          insurance_fee: fee?.insurance_fee || 0,
-          monthly_fee: fee?.monthly_fee || 0,
-          months_count: fee?.months_count || 0,
-          installments_count: fee?.installments_count || 1,
-          team: {
-            name: team?.name || 'N/D',
-            code: team?.code || 'N/D',
-            activity: { name: activity?.name || 'N/D' }
-          }
-        }
-      }
-    })
-
-    return NextResponse.json({ installments: composed })
+    const contract = buildAthleteFeesContract(
+      base || [],
+      new Map((fees || []).map((fee) => [fee.id, fee])),
+      new Map(safeTeams.map((team) => [team.id, team])),
+      new Map((activities || []).map((activity) => [activity.id, activity])),
+    )
+    return NextResponse.json(contract)
   } catch (error) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })

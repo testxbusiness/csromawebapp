@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
       title: payload?.title || 'Notifica di test',
       body: payload?.body || 'Le push sono attive su questo dispositivo',
       url: payload?.url || '/dashboard',
-      icon: payload?.icon || '/images/logo_CSRoma.png',
-      badge: payload?.badge || '/favicon.ico',
+      icon: payload?.icon || '/icons/icon-192.png',
+      badge: payload?.badge || '/icons/icon-192.png',
     })
     if (result.skipped) {
       return NextResponse.json({ success: false, error: result.reason }, { status: 503 })

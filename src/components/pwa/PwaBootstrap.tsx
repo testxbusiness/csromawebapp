@@ -2,16 +2,28 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ConnectivityBanner } from './ConnectivityBanner'
-import { registerServiceWorker } from '@/lib/pwa/service-worker-registration'
+import { checkForServiceWorkerUpdate, registerServiceWorker } from '@/lib/pwa/service-worker-registration'
 
 export default function PwaBootstrap() {
   const [offline, setOffline] = useState(false)
+  const [onlineNotice, setOnlineNotice] = useState(false)
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const updateApplied = useRef(false)
+  const connectivityInitialized = useRef(false)
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
 
   useEffect(() => {
-    const updateConnectivity = () => setOffline(!navigator.onLine)
+    let onlineNoticeTimer: ReturnType<typeof setTimeout> | undefined
+    const updateConnectivity = () => {
+      const isOffline = !navigator.onLine
+      setOffline(isOffline)
+      if (!isOffline && connectivityInitialized.current) {
+        setOnlineNotice(true)
+        if (onlineNoticeTimer) clearTimeout(onlineNoticeTimer)
+        onlineNoticeTimer = setTimeout(() => setOnlineNotice(false), 2400)
+      }
+      connectivityInitialized.current = true
+    }
     updateConnectivity()
 
     window.addEventListener('online', updateConnectivity)
@@ -21,6 +33,17 @@ export default function PwaBootstrap() {
     let updateListener: (() => void) | null = null
     let installingWorker: ServiceWorker | null = null
     let installingStateListener: (() => void) | null = null
+    let showUpdate = () => {}
+
+    const checkForUpdate = () => {
+      if (!registration) return
+      void checkForServiceWorkerUpdate(registration).then(showUpdate)
+    }
+
+    const handlePageActivity = () => {
+      if (document.visibilityState === 'hidden') return
+      checkForUpdate()
+    }
 
     const handleControllerChange = () => {
       if (!updateApplied.current) return
@@ -32,7 +55,7 @@ export default function PwaBootstrap() {
       registrationRef.current = nextRegistration
       if (!registration) return
 
-      const showUpdate = () => {
+      showUpdate = () => {
         if (navigator.serviceWorker.controller && registration?.waiting) {
           setUpdateAvailable(true)
         }
@@ -51,13 +74,17 @@ export default function PwaBootstrap() {
       registration.addEventListener('updatefound', watchInstallingWorker)
       watchInstallingWorker()
       showUpdate()
+      checkForUpdate()
     })
 
     navigator.serviceWorker?.addEventListener('controllerchange', handleControllerChange)
+    document.addEventListener('visibilitychange', handlePageActivity)
+    window.addEventListener('focus', handlePageActivity)
 
     return () => {
       window.removeEventListener('online', updateConnectivity)
       window.removeEventListener('offline', updateConnectivity)
+      if (onlineNoticeTimer) clearTimeout(onlineNoticeTimer)
       if (registration && updateListener) {
         registration.removeEventListener('updatefound', updateListener)
       }
@@ -66,6 +93,8 @@ export default function PwaBootstrap() {
       }
       registrationRef.current = null
       navigator.serviceWorker?.removeEventListener('controllerchange', handleControllerChange)
+      document.removeEventListener('visibilitychange', handlePageActivity)
+      window.removeEventListener('focus', handlePageActivity)
     }
   }, [])
 
@@ -79,17 +108,18 @@ export default function PwaBootstrap() {
 
   return (
     <>
-      <ConnectivityBanner offline={offline} />
+      <ConnectivityBanner offline={offline} onlineNotice={onlineNotice} />
       {updateAvailable && (
         <div
-          className="fixed inset-x-4 bottom-4 z-[190] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] p-4 text-sm shadow-lg"
+          className="cs-update-banner"
           role="status"
           aria-live="polite"
         >
           <span className="text-[color:var(--cs-text)]">È disponibile una nuova versione.</span>
-          <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={applyUpdate}>
-            Aggiorna
-          </button>
+          <div className="cs-update-banner__actions">
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setUpdateAvailable(false)}>Più tardi</button>
+            <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={applyUpdate}>Aggiorna ora</button>
+          </div>
         </div>
       )}
     </>

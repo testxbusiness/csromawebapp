@@ -3,6 +3,7 @@
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { Trophy } from 'lucide-react'
 
 type TrainingSchedule = {
   day_of_week: number
@@ -127,10 +128,10 @@ export default function TeamDetailModal({
         data-state={open ? 'open' : 'closed'}
         style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto' }}
       >
-        <button className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX /></button>
+        <button type="button" className="cs-modal__close" aria-label="Chiudi" onClick={onClose}><IconX aria-hidden="true" /></button>
 
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
-          <div className="cs-modal__icon" aria-hidden>⚽</div>
+          <div className="cs-modal__icon" aria-hidden="true"><Trophy className="h-5 w-5" /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 className="cs-modal__title">Dettaglio Squadra</h2>
             {data?.name && <div style={{ marginTop: 4, fontWeight: 600 }}>{data.name}</div>}

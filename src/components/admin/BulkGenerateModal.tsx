@@ -150,7 +150,7 @@ export default function BulkGenerateModal({
     // semplice header con logo: adatta al tuo progetto
     const block = `
       <div style="text-align:center;margin-bottom:12px">
-        <img src="/images/logo_CSRoma.png" alt="Logo" style="height:56px"/>
+        <img src="/images/new_csroma_logo_no_bg.png" alt="Logo" style="height:56px"/>
       </div>
     `
     return block + html

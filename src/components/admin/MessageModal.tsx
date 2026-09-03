@@ -9,6 +9,7 @@ import {
   DialogTitle,
   toast,
 } from '@/components/ui'
+import { Mail } from 'lucide-react'
 
 export type Message = {
   id?: string
@@ -147,7 +148,7 @@ export default function MessageModal({
           <DialogDescription>Inserisci o modifica il messaggio e i suoi destinatari.</DialogDescription>
         </DialogHeader>
         <div className="cs-modal__header" style={{ alignItems: 'center', gap: 12 }}>
-          <div className="cs-modal__icon" aria-hidden>✉️</div>
+          <div className="cs-modal__icon" aria-hidden="true"><Mail className="h-5 w-5" /></div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 className="cs-modal__title">{message ? 'Modifica Messaggio' : 'Nuovo Messaggio'}</h2>
             <div className="text-secondary" style={{ fontSize: 12, marginTop: 4 }}>Compila i campi e seleziona i destinatari</div>

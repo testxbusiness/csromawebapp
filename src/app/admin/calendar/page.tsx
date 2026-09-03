@@ -1,13 +1,10 @@
-'use client'
-
 import EventsManager from '@/components/admin/EventsManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function CalendarPage() {
   return (
-    <>
-      <PageHeader title="Gestione Calendario" subtitle="Amministrazione CSRoma" />
-      <EventsManager />
-    </>
+    <AdminManagementPage title="Calendario" context="Sport" description="Pianifica e verifica gli eventi della società.">
+      <EventsManager embedded />
+    </AdminManagementPage>
   )
 }

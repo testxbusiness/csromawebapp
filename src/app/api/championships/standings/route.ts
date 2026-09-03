@@ -1,27 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
-import { AccountContextError, requireAccountContext, requireAthleteContext } from '@/server/auth/require-account-context'
+import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveAthleteChampionshipContext } from '@/server/championships/resolve-athlete-championship'
 
 const groupIdSchema = z.string().uuid()
+const subjectProfileIdSchema = z.string().uuid()
 
 export async function GET(request: NextRequest) {
   try {
-    const groupId = groupIdSchema.safeParse(new URL(request.url).searchParams.get('group_id'))
+    const url = new URL(request.url)
+    const groupId = groupIdSchema.safeParse(url.searchParams.get('group_id'))
     if (!groupId.success) {
-      return NextResponse.json({ standings: [] }, { status: 200 })
+      return NextResponse.json({ error: 'group_id non valido' }, { status: 400 })
+    }
+
+    const rawSubjectProfileId = url.searchParams.get('subjectProfileId')
+    const subjectProfileId = rawSubjectProfileId
+      ? subjectProfileIdSchema.safeParse(rawSubjectProfileId)
+      : { success: true as const, data: null }
+    if (!subjectProfileId.success) {
+      return NextResponse.json({ error: 'subjectProfileId non valido' }, { status: 400 })
     }
 
     const supabase = await createClient()
     const admin = createAdminClient()
     const account = await requireAccountContext(supabase)
+    const requestedSubjectProfileId = subjectProfileId.data
     const role = account.roles.includes('admin')
       ? 'admin'
       : account.roles.includes('coach')
         ? 'coach'
         : 'athlete'
 
-    if (role === 'athlete') await requireAthleteContext(supabase)
+    if (role === 'athlete' || requestedSubjectProfileId) {
+      const subject = await resolveAthleteChampionshipContext(supabase, requestedSubjectProfileId)
+      const authorized = subject.paths.some((path) => path.groupId === groupId.data)
+      if (!authorized) {
+        return NextResponse.json({ error: 'Girone non autorizzato per il soggetto' }, { status: 403 })
+      }
+      // The subject graph is authorized above; use the server-side client for
+      // this RLS-less materialized view and keep the group filter mandatory.
+      const { data: standings, error: standingsError } = await admin
+        .from('championship_standings_mv')
+        .select('*')
+        .eq('championship_group_id', groupId.data)
+      if (standingsError) {
+        console.error('Errore caricamento classifica:', standingsError)
+        return NextResponse.json({ error: 'Impossibile caricare la classifica' }, { status: 500 })
+      }
+      return NextResponse.json({ standings: standings ?? [], subjectProfileId: subject.profileId })
+    }
 
     if (role !== 'admin') {
       const { data: groupTeams, error: groupTeamsError } = await admin

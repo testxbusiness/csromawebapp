@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
+import { buildAthleteMessages } from '@/lib/athlete/messages-contract'
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const { data: recips, error: recErr } = await dataClient
       .from('message_recipients')
-      .select('message_id, team_id, profile_id')
+      .select('id, message_id, team_id, profile_id')
       .or(orClauses.join(','))
       .order('created_at', { ascending: false })
 
@@ -47,7 +48,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (!recips || recips.length === 0) {
-      return NextResponse.json({ messages: [] })
+      if (searchParams.get('countOnly') === '1') {
+        return NextResponse.json({ unreadMessageCount: 0 })
+      }
+      const { data: authorizedTeams } = teamIds.length > 0
+        ? await dataClient.from('teams').select('id, name, code').in('id', teamIds)
+        : { data: [] }
+      return NextResponse.json({ messages: [], teams: authorizedTeams || [], read_state_scope: 'account_subject' })
     }
 
     let messageIds = [...new Set(recips.map(r => r.message_id))]
@@ -56,6 +63,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Not found' }, { status: 404 })
       }
       messageIds = [idFilter]
+    }
+
+    // The shell only needs the badge count. Avoid loading message bodies and
+    // full recipient/attachment metadata for that high-frequency request.
+    if (searchParams.get('countOnly') === '1') {
+      const { data: readRows } = await dataClient
+        .from('message_reads')
+        .select('message_id')
+        .eq('auth_user_id', subject.account.authUserId)
+        .eq('subject_profile_id', athleteProfileId)
+        .in('message_id', messageIds)
+      const readIds = new Set((readRows || []).map((row) => row.message_id))
+      const unreadIds = new Set(messageIds.filter((messageId) => !readIds.has(messageId)))
+      return NextResponse.json({ unreadMessageCount: unreadIds.size })
     }
 
     // Get messages
@@ -75,6 +96,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error loading messages' }, { status: 400 })
     }
 
+    const loadedMessageIds = (msgs || []).map((message) => message.id)
+    const [{ data: readRows }, { data: messageTeams }] = await Promise.all([
+      loadedMessageIds.length > 0
+        ? dataClient
+            .from('message_reads')
+            .select('message_id, read_at')
+            .eq('auth_user_id', subject.account.authUserId)
+            .eq('subject_profile_id', athleteProfileId)
+            .in('message_id', loadedMessageIds)
+        : Promise.resolve({ data: [] }),
+      teamIds.length > 0
+        ? dataClient.from('teams').select('id, name, code').in('id', teamIds)
+        : Promise.resolve({ data: [] }),
+    ])
+    const readByMessageId = new Map((readRows || []).map((row: any) => [row.message_id, { read_at: row.read_at }]))
+    const teamsById = new Map((messageTeams || []).map((team: any) => [team.id, team]))
+    const contractMessages = buildAthleteMessages(
+      (msgs || []) as any,
+      recips.filter((recipient) => loadedMessageIds.includes(recipient.message_id)),
+      teamsById,
+      readByMessageId,
+      athleteProfileId,
+    )
+
     if (!view || view !== 'full') {
       // === BATCH AGGREGATION FOR MINIMAL VIEW ===
       // Collect all creator IDs
@@ -84,13 +129,13 @@ export async function GET(request: NextRequest) {
       const { data: creators } = creatorIds.length > 0
         ? await adminClient
             .from('profiles')
-            .select('id, first_name, last_name')
+            .select('id, first_name, last_name, role')
             .in('id', creatorIds)
         : { data: [] }
 
       const creatorsMap = new Map((creators || []).map(c => [c.id, c]))
 
-      const minimal = (msgs || []).map((m: any) => {
+      const minimal = contractMessages.map((m: any) => {
         const minimalMsg: any = { ...m }
         if (m.created_by && creatorsMap.has(m.created_by)) {
           const creator = creatorsMap.get(m.created_by)
@@ -102,7 +147,7 @@ export async function GET(request: NextRequest) {
         return minimalMsg
       })
 
-      return NextResponse.json({ messages: minimal })
+      return NextResponse.json({ messages: minimal, teams: messageTeams || [], read_state_scope: 'account_subject' })
     }
 
     // === BATCH AGGREGATION FOR FULL VIEW ===
@@ -112,7 +157,7 @@ export async function GET(request: NextRequest) {
     const { data: creators } = fullCreatorIds.length > 0
       ? await adminClient
           .from('profiles')
-          .select('id, first_name, last_name')
+          .select('id, first_name, last_name, role')
           .in('id', fullCreatorIds)
       : { data: [] }
     const creatorsMap = new Map((creators || []).map(c => [c.id, c]))
@@ -138,7 +183,13 @@ export async function GET(request: NextRequest) {
 
     // 3. Collect team and profile IDs from recipients
     const teamRecipientIds = [...new Set(visibleRecipients.filter(r => r.team_id).map(r => r.team_id))]
-    const profileRecipientIds = [...new Set(visibleRecipients.filter(r => r.profile_id).map(r => r.profile_id))]
+    // A subject may see that a message was sent directly to them, but never
+    // receives the identity of unrelated direct recipients.
+    const profileRecipientIds = [...new Set(
+      visibleRecipients
+        .filter(r => r.profile_id === athleteProfileId)
+        .map(r => r.profile_id)
+    )]
 
     // 4. Get all teams and profiles in batch
     const [{ data: teams }, { data: profiles }] = await Promise.all([
@@ -159,7 +210,12 @@ export async function GET(request: NextRequest) {
       if (!recipientsByMessage.has(rr.message_id)) {
         recipientsByMessage.set(rr.message_id, [])
       }
-      const item: any = { id: rr.id, is_read: rr.is_read, read_at: rr.read_at }
+      const readState = readByMessageId.get(rr.message_id)
+      const item: any = {
+        id: rr.id,
+        is_read: Boolean(readState),
+        read_at: readState?.read_at ?? null,
+      }
       if (rr.team_id && teamsMap.has(rr.team_id)) {
         item.teams = teamsMap.get(rr.team_id)
       }
@@ -177,27 +233,11 @@ export async function GET(request: NextRequest) {
           .in('message_id', fullMsgIds)
       : { data: [] }
 
-    // 7. Generate signed URLs in batch
+    // 7. Return attachment metadata only. Signed URLs are generated by the
+    // dedicated, subject-authorized endpoint when the user requests a file.
     const attachmentsByMessage = new Map<string, any[]>()
     if (allAttachments && allAttachments.length > 0) {
-      const signedUrlPromises = (allAttachments || []).map(a =>
-        adminClient
-          // @ts-ignore
-          .storage.from('message-attachments')
-          .createSignedUrl(a.file_path, 3600)
-          .then(({ data: signed }) => ({
-            ...a,
-            download_url: signed?.signedUrl || null
-          }))
-          .catch(err => {
-            console.error(`Error signing URL for ${a.file_path}:`, err)
-            return { ...a, download_url: null }
-          })
-      )
-
-      const signedAttachments = await Promise.all(signedUrlPromises)
-
-      for (const att of signedAttachments) {
+      for (const att of allAttachments) {
         if (!attachmentsByMessage.has(att.message_id)) {
           attachmentsByMessage.set(att.message_id, [])
         }
@@ -206,7 +246,6 @@ export async function GET(request: NextRequest) {
           file_name: att.file_name,
           mime_type: att.mime_type,
           file_size: att.file_size,
-          download_url: att.download_url
         })
       }
     }
@@ -225,8 +264,20 @@ export async function GET(request: NextRequest) {
       }
       return em
     })
+    const contractById = new Map(contractMessages.map((message) => [message.id, message]))
+    const messages = enriched.map((message: any) => {
+      const contract = contractById.get(message.id)
+      return contract ? {
+        ...message,
+        dedupe_key: contract.dedupe_key,
+        teams: contract.teams,
+        team_ids: contract.team_ids,
+        read_state: contract.read_state,
+        is_read: contract.is_read,
+      } : message
+    })
 
-    return NextResponse.json({ messages: enriched })
+    return NextResponse.json({ messages, teams: messageTeams || [], read_state_scope: 'account_subject' })
   } catch (error) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })

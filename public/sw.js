@@ -1,14 +1,14 @@
 /* CSRoma PWA + Push service worker. Keep this file dependency-free. */
 
-const PRECACHE = 'csroma-precache-v2'
-const STATIC_CACHE = 'csroma-static-v1'
+const PRECACHE = 'csroma-precache-v3'
+const STATIC_CACHE = 'csroma-static-v2'
 const IMAGE_CACHE = 'csroma-images-v1'
 const PRECACHE_URLS = [
   '/offline.html',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  '/images/logo_CSRoma.svg',
-  '/images/logo_CSRoma.png',
+  '/images/new_csroma_logo_no_bg.svg',
+  '/images/new_csroma_logo_no_bg.png',
 ]
 const MAX_IMAGE_ENTRIES = 30
 
@@ -103,11 +103,13 @@ self.addEventListener('fetch', (event) => {
   if (isStaticNextAsset(requestUrl)) {
     event.respondWith(
       caches.open(STATIC_CACHE).then(async (cache) => {
-        const cached = await cache.match(request)
-        if (cached) return cached
-        const response = await fetch(request)
-        if (response.ok) await cache.put(request, response.clone())
-        return response
+        try {
+          const response = await fetch(request)
+          if (response.ok) await cache.put(request, response.clone())
+          return response
+        } catch {
+          return (await cache.match(request)) || Response.error()
+        }
       })
     )
     return

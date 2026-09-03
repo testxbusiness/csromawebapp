@@ -9,6 +9,7 @@ import { EmptyState, LoadingState, toast } from '@/components/ui'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import EventModal from '@/components/admin/EventModal'
+import { BarChart3 } from 'lucide-react'
 
 const KIND_COLORS: Record<'training'|'match'|'meeting'|'other', string> = {
   training: '#413c67', // Allenamento (blu CSRoma)
@@ -84,7 +85,7 @@ interface Team {
   code: string
 }
 
-export default function EventsManager() {
+export default function EventsManager({ embedded = false }: { embedded?: boolean }) {
   const [events, setEvents] = useState<Event[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
@@ -389,10 +390,10 @@ export default function EventsManager() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h2 className="text-2xl font-bold">Calendario e Eventi</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Calendario e Eventi</h2>}
         <div className="flex flex-col gap-2 w-full md:w-auto md:flex-row md:flex-wrap md:gap-3">
           <button onClick={exportEventsToExcel} className="cs-btn cs-btn--outline">
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">
@@ -633,7 +634,7 @@ export default function EventsManager() {
           </thead>
           <tbody>
             {events.map((event) => (
-              <tr key={event.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedEvent(event)}>
+              <tr key={event.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4">
                   <div>
                     <div className="font-medium">{event.title}</div>
@@ -678,6 +679,7 @@ export default function EventsManager() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
+                  <button type="button" onClick={() => setSelectedEvent(event)} className="cs-btn cs-btn--ghost cs-btn--sm">Dettagli</button>
                   <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
                   <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
                 </td>
@@ -690,7 +692,7 @@ export default function EventsManager() {
         {/* Mobile cards */}
         <div className="md:hidden p-4 space-y-3">
           {events.map((event) => (
-            <div key={event.id} className="cs-card" onClick={() => setSelectedEvent(event)}>
+            <article key={event.id} className="cs-card">
               <div className="font-semibold">{event.title}</div>
               {event.description && (
                 <div className="text-sm text-secondary line-clamp-3">{event.description}</div>
@@ -722,10 +724,11 @@ export default function EventsManager() {
                 </div>
               </div>
               <div className="mt-3 flex gap-2">
+                <button type="button" onClick={() => setSelectedEvent(event)} className="cs-btn cs-btn--ghost cs-btn--sm flex-1">Dettagli</button>
                 <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
                 <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
               </div>
-            </div>
+            </article>
           ))}
           {events.length === 0 && (
             <EmptyState

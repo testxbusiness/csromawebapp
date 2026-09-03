@@ -40,7 +40,7 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-lg md:max-w-xl">
           <div className="cs-card cs-card--primary" style={{ padding: 24 }}>
             <div className="text-center" style={{ marginBottom: 16 }}>
-              <img src="/images/logo_CSRoma.svg" alt="CSRoma" className="h-16 mx-auto mb-2" />
+              <img src="/images/new_csroma_logo_no_bg.svg" alt="CSRoma" className="h-16 mx-auto mb-2" />
               <h1 className="text-2xl font-bold">Recupera password</h1>
               <p className="text-secondary text-base">
                 Inserisci l&apos;email associata al tuo account.

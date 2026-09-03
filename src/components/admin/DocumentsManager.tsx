@@ -27,7 +27,7 @@ export interface DocumentTemplate {
   description?: string | null
 }
 
-export default function DocumentsManager() {
+export default function DocumentsManager({ embedded = false }: { embedded?: boolean }) {
   const supabase = useMemo(() => createClient(), [])
 
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
@@ -253,8 +253,8 @@ export default function DocumentsManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Documenti & Template</h2>
-          <p className="text-secondary">Crea template e genera documenti dinamici (es. Convocazioni).</p>
+          {!embedded && <h2 className="text-xl font-semibold">Documenti & Template</h2>}
+          {!embedded && <p className="text-secondary">Crea template e genera documenti dinamici (es. Convocazioni).</p>}
         </div>
         <div className="flex gap-2">
           <button className="cs-btn cs-btn--primary" onClick={onCreateTemplate}>Nuovo template</button>

@@ -5,10 +5,27 @@ import { sendToUsers } from '@/lib/utils/push'
 
 type MessagePushInput = {
   adminClient: SupabaseClient
+  messageId: string
   subject: string
   senderProfileId: string
   selectedTeamIds?: string[]
   selectedProfileIds?: string[]
+}
+
+export type MessagePushArea = 'athlete' | 'coach' | 'admin'
+
+export function resolveMessagePushArea(roles: Iterable<string>): MessagePushArea | null {
+  const roleSet = new Set(roles)
+  if (roleSet.has('athlete') || roleSet.has('family_member')) return 'athlete'
+  if (roleSet.has('coach')) return 'coach'
+  if (roleSet.has('admin')) return 'admin'
+  return null
+}
+
+export function buildMessagePushUrl(area: MessagePushArea, messageId: string, subjectProfileId?: string): string {
+  const params = new URLSearchParams({ messageId })
+  if (area === 'athlete' && subjectProfileId) params.set('subjectProfileId', subjectProfileId)
+  return `/${area}/messages?${params.toString()}`
 }
 
 type ProfileRow = {
@@ -49,6 +66,7 @@ function relationshipAllowsPush(
 
 export async function notifyMessageRecipients({
   adminClient,
+  messageId,
   subject,
   senderProfileId,
   selectedTeamIds = [],
@@ -86,6 +104,7 @@ export async function notifyMessageRecipients({
   const profileById = new Map<string, ProfileRow>((profiles ?? []).map((profile) => [profile.id, profile]))
   const overrideById = new Map<string, boolean>((overrides ?? []).map((override) => [override.profile_id, override.treat_as_minor]))
   const relatedProfileIds = new Set<string>()
+  const subjectByRelatedProfileId = new Map<string, string>()
 
   for (const relationship of (relationships ?? []) as RelationshipRow[]) {
     const target = profileById.get(relationship.target_profile_id)
@@ -94,6 +113,7 @@ export async function notifyMessageRecipients({
       : target ? isMinor(target.birth_date, today) : true
     if (relationshipAllowsPush(relationship, targetIsMinor, todayIso)) {
       relatedProfileIds.add(relationship.source_profile_id)
+      subjectByRelatedProfileId.set(relationship.source_profile_id, relationship.target_profile_id)
     }
   }
 
@@ -114,13 +134,12 @@ export async function notifyMessageRecipients({
   for (const account of accounts ?? []) {
     if (account.owner_profile_id === senderProfileId) continue
     const roles = rolesByAuthUser.get(account.auth_user_id) ?? new Set<string>()
-    const url = roles.has('coach')
-      ? '/coach/messages'
-      : roles.has('athlete')
-        ? '/athlete/messages'
-        : roles.has('admin')
-          ? '/admin/messages'
-          : '/dashboard'
+    const area = resolveMessagePushArea(roles)
+    if (!area) continue
+    const subjectProfileId = area === 'athlete' && relatedProfileIds.has(account.owner_profile_id)
+      ? subjectByRelatedProfileId.get(account.owner_profile_id)
+      : undefined
+    const url = buildMessagePushUrl(area, messageId, subjectProfileId)
     const ids = byUrl.get(url) ?? []
     ids.push(account.owner_profile_id)
     byUrl.set(url, ids)
@@ -130,7 +149,7 @@ export async function notifyMessageRecipients({
     title: 'Nuovo messaggio',
     body: subject,
     url,
-    icon: '/images/logo_CSRoma.png',
-    badge: '/favicon.ico',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
   })))
 }

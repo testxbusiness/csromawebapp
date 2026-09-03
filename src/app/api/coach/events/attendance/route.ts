@@ -11,7 +11,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const eventId = new URL(request.url).searchParams.get('event_id')
+    const searchParams = new URL(request.url).searchParams
+    const eventId = searchParams.get('event_id')
+    const requestedTeamId = searchParams.get('team_id')
     if (!eventId) return NextResponse.json({ error: 'Missing event_id' }, { status: 400 })
 
     const { data: eventLinks, error: eventLinksError } = await admin
@@ -22,6 +24,9 @@ export async function GET(request: NextRequest) {
 
     const teamIds = [...new Set((eventLinks || []).map((link) => link.team_id))]
     if (teamIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (requestedTeamId && !teamIds.includes(requestedTeamId)) {
+      return NextResponse.json({ error: 'Squadra non associata all’evento' }, { status: 403 })
+    }
 
     const { data: assignments, error: assignmentsError } = await admin
       .from('team_coaches')
@@ -32,11 +37,15 @@ export async function GET(request: NextRequest) {
     if (!assignments || assignments.length === 0) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    if (requestedTeamId && !assignments.some((assignment) => assignment.team_id === requestedTeamId)) {
+      return NextResponse.json({ error: 'Squadra non assegnata al coach' }, { status: 403 })
+    }
 
+    const visibleTeamIds = requestedTeamId ? [requestedTeamId] : teamIds
     const { data: members, error: membersError } = await admin
       .from('team_members')
       .select('profile_id, profiles(id, first_name, last_name, email)')
-      .in('team_id', teamIds)
+      .in('team_id', visibleTeamIds)
     if (membersError) throw membersError
 
     const profileRows = (members || []).flatMap((member) => (

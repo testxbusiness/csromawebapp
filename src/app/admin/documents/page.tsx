@@ -1,13 +1,12 @@
 'use client'
 
 import DocumentsManager from '@/components/admin/DocumentsManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function DocumentsPage() {
   return (
-    <>
-      <PageHeader title="Gestione Documenti" subtitle="Amministrazione CSRoma" />
-      <DocumentsManager />
-    </>
+    <AdminManagementPage title="Documenti" context="Comunicazione" description="Gestisci template, documenti generati e allegati alle comunicazioni.">
+      <DocumentsManager embedded />
+    </AdminManagementPage>
   )
 }

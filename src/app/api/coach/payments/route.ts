@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient()
     const account = await requireAccountContext(supabase)
@@ -10,8 +10,25 @@ export async function GET() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    const requestedTeamId = new URL(request.url).searchParams.get('team_id')
+    if (requestedTeamId) {
+      const { data: assignment, error: assignmentError } = await supabase
+        .from('team_coaches')
+        .select('team_id')
+        .eq('coach_id', account.ownerProfileId)
+        .eq('team_id', requestedTeamId)
+        .maybeSingle()
+
+      if (assignmentError) {
+        return NextResponse.json({ error: assignmentError.message }, { status: 500 })
+      }
+      if (!assignment) {
+        return NextResponse.json({ error: 'Squadra non assegnata al coach' }, { status: 403 })
+      }
+    }
+
     // Coach can view only own payments (RLS enforces as well); limit to coach_payment type
-    const { data, error } = await supabase
+    let paymentsQuery = supabase
       .from('payments')
       .select(`
         *,
@@ -41,7 +58,8 @@ export async function GET() {
       `)
       .eq('type', 'coach_payment')
       .eq('coach_id', account.ownerProfileId)
-      .order('due_date', { ascending: true, nullsFirst: true })
+    if (requestedTeamId) paymentsQuery = paymentsQuery.eq('team_id', requestedTeamId)
+    const { data, error } = await paymentsQuery.order('due_date', { ascending: true, nullsFirst: true })
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

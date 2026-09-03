@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import type { Athlete, AthleteCreateData, Team, Activity, Season } from './athleteTypes'
@@ -10,6 +11,7 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import AthleteCreateModal from './AthleteCreateModal'
 import AthleteImportModal from './AthleteImportModal'
 import CollaboratorAccountActions from './CollaboratorAccountActions'
+import { getCertificateStatus, type CertificateStatus } from '@/lib/admin/certificate-status'
 
 interface AthleteWithDetails extends Athlete {
   teams: Array<{
@@ -20,7 +22,7 @@ interface AthleteWithDetails extends Athlete {
   }>
 }
 
-export default function AthletesManager() {
+export default function AthletesManager({ embedded = false }: { embedded?: boolean }) {
   const [athletes, setAthletes] = useState<AthleteWithDetails[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
@@ -51,21 +53,27 @@ export default function AthletesManager() {
   const [selectedActivity, setSelectedActivity] = useState<string>('all')
   const [selectedTeam, setSelectedTeam] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const searchParams = useSearchParams()
+  const [certificateFilter, setCertificateFilter] = useState<'all' | 'attention' | CertificateStatus>(() => {
+    const value = searchParams.get('certificateStatus')
+    return value === 'attention' || value === 'missing' || value === 'expired' || value === 'expiring' || value === 'valid' ? value : 'all'
+  })
   const certificateStats = useMemo(() => {
     let withoutCertificate = 0
     let expiredCertificate = 0
+    let expiringCertificate = 0
     const now = Date.now()
     athletes.forEach((athlete) => {
-      if (!athlete.medical_certificate_expiry) {
+      const status = getCertificateStatus(athlete.medical_certificate_expiry, new Date(now))
+      if (status === 'missing') {
         withoutCertificate += 1
-      } else {
-        const expiryTime = new Date(athlete.medical_certificate_expiry).getTime()
-        if (!Number.isNaN(expiryTime) && expiryTime < now) {
-          expiredCertificate += 1
-        }
+      } else if (status === 'expired') {
+        expiredCertificate += 1
+      } else if (status === 'expiring') {
+        expiringCertificate += 1
       }
     })
-    return { withoutCertificate, expiredCertificate }
+    return { withoutCertificate, expiredCertificate, expiringCertificate }
   }, [athletes])
 
   const loadAthletes = useCallback(async () => {
@@ -166,9 +174,13 @@ export default function AthletesManager() {
         if (!matchesName && !matchesEmail && !matchesMembership) return false
       }
 
+      const certificateStatus = getCertificateStatus(athlete.medical_certificate_expiry)
+      if (certificateFilter === 'attention' && certificateStatus === 'valid') return false
+      if (certificateFilter !== 'all' && certificateFilter !== 'attention' && certificateStatus !== certificateFilter) return false
+
       return true
     })
-  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities])
+  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities, certificateFilter])
 
   // Gestione selezione multipla
   const toggleAthleteSelection = (athleteId: string) => {
@@ -365,7 +377,7 @@ export default function AthletesManager() {
       <section className="cs-card cs-card--primary p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Atleti</h1>
+            {!embedded && <h1 className="text-2xl font-bold">Atleti</h1>}
             <p className="text-secondary mt-2">
               {filteredAthletes.length} atleti trovati • {selectedAthletes.size} selezionati
             </p>
@@ -463,7 +475,7 @@ export default function AthletesManager() {
 
       {/* Filtri di contesto */}
       <section className="cs-card cs-card--primary p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="cs-card cs-card--primary bg-[color:var(--cs-primary)]/5 border border-[color:var(--cs-primary)]/30">
             <p className="text-sm text-[color:var(--cs-primary)] font-semibold uppercase tracking-wide">Certificato Scaduto</p>
             <p className="text-3xl font-bold mt-2">{certificateStats.expiredCertificate}</p>
@@ -475,6 +487,11 @@ export default function AthletesManager() {
             <p className="text-secondary text-xs mt-1">Atleti senza data di scadenza inserita</p>
           </div>
           <div className="cs-card">
+            <p className="text-sm text-secondary font-semibold uppercase tracking-wide">In scadenza entro 30 giorni</p>
+            <p className="text-3xl font-bold mt-2">{certificateStats.expiringCertificate}</p>
+            <p className="text-secondary text-xs mt-1">Atleti da ricontattare o aggiornare</p>
+          </div>
+          <div className="cs-card">
             <p className="text-sm text-secondary font-semibold uppercase tracking-wide">Totale Atleti</p>
             <p className="text-3xl font-bold mt-2">{athletes.length}</p>
             <p className="text-secondary text-xs mt-1">Conteggio globale del database</p>
@@ -483,7 +500,7 @@ export default function AthletesManager() {
       </section>
 
       <section className="cs-card cs-card--primary p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="cs-field__label">Stagione</label>
             <select
@@ -530,6 +547,22 @@ export default function AthletesManager() {
                   {team.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="cs-field__label">Stato certificato</label>
+            <select
+              value={certificateFilter}
+              onChange={(e) => setCertificateFilter(e.target.value as 'all' | 'attention' | CertificateStatus)}
+              className="cs-select"
+            >
+              <option value="all">Tutti</option>
+              <option value="attention">Da verificare</option>
+              <option value="expired">Scaduti</option>
+              <option value="missing">Mancanti</option>
+              <option value="expiring">In scadenza entro 30 giorni</option>
+              <option value="valid">Regolari</option>
             </select>
           </div>
 
