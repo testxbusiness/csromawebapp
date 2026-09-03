@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import { CalendarDays } from 'lucide-react'
-import { ErrorState, LoadingState, ResponsiveDetail } from '@/components/ui'
+import { ErrorState, EventKindBadge, LoadingState, ResponsiveDetail } from '@/components/ui'
 import AttendanceControl from '@/components/athlete/AttendanceControl'
 import type { AttendanceStatus } from '@/types/attendance'
 
@@ -61,13 +61,6 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
     </svg>
   )
 
-  const humanKind = (kind?: string) => ({
-    training: 'Allenamento',
-    match: 'Partita',
-    meeting: 'Riunione',
-    other: 'Altro',
-  } as Record<string, string>)[kind ?? ''] ?? kind ?? ''
-
   const place = (d: EventDetailData | null) => {
     if (!d) return '—'
     if (d.location && d.location.trim()) return d.location
@@ -85,7 +78,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
           <span className="cs-detail-heading__copy">
             <span className="cs-detail-heading__eyebrow">Dettaglio evento</span>
             <span className="cs-detail-heading__title">{data?.title ?? 'Dettaglio evento'}</span>
-            {data?.event_kind ? <span className="cs-detail-heading__subtitle">{humanKind(data.event_kind)}</span> : null}
+            <EventKindBadge kind={data?.event_kind} />
           </span>
         </span>
       }

@@ -7,12 +7,11 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import MessageDetailModal, { type MessageReadState } from '@/components/shared/MessageDetailModal'
 import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
-import { FeedbackState, ListRow, LoadingState, Panel, StatusBadge } from '@/components/ui'
+import { EventKindBadge, FeedbackState, ListRow, LoadingState, Panel, StatusBadge } from '@/components/ui'
 import AttendanceControl from './AttendanceControl'
 import { MessagePreviewRow } from './MessagePreviewRow'
 import { MembershipRow } from './MembershipRow'
 import { feeStatusLabel, selectMostUrgentFee } from '@/lib/athlete/fee-preview'
-import { eventKindLabel } from '@/lib/athlete/event-kind'
 import { hasDashboardData, isDashboardDataCurrent, type DashboardStatus } from '@/lib/athlete/dashboard-state'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
@@ -781,7 +780,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           {upcomingEvents.length === 0 ? <FeedbackState variant="empty" title="Nessun impegno programmato" className="py-4" /> : visibleEvents.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun impegno per questa squadra" className="py-4" /> : (
             <div className="divide-y divide-[color:var(--cs-border)]">
               {visibleEvents.slice(0, 3).map((event, index) => {
-                const kindLabel = eventKindLabel(event.event_kind)
                 return (
                   <div key={event.id} className="py-3 first:pt-0 last:pb-0">
                     <ListRow
@@ -792,7 +790,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                     >
                       <span className="flex flex-wrap items-center gap-2 font-medium">
                         {event.title}
-                        {kindLabel && <StatusBadge status="neutral" label={kindLabel} />}
+                        <EventKindBadge kind={event.event_kind} />
                       </span>
                       <span className="mt-1 block text-sm text-secondary">
                         {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}

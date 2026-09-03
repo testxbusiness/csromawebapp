@@ -52,6 +52,13 @@ const EVENT_KIND_VISUALS: Record<EventKind, EventKindVisual> = {
   },
 }
 
+export type EventKindOption = { value: EventKind; label: string }
+
+export const EVENT_KIND_OPTIONS: readonly EventKindOption[] = EVENT_KINDS.map((kind) => ({
+  value: kind,
+  label: EVENT_KIND_VISUALS[kind].label,
+}))
+
 function isEventKind(kind: string): kind is EventKind {
   return (EVENT_KINDS as readonly string[]).includes(kind)
 }

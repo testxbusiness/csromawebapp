@@ -27,6 +27,7 @@ describe('CoachDashboard', () => {
     expect(screen.getByText('Qual è la prossima partita?')).toBeTruthy()
     expect(screen.getByText('Cosa devo comunicare?')).toBeTruthy()
     expect(screen.getByText('Allenamento U16')).toBeTruthy()
+    expect(screen.getByLabelText('Tipo evento: Allenamento')).toBeTruthy()
     expect(screen.getByText('Avviso allenamento')).toBeTruthy()
     expect(screen.getByText('8')).toBeTruthy()
   })

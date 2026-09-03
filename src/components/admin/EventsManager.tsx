@@ -5,25 +5,12 @@ import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
-import { EmptyState, LoadingState, toast } from '@/components/ui'
+import { EmptyState, EventKindBadge, LoadingState, toast } from '@/components/ui'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import EventModal from '@/components/admin/EventModal'
 import { BarChart3 } from 'lucide-react'
-
-const KIND_COLORS: Record<'training'|'match'|'meeting'|'other', string> = {
-  training: '#413c67', // Allenamento (blu CSRoma)
-  match:    '#d71920', // Partita (rosso CSRoma)
-  meeting:  '#f5eb00', // Riunione (giallo CSRoma)
-  other:    '#6b7280', // Altro (grigio)
-}
-
-const EVENT_KIND_OPTIONS = [
-  { value: 'training', label: 'Allenamento' },
-  { value: 'match', label: 'Partita' },
-  { value: 'meeting', label: 'Riunione' },
-  { value: 'other', label: 'Altro' },
-] as const
+import { EVENT_KIND_OPTIONS, eventKindLabel, eventKindVisual } from '@/lib/events/event-kind'
 
 interface Event {
   id?: string
@@ -374,7 +361,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       { key: 'gyms', title: 'Palestra', width: 15, format: (val) => val?.name || '' },
       { key: 'event_teams', title: 'Squadre', width: 25, format: (val) => Array.isArray(val) ? val.map((et: any) => et.teams?.name).filter(Boolean).join(', ') : '' },
       { key: 'event_type', title: 'Tipo Evento', width: 12, format: (val) => val === 'one_time' ? 'Singolo' : 'Ricorrente' },
-      { key: 'event_kind', title: 'Tipologia', width: 12, format: (val) => ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[val] || '' },
+      { key: 'event_kind', title: 'Tipologia', width: 12, format: (val) => eventKindLabel(typeof val === 'string' ? val : null) || '' },
       { key: 'created_by_profile', title: 'Creato Da', width: 20, format: (val) => val ? `${val.first_name} ${val.last_name}` : '' }
     ], {
       filename: 'eventi_csroma',
@@ -589,7 +576,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             title: e.title,
             start: new Date(e.start_date),
             end: new Date(e.end_date),
-            color: KIND_COLORS[(e.event_kind ?? 'other') as 'training'|'match'|'meeting'|'other'],
+            color: eventKindVisual(e.event_kind)?.colorToken,
           }))}
           onNavigate={(act)=>{
             const d = new Date(currentDate)
@@ -666,17 +653,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`cs-badge ${
-                    event.event_kind === 'training' ? 'cs-badge--primary' :
-                    event.event_kind === 'match' ? 'cs-badge--danger' :
-                    event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                    'cs-badge--neutral'
-                  }`}>
-                    {event.event_kind === 'training' ? 'Allenamento' :
-                     event.event_kind === 'match' ? 'Partita' :
-                     event.event_kind === 'meeting' ? 'Riunione' :
-                     event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                  </span>
+                  <EventKindBadge kind={event.event_kind} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
                   <button type="button" onClick={() => setSelectedEvent(event)} className="cs-btn cs-btn--ghost cs-btn--sm">Dettagli</button>
@@ -710,17 +687,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
                 <div><strong>Squadre:</strong> {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}</div>
                 <div>
                   <strong>Tipo:</strong>
-                  <span className={`ml-2 cs-badge ${
-                    event.event_kind === 'training' ? 'cs-badge--primary' :
-                    event.event_kind === 'match' ? 'cs-badge--danger' :
-                    event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                    'cs-badge--neutral'
-                  }`}>
-                    {event.event_kind === 'training' ? 'Allenamento' :
-                     event.event_kind === 'match' ? 'Partita' :
-                     event.event_kind === 'meeting' ? 'Riunione' :
-                     event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                  </span>
+                  <EventKindBadge kind={event.event_kind} className="ml-2" />
                 </div>
               </div>
               <div className="mt-3 flex gap-2">
@@ -1045,10 +1012,9 @@ function EventForm({
             onChange={(e) => setFormData({ ...formData, event_kind: e.target.value as any })}
             className="cs-select"
           >
-            <option value="training">Allenamento</option>
-            <option value="match">Partita</option>
-            <option value="meeting">Riunione</option>
-            <option value="other">Altro</option>
+            {EVENT_KIND_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </div>
 

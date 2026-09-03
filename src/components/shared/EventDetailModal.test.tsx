@@ -29,7 +29,7 @@ describe('EventDetailModal', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByRole('dialog').className).toContain('cs-responsive-detail--centered-mobile')
     expect(screen.getByRole('heading', { name: /Dettaglio evento Allenamento U16/i })).toBeTruthy()
-    expect(screen.getByText('Allenamento')).toBeTruthy()
+    expect(screen.getByLabelText('Tipo evento: Allenamento')).toBeTruthy()
     expect(screen.getByText('Palestra CSRoma')).toBeTruthy()
     expect(screen.getByText('U16')).toBeTruthy()
     expect(screen.getByText('Portare la divisa chiara.')).toBeTruthy()

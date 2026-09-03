@@ -10,7 +10,7 @@ import AthleteAgenda from '@/components/athlete/AthleteAgenda'
 import type { AthleteCalendarEvent } from '@/types/athlete-calendar'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
-import { EmptyState, ErrorState, LoadingState, OfflineState } from '@/components/ui'
+import { EmptyState, ErrorState, EventKindBadge, LoadingState, OfflineState } from '@/components/ui'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
 import { filterCalendarEvents, type CalendarEventKindFilter } from '@/lib/athlete/calendar-filters'
@@ -19,20 +19,12 @@ import { canConfirmAthleteAttendance } from '@/lib/athlete/calendar-permissions'
 import AttendanceControl from '@/components/athlete/AttendanceControl'
 import type { AttendanceStatus } from '@/types/attendance'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
+import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
 
 type Event = AthleteCalendarEvent
 type CalendarLoadState = 'loading' | 'ready' | 'error' | 'offline'
 
 interface TeamLite { id: string; name: string; code: string }
-
-function kindColor(kind?: string | null) {
-  switch (kind) {
-    case 'training': return '#16a34a'
-    case 'match':    return '#dc2626'
-    case 'meeting':  return '#2563eb'
-    default:         return '#6b7280'
-  }
-}
 
 export default function AthleteCalendarManager() {
   const { user, role, loading: authLoading, profileLoading } = useAuth()
@@ -215,7 +207,7 @@ export default function AthleteCalendarManager() {
     title: e.has_conflict ? `⚠ ${e.title}` : e.title,
     start: new Date(e.start_time),
     end: new Date(e.end_time),
-    color: kindColor(e.event_kind)
+    color: eventKindVisual(e.event_kind)?.colorToken
   }))
 
   return (
@@ -260,13 +252,7 @@ export default function AthleteCalendarManager() {
           <div className="flex-1">
             <span className="cs-field__label">Tipo evento</span>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Filtra per tipo evento">
-              {[
-                ['', 'Tutti'],
-                ['training', 'Allenamenti'],
-                ['match', 'Partite'],
-                ['meeting', 'Riunioni'],
-                ['other', 'Altro'],
-              ].map(([value, label]) => (
+              {[{ value: '', label: 'Tutti' }, ...EVENT_KIND_OPTIONS].map(({ value, label }) => (
                 <button
                   key={value || 'all'}
                   type="button"
@@ -377,17 +363,7 @@ export default function AthleteCalendarManager() {
                         {event.teams.length > 0 ? event.teams.join(', ') : <span className="text-secondary">N/D</span>}
                       </td>
                       <td>
-                        <span className={`cs-badge ${
-                          event.event_kind === 'training' ? 'cs-badge--primary' :
-                          event.event_kind === 'match' ? 'cs-badge--danger' :
-                          event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                          'cs-badge--neutral'
-                        }`}>
-                          {event.event_kind === 'training' ? 'Allenamento' :
-                           event.event_kind === 'match' ? 'Partita' :
-                           event.event_kind === 'meeting' ? 'Riunione' :
-                           event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                        </span>
+                        <EventKindBadge kind={event.event_kind} />
                       </td>
                       <td>
                         <button

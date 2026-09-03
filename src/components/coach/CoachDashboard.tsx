@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { CalendarDays, ChevronRight, CircleAlert, MessageSquare, Trophy, UsersRound } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DeniedState, ErrorState, FeedbackState, OfflineState, Panel, StatusBadge } from '@/components/ui'
+import { DeniedState, ErrorState, EventKindBadge, FeedbackState, OfflineState, Panel, StatusBadge } from '@/components/ui'
 import { useTeamContext } from '@/context/TeamContext'
 import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
 
@@ -14,8 +14,6 @@ type CoachEvent = { id: string; title: string; start_time: string; end_time?: st
 type CoachMessage = { id: string; subject: string; content?: string; created_at?: string }
 type AttendanceCounts = { going: number; maybe: number; declined: number; no_response: number }
 type CoachDashboardProps = { user: User; profile: Profile }
-
-const eventLabels: Record<NonNullable<CoachEvent['event_kind']>, string> = { training: 'Allenamento', match: 'Partita', meeting: 'Riunione', other: 'Altro' }
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(value))
@@ -127,7 +125,7 @@ export default function CoachDashboard({ profile }: CoachDashboardProps) {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <CoachPanel title="Cosa ho oggi?" description="Agenda aggregata sulle squadre assegnate.">
-          {nextEvent ? <div className="space-y-4"><div className="flex items-start gap-3"><div className="rounded-xl bg-[color:var(--cs-surface-selected)] p-3 text-[color:var(--cs-brand-red)]"><CalendarDays className="h-5 w-5" aria-hidden="true" /></div><div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--cs-ink-muted)]">Prossimo impegno</p><h2 className="cs-type-h3 truncate">{nextEvent.title}</h2><p className="text-sm text-[color:var(--cs-ink-muted)]">{formatDate(nextEvent.start_time)} · {formatTime(nextEvent.start_time)}{nextEvent.location ? ` · ${nextEvent.location}` : ''}</p></div>{nextEvent.event_kind ? <StatusBadge status={nextEvent.event_kind === 'match' ? 'danger' : 'info'} label={eventLabels[nextEvent.event_kind]} /> : null}</div>{conflictIds.size > 0 ? <div className="flex items-center gap-2 rounded-lg border border-[color:var(--cs-warning-canonical)]/40 bg-[color:var(--cs-warning-canonical)]/10 p-3 text-sm"><CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" /><span>{conflictIds.size} impegni coinvolti in una sovrapposizione.</span></div> : null}<SectionLink href="/coach/calendar">Apri calendario</SectionLink></div> : <FeedbackState variant="empty" title="Nessun impegno imminente" description="Non risultano eventi nei prossimi giorni." action={<SectionLink href="/coach/calendar">Apri calendario</SectionLink>} />}
+          {nextEvent ? <div className="space-y-4"><div className="flex items-start gap-3"><div className="rounded-xl bg-[color:var(--cs-surface-selected)] p-3 text-[color:var(--cs-brand-red)]"><CalendarDays className="h-5 w-5" aria-hidden="true" /></div><div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--cs-ink-muted)]">Prossimo impegno</p><h2 className="cs-type-h3 truncate">{nextEvent.title}</h2><p className="text-sm text-[color:var(--cs-ink-muted)]">{formatDate(nextEvent.start_time)} · {formatTime(nextEvent.start_time)}{nextEvent.location ? ` · ${nextEvent.location}` : ''}</p></div><EventKindBadge kind={nextEvent.event_kind} /></div>{conflictIds.size > 0 ? <div className="flex items-center gap-2 rounded-lg border border-[color:var(--cs-warning-canonical)]/40 bg-[color:var(--cs-warning-canonical)]/10 p-3 text-sm"><CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" /><span>{conflictIds.size} impegni coinvolti in una sovrapposizione.</span></div> : null}<SectionLink href="/coach/calendar">Apri calendario</SectionLink></div> : <FeedbackState variant="empty" title="Nessun impegno imminente" description="Non risultano eventi nei prossimi giorni." action={<SectionLink href="/coach/calendar">Apri calendario</SectionLink>} />}
         </CoachPanel>
 
         <CoachPanel title="Chi sarà presente?" description="Stato delle conferme per il prossimo allenamento.">

@@ -5,9 +5,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  EventKindBadge,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
+import { EVENT_KIND_OPTIONS } from '@/lib/events/event-kind'
 
 type Gym = { id: string; name: string; city: string }
 type Activity = { id: string; name: string }
@@ -142,7 +144,7 @@ export default function EventModal({
             <h2 className="cs-modal__title">{event ? 'Modifica Evento' : 'Nuovo Evento'}</h2>
             <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               <span className="cs-badge cs-badge--neutral">{form.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}</span>
-              <span className="cs-badge cs-badge--accent">{({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[form.event_kind]}</span>
+              <EventKindBadge kind={form.event_kind} />
             </div>
           </div>
         </div>
@@ -250,12 +252,11 @@ export default function EventModal({
                 className="cs-select"
                 value={form.event_kind}
                 onChange={(e) => setForm({ ...form, event_kind: e.target.value as any })}
-              >
-                <option value="training">Allenamento</option>
-                <option value="match">Partita</option>
-                <option value="meeting">Riunione</option>
-                <option value="other">Altro</option>
-              </select>
+          >
+              {EVENT_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+          </select>
             </div>
           </div>
 

@@ -3,6 +3,7 @@
 import type { AthleteCalendarEvent } from '@/types/athlete-calendar'
 import AttendanceControl from './AttendanceControl'
 import type { AttendanceStatus } from '@/types/attendance'
+import { EventKindBadge } from '@/components/ui'
 
 type AgendaEvent = Pick<
   AthleteCalendarEvent,
@@ -14,13 +15,6 @@ export type AgendaDay = {
   key: string
   date: Date
   events: AgendaEvent[]
-}
-
-const eventKindLabels: Record<string, string> = {
-  training: 'Allenamento',
-  match: 'Partita',
-  meeting: 'Riunione',
-  other: 'Altro',
 }
 
 function dateKey(date: Date): string {
@@ -67,10 +61,6 @@ function formatDay(date: Date): string {
     day: 'numeric',
     month: 'long',
   })
-}
-
-function kindLabel(kind: string | null | undefined): string | null {
-  return kind ? eventKindLabels[kind] ?? kind : null
 }
 
 export default function AthleteAgenda({
@@ -147,7 +137,7 @@ function AgendaRow({
             {event.title}
           </span>
           <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[color:var(--cs-text-secondary)]">
-            {kindLabel(event.event_kind) && <span>{kindLabel(event.event_kind)}</span>}
+            <EventKindBadge kind={event.event_kind} />
             {event.location && <span className="truncate">{event.location}</span>}
             {event.teams.length > 0 && <span className="truncate">{event.teams.join(', ')}</span>}
             {event.has_conflict && <span role="status" className="font-semibold text-[color:var(--cs-danger-canonical)]">⚠ Conflitto di orario</span>}

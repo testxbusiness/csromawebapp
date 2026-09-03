@@ -8,9 +8,10 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
-import { Button, Card, DeniedState, EmptyState, ErrorState, FeedbackState, LoadingState, OfflineState, Panel, Select, StatusBadge, Table, TableActions } from '@/components/ui'
+import { Button, Card, DeniedState, EmptyState, ErrorState, EventKindBadge, FeedbackState, LoadingState, OfflineState, Panel, Select, StatusBadge, Table, TableActions } from '@/components/ui'
 import { useTeamContext } from '@/context/TeamContext'
 import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
+import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
 
 interface Event {
   id?: string
@@ -284,10 +285,9 @@ export default function CoachCalendarManager() {
               className="cs-select"
             >
               <option value="">Tutti i tipi</option>
-              <option value="training">Allenamento</option>
-              <option value="match">Partita</option>
-              <option value="meeting">Riunione</option>
-              <option value="other">Altro</option>
+              {EVENT_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
             </Select>
           </div>
           <div>
@@ -314,14 +314,7 @@ export default function CoachCalendarManager() {
             events={(filteredEventsForCalendar || []).map((e:any)=>({
               id: e.id!, title: e.title,
               start: new Date(e.start_time), end: new Date(e.end_time),
-              color: (function(){
-                switch (e.event_kind) {
-                  case 'training': return '#16a34a'
-                  case 'match': return '#dc2626'
-                  case 'meeting': return '#2563eb'
-                  default: return '#6b7280'
-                }
-              })()
+              color: eventKindVisual(e.event_kind)?.colorToken
             }))}
             onNavigate={(act) => {
               const d = new Date(currentDate)
@@ -394,17 +387,7 @@ export default function CoachCalendarManager() {
                         <div>{(event.selected_teams || []).map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`cs-badge ${
-                          event.event_kind === 'training' ? 'cs-badge--primary' :
-                          event.event_kind === 'match' ? 'cs-badge--danger' :
-                          event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                          'cs-badge--neutral'
-                        }`}>
-                          {event.event_kind === 'training' ? 'Allenamento' :
-                           event.event_kind === 'match' ? 'Partita' :
-                           event.event_kind === 'meeting' ? 'Riunione' :
-                           event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                        </span>
+                        <EventKindBadge kind={event.event_kind} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
                         <TableActions className="gap-2">
@@ -447,17 +430,7 @@ export default function CoachCalendarManager() {
                     <div><strong>Squadre:</strong> {(event.selected_teams || []).map(teamId => teams.find(t => t.id === teamId)?.name).filter(Boolean).join(', ') || 'N/D'}</div>
                     <div>
                       <strong>Tipo:</strong>
-                      <span className={`ml-2 cs-badge ${
-                        event.event_kind === 'training' ? 'cs-badge--primary' :
-                        event.event_kind === 'match' ? 'cs-badge--danger' :
-                        event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                        'cs-badge--neutral'
-                      }`}>
-                        {event.event_kind === 'training' ? 'Allenamento' :
-                         event.event_kind === 'match' ? 'Partita' :
-                         event.event_kind === 'meeting' ? 'Riunione' :
-                         event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                      </span>
+                      <EventKindBadge kind={event.event_kind} className="ml-2" />
                     </div>
                   </div>
                   <div className="mt-3 flex gap-2">
@@ -574,14 +547,13 @@ export default function CoachCalendarManager() {
                   </select>
                 </div>
 
-                <div className="mb-4">
-                  <label className="cs-field__label">Tipologia</label>
-                  <select name="event_kind" defaultValue={(editingEvent as any)?.event_kind || 'training'} className="cs-select">
-                    <option value="training">Allenamento</option>
-                    <option value="match">Partita</option>
-                    <option value="meeting">Riunione</option>
-                    <option value="other">Altro</option>
-                  </select>
+                  <div className="mb-4">
+                    <label className="cs-field__label">Tipologia</label>
+                    <select name="event_kind" defaultValue={(editingEvent as any)?.event_kind || 'training'} className="cs-select">
+                      {EVENT_KIND_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
                 </div>
 
                 <div className="mb-4 cs-card p-3">
@@ -779,15 +751,6 @@ function CoachEventAttendancePanel({ eventId, teamId }: { eventId: string; teamI
   )
 }
 
-function kindColor(kind?: string) {
-  switch (kind) {
-    case 'training': return '#16a34a'
-    case 'match': return '#dc2626'
-    case 'meeting': return '#2563eb'
-    default: return '#6b7280'
-  }
-}
-
 function CalendarBlock({
   events, currentDate, onNavigate, view, onViewChange, onEventClick
 }:{
@@ -798,7 +761,7 @@ function CalendarBlock({
     title: e.title,
     start: new Date(e.start_time),
     end: new Date(e.end_time),
-    color: kindColor(e.event_kind)
+    color: eventKindVisual(e.event_kind)?.colorToken
   }))
   return (
     <SimpleCalendar

@@ -66,7 +66,7 @@ describe('athlete agenda', () => {
     )
 
     expect(screen.getByText('Allenamento mattina')).toBeTruthy()
-    expect(screen.getByText('Allenamento')).toBeTruthy()
+    expect(screen.getByLabelText('Tipo evento: Allenamento')).toBeTruthy()
     expect(screen.getByText('Palestra CSRoma')).toBeTruthy()
     expect(screen.getByText(/Conflitto di orario/i)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Apri dettagli' })).toBeTruthy()
