@@ -458,6 +458,8 @@ button.cs-list-row{ font:inherit; }
   .cs-overlay[data-state="open"] ~ .cs-responsive-detail,
   .cs-responsive-detail[data-state="open"]{ transform:translateY(0); }
   .cs-responsive-detail--fullscreen-mobile{ top:0; bottom:0; max-height:none; border-radius:0; transform:translateY(100%); }
+  .cs-overlay[data-state="open"] ~ .cs-responsive-detail--fullscreen-mobile,
+  .cs-responsive-detail--fullscreen-mobile[data-state="open"]{ transform:translateY(0); }
 }
 
 /* ----------------------------
