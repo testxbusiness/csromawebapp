@@ -829,6 +829,7 @@ button.cs-list-row{ font:inherit; }
 .cs-overlay[data-state="open"] { opacity: 1; pointer-events: auto; }
 .cs-modal[data-state="open"]:not(.cs-responsive-detail) { transform: translateY(0) scale(1); opacity: 1; }
 .cs-responsive-detail[data-state="open"] { transform: translateX(0); opacity: 1; }
+.cs-modal.cs-responsive-detail { position: fixed; }
 
 @media (max-width: 767px){
   .cs-responsive-detail[data-state="open"] { transform: translateY(0); }
