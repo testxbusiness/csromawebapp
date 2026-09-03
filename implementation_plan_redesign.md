@@ -219,7 +219,7 @@ Per un goal `[x]` aggiungere sempre:
 | G8.6 Coach messaggi | [x] | G8.2 | Completato il 31/08/2026; lista coach estesa al pattern canonico `ListRow` con mittente/ruolo, stato letto, squadre destinatarie, anteprima, data relativa e allegati; composer mantenuto sulle route e recipient logic esistenti, con riepilogo finale esplicito (conteggio e nomi) e conferma prima di invio/aggiornamento; `CoachMessagesManager.tsx` e `CoachMessageModal.tsx`; typecheck, build e diff check superati |
 | G8.7 Coach pagamenti/profilo | [x] | G8.1 | Completato il 31/08/2026; `/coach/payments` migrata a Stat/Panel con registro personale dei compensi, filtri e stati semantici senza terminologia o aggregazioni da quote atleta; con più squadre il registro si restringe alla squadra selezionata dal TeamContext, mantenendo l’aggregato su `Tutte le squadre`; `/coach/profile` migrata a `CoachProfileManager` con separazione tra dati account, incarico professionale e squadre assegnate, più impostazioni PWA riusate; route/API e autorizzazioni esistenti preservate; typecheck, 48 suite/165 test, build e diff check superati |
 | G8.8 Test coach | [x] | G8.3–G8.7 | Completato il 31/08/2026; aggiunti test coach per multi-team e query contestuali, stato no-events, conflitti, unread messages con riga accessibile, CTA convocazione draft/published e conferma destinatari, editing non autorizzato e rifiuto server-side di team non assegnato; test componenti e route in `CoachDashboard.test.tsx`, `CoachMessagesManager.test.tsx`, `ChampionshipConvocationModal.test.tsx`, `calendar/route.test.ts`; typecheck, 51 suite/172 test, build e diff check superati |
-| G8.V Gate verifica Fase 8 — area coach | [~] | G8.1–G8.8 | PASS WITH ISSUES il 31/08/2026; `G8.R1`, `G8.R2` e `G8.R3` completati. `npx tsc --noEmit`, Jest (52 suite/175 test), `next build` e `git diff --check` superati. Autorizzazione server-side e contesto multi-team verificati sui Route Handler; route canoniche preservate. Resta il rilievo Medium relativo allo smoke E2E autenticato responsive non eseguibile per credenziali `E2E_COACH_*` assenti. Il gate non è dichiarato superato. |
+| G8.V Gate verifica Fase 8 — area coach | [~] | G8.1–G8.8 | PASS WITH ISSUES il 31/08/2026; `G8.R1`, `G8.R2` e `G8.R3` completati. `npx tsc --noEmit`, Jest (52 suite/175 test), `next build` e `git diff --check` superati. Autorizzazione server-side e contesto multi-team verificati sui Route Handler; route canoniche preservate. Smoke Preview del 03/09/2026: login coach, home aggregata con 2 squadre, selettore team, route coach principali e console senza errori superati. Resta da completare la matrice E2E responsive completa sui viewport obbligatori. Il gate non è dichiarato superato. |
 | G8.R1 Stati coach error/denied/offline/filtered-empty | [x] | G8.V | Completato il 31/08/2026; aggiunta classificazione condivisa degli errori HTTP/rete, stati `DeniedState`/`OfflineState`/`ErrorState` nei manager coach, retry e preservazione dei dati già caricati, oltre a stati espliciti per risultati filtrati vuoti in calendario, messaggi e compensi; aggiunti test della classificazione. Typecheck e suite Jest (52 suite/175 test) superati. Restano separati i rilievi E2E responsive e accessibilità già registrati nel gate. |
 | G8.R2 Accessibilità calendario coach mobile | [x] | G8.V | Completato il 31/08/2026; sostituito il trigger su `div` delle card mobile con un pulsante semantico, tastierabile e con nome accessibile, mantenendo Modifica/Elimina come azioni separate senza nesting di pulsanti; typecheck, test e build verificati. |
 | G8.R3 Conformità design system coach calendario/campionati | [x] | G8.V | Completato il 31/08/2026; calendario migrato ai componenti `Panel`, `Button`, `Select`, `Table`, `TableActions` e `Card`; manager campionati e pannelli coach migrati a `Card`, `Badge`, `EmptyState`, token colore e tipografia canonica, rimuovendo le classi legacy `slate/gray/white` dai percorsi coach. Typecheck, suite Jest, build e diff check superati. |
@@ -241,7 +241,7 @@ Per un goal `[x]` aggiungere sempre:
 | G10.10 Remediation certificati admin | [x] | G9.3,G9.6 | Completato il 03/09/2026; allineata la classificazione dashboard/pagina Atleti (scaduto, mancante, imminente entro 30 giorni, regolare), aggiunto filtro stato certificato e link dashboard con filtro “Da verificare” preimpostato. Test mirati 7/7, typecheck, build e diff check superati. |
 | G10.11 Contrasto alert dashboard dark mode | [x] | G10.1,G9.3 | Completato il 03/09/2026; corrette le card “Richiede attenzione” in dark mode con superfici navy, testo primario/secondario esplicito, icone warning e hover coerenti. Typecheck, build e diff check superati. |
 | G10.12 Sostituzione logo e icona PWA | [x] | G1.10,G6.5,G10.3 | Completato il 03/09/2026; nuovo logo trasparente collegato a shell/autenticazione/documenti, icone PWA rigenerate dal canvas bianco, push/offline/service worker aggiornati e test PWA estesi agli asset. Typecheck, Jest 59 suite/194 test, lint, build e diff check superati. Smoke browser/PWA non eseguibile in questo ambiente per `SIGTRAP` Chromium e `listen EPERM`; da ripetere su staging/host con bind locale disponibile. |
-| G10.6 E2E matrice finale | [ ] | G10.5 | |
+| G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview parziale il 03/09/2026: login admin/coach/atleta/genitore, dashboard e route principali, area familiare con 2 profili e cambio subject senza leakage, redirect coach→`/unauthorized`, responsive famiglia (320/375/390/768) e admin (320/375/768/1440), manifest/fallback offline/update PWA e console admin/coach/atleta verificati. Restano da eseguire la matrice completa, lo smoke familiare dedicato sui viewport previsti, gli scenari PWA sul dispositivo e la chiusura del rilievo “Firma documenti”. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
 
 ---
@@ -4133,6 +4133,19 @@ Non sono state applicate remediation né creati goal G7.Rx: il verdict non è
 `FAIL`, ma il gate Fase 7 → 8 non viene dichiarato superato finché i rilievi
 Medium e la verifica E2E familiare non vengono risolti.
 
+### Verifica Preview parziale — 3 settembre 2026
+
+- Login del genitore riuscito sulla Preview Vercel con il database staging.
+- Area familiare verificata con due profili collegati (`AtletaU17 prova` e
+  `AtletaU14 prova`), selezione esplicita e apertura del profilo delegato.
+- Cambio subject da U17 a U14 verificato: il contenuto principale non conserva
+  dati U17 dopo il cambio; il contenuto U14 viene caricato correttamente.
+- Responsive verificato a 320×568, 375×812, 390×844 e 768×1024 senza errori
+  visibili o indicatori di overflow nel contenuto.
+- Rilievo ancora aperto e confermato: nella card di selezione familiare viene
+  ancora mostrata la sezione “Firma documenti”, benché il flusso non esista.
+- La copertura PWA familiare con permessi parziali non è stata completata.
+
 ## Gate Fase 8 → 9
 - coach multi-team stabile;
 - foundation confermata su terzo ruolo.
@@ -4220,8 +4233,10 @@ iniziale o quando arrivava un `updatefound`.
 **Verifiche eseguite:** test PWA mirati `src/lib/pwa/service-worker-registration.test.ts`
 (4/4), `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
 
-**Nota residua:** la verifica definitiva richiede un deploy o due versioni
-distinte di `sw.js` con una scheda/PWA già aperta durante il cambio versione.
+**Nota residua:** il 03/09/2026 la Preview ha mostrato il banner di update e
+l’azione “Aggiorna ora” ha completato il reload controllato. La verifica
+definitiva del cambio versione richiede comunque due deploy/versioni distinte
+di `sw.js` con una scheda/PWA già aperta.
 
 ## G10.10 — Remediation certificati medici admin
 
@@ -4391,10 +4406,13 @@ aggiorna il registro.
   HTTP delle quattro icone PNG.
 - Verifiche superate: `npx tsc --noEmit`, `npm test -- --runInBand`
   (59 suite / 194 test), `npm run lint`, `npm run build`, `git diff --check`.
-- Nota residua: lo smoke Playwright/browser non è stato eseguito perché
-  Chromium headless termina con `SIGTRAP`/`kill EPERM` e il server locale non
-  può effettuare il bind (`listen EPERM`) nell’ambiente corrente; ripetere il
-  test PWA su staging o su un host con networking locale abilitato.
+- Verifica Preview del 03/09/2026: manifest, `sw.js`, `offline.html`, banner
+  di aggiornamento controllato e nuove icone risultano raggiungibili; il
+  fallback offline mostra il copy previsto e l’applicazione dell’update
+  ritorna alla dashboard coach senza errori console.
+- Nota residua: resta da completare lo smoke PWA su dispositivo fisico per
+  installazione, push, offline reale e aggiornamento tra due deploy. La
+  Preview è stata installata con successo anche sul dispositivo dell’utente.
 
 ---
 
