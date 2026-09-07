@@ -37,4 +37,30 @@ describe('MonthlyMobileCalendar', () => {
     fireEvent.click(screen.getByRole('button', { name: /Riunione staff/ }))
     expect(onEventClick).toHaveBeenCalledWith('event-1')
   })
+
+  it('selects an empty day without opening an event and offers that date for creation', () => {
+    const onEventClick = jest.fn()
+    const onCreateEvent = jest.fn()
+    render(
+      <MonthlyMobileCalendar
+        currentDate={currentDate}
+        events={[]}
+        onNavigate={jest.fn()}
+        onEventClick={onEventClick}
+        onCreateEvent={onCreateEvent}
+      />,
+    )
+
+    const day = screen.getByRole('button', { name: /^martedì 8 settembre, nessun evento$/i })
+    fireEvent.click(day)
+
+    expect(onEventClick).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Nuovo evento per questa giornata' }))
+    expect(onCreateEvent).toHaveBeenCalledWith(expect.objectContaining({
+      getFullYear: expect.any(Function),
+      getMonth: expect.any(Function),
+      getDate: expect.any(Function),
+    }))
+    expect((onCreateEvent.mock.calls[0][0] as Date).getDate()).toBe(8)
+  })
 })

@@ -98,11 +98,13 @@ export default function MonthlyMobileCalendar({
   events,
   onNavigate,
   onEventClick,
+  onCreateEvent,
 }: {
   currentDate: Date
   events: MonthlyCalendarEvent[]
   onNavigate: (action: 'prev' | 'next' | 'today') => void
   onEventClick?: (id: string) => void
+  onCreateEvent?: (date: Date) => void
 }) {
   const days = useMemo(() => buildMonthDays(currentDate, events), [currentDate, events])
   const currentMonth = currentDate.getMonth()
@@ -209,7 +211,18 @@ export default function MonthlyMobileCalendar({
             })}
           </div>
         ) : (
-          <p className="rounded-[var(--cs-radius-md)] border border-dashed border-[color:var(--cs-border)] px-3 py-4 text-sm text-secondary">Nessun evento in questa giornata.</p>
+          <div className="rounded-[var(--cs-radius-md)] border border-dashed border-[color:var(--cs-border)] px-3 py-4">
+            <p className="text-sm text-secondary">Nessun evento in questa giornata.</p>
+            {onCreateEvent && selectedDay && (
+              <button
+                type="button"
+                className="cs-btn cs-btn--sm cs-btn--outline mt-3"
+                onClick={() => onCreateEvent(selectedDay.date)}
+              >
+                Nuovo evento per questa giornata
+              </button>
+            )}
+          </div>
         )}
       </div>
     </section>

@@ -35,6 +35,33 @@ interface Team { id: string; name: string; code: string }
 interface Gym { id: string; name: string; city?: string }
 interface Activity { id: string; name: string }
 
+export function createCoachEventDraft(date: Date = new Date(), teamIds: string[] = []): Event {
+  const start = new Date(date)
+  start.setHours(start.getHours(), 0, 0, 0)
+  const end = new Date(start)
+  end.setHours(end.getHours() + 1)
+
+  return {
+    title: '',
+    description: '',
+    location: '',
+    start_time: start.toISOString(),
+    end_time: end.toISOString(),
+    is_recurring: false,
+    selected_teams: teamIds,
+    event_type: 'one_time',
+    event_kind: 'training',
+  }
+}
+
+function formatDateTimeLocal(value?: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 export default function CoachCalendarManager() {
   const { account } = useAuth()
   const { selectedTeamId, setTeams: setContextTeams } = useTeamContext()
@@ -52,6 +79,8 @@ export default function CoachCalendarManager() {
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
+  const [newEventStart, setNewEventStart] = useState<string | null>(null)
+  const [newEventEnd, setNewEventEnd] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
@@ -151,6 +180,22 @@ export default function CoachCalendarManager() {
   const refreshEvents = useCallback(() => {
     void loadData()
   }, [loadData])
+
+  const openNewEvent = useCallback((date?: Date) => {
+    const teamIds = selectedTeamId ? [selectedTeamId] : teams.map((team) => team.id)
+    const draft = date ? createCoachEventDraft(date, teamIds) : null
+    setEditingEvent(null)
+    setNewEventStart(draft?.start_time ?? null)
+    setNewEventEnd(draft?.end_time ?? null)
+    setShowForm(true)
+  }, [selectedTeamId, teams])
+
+  const openEditEvent = useCallback((event: Event) => {
+    setNewEventStart(null)
+    setNewEventEnd(null)
+    setEditingEvent(event)
+    setShowForm(true)
+  }, [])
 
   // Lazy load gyms/activities solo quando il form si apre
   const loadSelectOptions = useCallback(async () => {
@@ -261,7 +306,7 @@ export default function CoachCalendarManager() {
             <Button
               type="button"
               variant="danger"
-              onClick={() => { setEditingEvent(null); setShowForm(true) }}
+              onClick={() => openNewEvent()}
             >
               Nuovo Evento
             </Button>
@@ -305,10 +350,17 @@ export default function CoachCalendarManager() {
           </div>
         </div>
 
-        {viewMode === 'calendar' ? filteredEvents.length === 0 ? (
-          <EmptyState filtered={events.length > 0} title={events.length > 0 ? 'Nessun evento trovato' : 'Nessun evento'} description={events.length > 0 ? 'Prova a modificare i filtri.' : 'Non hai ancora eventi.'} />
+        {viewMode === 'calendar' ? teams.length === 0 ? (
+          <EmptyState title="Non hai squadre assegnate" description="Contatta l'amministratore per essere assegnato a una squadra" />
         ) : (
           <>
+            {filteredEvents.length === 0 && (
+              <FeedbackState
+                variant={events.length > 0 ? 'filtered-empty' : 'empty'}
+                title={events.length > 0 ? 'Nessun evento trovato' : 'Nessun evento'}
+                description={events.length > 0 ? 'Prova a modificare i filtri.' : 'Seleziona un giorno per verificare la giornata o crea il primo evento.'}
+              />
+            )}
             <div className="md:hidden">
               <MonthlyMobileCalendar
                 currentDate={currentDate}
@@ -331,6 +383,7 @@ export default function CoachCalendarManager() {
                   const event = events.find((item) => item.id === id)
                   if (event) setSelectedEvent(event)
                 }}
+                onCreateEvent={openNewEvent}
               />
             </div>
             <div className="hidden md:block">
@@ -354,16 +407,9 @@ export default function CoachCalendarManager() {
                   if (ev) setSelectedEvent(ev)
                 }}
                 onSelectSlot={(start, end) => {
-                  setEditingEvent({
-                    title: '', description: '',
-                    location: '',
-                    start_time: start.toISOString(),
-                    end_time: end.toISOString(),
-                    is_recurring: false,
-                    selected_teams: teams.map(t => t.id),
-                    event_type: 'one_time',
-                    event_kind: 'training'
-                  } as any)
+                  setEditingEvent(null)
+                  setNewEventStart(start.toISOString())
+                  setNewEventEnd(end.toISOString())
                   setShowForm(true)
                 }}
               />
@@ -376,7 +422,7 @@ export default function CoachCalendarManager() {
             filtered={events.length > 0}
             title={events.length > 0 ? 'Nessun evento trovato' : 'Nessun evento'}
             description={events.length > 0 ? 'Prova a modificare i filtri.' : 'Non hai ancora eventi.'}
-            action={events.length === 0 ? <Button type="button" onClick={() => setShowForm(true)}>Crea il tuo primo evento</Button> : undefined}
+            action={events.length === 0 ? <Button type="button" onClick={() => openNewEvent()}>Crea il tuo primo evento</Button> : undefined}
           />
         ) : (
           <div className="overflow-hidden">
@@ -420,7 +466,7 @@ export default function CoachCalendarManager() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
                         <TableActions className="gap-2">
                           <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedEvent(event)}>Dettagli</Button>
-                          <Button type="button" size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowForm(true) }}>Modifica</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); openEditEvent(event) }}>Modifica</Button>
                           <Button type="button" size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); deleteEvent(event.id!) }}>Elimina</Button>
                         </TableActions>
                       </td>
@@ -462,7 +508,7 @@ export default function CoachCalendarManager() {
                     </div>
                   </div>
                   <div className="mt-3 flex gap-2">
-                    <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => { setEditingEvent(event); setShowForm(true) }}>Modifica</Button>
+                    <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => openEditEvent(event)}>Modifica</Button>
                     <Button type="button" size="sm" variant="danger" className="flex-1" onClick={() => deleteEvent(event.id!)}>Elimina</Button>
                   </div>
                 </Card>
@@ -505,7 +551,7 @@ export default function CoachCalendarManager() {
                 }}
               >
                 <div className="mb-4">
-                  <h3 className="cs-modal__title">{editingEvent ? 'Modifica Evento' : 'Nuovo Evento'}</h3>
+                  <h3 className="cs-modal__title">{editingEvent?.id ? 'Modifica Evento' : 'Nuovo Evento'}</h3>
                 </div>
 
                 <div>
@@ -521,11 +567,11 @@ export default function CoachCalendarManager() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label className="cs-field__label">Data/Ora Inizio *</label>
-                    <input type="datetime-local" name="start_time" required defaultValue={editingEvent?.start_time ? new Date(editingEvent.start_time).toISOString().slice(0, 16) : ''} className="cs-select" />
+                    <input type="datetime-local" name="start_time" required defaultValue={formatDateTimeLocal(editingEvent?.start_time ?? newEventStart ?? undefined)} className="cs-select" />
                   </div>
                   <div>
                     <label className="cs-field__label">Data/Ora Fine *</label>
-                    <input type="datetime-local" name="end_time" required defaultValue={editingEvent?.end_time ? new Date(editingEvent.end_time).toISOString().slice(0, 16) : ''} className="cs-select" />
+                    <input type="datetime-local" name="end_time" required defaultValue={formatDateTimeLocal(editingEvent?.end_time ?? newEventEnd ?? undefined)} className="cs-select" />
                   </div>
                 </div>
 
@@ -560,7 +606,7 @@ export default function CoachCalendarManager() {
                   <div className="space-y-2 max-h-32 overflow-y-auto cs-card p-3">
                     {teams.map((team) => (
                       <label key={team.id} className="flex items-center">
-                        <input type="checkbox" name="teams" value={team.id} defaultChecked={editingEvent?.selected_teams.includes(team.id)} className="mr-2" />
+                        <input type="checkbox" name="teams" value={team.id} defaultChecked={editingEvent ? editingEvent.selected_teams.includes(team.id) : !selectedTeamId || selectedTeamId === team.id} className="mr-2" />
                         {team.name} ({team.code})
                       </label>
                     ))}
@@ -598,9 +644,7 @@ export default function CoachCalendarManager() {
                     <input
                       type="datetime-local"
                       name="confirmation_deadline"
-                      defaultValue={editingEvent?.confirmation_deadline
-                        ? new Date(editingEvent.confirmation_deadline).toISOString().slice(0, 16)
-                        : ''}
+                      defaultValue={formatDateTimeLocal(editingEvent?.confirmation_deadline ?? undefined)}
                       className="cs-select"
                     />
                   </label>
@@ -631,7 +675,7 @@ export default function CoachCalendarManager() {
                     Annulla
                   </button>
                   <button type="submit" className="cs-btn cs-btn--primary">
-                    {editingEvent ? 'Aggiorna Evento' : 'Crea Evento'}
+                    {editingEvent?.id ? 'Aggiorna Evento' : 'Crea Evento'}
                   </button>
                 </div>
               </form>
