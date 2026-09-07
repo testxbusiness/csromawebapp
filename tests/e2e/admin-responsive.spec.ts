@@ -71,6 +71,18 @@ test.describe('admin responsive and operational gate', () => {
     }
   })
 
+  test('renders the admin calendar in mobile and desktop month views', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/admin/calendar', { waitUntil: 'domcontentloaded', timeout: 60_000 })
+    await expect(page.getByLabel('Calendario mensile')).toBeVisible({ timeout: 60_000 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.locator('.fc-daygrid')).toBeVisible({ timeout: 60_000 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+  })
+
   test('exposes table, filters and modal interactions without side effects', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.route('**/api/admin/payments', async (route) => {

@@ -9,7 +9,9 @@ async function login(page: Page) {
   await page.getByLabel('Email').fill(athleteEmail!)
   await page.getByLabel('Password').fill(athletePassword!)
   await page.getByRole('button', { name: 'Accedi' }).click()
-  await page.waitForURL(/\/dashboard/)
+  // Authenticated dashboard navigation can keep third-party/runtime resources
+  // pending; the route and DOM are already usable at DOMContentLoaded.
+  await page.waitForURL(/\/dashboard/, { waitUntil: 'domcontentloaded', timeout: 60_000 })
 }
 
 test.describe('athlete calendar responsive and accessible views', () => {
@@ -36,6 +38,8 @@ test.describe('athlete calendar responsive and accessible views', () => {
 
     await expect(page.getByLabel('Agenda eventi')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('button', { name: 'Agenda', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await page.getByRole('button', { name: 'Mese', exact: true }).click()
+    await expect(page.getByLabel('Calendario mensile')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
   })
 })

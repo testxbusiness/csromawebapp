@@ -71,6 +71,16 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      name: 'coach-calendar-chromium',
+      testMatch: /coach-calendar\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'coach-calendar-touch-chromium',
+      testMatch: /coach-calendar-touch\.spec\.ts/,
+      use: { ...devices['Pixel 7'] },
+    },
+    {
       name: 'athlete-messages-chromium',
       testMatch: /athlete-messages\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },

@@ -260,7 +260,7 @@ Per un goal `[x]` aggiungere sempre:
 | G11.4 Integrazione calendario coach mobile | [x] | G11.2,G11.3 | Completato il 07/09/2026; integrato `MonthlyMobileCalendar` in `/coach/calendar` mantenendo `TeamContext`, filtri su squadre autorizzate, dettaglio/modifica, form e mutation coach esistenti. Il tap sul giorno seleziona la giornata e l’agenda, senza aprire eventi; l’agenda vuota offre “Nuovo evento per questa giornata” con data/ora locale precompilata. Calendario mobile visibile anche con zero eventi o filtro vuoto; error/denied/offline e risultati vuoti restano espliciti. Modificati `src/components/coach/CoachCalendarManager.tsx`, `src/components/calendar/MonthlyMobileCalendar.tsx` e relativo test. Jest completo 62 suite/218 test, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. |
 | G11.5 Integrazione calendario admin mobile | [x] | G11.2,G11.3 | Completato il 07/09/2026; integrato `MonthlyMobileCalendar` in `/admin/calendar`, spostati i filtri multi-selezione squadra/tipologia/intervallo in uno sheet mobile accessibile con conteggio, Applica e Reset; mantenuti vista elenco, export Excel, CRUD/modale evento e aggiunta selezione bulk con eliminazione tramite le DELETE admin esistenti. Il calendario carica l’intervallo visibile con `visible=1`, limite 500 e overlap multi-giorno; l’API valida date, ordine e ampiezza dell’intervallo mantenendo `requireGlobalRole('admin')`, paginazione legacy e route/schema/RLS invariati. Esteso il recupero FullCalendar al range visibile. Remediation del 07/09/2026: corretto il loop di refresh desktop causato da `datesSet` che smontava il calendario mentre `loading` era attivo; il caricamento iniziale resta bloccante, i refresh successivi mantengono il calendario montato e deduplicano il range. `npx tsc --noEmit`, `npm test -- --runInBand` (62 suite/218 test), `npm run build` e `git diff --check` superati. |
 | G11.5a Vista mese atleta condivisa e coerenza cross-role | [x] | G11.3,G11.4,G11.5 | Completato il 07/09/2026: integrato `MonthlyMobileCalendar` nella sola vista Mese mobile atleta/famiglia; Agenda resta il default. Aggiunto renderer agenda role-specifico per mantenere squadre, conflitti, stato/deadline e `AttendanceControl` autorizzato senza pulsanti annidati; label vista uniformata a `Mese`. FullCalendar e default desktop, route, filtri, contesto subject/team e autorizzazioni invariati. Test mirati 23/23, suite completa 62 suite/220 test, typecheck, build e diff check superati. |
-| G11.6 Test e gate calendario cross-role | [ ] | G11.4,G11.5,G11.5a | Coprire tipi evento, multiday, filtri, touch, tastiera, dark mode, responsive, autorizzazioni e performance di caricamento, inclusi Agenda/Mese atleta e permessi familiari. |
+| G11.6 Test e gate calendario cross-role | [!] | G11.4,G11.5,G11.5a | BLOCCATO il 07/09/2026 dopo verifiche unit/component, Route Handler e gate tecnici superati. Su server production dedicato, E2E admin 5/5, atleta 2/2, famiglia 2/2 e coach 1/1 passano; coach touch 1/1 passa. Il run dev parallelo precedente resta flaky (`ERR_ABORTED`/sidebar non trovata), quindi non viene usato come evidenza UI. Aggiunti casi MonthlyMobileCalendar per quattro tipi, tipo sconosciuto, multiday, ordinamento locale e navigazione tastiera, smoke mobile Agenda/Mese famiglia/atleta, sei viewport + dark/reduced-motion coach, touch coach, mese mobile/desktop admin e GET admin per intervalli/limite/overlap. Blocco esterno: Chromium headless non applica lo zoom browser 200% da tastiera e il servizio Computer Use interattivo non si avvia (`Sky Computer Use service startup request failed`); resta da eseguire zoom reale e dark mode completa per ogni ruolo, poi G11.V. |
 | G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
@@ -4854,6 +4854,48 @@ ripetere i goal già completati. Il gate complessivo resta G11.6.
 - test Route Handler mirati se viene aggiunto il filtro temporale;
 - E2E atleta/famiglia/coach/admin ai viewport obbligatori;
 - `npx tsc --noEmit`, test pertinenti, `npm run build` e `git diff --check`.
+
+**Registro della verifica — 07/09/2026**
+
+- [x] Mapper `event_kind`: quattro tipi, fallback assente/sconosciuto, label
+  accessibili e token separati verificati in `event-kind.test.ts`,
+  `EventKindBadge.test.tsx` e nei percorsi atleta/coach/admin già coperti dal
+  suite completa.
+- [x] `MonthlyMobileCalendar`: giorno vuoto, eventi singoli/misti, quattro tipi,
+  evento multiday su tre giorni, dettaglio dalla agenda, tap sul giorno senza
+  apertura evento, renderer atleta/famiglia senza pulsanti annidati, ordinamento
+  per ora locale e comandi di navigazione tastierabili verificati; 17 test
+  mirati superati.
+- [x] Presenze e permessi: i test esistenti di `AthleteCalendarManager`,
+  `AttendanceControl`, route attendance, contesto subject e permessi familiari
+  restano superati; il codice mantiene deadline, rollback, offline,
+  `view_schedule`/`confirm_attendance`, reset subject e filtri non-escalating.
+- [x] Coach/admin: test route per team coach non assegnato, test responsive admin
+  con filtri/modal/route map e caricamento admin `visible=1`/limite 500 superati;
+  i default desktop e le azioni lista/CRUD/export/bulk risultano preservati dal
+  codice e dai test già presenti.
+- [x] Gate tecnici: `npm test -- --runInBand` 63 suite/226 test,
+  `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+- [x] E2E cross-role su server production dedicato: `admin-responsive-chromium`
+  5/5, `athlete-calendar-chromium` 2/2, `family-chromium` 2/2,
+  `coach-calendar-chromium` 1/1 e `coach-calendar-touch-chromium` 1/1
+  passati, tutti con `--workers=1`; atleta include Agenda/Mese mobile, famiglia
+  include persistenza subject e Agenda/Mese mobile, coach include default mese
+  desktop, sei viewport, dark/reduced-motion e tap touch, admin include mese
+  mobile/desktop, route map, filtri, modal e bulk flow.
+- [-] Il run dev parallelo precedente ha prodotto 3/6 per flakiness del server
+  (`ERR_ABORTED` in `page.goto` atleta e falso negativo sidebar admin mentre la
+  sidebar era presente nello screenshot); non viene considerato evidenza di
+  regressione applicativa.
+- [-] Non dichiarati come eseguiti in modo reale: viewport 320/375/390/768/
+  1024/1440 per tutti i ruoli, zoom 200%, dark mode e reduced-motion con
+  sessioni autenticati atleta/famiglia/coach; richiedono fixture/credenziali e
+  browser session stabile. Non sono state introdotte correzioni UI non
+  dimostrate.
+- [-] Tentativo zoom 200% del 07/09/2026: cinque `Control+Equal` in Chromium
+  headless non hanno cambiato il breakpoint; il fallimento sul calendario mobile
+  nascosto è stato classificato come limite del runner e il test non
+  deterministico è stato rimosso.
 
 **Prompt `/goal`**
 ```text

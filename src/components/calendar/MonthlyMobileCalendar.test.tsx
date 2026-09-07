@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import MonthlyMobileCalendar from './MonthlyMobileCalendar'
 
 describe('MonthlyMobileCalendar', () => {
@@ -81,5 +82,57 @@ describe('MonthlyMobileCalendar', () => {
 
     expect(screen.getByRole('button', { name: 'Partecipo' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Partita/ })).toBeNull()
+  })
+
+  it('renders every supported kind, keeps an unknown kind textual, and repeats multiday events', () => {
+    render(
+      <MonthlyMobileCalendar
+        currentDate={currentDate}
+        events={[
+          { id: 'training', title: 'Allenamento', start: new Date(2026, 8, 7, 18), end: new Date(2026, 8, 7, 19), eventKind: 'training' },
+          { id: 'match', title: 'Partita', start: new Date(2026, 8, 8, 18), end: new Date(2026, 8, 8, 20), eventKind: 'match' },
+          { id: 'meeting', title: 'Riunione', start: new Date(2026, 8, 9, 18), end: new Date(2026, 8, 9, 19), eventKind: 'meeting' },
+          { id: 'other', title: 'Altro', start: new Date(2026, 8, 10, 18), end: new Date(2026, 8, 10, 19), eventKind: 'other' },
+          { id: 'multiday', title: 'Stage', start: new Date(2026, 8, 11, 18), end: new Date(2026, 8, 13, 12), eventKind: 'legacy' },
+        ]}
+        onNavigate={jest.fn()}
+      />,
+    )
+
+    expect(document.querySelectorAll('.cs-mobile-month-calendar__indicator').length).toBe(4)
+    expect(screen.getAllByText('Stage')).toHaveLength(3)
+    const stageDay = screen.getByRole('button', { name: /venerdì 11 settembre, 1 eventi/i })
+    expect(screen.getByRole('button', { name: /sabato 12 settembre, 1 eventi/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /domenica 13 settembre, 1 eventi/i })).toBeTruthy()
+    fireEvent.click(stageDay)
+    expect(screen.getByText('Tipo non disponibile')).toBeTruthy()
+  })
+
+  it('sorts the selected day agenda by local start time and exposes keyboard navigation', async () => {
+    const user = userEvent.setup()
+    const onNavigate = jest.fn()
+    render(
+      <MonthlyMobileCalendar
+        currentDate={currentDate}
+        events={[
+          { id: 'late', title: 'Evento tardi', start: new Date(2026, 8, 7, 20), end: new Date(2026, 8, 7, 21), eventKind: 'other' },
+          { id: 'early', title: 'Evento presto', start: new Date(2026, 8, 7, 8), end: new Date(2026, 8, 7, 9), eventKind: 'training' },
+        ]}
+        onNavigate={onNavigate}
+      />,
+    )
+
+    const agenda = document.querySelector('.cs-mobile-month-calendar__agenda')
+    expect(agenda).toBeTruthy()
+    const eventButtons = within(agenda as HTMLElement).getAllByRole('button')
+    expect(eventButtons[0]).toHaveTextContent('Evento presto')
+    expect(eventButtons[1]).toHaveTextContent('Evento tardi')
+
+    await user.click(screen.getByRole('button', { name: 'Mese precedente' }))
+    await user.click(screen.getByRole('button', { name: 'Mese successivo' }))
+    await user.click(screen.getByRole('button', { name: 'Oggi' }))
+    expect(onNavigate).toHaveBeenNthCalledWith(1, 'prev')
+    expect(onNavigate).toHaveBeenNthCalledWith(2, 'next')
+    expect(onNavigate).toHaveBeenNthCalledWith(3, 'today')
   })
 })
