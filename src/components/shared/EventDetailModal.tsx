@@ -85,6 +85,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
       description={<span className="sr-only">Informazioni sull’evento</span>}
       size="lg"
       centeredOnMobile
+      centeredOnDesktop
     >
       {error ? (
         <ErrorState

@@ -260,12 +260,14 @@ export default function AthleteCalendarManager() {
             <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--success">
               Esporta Excel
             </button>
-            <button
-              onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-              className={`cs-btn hidden md:inline-flex ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--accent'}`}
-            >
-              {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
-            </button>
+            <div className="hidden md:block">
+              <button
+                onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
+                className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--accent'}`}
+              >
+                {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
+              </button>
+            </div>
           </div>
         </div>
 

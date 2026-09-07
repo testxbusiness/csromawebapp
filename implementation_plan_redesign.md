@@ -4812,6 +4812,11 @@ ripetere i goal già completati. Il gate complessivo resta G11.6.
   agenda custom senza nesting di pulsanti e permessi/presenza familiare.
   `npm test -- --runInBand`: 62 suite, 220 test superati; `npx tsc --noEmit`,
   `npm run build` e `git diff --check` superati. G11.6 resta il gate complessivo.
+- 07/09/2026: rifinitura UI post-verifica browser: nascosto correttamente il
+  toggle desktop `Vista Elenco` sotto 768px tramite wrapper responsive (il
+  precedente `hidden` sul bottone era sovrascritto da `.cs-btn`) e centrato su
+  desktop il `EventDetailModal`, mantenendo il bottom sheet mobile. Suite
+  completa 62/220, build e `git diff --check` superati.
 
 ---
 

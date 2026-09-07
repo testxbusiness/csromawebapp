@@ -77,6 +77,7 @@ describe('AthleteCalendarManager load states', () => {
 
     await waitFor(() => expect(screen.getByText('Non sei iscritto a nessuna squadra')).toBeTruthy())
     expect(screen.queryByText('Impossibile caricare il calendario')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Vista Elenco' }).parentElement).toHaveClass('hidden', 'md:block')
   })
 
   it('renders an error state for an HTTP failure instead of empty content', async () => {
