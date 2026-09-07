@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { EVENT_KIND_OPTIONS, eventKindVisual, type EventKind } from '@/lib/events/event-kind'
 
 export type MonthlyCalendarEvent = {
@@ -99,12 +99,14 @@ export default function MonthlyMobileCalendar({
   onNavigate,
   onEventClick,
   onCreateEvent,
+  renderAgendaEvent,
 }: {
   currentDate: Date
   events: MonthlyCalendarEvent[]
   onNavigate: (action: 'prev' | 'next' | 'today') => void
   onEventClick?: (id: string) => void
   onCreateEvent?: (date: Date) => void
+  renderAgendaEvent?: (event: MonthlyCalendarEvent) => ReactNode
 }) {
   const days = useMemo(() => buildMonthDays(currentDate, events), [currentDate, events])
   const currentMonth = currentDate.getMonth()
@@ -188,6 +190,8 @@ export default function MonthlyMobileCalendar({
         {selectedDay && selectedDay.events.length > 0 ? (
           <div className="divide-y divide-[color:var(--cs-border-subtle)] overflow-hidden rounded-[var(--cs-radius-md)] border border-[color:var(--cs-border-subtle)]">
             {selectedDay.events.map((event) => {
+              if (renderAgendaEvent) return <div key={event.id}>{renderAgendaEvent(event)}</div>
+
               const visual = eventKindVisual(event.eventKind)
               return (
                 <button

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AthleteCalendarManager from './AthleteCalendarManager'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
@@ -102,6 +102,45 @@ describe('AthleteCalendarManager load states', () => {
 
     await waitFor(() => expect(screen.getByText('Calendario non disponibile offline')).toBeTruthy())
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('switches to the shared mobile month while preserving athlete agenda metadata and attendance controls', async () => {
+    const start = new Date(2026, 8, 7, 18, 0, 0)
+    const end = new Date(start)
+    end.setHours(20, 0, 0, 0)
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        teams: [{ id: 'team-1', name: 'U16', code: 'U16' }],
+        events: [{
+          id: 'event-month', title: 'Allenamento mese', description: null, location: 'Palestra',
+          start_time: start.toISOString(), end_time: end.toISOString(), is_recurring: false,
+          teams: ['U16'], team_details: [{ id: 'team-1', name: 'U16', code: 'U16' }], team_ids: ['team-1'],
+          event_kind: 'training', requires_confirmation: true,
+          confirmation_deadline: new Date(Date.now() + 86_400_000).toISOString(),
+          my_attendance: { status: 'maybe', responded_at: null },
+        }, {
+          id: 'event-month-conflict', title: 'Riunione sovrapposta', description: null, location: 'Palestra',
+          start_time: start.toISOString(), end_time: end.toISOString(), is_recurring: false,
+          teams: ['U16'], team_details: [{ id: 'team-1', name: 'U16', code: 'U16' }], team_ids: ['team-1'],
+          event_kind: 'meeting', requires_confirmation: false, confirmation_deadline: null, my_attendance: null,
+        }],
+      }),
+    }) as jest.Mock
+
+    render(<AthleteCalendarManager />)
+
+    await waitFor(() => expect(screen.getByText('Allenamento mese')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /^Mese$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /settembre.*2 eventi/i }))
+
+    expect(screen.getByRole('button', { name: /^Mese$/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByText('U16').length).toBeGreaterThan(0)
+    expect(screen.getByText('Risposta:')).toBeTruthy()
+    expect(screen.getAllByText('Forse').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Partecipo' })).toBeTruthy()
   })
 
   it('loads a family subject calendar with view_schedule while keeping attendance read-only', async () => {

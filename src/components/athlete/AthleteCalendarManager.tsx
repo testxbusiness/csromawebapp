@@ -2,10 +2,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal, { type EventDetailData } from '@/components/shared/EventDetailModal'
-import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
-import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
+import MonthlyMobileCalendar, { type MonthlyCalendarEvent } from '@/components/calendar/MonthlyMobileCalendar'
+import FullCalendarWidget, { type CalEvent } from '@/components/calendar/FullCalendarWidget'
 import AthleteAgenda from '@/components/athlete/AthleteAgenda'
 import type { AthleteCalendarEvent } from '@/types/athlete-calendar'
 import { useAuth } from '@/hooks/useAuth'
@@ -179,6 +178,48 @@ export default function AthleteCalendarManager() {
 
   const retryLoad = () => { void loadData() }
 
+  const mobileMonthEvents: MonthlyCalendarEvent[] = filteredEvents.map((event) => ({
+    id: event.id,
+    title: event.title,
+    start: event.start_time,
+    end: event.end_time,
+    eventKind: event.event_kind,
+    location: event.location,
+  }))
+
+  const renderMobileMonthEvent = (monthEvent: MonthlyCalendarEvent) => {
+    const event = filteredEvents.find((item) => item.id === monthEvent.id)
+    if (!event) return null
+
+    return (
+      <div className="bg-[color:var(--cs-surface-1)] px-3 py-3">
+        <div className="flex items-start gap-3">
+          <span className="w-12 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-secondary">
+            {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{event.title}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary">
+              <EventKindBadge kind={event.event_kind} />
+              {event.teams.length > 0 && <span>{event.teams.join(', ')}</span>}
+              {event.has_conflict && <span role="status" className="font-semibold text-[color:var(--cs-danger-canonical)]">⚠ Conflitto di orario</span>}
+            </div>
+          </div>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm shrink-0" onClick={() => setSelectedEvent(event)}>
+            Dettagli
+          </button>
+        </div>
+        <AttendanceControl
+          requiresConfirmation={event.requires_confirmation}
+          confirmationDeadline={event.confirmation_deadline}
+          initialStatus={event.my_attendance?.status ?? null}
+          canRespond={canConfirmAttendance}
+          onChange={(status) => saveAttendance(event.id, status)}
+        />
+      </div>
+    )
+  }
+
   if (loadState === 'loading') {
     return <LoadingState label="Caricamento calendario..." />
   }
@@ -243,7 +284,7 @@ export default function AthleteCalendarManager() {
             aria-pressed={mobileViewMode === 'calendar'}
             className={`cs-btn cs-btn--sm ${mobileViewMode === 'calendar' ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
           >
-            Vista mese
+            Mese
           </button>
         </div>
 
@@ -278,10 +319,9 @@ export default function AthleteCalendarManager() {
                 if (event) setSelectedEvent(event)
               }} />
             ) : (
-              <FullCalendarWidget
-                initialDate={currentDate}
-                view="month"
-                events={calEvents}
+              <MonthlyMobileCalendar
+                currentDate={currentDate}
+                events={mobileMonthEvents}
                 onNavigate={(action) => {
                   const nextDate = new Date(currentDate)
                   if (action === 'today') setCurrentDate(new Date())
@@ -289,11 +329,11 @@ export default function AthleteCalendarManager() {
                   else nextDate.setMonth(nextDate.getMonth() + 1)
                   setCurrentDate(nextDate)
                 }}
-                onViewChange={() => undefined}
                 onEventClick={(id) => {
                   const event = filteredEvents.find((item) => item.id === id)
                   if (event) setSelectedEvent(event)
                 }}
+                renderAgendaEvent={renderMobileMonthEvent}
               />
           )}
         </div>

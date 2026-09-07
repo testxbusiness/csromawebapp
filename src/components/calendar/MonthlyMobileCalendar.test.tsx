@@ -63,4 +63,23 @@ describe('MonthlyMobileCalendar', () => {
     }))
     expect((onCreateEvent.mock.calls[0][0] as Date).getDate()).toBe(8)
   })
+
+  it('supports a role-specific agenda renderer without wrapping its controls in an event button', () => {
+    render(
+      <MonthlyMobileCalendar
+        currentDate={currentDate}
+        events={[{ id: 'event-1', title: 'Partita', start: new Date(2026, 8, 7, 10), end: new Date(2026, 8, 7, 12), eventKind: 'match' }]}
+        onNavigate={jest.fn()}
+        renderAgendaEvent={(event) => (
+          <div>
+            <span>{event.title}</span>
+            <button type="button">Partecipo</button>
+          </div>
+        )}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Partecipo' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Partita/ })).toBeNull()
+  })
 })
