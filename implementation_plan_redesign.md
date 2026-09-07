@@ -74,6 +74,19 @@ Sono **non negoziabili** per tutti i goal:
 - Nessuna UI deve simulare funzioni non presenti, ad esempio pagamento online o firma documenti non implementata.
 - Nessuna modifica RLS/schema è implicita in questo piano: se emerge una necessità, annotarla come blocco e fermarsi.
 
+### 0.3.1 Standard trasversale — riconoscimento del tipo di evento
+
+Il tipo di evento usa lo stesso linguaggio visivo in tutta l'app, senza eccezioni di ruolo o schermata:
+
+- **Allenamento** → indigo/navy;
+- **Partita** → rosso CSRoma;
+- **Riunione** → blu/teal;
+- **Altro** → grigio neutro.
+
+Questo mapping si applica in modo coerente ad atleta, familiare/delegato, coach e amministrazione: calendari, agenda, dashboard, liste, dettaglio evento, filtri, badge e relative legende. I colori devono essere definiti come token condivisi, non come valori locali o hard-coded nei singoli componenti.
+
+Il colore identifica esclusivamente la tipologia: non sostituisce mai la label testuale né viene riutilizzato per presenza, conflitto, urgenza, errore o selezione. Questi stati conservano indicatori semantici e testuali propri.
+
 ### 0.4 Regola sul refactoring
 
 Il redesign deve essere **incrementale e feature-driven**.
@@ -241,6 +254,13 @@ Per un goal `[x]` aggiungere sempre:
 | G10.10 Remediation certificati admin | [x] | G9.3,G9.6 | Completato il 03/09/2026; allineata la classificazione dashboard/pagina Atleti (scaduto, mancante, imminente entro 30 giorni, regolare), aggiunto filtro stato certificato e link dashboard con filtro “Da verificare” preimpostato. Test mirati 7/7, typecheck, build e diff check superati. |
 | G10.11 Contrasto alert dashboard dark mode | [x] | G10.1,G9.3 | Completato il 03/09/2026; corrette le card “Richiede attenzione” in dark mode con superfici navy, testo primario/secondario esplicito, icone warning e hover coerenti. Typecheck, build e diff check superati. |
 | G10.12 Sostituzione logo e icona PWA | [x] | G1.10,G6.5,G10.3 | Completato il 03/09/2026; nuovo logo trasparente collegato a shell/autenticazione/documenti, icone PWA rigenerate dal canvas bianco, push/offline/service worker aggiornati e test PWA estesi agli asset. Typecheck, Jest 59 suite/195 test, lint, build e diff check superati. Smoke browser/PWA non eseguibile in questo ambiente per `SIGTRAP` Chromium e `listen EPERM`; da ripetere su staging/host con bind locale disponibile. |
+| G11.1 Token e contratto visivo del tipo evento | [x] | G10.2 | Completato il 03/09/2026; creato il mapper condiviso tipizzato in `src/lib/events/event-kind.ts` con label, aria-label, classe badge e token colore/superficie/foreground per Allenamento (indigo/navy), Partita (rosso CSRoma), Riunione (teal) e Altro (grigio neutro); aggiunti equivalenti light/dark e classi CSS `cs-event-kind-*` con prefisso separato dai token operativi; il compatibility entry point atleta delega al mapper condiviso. Test mapper/compatibilità 2 suite/22 test, typecheck, build e diff check superati. L'adozione delle superfici esistenti cross-role resta in G11.2. |
+| G11.2 Adozione cross-role del tipo evento | [x] | G11.1 | Completato il 03/09/2026; adottati `EventKindBadge`, `EVENT_KIND_OPTIONS` e `eventKindVisual` in dashboard, agenda, calendari, liste, dettaglio e form/filtri di atleta/famiglia, coach e admin; mantenuti separati colori e copy di presenza, conflitto, errore e selezione, senza modifiche a route, dati o autorizzazioni. Test mirati 4 suite/16 test, suite completa 61 suite/215 test, typecheck, build e diff check superati. |
+| G11.3 Calendario mensile mobile condiviso | [x] | G11.1 | Completato il 07/09/2026; aggiunto `MonthlyMobileCalendar` condiviso con griglia 7×6, indicatori/legenda per tipologia, gestione eventi multi-giorno, agenda della data selezionata, preview desktop hover/focus e supporto reduced motion. Integrato sotto 768px in coach/admin; FullCalendar mantenuto da 768px. Suite Jest completa 62/217, build Next, typecheck e diff check superati. |
+| G11.4 Integrazione calendario coach mobile | [ ] | G11.2,G11.3 | Integrare contesto squadra, filtri, creazione da data vuota e dettaglio/modifica esistenti in `/coach/calendar`, senza cambiare autorizzazioni o route. |
+| G11.5 Integrazione calendario admin mobile | [ ] | G11.2,G11.3 | Integrare filtri multipli in sheet, azioni esistenti e caricamento per intervallo visibile in `/admin/calendar`, senza cambiare schema, RLS o route. |
+| G11.6 Test e gate calendario cross-role | [ ] | G11.4,G11.5 | Coprire tipi evento, multiday, filtri, touch, tastiera, dark mode, responsive, autorizzazioni e performance di caricamento. |
+| G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 | Verifica finale del linguaggio visivo e del calendario mobile coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
 
@@ -4435,7 +4455,352 @@ aggiorna il registro.
 
 ---
 
-# 21. Criterio finale di successo
+# 21. Fase 11 — Linguaggio eventi e calendario mobile coach/admin
+
+## Obiettivo della fase
+
+Rendere il calendario di coach e amministrazione realmente utilizzabile da
+mobile senza creare due implementazioni parallele né degradare la vista
+operativa desktop. La vista mobile deve essere una griglia mensile leggera:
+segnala le tipologie presenti per giorno e, al tap, apre la giornata
+selezionata con la relativa agenda.
+
+La fase rende inoltre esecutivo lo standard trasversale di riconoscimento del
+tipo evento definito in §0.3.1. Non è un redesign delle regole di calendario:
+route, modelli dati, autorizzazioni, mutation, RLS e flussi esistenti restano
+invariati salvo il caricamento già autorizzato e limitato all'intervallo
+visibile quando necessario per le prestazioni.
+
+### Decisioni UX vincolanti
+
+- Sul touch non esiste un mouseover affidabile: il tap su un giorno seleziona
+  la data e mostra la sua agenda; un secondo tap su una riga apre il dettaglio
+  dell'evento. Non aprire direttamente il primo evento del giorno.
+- Su desktop, hover e focus tastiera possono mostrare una preview non
+  indispensabile; la medesima informazione deve restare raggiungibile con
+  click/tastiera e nella vista agenda.
+- La cella mobile mostra il numero del giorno e al massimo tre indicatori
+  circolari dei tipi presenti; un quarto tipo è reso con `+n`. Il giorno
+  corrente e quello selezionato usano anche bordo/superficie, non solo colore.
+- Una giornata con più eventi dello stesso tipo mostra un solo indicatore per
+  tipo: il conteggio e i titoli completi sono nell'agenda giornaliera.
+- Le colonne restano da lunedì a domenica. Eventi che attraversano più giorni
+  devono comparire in ciascun giorno pertinente senza creare duplicati nel
+  dettaglio della giornata.
+- A 768 px e oltre resta disponibile il calendario completo attuale, con vista
+  mese/settimana/elenco; la variante compatta serve principalmente 320–767 px.
+- Il calendario deve restare leggero: non renderizzare titoli di tutti gli
+  eventi dentro le celle e non caricare un volume indefinito di eventi per
+  riempire un solo mese.
+
+### Interazioni comuni
+
+```text
+‹  Settembre 2026  ›       Oggi
+L   M   M   G   V   S   D
+31  1•  2•• 3   4●  5   6
+7   8   9•• 10  11  12  13
+
+Legenda: Allenamento · Partita · Riunione · Altro
+
+Mercoledì 9 settembre · 2 eventi
+18:00  Allenamento U16                              ›
+20:30  Riunione staff                               ›
+```
+
+- Le frecce precedente/successivo e “Oggi” hanno target touch ≥44 px e
+  aggiornano un annuncio `aria-live` con il nuovo mese.
+- Il giorno selezionato ha un nome accessibile con data, numero eventi e tipi
+  presenti; Invio/Spazio produce lo stesso risultato del tap.
+- L'agenda è visibile sotto la griglia quando lo spazio lo consente; può usare
+  il `ResponsiveDetail` esistente come bottom sheet/fullscreen per viewport
+  bassi. Non usare tooltip come unica UI mobile.
+- Coach e admin possono selezionare un giorno vuoto per avviare la creazione
+  esistente con data precompilata, ma la mutation avviene solo dalla conferma
+  nel form già autorizzato.
+- Presenza, conflitto, scadenza e urgenza restano badge/icone/copy dedicati;
+  non alterano il colore della tipologia dell'evento.
+
+---
+
+## G11.1 — Token e contratto visivo del tipo evento
+
+**Obiettivo**
+Rendere lo standard Allenamento/Partita/Riunione/Altro una primitive condivisa
+e non quattro mapping locali divergenti.
+
+**Task**
+- [ ] Inventariare tutti i mapping correnti di `event_kind`, compresi colori
+  hard-coded e label duplicate.
+- [ ] Definire token semantici condivisi, con equivalenti light/dark e
+  contrasto AA: Allenamento → indigo/navy; Partita → rosso CSRoma; Riunione →
+  blu/teal; Altro → grigio neutro.
+- [ ] Esporre un unico mapper tipizzato per label, token, variante badge e
+  descrizione accessibile; il valore mancante/ignoto non deve essere
+  arbitrariamente classificato.
+- [ ] Mantenere testo e/o icona oltre al colore in ogni superficie.
+- [ ] Non modificare i colori semantici di errori, warning, presenze,
+  conflitti o selezione.
+
+**File da ispezionare per primi**
+- `src/lib/athlete/event-kind.ts`;
+- `src/components/athlete/AthleteCalendarManager.tsx`;
+- `src/components/coach/CoachCalendarManager.tsx`;
+- `src/components/admin/EventsManager.tsx`;
+- `src/components/calendar/FullCalendarWidget.tsx`;
+- `src/app/globals.css`.
+
+**Definition of Done**
+- un evento dello stesso `event_kind` riceve identico token e label in ogni
+  area; nessun mapping locale resta necessario;
+- colori verificati in light/dark senza dipendere dal testo bianco sopra un
+  colore variabile;
+- test del mapper per tutti e quattro i valori e per valore assente/sconosciuto.
+
+**Prompt `/goal`**
+```text
+/goal G11.1
+Introduci il contratto visivo condiviso per event_kind. Applica i token
+Allenamento→indigo/navy, Partita→rosso CSRoma, Riunione→blu/teal e
+Altro→grigio neutro senza riutilizzarli per presenze, conflitti, errori o
+selezione. Mantieni label accessibili e non modificare route, dati o
+autorizzazioni.
+```
+
+---
+
+## G11.2 — Adozione cross-role del tipo evento
+
+**Obiettivo**
+Applicare il contratto di G11.1 a ogni superficie che già presenta una
+tipologia di evento, senza estendere il perimetro a dati non presenti.
+
+**Task**
+- [x] Migrare dashboard, agenda, calendario, liste, dettaglio, filtri, badge e
+  legende dell'area atleta e familiare.
+- [x] Migrare le superfici coach, comprese home, calendario, lista e dettaglio.
+- [x] Migrare calendario, dashboard/eccezioni e dettaglio evento admin dove il
+  tipo viene già mostrato.
+- [x] Verificare che la legenda e i filtri usino label coerenti e che il filtro
+  non conceda accesso a eventi non autorizzati.
+- [x] Lasciare inalterati gli stati di presenza, conflitto e RSVP; aggiungere
+  testo dove il colore era l'unica differenza visibile.
+
+**Esito e verifiche — 03/09/2026**
+
+- `EventKindBadge` espone label e `aria-label` coerenti per Allenamento,
+  Partita, Riunione e Altro; valori assenti/sconosciuti restano non classificati.
+- `EventKindBadge.test.tsx` copre i quattro valori, classi condivise,
+  accessibilità e fallback; `AthleteAgenda`, `EventDetailModal` e
+  `CoachDashboard` verificano il rendering cross-role.
+- `npm test -- --runInBand`: 61 suite, 215 test superati; `npm run build`,
+  `npx tsc --noEmit` e `git diff --check` superati.
+- File di adozione: `src/components/ui/EventKindBadge.tsx`,
+  `src/components/{athlete,coach,admin,shared}/**`,
+  `src/components/calendar/SimpleCalendar.tsx` e
+  `src/lib/events/event-kind.ts`.
+- Nessuna modifica a route, API, dati, filtri autorizzativi o autorizzazioni;
+  il colore di selezione del calendario e gli stati operativi restano separati.
+
+**Definition of Done**
+- nessuna differenza visiva intenzionale di `event_kind` tra ruoli;
+- nessun colore raw del tipo evento rimasto nei componenti coinvolti;
+- verifica visuale light/dark e test di rendering per atleta/familiare,
+  coach e admin.
+
+**Prompt `/goal`**
+```text
+/goal G11.2
+Applica il contratto event_kind condiviso a tutte le superfici esistenti di
+atleta, familiare, coach e admin che mostrano il tipo evento. Non cambiare dati,
+permessi, filtri autorizzativi o route; sostituisci solo le presentazioni locali
+incoerenti e aggiungi le verifiche pertinenti.
+```
+
+---
+
+## G11.3 — Calendario mensile mobile condiviso
+
+**Obiettivo**
+Creare la variante mobile comune da usare per coach e admin, lasciando il
+widget desktop completo come vista ≥768 px.
+
+**Task**
+- [x] Estrarre un componente client riusabile che riceve solo eventi già
+  autorizzati, data corrente, data selezionata, callback navigazione e callback
+  apertura giornata/evento; non deve conoscere ruoli o query.
+- [x] Calcolare per giorno: tipi distinti, conteggio, eventi ordinati e
+  attraversamento multi-giorno in timezone `Europe/Rome`.
+- [x] Rendere la griglia 7×6 compatta, con celle touch-friendly e nessun
+  overflow orizzontale a 320 px.
+- [x] Mostrare legenda testuale, giorno corrente, selezione persistente mentre
+  si esplora il mese e agenda della giornata selezionata.
+- [x] Fornire preview hover/focus solo per pointer fine/desktop, senza layout
+  shift e senza dipendere da essa per il contenuto.
+- [x] Rispettare `prefers-reduced-motion`; le transizioni tra mese, selezione e
+  sheet usano opacity/transform o sono ridotte.
+- [x] Non introdurre una nuova libreria calendario; riusare primitive, dialog e
+  utility del progetto.
+
+**API e prestazioni**
+- Il componente deve lavorare su un DTO minimale già disponibile al client:
+  `id`, titolo, inizio/fine, `event_kind` e i metadati già necessari alla riga
+  agenda. Non duplicare payload privati né usare cache persistenti.
+- Prima di implementare una nuova query, verificare se gli endpoint coach/admin
+  possono ricevere in modo sicuro `from` e `to`. Se serve un adeguamento,
+  validare server-side l'intervallo e ogni team richiesto, mantenendo i
+  contratti legacy compatibili.
+- Il cambio mese carica o filtra il solo intervallo necessario più l'eventuale
+  bordo per eventi multi-giorno; non usare `limit=5000` come requisito della
+  vista mensile.
+
+**Definition of Done**
+- stessa griglia e stessa semantica nelle due aree;
+- tap/Invio sul giorno apre l'agenda, tap/Invio sull'evento apre il dettaglio;
+- navigazione, focus, screen reader, empty month e mese con eventi misti sono
+  coperti da test;
+- FullCalendar continua a funzionare nella vista desktop.
+
+**Prompt `/goal`**
+```text
+/goal G11.3
+Crea il calendario mensile mobile condiviso per coach e admin. La griglia deve
+segnalare i tipi evento con indicatori e aprire l'agenda della giornata al tap;
+hover/focus è solo una preview desktop. Mantieni FullCalendar a 768px e oltre,
+non aggiungere librerie e non mettere logica autorizzativa nel componente.
+```
+
+---
+
+## G11.4 — Integrazione calendario coach mobile
+
+**Obiettivo**
+Usare G11.3 in `/coach/calendar`, preservando il contesto assegnazioni coach e
+tutte le azioni attuali.
+
+**Task**
+- [ ] Collegare la variante mobile agli eventi già filtrati dal team context;
+  con una sola squadra non introdurre un selettore ridondante.
+- [ ] Rendere i filtri tipologia e squadra compatti su mobile, preferibilmente
+  in sheet con conteggio filtri attivi; non duplicarli nella griglia.
+- [ ] Mantenere calendario/elenco come scelta di vista e rendere “Nuovo evento”
+  sempre raggiungibile, con precompilazione della data quando è stato scelto un
+  giorno vuoto.
+- [ ] Riutilizzare i dettagli, modifica, eliminazione, ricorrenze e report
+  presenze esistenti; non cambiare le mutation o la verifica `team_coaches`.
+- [ ] Gestire loading, errore, offline, denied, nessun evento e nessun
+  risultato dei filtri senza sostituirli con un mese apparentemente vuoto.
+
+**Definition of Done**
+- un coach multi-squadra vede solo le squadre assegnate prima e dopo cambio
+  mese/filtro;
+- dettaglio, modifica ed eliminazione restano tastierabili e non creano nesting
+  di pulsanti;
+- nessuna regressione a `/api/coach/calendar` o alle mutation esistenti.
+
+**Prompt `/goal`**
+```text
+/goal G11.4
+Integra il calendario mobile condiviso in /coach/calendar. Mantieni TeamContext,
+filtri autorizzati, form e mutation coach esistenti; il tap sul giorno apre la
+giornata, non un evento. Copri esplicitamente stati vuoti/errore/offline/denied
+e la precompilazione della data per Nuovo evento.
+```
+
+---
+
+## G11.5 — Integrazione calendario admin mobile
+
+**Obiettivo**
+Usare G11.3 in `/admin/calendar` con filtri amministrativi completi, senza
+ridurre le capacità gestionali desktop.
+
+**Task**
+- [ ] Spostare su mobile i filtri multipli squadra, tipologia e intervallo in
+  un unico sheet accessibile con Applica, Reset e conteggio dei filtri attivi.
+- [ ] Conservare tabella/elenco, export, bulk e modale evento esistenti; la
+  vista mensile non deve diventare l'unico modo per gestire eventi.
+- [ ] Collegare selezione giornata, dettaglio, modifica e creazione alla
+  variante condivisa; il giorno vuoto precompila il form senza bypassare le
+  autorizzazioni admin.
+- [ ] Adattare il recupero agli intervalli visibili soltanto se l'ispezione
+  mostra che la richiesta attuale è eccessiva. Validare input server-side,
+  mantenere paginazione/limiti sensati e non modificare schema o RLS.
+- [ ] Rendere espliciti eventi senza tipologia, senza squadra o senza palestra
+  con label testuali: non inventare un colore o un team.
+
+**Definition of Done**
+- i filtri multipli producono gli stessi risultati in mobile, desktop, agenda e
+  lista;
+- cambio mese, reset e intervallo non espandono l'insieme di dati autorizzati;
+- export, bulk e CRUD rimangono disponibili nella vista appropriata;
+- la griglia non richiede il caricamento indiscriminato dell'intero calendario.
+
+**Prompt `/goal`**
+```text
+/goal G11.5
+Integra il calendario mobile condiviso in /admin/calendar. Sposta i filtri
+multi-selezione in un sheet mobile accessibile, conserva lista/export/bulk/CRUD
+e limita il caricamento al periodo visibile solo dopo aver verificato e
+preservato le garanzie server-side. Non cambiare schema, RLS o route.
+```
+
+---
+
+## G11.6 — Test e gate calendario cross-role
+
+**Scenari minimi**
+- [ ] Ogni `event_kind`, valore assente e colori light/dark coerenti in tutti i
+  ruoli.
+- [ ] Giorno senza eventi, uno, più eventi dello stesso tipo, tipi misti e più
+  di tre tipi.
+- [ ] Evento su più giorni, evento a cavallo di mese e ordinamento per ora nella
+  timezone italiana.
+- [ ] Tap, keyboard, focus, Escape e screen-reader name; nessuna informazione
+  essenziale disponibile solo al mouseover o al colore.
+- [ ] 320×568, 375×812, 390×844, 768×1024, 1024×768 e 1440×900; zoom 200%,
+  dark mode e `prefers-reduced-motion`.
+- [ ] Coach con zero/una/più squadre e tentativo di team non assegnato.
+- [ ] Admin con filtri multipli, reset, cambio mese, lista, export/bulk e CRUD.
+- [ ] Endpoint con intervallo valido/non valido e verifica che non restituisca
+  dati fuori contesto o un volume non necessario.
+
+**Verifiche richieste**
+- test unitari per mapper event-kind e aggregazione giornaliera;
+- test componenti per griglia, agenda, filtri e accessibilità;
+- test Route Handler mirati se viene aggiunto il filtro temporale;
+- E2E coach/admin ai viewport obbligatori;
+- `npx tsc --noEmit`, test pertinenti, `npm run build` e `git diff --check`.
+
+**Prompt `/goal`**
+```text
+/goal G11.6
+Esegui e completa la verifica cross-role del nuovo standard event_kind e del
+calendario mobile coach/admin. Copri responsive, touch, tastiera, dark mode,
+multi-team, filtri e limiti di caricamento; correggi soltanto regressioni
+dimostrate e aggiorna il registro con gli esiti reali.
+```
+
+---
+
+## G11.V — Gate verifica Fase 11
+
+La fase è superata solo se:
+
+- il mapping dei quattro tipi è identico in atleta, familiare, coach e admin;
+- nessun utente deve affidarsi al colore o al mouseover per comprendere o
+  aprire una giornata;
+- il calendario coach/admin è usabile a 320 px senza overflow e mantiene le
+  capacità operative desktop;
+- i filtri non ampliano mai i dati autorizzati;
+- i dati mensili non richiedono il caricamento indiscriminato dell'intero
+  storico;
+- test, build e review responsive/accessibilità risultano effettivamente
+  eseguiti e annotati nel registro.
+
+---
+
+# 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
 

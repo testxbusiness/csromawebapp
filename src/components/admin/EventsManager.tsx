@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
-import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
+import MonthlyMobileCalendar from '@/components/calendar/MonthlyMobileCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { EmptyState, EventKindBadge, LoadingState, toast } from '@/components/ui'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
@@ -568,6 +568,32 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
 
 
       {viewMode === 'calendar' ? (
+        <>
+        <div className="md:hidden">
+          <MonthlyMobileCalendar
+            currentDate={currentDate}
+            events={events.map((event) => ({
+              id: event.id!,
+              title: event.title,
+              start: event.start_date,
+              end: event.end_date,
+              eventKind: event.event_kind,
+              location: event.location || event.gyms?.name,
+            }))}
+            onNavigate={(action) => {
+              const nextDate = new Date(currentDate)
+              if (action === 'today') setCurrentDate(new Date())
+              else if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
+              else nextDate.setMonth(nextDate.getMonth() + 1)
+              setCurrentDate(nextDate)
+            }}
+            onEventClick={(id) => {
+              const event = events.find((item) => item.id === id)
+              if (event) setSelectedEvent(event)
+            }}
+          />
+        </div>
+        <div className="hidden md:block">
         <FullCalendarWidget
           initialDate={currentDate}
           view={calView}
@@ -604,6 +630,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             setShowModal(true)
           }}
         />
+        </div>
+        </>
       ) : (
       <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}

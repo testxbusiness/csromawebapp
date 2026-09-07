@@ -6,7 +6,7 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
-import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
+import MonthlyMobileCalendar from '@/components/calendar/MonthlyMobileCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { Button, Card, DeniedState, EmptyState, ErrorState, EventKindBadge, FeedbackState, LoadingState, OfflineState, Panel, Select, StatusBadge, Table, TableActions } from '@/components/ui'
 import { useTeamContext } from '@/context/TeamContext'
@@ -308,39 +308,67 @@ export default function CoachCalendarManager() {
         {viewMode === 'calendar' ? filteredEvents.length === 0 ? (
           <EmptyState filtered={events.length > 0} title={events.length > 0 ? 'Nessun evento trovato' : 'Nessun evento'} description={events.length > 0 ? 'Prova a modificare i filtri.' : 'Non hai ancora eventi.'} />
         ) : (
-          <FullCalendarWidget
-            initialDate={currentDate}
-            view={calView}
-            events={(filteredEventsForCalendar || []).map((e:any)=>({
-              id: e.id!, title: e.title,
-              start: new Date(e.start_time), end: new Date(e.end_time),
-              color: eventKindVisual(e.event_kind)?.colorToken
-            }))}
-            onNavigate={(act) => {
-              const d = new Date(currentDate)
-              if (act === 'today') setCurrentDate(new Date())
-              else if (act === 'prev') { calView === 'month' ? d.setMonth(d.getMonth() - 1) : d.setDate(d.getDate() - 7); setCurrentDate(new Date(d)) }
-              else { calView === 'month' ? d.setMonth(d.getMonth() + 1) : d.setDate(d.getDate() + 7); setCurrentDate(new Date(d)) }
-            }}
-            onViewChange={(v) => setCalView(v)}
-            onEventClick={(id) => {
-              const ev = events.find(e => e.id === id)
-              if (ev) setSelectedEvent(ev)
-            }}
-            onSelectSlot={(start, end) => {
-              setEditingEvent({
-                title: '', description: '',
-                location: '',
-                start_time: start.toISOString(),
-                end_time: end.toISOString(),
-                is_recurring: false,
-                selected_teams: teams.map(t => t.id),
-                event_type: 'one_time',
-                event_kind: 'training'
-              } as any)
-              setShowForm(true)
-            }}
-          />
+          <>
+            <div className="md:hidden">
+              <MonthlyMobileCalendar
+                currentDate={currentDate}
+                events={filteredEventsForCalendar.map((event) => ({
+                  id: event.id!,
+                  title: event.title,
+                  start: event.start_time,
+                  end: event.end_time,
+                  eventKind: event.event_kind,
+                  location: event.location,
+                }))}
+                onNavigate={(action) => {
+                  const nextDate = new Date(currentDate)
+                  if (action === 'today') setCurrentDate(new Date())
+                  else if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
+                  else nextDate.setMonth(nextDate.getMonth() + 1)
+                  setCurrentDate(nextDate)
+                }}
+                onEventClick={(id) => {
+                  const event = events.find((item) => item.id === id)
+                  if (event) setSelectedEvent(event)
+                }}
+              />
+            </div>
+            <div className="hidden md:block">
+              <FullCalendarWidget
+                initialDate={currentDate}
+                view={calView}
+                events={(filteredEventsForCalendar || []).map((e:any)=>({
+                  id: e.id!, title: e.title,
+                  start: new Date(e.start_time), end: new Date(e.end_time),
+                  color: eventKindVisual(e.event_kind)?.colorToken
+                }))}
+                onNavigate={(act) => {
+                  const d = new Date(currentDate)
+                  if (act === 'today') setCurrentDate(new Date())
+                  else if (act === 'prev') { calView === 'month' ? d.setMonth(d.getMonth() - 1) : d.setDate(d.getDate() - 7); setCurrentDate(new Date(d)) }
+                  else { calView === 'month' ? d.setMonth(d.getMonth() + 1) : d.setDate(d.getDate() + 7); setCurrentDate(new Date(d)) }
+                }}
+                onViewChange={(v) => setCalView(v)}
+                onEventClick={(id) => {
+                  const ev = events.find(e => e.id === id)
+                  if (ev) setSelectedEvent(ev)
+                }}
+                onSelectSlot={(start, end) => {
+                  setEditingEvent({
+                    title: '', description: '',
+                    location: '',
+                    start_time: start.toISOString(),
+                    end_time: end.toISOString(),
+                    is_recurring: false,
+                    selected_teams: teams.map(t => t.id),
+                    event_type: 'one_time',
+                    event_kind: 'training'
+                  } as any)
+                  setShowForm(true)
+                }}
+              />
+            </div>
+          </>
         ) : teams.length === 0 ? (
           <EmptyState title="Non hai squadre assegnate" description="Contatta l'amministratore per essere assegnato a una squadra" />
         ) : filteredEvents.length === 0 ? (
@@ -748,29 +776,5 @@ function CoachEventAttendancePanel({ eventId, teamId }: { eventId: string; teamI
         </div>
       </div>
     </div>
-  )
-}
-
-function CalendarBlock({
-  events, currentDate, onNavigate, view, onViewChange, onEventClick
-}:{
-  events: any[]; currentDate: Date; onNavigate: (a:'prev'|'next'|'today')=>void; view: 'month'|'week'; onViewChange: (v:'month'|'week')=>void; onEventClick: (id:string)=>void
-}) {
-  const evs: CalEvent[] = (events||[]).map((e:any) => ({
-    id: e.id,
-    title: e.title,
-    start: new Date(e.start_time),
-    end: new Date(e.end_time),
-    color: eventKindVisual(e.event_kind)?.colorToken
-  }))
-  return (
-    <SimpleCalendar
-      currentDate={currentDate}
-      view={view}
-      events={evs}
-      onNavigate={onNavigate}
-      onViewChange={onViewChange}
-      onEventClick={onEventClick}
-    />
   )
 }
