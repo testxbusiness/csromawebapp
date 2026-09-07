@@ -6,11 +6,13 @@ import { exportToExcel } from '@/lib/utils/excelExport'
 import MonthlyMobileCalendar from '@/components/calendar/MonthlyMobileCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
 import { EmptyState, EventKindBadge, LoadingState, toast } from '@/components/ui'
+import { AdminRowCheckbox, AdminSelectionBar } from '@/components/admin/AdminManagement'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import EventModal from '@/components/admin/EventModal'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, SlidersHorizontal } from 'lucide-react'
 import { EVENT_KIND_OPTIONS, eventKindLabel, eventKindVisual } from '@/lib/events/event-kind'
+import { ResponsiveDetail } from '@/components/ui'
 
 interface Event {
   id?: string
@@ -72,6 +74,16 @@ interface Team {
   code: string
 }
 
+function visibleMonthRange(date: Date): { from: string; to: string } {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1)
+  const mondayOffset = (first.getDay() + 6) % 7
+  first.setDate(first.getDate() - mondayOffset)
+  const last = new Date(first)
+  last.setDate(last.getDate() + 41)
+  last.setHours(23, 59, 59, 999)
+  return { from: first.toISOString(), to: last.toISOString() }
+}
+
 export default function EventsManager({ embedded = false }: { embedded?: boolean }) {
   const [events, setEvents] = useState<Event[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
@@ -91,6 +103,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([])
   const teamDropdownRef = useRef<HTMLDivElement | null>(null)
   const eventKindDropdownRef = useRef<HTMLDivElement | null>(null)
   const supabase = useMemo(() => createClient(), [])
@@ -113,8 +127,17 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     return `${filterEventKinds.length} tipi selezionati`
   })()
 
+  const visibleRequest = (date = currentDate) => {
+    const range = visibleMonthRange(date)
+    return {
+      from: filterFrom || range.from,
+      to: filterTo ? `${filterTo}T23:59:59.999` : range.to,
+      visible: true,
+    }
+  }
+
   useEffect(() => {
-    loadEvents()
+    loadEvents(visibleRequest(new Date()))
     loadTeams()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -146,6 +169,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     eventKinds?: string[]
     from?: string
     to?: string
+    visible?: boolean
   }) => {
     setLoading(true)
     try {
@@ -158,7 +182,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       if (selectedTeamIds.length > 0) params.set('team_ids', selectedTeamIds.join(','))
       if (selectedFrom) params.set('from', new Date(selectedFrom).toISOString())
       if (selectedTo) params.set('to', new Date(selectedTo).toISOString())
-      params.set('limit', '5000')
+      if (overrides?.visible) params.set('visible', '1')
+      params.set('limit', overrides?.visible ? '500' : '5000')
       const qs = params.toString()
       const response = await fetch(`/api/admin/events${qs ? `?${qs}` : ''}`)
       const result = await response.json()
@@ -170,7 +195,6 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         return
       }
 
-      console.log('Eventi caricati:', result.events)
       // Assicurati che i dati correlati siano sempre oggetti validi
       let eventsWithSafeData = (result.events || []).map((event: Event) => ({
         ...event,
@@ -188,6 +212,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       }
 
       setEvents(eventsWithSafeData)
+      setSelectedEventIds([])
       setLoading(false)
     } catch (error) {
       console.error('Errore caricamento eventi:', error)
@@ -351,6 +376,20 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     
   }
 
+  const handleBulkDelete = async () => {
+    if (selectedEventIds.length === 0) return
+    if (!window.confirm(`Vuoi eliminare ${selectedEventIds.length} eventi selezionati?`)) return
+    const results = await Promise.all(selectedEventIds.map(async (id) => {
+      const response = await fetch(`/api/admin/events?id=${encodeURIComponent(id)}&scope=one`, { method: 'DELETE' })
+      return response.ok
+    }))
+    const deletedCount = results.filter(Boolean).length
+    if (deletedCount === results.length) toast.success(`${deletedCount} eventi eliminati`)
+    else toast.error(`${deletedCount} eventi eliminati; alcuni non sono stati rimossi`)
+    setSelectedEventIds([])
+    void loadEvents(viewMode === 'calendar' ? visibleRequest() : { visible: false })
+  }
+
   const exportEventsToExcel = () => {
     exportToExcel(events, [
       { key: 'title', title: 'Titolo Evento', width: 25 },
@@ -370,6 +409,35 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     })
   }
 
+  const navigateCalendar = (action: 'prev' | 'next' | 'today') => {
+    const nextDate = new Date(currentDate)
+    if (action === 'today') {
+      nextDate.setTime(Date.now())
+    } else {
+      nextDate.setMonth(nextDate.getMonth() + (action === 'prev' ? -1 : 1))
+    }
+    setCurrentDate(nextDate)
+    const range = visibleMonthRange(nextDate)
+    void loadEvents({
+      from: filterFrom || range.from,
+      to: filterTo ? `${filterTo}T23:59:59.999` : range.to,
+      visible: true,
+    })
+  }
+
+  const openCreateForDay = (date: Date) => {
+    const start = new Date(date)
+    start.setHours(18, 0, 0, 0)
+    const end = new Date(start)
+    end.setHours(19, 0, 0, 0)
+    setEditingEvent({
+      title: '', description: '', start_date: start.toISOString(), end_date: end.toISOString(),
+      location: '', gym_id: '', activity_id: '', event_type: 'one_time', event_kind: 'training',
+      recurrence_rule: { frequency: 'weekly', interval: 1 }, recurrence_end_date: '', selected_teams: [],
+    })
+    setShowModal(true)
+  }
+
   if (loading) {
     return <LoadingState label="Caricamento eventi..." />
   }
@@ -386,14 +454,23 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           <button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">
             Nuovo Evento
           </button>
-          <button onClick={() => setViewMode(viewMode==='list'?'calendar':'list')} className="cs-btn cs-btn--ghost">
+          <button onClick={() => {
+            const nextMode = viewMode === 'list' ? 'calendar' : 'list'
+            setViewMode(nextMode)
+            if (nextMode === 'calendar') {
+              const range = visibleMonthRange(currentDate)
+              void loadEvents({ from: range.from, to: range.to, visible: true })
+            } else {
+              void loadEvents({ visible: false })
+            }
+          }} className="cs-btn cs-btn--ghost">
             {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
           </button>
         </div>
       </div>
 
       {/* Filtri */}
-      <div className="cs-card cs-card--primary p-4">
+      <div className="hidden md:block cs-card cs-card--primary p-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
           <div>
             <label className="cs-field__label">Squadra</label>
@@ -538,14 +615,18 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => loadEvents()} className="cs-btn cs-btn--primary">Applica filtri</button>
+            <button onClick={() => viewMode === 'calendar'
+              ? loadEvents(visibleRequest())
+              : loadEvents({ visible: false })} className="cs-btn cs-btn--primary">Applica filtri</button>
             <button
               onClick={() => {
                 setFilterTeams([])
                 setFilterEventKinds([])
                 setFilterFrom('')
                 setFilterTo('')
-                loadEvents({ teamIds: [], eventKinds: [], from: '', to: '' })
+                loadEvents(viewMode === 'calendar'
+                  ? { teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true }
+                  : { teamIds: [], eventKinds: [], from: '', to: '', visible: false })
               }}
               className="cs-btn cs-btn--ghost"
             >
@@ -554,6 +635,58 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           </div>
         </div>
       </div>
+
+      <div className="md:hidden">
+        <button
+          type="button"
+          className="cs-btn cs-btn--outline w-full justify-between"
+          onClick={() => setIsFilterSheetOpen(true)}
+          aria-haspopup="dialog"
+        >
+          <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Filtri</span>
+          <span className="text-xs text-secondary">{filterTeams.length + filterEventKinds.length + (filterFrom || filterTo ? 1 : 0)} attivi</span>
+        </button>
+      </div>
+
+      <ResponsiveDetail
+        open={isFilterSheetOpen}
+        onOpenChange={setIsFilterSheetOpen}
+        title="Filtri calendario"
+        description="Restringi gli eventi per squadra, tipologia e intervallo."
+        fullscreenOnMobile
+        footer={<div className="flex w-full gap-2"><button type="button" className="cs-btn cs-btn--ghost flex-1" onClick={() => {
+          setFilterTeams([]); setFilterEventKinds([]); setFilterFrom(''); setFilterTo('')
+          void loadEvents({ teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true })
+          setIsFilterSheetOpen(false)
+        }}>Reset</button><button type="button" className="cs-btn cs-btn--primary flex-1" onClick={() => {
+          void loadEvents(visibleRequest()); setIsFilterSheetOpen(false)
+        }}>Applica</button></div>}
+      >
+        <div className="space-y-5">
+          <fieldset>
+            <legend className="cs-field__label">Squadre</legend>
+            <div className="space-y-1" role="group" aria-label="Filtra per squadre">
+              {teams.map((team) => <label key={team.id} className="flex min-h-[44px] items-center gap-3 rounded-md px-2">
+                <input type="checkbox" checked={filterTeams.includes(team.id)} onChange={() => toggleTeamFilter(team.id)} className="h-4 w-4" />
+                <span className="text-sm">{team.name} ({team.code})</span>
+              </label>)}
+              {teams.length === 0 && <p className="text-sm text-secondary">Nessuna squadra disponibile</p>}
+            </div>
+            <div className="mt-2 flex gap-4"><button type="button" className="text-xs font-medium text-primary" onClick={selectAllTeams}>Seleziona tutte</button><button type="button" className="text-xs font-medium text-secondary" onClick={() => setFilterTeams([])}>Svuota</button></div>
+          </fieldset>
+          <fieldset>
+            <legend className="cs-field__label">Tipologia</legend>
+            <div className="space-y-1" role="group" aria-label="Filtra per tipologia evento">
+              {EVENT_KIND_OPTIONS.map((option) => <label key={option.value} className="flex min-h-[44px] items-center gap-3 rounded-md px-2">
+                <input type="checkbox" checked={filterEventKinds.includes(option.value)} onChange={() => toggleEventKindFilter(option.value)} className="h-4 w-4" />
+                <span className="text-sm">{option.label}</span>
+              </label>)}
+            </div>
+            <div className="mt-2 flex gap-4"><button type="button" className="text-xs font-medium text-primary" onClick={selectAllEventKinds}>Seleziona tutte</button><button type="button" className="text-xs font-medium text-secondary" onClick={() => setFilterEventKinds([])}>Svuota</button></div>
+          </fieldset>
+          <div className="grid grid-cols-2 gap-3"><label className="cs-field__label">Dal<input type="date" value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} className="cs-input mt-1" /></label><label className="cs-field__label">Al<input type="date" value={filterTo} onChange={(event) => setFilterTo(event.target.value)} className="cs-input mt-1" /></label></div>
+        </div>
+      </ResponsiveDetail>
 
       <EventModal
   open={showModal}
@@ -580,17 +713,12 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
               eventKind: event.event_kind,
               location: event.location || event.gyms?.name,
             }))}
-            onNavigate={(action) => {
-              const nextDate = new Date(currentDate)
-              if (action === 'today') setCurrentDate(new Date())
-              else if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
-              else nextDate.setMonth(nextDate.getMonth() + 1)
-              setCurrentDate(nextDate)
-            }}
+            onNavigate={navigateCalendar}
             onEventClick={(id) => {
               const event = events.find((item) => item.id === id)
               if (event) setSelectedEvent(event)
             }}
+            onCreateEvent={openCreateForDay}
           />
         </div>
         <div className="hidden md:block">
@@ -609,8 +737,18 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             if (act==='today') setCurrentDate(new Date())
             else if (act==='prev') { if (calView==='month') d.setMonth(d.getMonth()-1); else d.setDate(d.getDate()-7); setCurrentDate(new Date(d)) }
             else { if (calView==='month') d.setMonth(d.getMonth()+1); else d.setDate(d.getDate()+7); setCurrentDate(new Date(d)) }
+            const range = visibleMonthRange(new Date(d))
+            void loadEvents({ from: range.from, to: range.to, visible: true })
           }}
           onViewChange={(v)=>setCalView(v)}
+          onVisibleRangeChange={(start, end) => {
+            setCurrentDate(start)
+            void loadEvents({
+              from: filterFrom || start.toISOString(),
+              to: filterTo ? `${filterTo}T23:59:59.999` : end.toISOString(),
+              visible: true,
+            })
+          }}
           onEventClick={(id)=>{ const ev = events.find(e=>e.id===id); if (ev) setSelectedEvent(ev) }}
           onSelectSlot={(start, end)=>{
             setEditingEvent({
@@ -634,11 +772,21 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         </>
       ) : (
       <div className="cs-card cs-card--primary overflow-hidden">
+        <AdminSelectionBar
+          selectedCount={selectedEventIds.length}
+          totalCount={events.length}
+          onClear={() => setSelectedEventIds([])}
+        >
+          <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" onClick={() => void handleBulkDelete()}>
+            Elimina selezionati
+          </button>
+        </AdminSelectionBar>
         {/* Desktop */}
         <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
+              <th className="w-12"><AdminRowCheckbox id="select-all-events" checked={events.length > 0 && selectedEventIds.length === events.length} onChange={(checked) => setSelectedEventIds(checked ? events.flatMap((event) => event.id ? [event.id] : []) : [])} label="Seleziona tutti gli eventi" /></th>
               <th>Evento</th>
               <th>Data/Ora</th>
               <th>Luogo</th>
@@ -650,6 +798,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           <tbody>
             {events.map((event) => (
               <tr key={event.id} className="hover:bg-gray-50">
+                <td className="px-4 py-4"><AdminRowCheckbox id={`select-event-${event.id}`} checked={Boolean(event.id && selectedEventIds.includes(event.id))} onChange={(checked) => event.id && setSelectedEventIds((current) => checked ? [...new Set([...current, event.id!])] : current.filter((id) => id !== event.id))} label={`Seleziona ${event.title}`} /></td>
                 <td className="px-6 py-4">
                   <div>
                     <div className="font-medium">{event.title}</div>
@@ -672,12 +821,12 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
                 </td>
                 <td className="px-6 py-4">
                   <div>
-                    {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'N/D'}
+                    {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'Nessuna palestra/luogo assegnato'}
                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <div>
-                    {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}
+                    {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'Nessuna squadra assegnata'}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -698,7 +847,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         <div className="md:hidden p-4 space-y-3">
           {events.map((event) => (
             <article key={event.id} className="cs-card">
-              <div className="font-semibold">{event.title}</div>
+              <div className="flex items-start gap-2"><AdminRowCheckbox id={`select-event-mobile-${event.id}`} checked={Boolean(event.id && selectedEventIds.includes(event.id))} onChange={(checked) => event.id && setSelectedEventIds((current) => checked ? [...new Set([...current, event.id!])] : current.filter((id) => id !== event.id))} label={`Seleziona ${event.title}`} /><div className="min-w-0 flex-1 font-semibold">{event.title}</div></div>
               {event.description && (
                 <div className="text-sm text-secondary line-clamp-3">{event.description}</div>
               )}
@@ -711,8 +860,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
                     {new Date(event.end_date).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-                <div><strong>Luogo:</strong> {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'N/D'}</div>
-                <div><strong>Squadre:</strong> {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}</div>
+                <div><strong>Luogo:</strong> {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'Nessuna palestra/luogo assegnato'}</div>
+                <div><strong>Squadre:</strong> {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'Nessuna squadra assegnata'}</div>
                 <div>
                   <strong>Tipo:</strong>
                   <EventKindBadge kind={event.event_kind} className="ml-2" />

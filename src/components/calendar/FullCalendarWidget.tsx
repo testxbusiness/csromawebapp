@@ -25,6 +25,7 @@ export default function FullCalendarWidget({
   onViewChange,
   onEventClick,
   onSelectSlot,
+  onVisibleRangeChange,
 }: {
   initialDate: Date
   view: View
@@ -33,6 +34,7 @@ export default function FullCalendarWidget({
   onViewChange: (view: View) => void
   onEventClick?: (id: string) => void
   onSelectSlot?: (start: Date, end: Date) => void
+  onVisibleRangeChange?: (start: Date, end: Date) => void
 }) {
   const calendarRef = useRef<FullCalendar | null>(null)
 
@@ -80,6 +82,7 @@ export default function FullCalendarWidget({
         datesSet={(arg) => {
           const newView = arg.view.type === 'timeGridWeek' ? 'week' : 'month'
           onViewChange(newView)
+          onVisibleRangeChange?.(new Date(arg.start), new Date(arg.end.getTime() - 1))
         }}
       />
       </div>
