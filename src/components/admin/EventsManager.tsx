@@ -97,6 +97,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const [filterFrom, setFilterFrom] = useState<string>('')
   const [filterTo, setFilterTo] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -107,6 +108,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const [selectedEventIds, setSelectedEventIds] = useState<string[]>([])
   const teamDropdownRef = useRef<HTMLDivElement | null>(null)
   const eventKindDropdownRef = useRef<HTMLDivElement | null>(null)
+  const requestedVisibleRangeRef = useRef<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const selectedTeamsLabel = (() => {
@@ -182,7 +184,10 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       if (selectedTeamIds.length > 0) params.set('team_ids', selectedTeamIds.join(','))
       if (selectedFrom) params.set('from', new Date(selectedFrom).toISOString())
       if (selectedTo) params.set('to', new Date(selectedTo).toISOString())
-      if (overrides?.visible) params.set('visible', '1')
+      if (overrides?.visible) {
+        params.set('visible', '1')
+        requestedVisibleRangeRef.current = [selectedTeamIds.join(','), selectedEventKinds.join(','), selectedFrom, selectedTo].join('|')
+      }
       params.set('limit', overrides?.visible ? '500' : '5000')
       const qs = params.toString()
       const response = await fetch(`/api/admin/events${qs ? `?${qs}` : ''}`)
@@ -192,6 +197,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         console.error('Errore caricamento eventi:', result.error)
         setEvents([])
         setLoading(false)
+        setInitialLoading(false)
         return
       }
 
@@ -214,10 +220,12 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       setEvents(eventsWithSafeData)
       setSelectedEventIds([])
       setLoading(false)
+      setInitialLoading(false)
     } catch (error) {
       console.error('Errore caricamento eventi:', error)
       setEvents([])
       setLoading(false)
+      setInitialLoading(false)
     }
   }
 
@@ -438,14 +446,17 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     setShowModal(true)
   }
 
-  if (loading) {
+  if (initialLoading) {
     return <LoadingState label="Caricamento eventi..." />
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        {!embedded && <h2 className="text-2xl font-bold">Calendario e Eventi</h2>}
+        <div className="flex min-w-0 items-center gap-3">
+          {!embedded && <h2 className="text-2xl font-bold">Calendario e Eventi</h2>}
+          {loading && <span className="text-xs text-secondary" role="status" aria-live="polite">Aggiornamento eventi…</span>}
+        </div>
         <div className="flex flex-col gap-2 w-full md:w-auto md:flex-row md:flex-wrap md:gap-3">
           <button onClick={exportEventsToExcel} className="cs-btn cs-btn--outline">
             <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -742,10 +753,14 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           }}
           onViewChange={(v)=>setCalView(v)}
           onVisibleRangeChange={(start, end) => {
-            setCurrentDate(start)
+            const from = filterFrom || start.toISOString()
+            const to = filterTo ? `${filterTo}T23:59:59.999` : end.toISOString()
+            const requestKey = [filterTeams.join(','), filterEventKinds.join(','), from, to].join('|')
+            if (requestedVisibleRangeRef.current === requestKey) return
+            requestedVisibleRangeRef.current = requestKey
             void loadEvents({
-              from: filterFrom || start.toISOString(),
-              to: filterTo ? `${filterTo}T23:59:59.999` : end.toISOString(),
+              from,
+              to,
               visible: true,
             })
           }}
