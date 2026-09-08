@@ -147,6 +147,16 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     }
   }, [account?.authUserId, isFamilyOnlyAccount])
 
+  useEffect(() => {
+    // The stored area can belong to a previous login. Once access has been
+    // checked successfully, an account without family access must use its own
+    // area; otherwise athlete pages apply the delegated permission guards.
+    if (authLoading || !account || !profilesLoaded || loading || error) return
+    if (account.roles.includes('family_member') || profiles.length > 0) return
+    setActiveAreaState('personal')
+    if (typeof window !== 'undefined') window.localStorage.setItem(AREA_STORAGE_KEY, 'personal')
+  }, [account, authLoading, error, loading, profiles.length, profilesLoaded])
+
   const setActiveArea = useCallback((area: 'personal' | 'family') => {
     setActiveAreaState(area)
     if (typeof window !== 'undefined') window.localStorage.setItem(AREA_STORAGE_KEY, area)

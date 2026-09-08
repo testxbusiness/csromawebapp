@@ -4973,6 +4973,29 @@ La fase è superata solo se:
 
 ---
 
+## Audit permessi atleta su staging — 08/09/2026
+
+- [x] Verifica in sola lettura su Supabase `csromawebapp-staging`: account
+  `testxbusiness+atleta1@gmail.com` attivo, solo ruolo `athlete`, profilo atleta
+  presente, iscrizione stagionale attiva, nessuna relazione delegata in uscita.
+- [x] Riprodotta con test la contaminazione del contesto UI: la preferenza
+  `csroma_active_area=family` sopravviveva al logout e non veniva invalidata
+  per un atleta privo di accesso familiare. Calendario, messaggi e quote
+  applicavano quindi i controlli delegati senza un subject, mentre dashboard
+  e sidebar verificavano anche la disponibilità dell'accesso familiare.
+- [x] Correzione locale: `src/context/AccessibleProfileContext.tsx` ripristina
+  l'area personale dopo verifica riuscita dell'assenza di accesso familiare;
+  `src/lib/pwa/service-worker-registration.ts` elimina anche l'area al logout.
+  Aggiornati i rispettivi file `.test.tsx`/`.test.ts`, con regressione prima
+  fallita e poi superata e copertura del mantenimento degli accessi familiari.
+- [x] Verifiche: `npm test -- --runInBand` (63 suite, 230 test),
+  `npx tsc --noEmit`, ESLint sui quattro file modificati e `git diff --check`
+  superati. Nessuna modifica a ruoli, relazioni o RLS sul database.
+- [-] Il browser di verifica apre la Preview alla pagina login: non verificata
+  la sessione specifica dell'utente né effettuato un login con le sue credenziali.
+  La causa è riprodotta nel codice locale ed è coerente con il sintomo;
+  resta la verifica autenticata dopo deploy. Correzione non ancora pubblicata.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

@@ -13,6 +13,7 @@ describe('PWA client state', () => {
   it('clears account-specific subject/team state without clearing the theme', () => {
     window.localStorage.setItem('csroma-theme', 'dark')
     window.localStorage.setItem('csroma_active_subject_profile_id', 'athlete-1')
+    window.localStorage.setItem('csroma_active_area', 'family')
     window.localStorage.setItem('csroma_team_context:family:athlete-1', 'team-1')
     window.localStorage.setItem('unrelated-preference', 'keep')
     window.sessionStorage.setItem('csroma_profile_cache', '{"profile":{}}')
@@ -21,6 +22,7 @@ describe('PWA client state', () => {
 
     expect(window.localStorage.getItem('csroma-theme')).toBe('dark')
     expect(window.localStorage.getItem('csroma_active_subject_profile_id')).toBeNull()
+    expect(window.localStorage.getItem('csroma_active_area')).toBeNull()
     expect(window.localStorage.getItem('csroma_team_context:family:athlete-1')).toBeNull()
     expect(window.localStorage.getItem('unrelated-preference')).toBe('keep')
     expect(window.sessionStorage.getItem('csroma_profile_cache')).toBeNull()

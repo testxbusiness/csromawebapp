@@ -74,6 +74,7 @@ export function clearPwaClientState(): void {
   if (typeof window === 'undefined') return
   try {
     window.localStorage.removeItem('csroma_active_subject_profile_id')
+    window.localStorage.removeItem('csroma_active_area')
     for (const key of Object.keys(window.localStorage)) {
       if (key.startsWith('csroma_team_context:')) window.localStorage.removeItem(key)
     }

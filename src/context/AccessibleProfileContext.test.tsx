@@ -18,7 +18,7 @@ const oneProfile = {
 
 function Probe() {
   const context = useAccessibleProfiles()
-  return <><output data-testid="selected">{context.selectedProfileId ?? ''}</output><button type="button" onClick={() => context.setActiveArea('family')}>Famiglia</button></>
+  return <><output data-testid="selected">{context.selectedProfileId ?? ''}</output><output data-testid="area">{context.activeArea}</output><button type="button" onClick={() => context.setActiveArea('family')}>Famiglia</button></>
 }
 
 describe('AccessibleProfileProvider initial family selection', () => {
@@ -57,5 +57,52 @@ describe('AccessibleProfileProvider initial family selection', () => {
 
     await waitFor(() => expect(screen.getByTestId('selected').textContent).toBe(''))
     expect(window.localStorage.getItem('csroma_active_area')).toBe('family')
+  })
+
+  it('returns an athlete without family access to personal area after a previous family login', async () => {
+    window.localStorage.setItem('csroma_active_area', 'family')
+    window.localStorage.setItem('csroma_active_subject_profile_id', 'child-1')
+    authMock.mockReturnValue({
+      account: { authUserId: 'athlete-account', roles: ['athlete'] },
+      user: { id: 'athlete-account' },
+      loading: false,
+    })
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ profiles: [] }) }) as jest.Mock
+
+    render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('area').textContent).toBe('personal'))
+    expect(screen.getByTestId('selected').textContent).toBe('')
+    expect(window.localStorage.getItem('csroma_active_area')).toBe('personal')
+    expect(window.localStorage.getItem('csroma_active_subject_profile_id')).toBeNull()
+  })
+
+  it('preserves family area for an athlete with an accessible relationship even without the family role', async () => {
+    window.localStorage.setItem('csroma_active_area', 'family')
+    authMock.mockReturnValue({
+      account: { authUserId: 'athlete-account', roles: ['athlete'] },
+      user: { id: 'athlete-account' },
+      loading: false,
+    })
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ profiles: [oneProfile] }) }) as jest.Mock
+
+    render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('selected').textContent).toBe('child-1'))
+    expect(screen.getByTestId('area').textContent).toBe('family')
+  })
+
+  it('opens family area for a family-only account with no saved preference', async () => {
+    authMock.mockReturnValue({
+      account: { authUserId: 'family-account', roles: ['family_member'] },
+      user: { id: 'family-account' },
+      loading: false,
+    })
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ profiles: [oneProfile] }) }) as jest.Mock
+
+    render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('selected').textContent).toBe('child-1'))
+    expect(screen.getByTestId('area').textContent).toBe('family')
   })
 })
