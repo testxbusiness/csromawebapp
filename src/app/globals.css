@@ -905,6 +905,7 @@ button.cs-list-row{ font:inherit; }
 
 .cs-modal {
   z-index: 101;
+  box-sizing: border-box;
   width: min(var(--cs-modal-maxw-md), 92vw);
   background: var(--cs-surface);
   border: 1px solid var(--cs-modal-border);
@@ -952,8 +953,18 @@ button.cs-list-row{ font:inherit; }
 
 /* Mobile fullscreen opt-in */
 @media (max-width: 640px){
+  /* Dialogs must stay inside the viewport and remain usable with a mobile
+     keyboard and long forms. This also covers legacy inline event forms. */
+  .cs-modal {
+    width: min(100% - 24px, var(--cs-modal-maxw-md));
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .cs-modal--fullscreen {
-    width: 100vw; height: 100vh; max-width: none; border-radius: 0;
+    width: 100vw; height: 100dvh; max-height: 100dvh; max-width: none; border-radius: 0;
     display:flex; flex-direction:column; padding: var(--cs-sp-5);
   }
   .cs-modal--fullscreen .cs-modal__footer { margin-top: auto; }
@@ -1089,6 +1100,18 @@ button.cs-list-row{ font:inherit; }
     display: flex; flex-direction: column; padding: var(--cs-sp-5);
   }
   .cs-modal--centered.cs-modal--fullscreen .cs-modal__footer { margin-top: auto; }
+
+  /* Radix dialogs use the centered variant and must not inherit a desktop
+     translate/width that pushes the panel beyond a narrow viewport. */
+  .cs-modal--centered:not(.cs-modal--fullscreen) {
+    top: 12px;
+    left: 12px;
+    translate: none;
+    transform: none;
+    width: calc(100vw - 24px);
+    max-width: none;
+    max-height: calc(100dvh - 24px);
+  }
 }
 
 /* === Navbar container missing === */

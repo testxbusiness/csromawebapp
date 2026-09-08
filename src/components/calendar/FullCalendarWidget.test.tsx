@@ -1,15 +1,29 @@
 import { render, screen } from '@testing-library/react'
+import React from 'react'
+
+const gotoDateMock = jest.fn()
 import FullCalendarWidget from './FullCalendarWidget'
 
 jest.mock('@fullcalendar/react', () => ({
   __esModule: true,
-  default: (props: { initialView: string; buttonText: Record<string, string> }) => (
-    <div
-      data-testid="full-calendar"
-      data-initial-view={props.initialView}
-      data-week-label={props.buttonText.week}
-    />
-  ),
+  default: React.forwardRef(function FullCalendarMock(
+    props: { initialView: string; buttonText: Record<string, string> },
+    ref,
+  ) {
+    React.useImperativeHandle(ref, () => ({
+      getApi: () => ({
+        getDate: () => new Date('2026-08-28T10:00:00Z'),
+        gotoDate: gotoDateMock,
+      }),
+    }))
+    return (
+      <div
+        data-testid="full-calendar"
+        data-initial-view={props.initialView}
+        data-week-label={props.buttonText.week}
+      />
+    )
+  }),
 }))
 
 jest.mock('@fullcalendar/daygrid', () => ({ __esModule: true, default: {} }))
@@ -36,5 +50,15 @@ describe('FullCalendarWidget', () => {
     render(<FullCalendarWidget {...props} view="month" />)
 
     expect(screen.getByTestId('full-calendar').getAttribute('data-initial-view')).toBe('dayGridMonth')
+  })
+
+  it('keeps the mounted desktop calendar synchronized with a new date', () => {
+    gotoDateMock.mockClear()
+    const { rerender } = render(<FullCalendarWidget {...props} view="month" />)
+    const nextDate = new Date('2026-09-08T10:00:00Z')
+
+    rerender(<FullCalendarWidget {...props} initialDate={nextDate} view="month" />)
+
+    expect(gotoDateMock).toHaveBeenCalledWith(nextDate)
   })
 })

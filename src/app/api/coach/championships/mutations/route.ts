@@ -81,8 +81,30 @@ async function handleMutation(context: CoachMutationContext, body: Record<string
     }).select('id').single()
     if (error) throw new Error('Impossibile creare il campionato')
     if (body.create_group && body.group_name) {
-      const { error: groupError } = await context.admin.from('championship_groups').insert({ championship_id: championship.id, name: body.group_name, phase: 'regular', sort_order: 0 })
+      const selectedTeamId = body.team_id ? String(body.team_id) : Array.from(context.teamIds)[0]
+      if (!selectedTeamId || !context.teamIds.has(selectedTeamId)) throw new AccountContextError('Squadra non autorizzata', 403)
+
+      const { data: team, error: teamError } = await context.admin.from('teams').select('id, name, code').eq('id', selectedTeamId).single()
+      if (teamError || !team) throw new Error('Impossibile caricare la squadra del campionato')
+
+      const { data: group, error: groupError } = await context.admin.from('championship_groups').insert({ championship_id: championship.id, name: body.group_name, phase: 'regular', sort_order: 0 }).select('id').single()
       if (groupError) throw new Error('Impossibile creare il girone')
+
+      const { data: clubTeam, error: clubTeamError } = await context.admin.from('championship_club_teams').insert({
+        championship_id: championship.id,
+        code: team.code,
+        name: team.name,
+        is_home_club: true,
+        team_id: team.id,
+      }).select('id').single()
+      if (clubTeamError || !clubTeam) throw new Error('Impossibile associare la squadra al campionato')
+
+      const { error: groupTeamError } = await context.admin.from('championship_group_teams').insert({
+        championship_group_id: group.id,
+        championship_club_team_id: clubTeam.id,
+        is_home_club: true,
+      })
+      if (groupTeamError) throw new Error('Impossibile associare la squadra al girone')
     }
     return { id: championship.id }
   }

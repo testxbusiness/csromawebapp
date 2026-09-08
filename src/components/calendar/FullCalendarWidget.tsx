@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -47,6 +47,22 @@ export default function FullCalendarWidget({
   })), [events])
 
   const initialView = view === 'month' ? 'dayGridMonth' : 'timeGridWeek'
+
+  // FullCalendar treats initialDate as an initialization option. Keep the
+  // mounted calendar in sync with the parent so the shared "Oggi" action
+  // also works after the first render.
+  useEffect(() => {
+    const api = calendarRef.current?.getApi()
+    if (!api) return
+
+    const current = api.getDate()
+    const target = new Date(initialDate)
+    const sameDay = current.getFullYear() === target.getFullYear()
+      && current.getMonth() === target.getMonth()
+      && current.getDate() === target.getDate()
+
+    if (!sameDay) api.gotoDate(target)
+  }, [initialDate])
 
   return (
     <div className="calendar-responsive">

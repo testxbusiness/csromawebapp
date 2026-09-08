@@ -284,7 +284,7 @@ export default function ChampionshipsManager() {
 
     setSavingResult(true)
     try {
-      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_championship', ...createForm, activity_id: createForm.activity_id || null, start_date: createForm.start_date || null, end_date: createForm.end_date || null }) })
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_championship', ...createForm, team_id: selectedTeamId || null, activity_id: createForm.activity_id || null, start_date: createForm.start_date || null, end_date: createForm.end_date || null }) })
       if (!response.ok) throw new Error('Impossibile creare il campionato')
 
       toast.success('Campionato creato')

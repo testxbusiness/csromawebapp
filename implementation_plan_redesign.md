@@ -4897,6 +4897,22 @@ ripetere i goal già completati. Il gate complessivo resta G11.6.
   nascosto è stato classificato come limite del runner e il test non
   deterministico è stato rimosso.
 
+**Correzioni post-verifica — 08/09/2026**
+
+- [x] Calendario: `FullCalendarWidget` sincronizza la vista già montata con
+  `initialDate` tramite `gotoDate`, quindi il comando `Oggi` aggiorna davvero
+  mese/settimana; aggiunto test di regressione.
+- [x] Dialog nuovo evento/nuovo messaggio: su mobile i pannelli restano entro il
+  viewport, hanno altezza massima e scroll interno; applicato anche al form
+  evento inline del coach, con altezza dinamica `dvh` per tastiera/notch.
+- [x] Campionati coach: la creazione inizializza girone, squadra del coach e
+  relativo legame girone-squadra; il campionato è quindi subito selezionabile.
+  Il log fornito mostra inoltre una richiesta 401/`42501` successiva al logout,
+  non una POST di creazione autorizzata fallita; non sono state modificate RLS o
+  schema.
+- [x] Gate post-fix: test mirati 5/5, suite completa 63 suite/227 test,
+  `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+
 **Prompt `/goal`**
 ```text
 /goal G11.6

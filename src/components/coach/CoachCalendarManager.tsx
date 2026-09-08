@@ -520,7 +520,7 @@ export default function CoachCalendarManager() {
         {/* Modal semplice “inline” */}
         {showForm && (
           <div className="cs-overlay" aria-hidden="false">
-            <div className="cs-modal cs-modal--md" data-state="open">
+            <div className="cs-modal cs-modal--md cs-modal--scrollable" data-state="open">
               <form
                 onSubmit={(e) => {
                   e.preventDefault()
