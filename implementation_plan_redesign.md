@@ -391,6 +391,16 @@ Crea la baseline del redesign CSRoma. Non modificare UI o logica. Mappa route/la
   questa sessione: mancano le credenziali `E2E_*`; resta necessaria una prova
   manuale o E2E con sessioni atleta, famiglia, coach e admin.
 
+**Stabilità bottom navigation mobile — 08/09/2026**
+
+- [x] Individuato il conflitto tra scroll interno `.cs-main` e navigazione
+  `position: fixed` durante il ricalcolo della visual viewport iOS.
+- [x] Su viewport mobili lo scroll passa al documento; il bottom menu resta
+  ancorato a `inset-block-end: 0`, con safe-area, compositing GPU e nessuna
+  modifica al layout desktop.
+- [x] Test mirati, typecheck, build e `git diff --check` superati.
+- [-] Verifica manuale su Safari iOS/PWA non eseguita in questa sessione.
+
 ---
 
 ## G0.2 — Inventario componenti UI, CSS e dipendenze visuali
