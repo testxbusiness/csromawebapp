@@ -400,6 +400,9 @@ Crea la baseline del redesign CSRoma. Non modificare UI o logica. Mappa route/la
   modifica al layout desktop.
 - [x] Test mirati, typecheck, build e `git diff --check` superati.
 - [-] Verifica manuale su Safari iOS/PWA non eseguita in questa sessione.
+- [x] Follow-up iPhone: ripristinato `bottom: 0` esplicito al posto della sola
+  proprietà logica `inset-block-end`, che su alcune versioni WebKit/PWA può
+  lasciare il fixed footer fuori viewport.
 
 ---
 

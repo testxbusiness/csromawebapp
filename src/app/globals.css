@@ -679,7 +679,7 @@ button.cs-list-row{ font:inherit; }
      mobile so the navigation remains anchored to one viewport. */
   .cs-layout{ display:block; }
   .cs-main{ min-height:auto; overflow:visible; }
-  .cs-bottom-navigation{ position:fixed; inset-inline:0; inset-block-end:0; z-index:80; display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); min-height:var(--cs-bottom-nav-height); padding:6px var(--cs-safe-right) var(--cs-safe-bottom) var(--cs-safe-left); border-top:var(--cs-border-width) solid var(--cs-border-canonical); border-bottom:0; box-shadow:0 -4px 16px rgba(23,26,33,.06); transform:translate3d(0,0,0); -webkit-transform:translate3d(0,0,0); backface-visibility:hidden; }
+  .cs-bottom-navigation{ position:fixed; right:0; bottom:0; left:0; z-index:80; display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); min-height:var(--cs-bottom-nav-height); padding:6px var(--cs-safe-right) var(--cs-safe-bottom) var(--cs-safe-left); border-top:var(--cs-border-width) solid var(--cs-border-canonical); border-bottom:0; box-shadow:0 -4px 16px rgba(23,26,33,.06); transform:translate3d(0,0,0); -webkit-transform:translate3d(0,0,0); backface-visibility:hidden; }
   .cs-bottom-navigation[data-item-count="1"]{ grid-template-columns:repeat(1, minmax(0,1fr)); }
   .cs-bottom-navigation[data-item-count="2"]{ grid-template-columns:repeat(2, minmax(0,1fr)); }
   .cs-bottom-navigation[data-item-count="3"]{ grid-template-columns:repeat(3, minmax(0,1fr)); }
