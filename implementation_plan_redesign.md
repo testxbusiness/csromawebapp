@@ -375,6 +375,22 @@ I quattro screenshot Google Stitch allegati dall'utente sono registrati come **r
 Crea la baseline del redesign CSRoma. Non modificare UI o logica. Mappa route/layout/shell attuali e documenta lo stato visuale ai viewport richiesti dal goal. Aggiorna il registro del piano e fermati.
 ```
 
+**Second verification “Oggi” — 08/09/2026**
+
+- [x] Riesame cross-role del percorso: atleta e famiglia condividono
+  `AthleteCalendarManager`; coach e admin hanno handler propri. Individuata e
+  corretta la sovrascrittura della data odierna nei gestori mobile atleta/coach
+  e nel caricamento intervallo desktop admin.
+- [x] Desktop: sostituiti i pulsanti FullCalendar interni con callback espliciti
+  `Oggi/precedente/successivo`, più sincronizzazione imperativa della vista
+  montata. Mobile: `Oggi` usa direttamente una nuova data corrente senza
+  successiva assegnazione della data precedente.
+- [x] Gate codice: 63 suite/227 test, `npx tsc --noEmit`, `npm run build` e
+  `git diff --check` superati.
+- [-] E2E autenticati desktop/mobile per tutti i profili non rieseguiti in
+  questa sessione: mancano le credenziali `E2E_*`; resta necessaria una prova
+  manuale o E2E con sessioni atleta, famiglia, coach e admin.
+
 ---
 
 ## G0.2 — Inventario componenti UI, CSS e dipendenze visuali

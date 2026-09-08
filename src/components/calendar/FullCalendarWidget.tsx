@@ -75,9 +75,14 @@ export default function FullCalendarWidget({
         initialView={initialView}
         initialDate={initialDate}
         headerToolbar={{
-          left: 'today,prev,next',
+          left: 'csToday,csPrev,csNext',
           center: 'title',
           right: 'dayGridMonth,timeGridWeek',
+        }}
+        customButtons={{
+          csToday: { text: 'Oggi', click: () => onNavigate('today') },
+          csPrev: { text: '‹', click: () => onNavigate('prev') },
+          csNext: { text: '›', click: () => onNavigate('next') },
         }}
         buttonText={{
           today: 'Oggi',

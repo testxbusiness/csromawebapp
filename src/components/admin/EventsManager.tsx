@@ -744,11 +744,11 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             color: eventKindVisual(e.event_kind)?.colorToken,
           }))}
           onNavigate={(act)=>{
-            const d = new Date(currentDate)
-            if (act==='today') setCurrentDate(new Date())
-            else if (act==='prev') { if (calView==='month') d.setMonth(d.getMonth()-1); else d.setDate(d.getDate()-7); setCurrentDate(new Date(d)) }
-            else { if (calView==='month') d.setMonth(d.getMonth()+1); else d.setDate(d.getDate()+7); setCurrentDate(new Date(d)) }
-            const range = visibleMonthRange(new Date(d))
+            const d = act === 'today' ? new Date() : new Date(currentDate)
+            if (act==='prev') { if (calView==='month') d.setMonth(d.getMonth()-1); else d.setDate(d.getDate()-7) }
+            else if (act==='next') { if (calView==='month') d.setMonth(d.getMonth()+1); else d.setDate(d.getDate()+7) }
+            setCurrentDate(d)
+            const range = visibleMonthRange(d)
             void loadEvents({ from: range.from, to: range.to, visible: true })
           }}
           onViewChange={(v)=>setCalView(v)}

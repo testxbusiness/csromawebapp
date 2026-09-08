@@ -373,10 +373,9 @@ export default function CoachCalendarManager() {
                   location: event.location,
                 }))}
                 onNavigate={(action) => {
-                  const nextDate = new Date(currentDate)
-                  if (action === 'today') setCurrentDate(new Date())
-                  else if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
-                  else nextDate.setMonth(nextDate.getMonth() + 1)
+                  const nextDate = action === 'today' ? new Date() : new Date(currentDate)
+                  if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
+                  else if (action === 'next') nextDate.setMonth(nextDate.getMonth() + 1)
                   setCurrentDate(nextDate)
                 }}
                 onEventClick={(id) => {
