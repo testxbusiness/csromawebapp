@@ -12,7 +12,6 @@ import { createClient } from '@/lib/supabase/client'
 import TrainingScheduleInput from './TrainingScheduleInput'
 import {
   TrainingSchedule,
-  generateTrainingEventsFromSchedules,
   checkGymScheduleConflicts,
   GymConflict
 } from '@/lib/utils/trainingScheduleEvents'
@@ -136,30 +135,19 @@ export default function TeamModal({
   }
 
   const saveTrainingSchedules = async (teamId: string) => {
-    // 1. Cancella tutti gli schedules esistenti per questo team
-    await supabase
-      .from('team_training_schedules')
-      .delete()
-      .eq('team_id', teamId)
-
-    // 2. Inserisci i nuovi (se ce ne sono)
-    if (trainingSchedules.length > 0) {
-      const toInsert = trainingSchedules.map(s => ({
+    const response = await fetch('/api/admin/training-schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         team_id: teamId,
-        day_of_week: s.day_of_week,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        gym_id: s.gym_id,
-        is_active: s.is_active ?? true,
-      }))
-
-      const { error } = await supabase
-        .from('team_training_schedules')
-        .insert(toInsert)
-
-      if (error) {
-        throw new Error('Errore salvataggio orari: ' + error.message)
-      }
+        schedules: trainingSchedules.map((schedule) => ({ ...schedule, team_id: teamId })),
+      }),
+    })
+    const result = await response.json().catch(() => null) as { error?: string; warnings?: Array<{ message: string }> } | null
+    if (!response.ok) throw new Error(result?.error ?? 'Errore salvataggio orari')
+    const manualWarnings = (result?.warnings ?? []).filter((warning) => warning.message.toLowerCase().includes('manuale') || warning.message.toLowerCase().includes('legacy'))
+    if (manualWarnings.length > 0) {
+      alert(`Orari salvati. ${manualWarnings.map((warning) => warning.message).join(' ')}`)
     }
   }
 
@@ -220,22 +208,6 @@ export default function TeamModal({
 
       // Salva orari allenamento
       await saveTrainingSchedules(teamId)
-
-      // Genera eventi ricorrenti automaticamente
-      const activeSchedules = trainingSchedules.filter(s => s.is_active !== false)
-      if (activeSchedules.length > 0) {
-        const result = await generateTrainingEventsFromSchedules(
-          teamId,
-          activeSchedules,
-          supabase
-        )
-
-        if (!result.success) {
-          console.error('Errore generazione eventi:', result.error)
-          // Non bloccare il salvataggio, ma avvisare l'utente
-          alert(`Squadra salvata, ma errore nella generazione degli eventi: ${result.error}`)
-        }
-      }
 
       onClose()
     } catch (error) {

@@ -5186,7 +5186,7 @@ default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
 | Goal | Risultato | Prerequisiti | Stato |
 |---|---|---|---|
 | R1 | Modello dati e contratti condivisi | Nessuno | [x] |
-| R2 | Generazione e riconciliazione sicure | R1 | [ ] |
+| R2 | Generazione e riconciliazione sicure | R1 | [x] |
 | R3 | Opzione RSVP nel form squadra | R2 | [ ] |
 | R4 | Resolver del prossimo RSVP e API di lettura | R1 | [ ] |
 | R5 | Mutation RSVP e protezioni database | R4 | [ ] |
@@ -5377,6 +5377,16 @@ una modifica anagrafica non rigenera la stagione; nessuna cancellazione storica.
 
 **Verifiche:** integrazione DB e test del generatore per retry, eventi con
 risposte, eccezioni, nessun orario attivo, fine stagione e cambio ora legale.
+
+#### Registro R2 — chiusura 10/09/2026
+
+Completato. `TeamModal` invia il salvataggio a `POST /api/admin/training-schedules`; il percorso server risolve l’account con `requireGlobalRole('admin')` e usa il client privilegiato esclusivamente lato server. Gli orari esistenti vengono aggiornati per ID, quelli rimossi vengono disattivati e nessun evento o risposta viene cancellato.
+
+La riconciliazione in `src/server/trainings/training-schedule-reconciliation.ts` usa l’identità `schedule_id + data locale Europe/Rome`, upserta i collegamenti evento-squadra, aggiorna soltanto occorrenze future identificabili non protette e conserva eventi con risposte/eccezioni manuali restituendo gli ID da verificare. Le sovrapposizioni con eventi training legacy senza origine vengono segnalate senza modificarle. Il generatore considera oggi se l’orario non è passato, la fine stagione inclusiva e il cambio ora legale.
+
+File principali: `src/lib/utils/trainingScheduleEvents.ts`, `src/components/admin/TeamModal.tsx`, `src/app/api/admin/training-schedules/route.ts`, `src/server/trainings/training-schedule-reconciliation.ts` e relativi test.
+
+Verifiche eseguite: schema DB locale read-only confermato con colonne/indici R1; fixture DB isolata verificata tramite servizio reale per generazione di 5 occorrenze, retry identico (`eventsCreated=0`, `eventsUpdated=0`, `eventsPreserved=5`), risposta conservata, modifica con avviso, rimozione con disattivazione e 5 link squadra invariati; fixture rimossa transazionalmente con conteggi residui a zero. Inoltre `npx tsc --noEmit`, suite Jest completa 67 suite/243 test, `npm run build` e `git diff --check` superati. I test R2 coprono anche autorizzazione endpoint, payload non valido, fine stagione, inclusione di oggi e DST Europe/Rome.
 
 ### R3 — Opzione RSVP e salvataggio squadra
 
