@@ -1083,8 +1083,8 @@ button.cs-list-row{ font:inherit; }
   position: fixed;              /* non dipende più dal layout dell’overlay */
   top: 50%;
   left: 50%;
-  translate: -50% -50%;         /* centramento indipendente dalle animazioni */
-  transform: scale(.985);
+  translate: none;
+  transform: translate(-50%, -50%) scale(.985);
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;
   z-index: 120;                 /* sopra l’overlay */
@@ -1093,7 +1093,7 @@ button.cs-list-row{ font:inherit; }
 /* Stato "aperto" con Radix */
 .cs-modal--centered[data-state="open"] {
   opacity: 1;
-  transform: scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }
 
 /* (opzionale) fullscreen mobile solo per questa variante */
