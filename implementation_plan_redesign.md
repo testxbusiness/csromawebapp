@@ -5021,6 +5021,10 @@ La fase è superata solo se:
   della Preview. Dopo il deploy, rieseguire una volta l'import del calendario
   Amatoriale: l'import aggiornato rimuoverà dal relativo girone l'associazione
   U14 già errata. Verificare poi la Preview autenticata come atleta U14.
+- [x] Follow-up 10/09/2026: la card della prossima gara e il modal
+  convocazioni usano ora entrambi `isProfileConvoked` con il medesimo profilo
+  atleta risolto (subject delegato oppure owner personale). Elimina lo stato
+  "Non partecipo" nel modal quando la card mostra correttamente "Sei convocato".
 
 # 22. Criterio finale di successo
 

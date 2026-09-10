@@ -875,10 +875,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
               <>
                 <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-subdued)] px-4 py-3">
                   <StatusBadge
-                    status={convocation && convocation.championship_match_convocation_members?.some((member) => {
-                      const subjectId = selectedProfileId
-                      return Boolean(subjectId && (member.profile_id === subjectId || member.team_members?.profile_id === subjectId))
-                    }) ? 'going' : convocation ? 'declined' : 'pending'}
+                    status={isProfileConvoked(convocation, athleteProfileId) ? 'going' : convocation ? 'declined' : 'pending'}
                   />
                   <span className="text-sm text-[color:var(--cs-text-secondary)]">
                     {convocation ? 'La convocazione pubblicata per questa gara.' : 'La convocazione non è ancora stata pubblicata.'}
