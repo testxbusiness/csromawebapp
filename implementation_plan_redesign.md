@@ -5326,6 +5326,25 @@ history locale; per evitare di riapplicarle, R1 è stata applicata direttamente
 in sviluppo e la history preesistente non è stata alterata. Nessun database
 remoto è stato modificato.
 
+#### Applicazione staging R1 — 10/09/2026
+
+La migrazione `20260910133219_r1_training_rsvp_data_contract.sql` è stata
+applicata al progetto Supabase staging `csromawebapp-staging`
+(`kibtvkuiedoxgppnnxkf`) tramite l'endpoint pooler IPv4 europeo, dopo backup
+dello schema `public` in `/tmp/csroma_staging_r1_20260910_schema.sql`. La
+history staging è stata aggiornata con `20260910133219 /
+r1_training_rsvp_data_contract`.
+
+Verifica post-migrazione: `teams.training_rsvp_enabled` è `NOT NULL DEFAULT
+false` con 5 righe false; `team_training_schedules.is_active` è `NOT NULL
+DEFAULT true`; `events.generated_schedule_exception` è `NOT NULL DEFAULT
+false`; `event_attendances.is_early_absence` è `NOT NULL DEFAULT false` con 3
+risposte preesistenti false; i quattro nuovi indici esistono; la FK
+`events_generated_from_schedule_id_fkey` è `ON DELETE SET NULL`; i 180 eventi
+staging restano legacy con origine NULL. La CLI `db push` non è stata usata
+perché la history staging contiene due migrazioni storiche già riflesse nello
+schema ma assenti dalla tabella history; non è stato usato `--include-all`.
+
 ### R2 — Generatore senza cancellazioni indiscriminate
 
 **Obiettivo:** generare o aggiornare allenamenti senza perdere ID e risposte.
