@@ -5026,6 +5026,587 @@ La fase è superata solo se:
   atleta risolto (subject delegato oppure owner personale). Elimina lo stato
   "Non partecipo" nel modal quando la card mostra correttamente "Sei convocato".
 
+## Piano proposto — RSVP allenamenti automatici — 10/09/2026
+
+Stato: analisi completata, implementazione non avviata. Richiesta limitata al
+piano, senza modifiche al codice o al database.
+
+Evidenze: `TeamModal.tsx` salva gli orari e richiama
+`generateTrainingEventsFromSchedules`; il generatore crea occorrenze fino a
+fine stagione con `requires_confirmation: false`. Il flusso atleta salva le
+risposte in `event_attendances` e verifica l'appartenenza tramite `event_teams`
+e `team_members`; i report ricavano chi non ha risposto dalla rosa corrente.
+Il controllo temporale della mutation attuale riguarda la deadline opzionale,
+non l'inizio dell'evento. La rigenerazione elimina gli allenamenti ricorrenti
+con `parent_event_id` nullo senza filtro temporale.
+
+Piano da implementare; priorità tra squadre e assenze anticipate confermate
+dall'utente il 10/09/2026:
+
+1. Aggiungere nel form squadra «Richiedi conferma presenza agli allenamenti»;
+   salvare la preferenza della squadra e applicarla alle occorrenze generate.
+   Default disattivato per compatibilità; nessuna attivazione retroattiva implicita.
+2. Usare `events.requires_confirmation` e `event_attendances` esistenti.
+   Tutti gli atleti della rosa, anche aggiunti successivamente, sono destinatari;
+   assenza di risposta significa «Da confermare», senza creare risposte fittizie.
+3. Mostrare il RSVP completo per un solo allenamento automatico per atleta:
+   quello più vicino in ordine cronologico fra tutte le sue squadre e fra quelli
+   non ancora iniziati. Esempio confermato: U14 lunedì e U16 martedì,
+   prima il RSVP di lunedì, poi quello di martedì.
+   La risposta non fa avanzare al successivo; l'avanzamento
+   avviene all'inizio dell'allenamento. Scadenza all'inizio oppure prima se
+   esplicitamente configurata. Eventi futuri e storico restano nel calendario,
+   senza richieste attive fuori dalla regola, salvo l'azione volontaria di
+   assenza anticipata descritta sotto. Non cambiare implicitamente le
+   regole di partite, convocazioni e RSVP manuali.
+4. Centralizzare il calcolo lato server per dashboard, calendario, dettaglio
+   e mutation; applicarlo anche ai familiari autorizzati e aggiornare la UI al
+   passaggio temporale/al ritorno in primo piano. Selezionare il prossimo evento
+   indipendentemente dal mese visualizzato, dai limiti della lista dashboard
+   e dal filtro squadra: filtrare U16 non deve anticipare il RSVP di martedì
+   mentre quello di lunedì U14 è ancora il prossimo per l'atleta.
+   Verificare anche i percorsi diretti di scrittura e le policy del database,
+   affinché non aggirino appartenenza, permessi e limiti temporali.
+5. Rendere riconoscibili gli eventi generati tramite collegamento stabile
+   all'orario origine. Sostituire la cancellazione indiscriminata con una
+   riconciliazione che preservi ID, risposte, storico ed eccezioni manuali,
+   eviti duplicati e gestisca esplicitamente errori parziali e orari rimossi.
+   Prima di intervenire sui dati esistenti verificare schema e vincoli reali.
+6. Consentire di comunicare assenze anticipate dal calendario, senza
+   mostrare i pulsanti RSVP completi per tutti gli allenamenti futuri:
+   - Singolo evento: «Segnala assenza» nel dettaglio di un allenamento futuro
+     con RSVP attivo, con nota facoltativa.
+   - Più eventi: «Comunica assenza» permette di indicare un periodo e mostra
+     gli allenamenti già presenti, con squadra, data e orario. L'atleta
+     seleziona tutti o alcuni eventi e conferma il riepilogo prima del salvataggio.
+     Il periodo è uno strumento di selezione, non una regola permanente:
+     eventuali allenamenti creati successivamente non ereditano l'assenza.
+   - Riutilizzare `event_attendances`, salvando `declined` per ciascun evento
+     selezionato. Il coach vede subito «Non partecipa» nei relativi report.
+   - Quando l'evento diventa il prossimo, mostrare «Hai già comunicato che
+     non parteciperai», senza richiedere una nuova risposta e senza passare
+     automaticamente all'allenamento successivo.
+   - Consentire la revoca dell'assenza anticipata entro la scadenza:
+     ripristina «Da confermare», senza trasformarla automaticamente in
+     «Partecipo». Quando l'evento diventa il prossimo, è disponibile il RSVP
+     completo secondo la regola ordinaria.
+   - Escludere eventi iniziati/passati, con scadenza superata o senza RSVP.
+     Applicare lato server appartenenza e permessi a ciascun evento, anche
+     nelle operazioni multiple e nelle revoche; includere i familiari con
+     `confirm_attendance`. L'eccezione per eventi successivi permette solo
+     comunicazione/revoca dell'assenza, non l'intero RSVP.
+   - Evitare duplicati e risultati parziali silenziosi nei salvataggi multipli;
+     mostrare un esito verificabile per gli eventi selezionati. Preservare
+     anche queste risposte durante la riconciliazione degli allenamenti.
+7. Verificare: opzione attiva/disattiva, più giorni settimanali, prossima
+   occorrenza già risposta, evento passato anche senza deadline, cambio giorno
+   e ora legale Europe/Rome, più squadre (U14 lunedì → U16 martedì),
+   cambio filtro squadra senza anticipo del RSVP, nuovi atleti, deleghe familiari,
+   accesso diretto a eventi senza RSVP completo disponibile, assenza anticipata
+   singola/multipla con selezione tra squadre, nota facoltativa, revoca,
+   visibilità immediata al coach e mancata riproposizione della richiesta
+   quando l'evento diventa il prossimo. Verificare esclusione di eventi
+   passati/scaduti/non autorizzati, nessuna eredità su nuovi eventi del periodo,
+   salvataggi multipli ripetuti o falliti e rigenerazione senza perdita
+   delle risposte e senza duplicati. Nessun job necessario per la sola
+   disponibilità in app; eventuali push richiedono un piano separato.
+
+File previsti: `src/components/admin/TeamModal.tsx`,
+`src/lib/utils/trainingScheduleEvents.ts`, migrazione per preferenza/origine,
+resolver server condiviso, API atleta dashboard/calendar/events,
+contratti e controlli RSVP atleta/condivisi, calendario e dettaglio atleta
+per assenze anticipate singole/multiple, test pertinenti.
+
+File modificati in questa analisi: solo `implementation_plan_redesign.md`.
+Verifiche: lettura del codice, delle migrazioni pertinenti e dello stato Git;
+`git diff --check`. Test applicativi non eseguiti (nessuna implementazione).
+Note aperte: eventuale necessità di una finestra massima di anticipo e criterio
+di parità per allenamenti che iniziano nello stesso istante; definire separatamente
+se applicare la funzione agli allenamenti già esistenti. Nessun deploy.
+
+## Goal operativi RSVP — esecuzione sequenziale con Luna medio
+
+Aggiornamento 10/09/2026: scomposizione del piano approvato in goal eseguibili
+singolarmente. Tutti i goal seguenti sono **da iniziare**. La loro presenza
+nel piano non autorizza l'avvio automatico del goal successivo.
+
+### Istruzioni comuni per ogni goal R
+
+- Leggere `AGENTS.md`, `re_design.md`, questo piano e lo stato Git; verificare
+  le evidenze dei prerequisiti. Eseguire soltanto il goal richiesto.
+- Usare le skill Next.js e Supabase per i rispettivi ambiti; per modifiche UI
+  applicare anche la skill UI/UX pertinente. Nessun subagent richiesto.
+- I percorsi indicati sono punti di ingresso reali; i nuovi moduli sotto
+  `src/server/events/` sono proposti. Prima di crearli cercare equivalenti.
+- Non introdurre dipendenze, cron, notifiche push, migrazioni massive dei dati
+  legacy o modifiche alle convocazioni/campionati per completare questi goal.
+- Non pubblicare una versione intermedia: UI, API e protezioni database devono
+  risultare coerenti prima dell'eventuale rilascio. Nessun deploy è incluso.
+- Ogni goal deve lasciare il progetto compilabile. Eseguire test mirati
+  significativi, `npx tsc --noEmit`, ESLint sui file TypeScript modificati e
+  `git diff --check`; per documentazione soltanto basta il diff check.
+- Per SQL: verificare lo schema effettivo e le policy, usare il workflow della
+  skill Supabase, provare la migrazione sul database di sviluppo e registrarne
+  l'esito. Staging è disponibile per controlli; non presumere che una migrazione
+  locale sia già applicata lì. Nessuna modifica a produzione.
+- Alla chiusura aggiornare la sezione del goal con stato, decisioni, file,
+  migrazioni, comandi ed esiti reali, ambiente DB e note residue. Se un requisito
+  manca, segnare il goal parziale e indicare esattamente cosa resta.
+
+### Regole di prodotto e default tecnici comuni
+
+Le regole confermate sono: un solo RSVP completo per atleta tra tutte le sue
+squadre; avanzamento all'inizio dell'evento, mai alla risposta; assenza anticipata
+singola o multipla; revoca prima della scadenza; storico consultabile.
+
+Per evitare decisioni implicite durante le implementazioni, usare questi
+default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
+
+- Ambito: nuove occorrenze identificabili come allenamenti automatici del nuovo
+  flusso, con RSVP abilitato. Eventi manuali e legacy mantengono il comportamento
+  precedente; non dedurre l'origine soltanto da titolo o `event_type`.
+- Nessuna finestra massima di anticipo nella prima versione: vale il prossimo
+  evento cronologico. A pari inizio, ordinare stabilmente per ID evento; un
+  evento collegato a più squadre compare una sola volta. Conservare gli avvisi
+  di conflitto, senza aggiungere arbitrariamente un secondo RSVP completo.
+- Selezionare prima il prossimo evento non iniziato, poi controllare la sua
+  deadline: una deadline anticipata scaduta non sblocca l'evento successivo.
+- Usare Europe/Rome per generazione, periodi e visualizzazione; confrontare
+  istanti sul server. Un allenamento di oggi ancora futuro è generabile.
+- RSVP disattivato come default squadra. La modifica della preferenza si
+  applica alle occorrenze automatiche future gestite dal nuovo flusso;
+  disattivarla chiude le azioni ma conserva risposte e storico.
+- Un'assenza anticipata è `declined` con un indicatore distinto dal ruolo di
+  chi risponde. Non riutilizzare `response_source`, che identifica già
+  `self`, `parent`, `coach`, `admin` o `system`.
+- Il periodo di assenza comprende le date locali selezionate, estremi inclusi,
+  ma soltanto gli eventi esplicitamente confermati; nessuna applicazione a
+  eventi creati dopo. Ripetere un invio non deve duplicare le risposte.
+
+| Goal | Risultato | Prerequisiti | Stato |
+|---|---|---|---|
+| R1 | Modello dati e contratti condivisi | Nessuno | [x] |
+| R2 | Generazione e riconciliazione sicure | R1 | [ ] |
+| R3 | Opzione RSVP nel form squadra | R2 | [ ] |
+| R4 | Resolver del prossimo RSVP e API di lettura | R1 | [ ] |
+| R5 | Mutation RSVP e protezioni database | R4 | [ ] |
+| R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [ ] |
+| R7 | API assenze anticipate singole/multiple e revoca | R5 | [ ] |
+| R8 | UI assenza anticipata sul singolo evento | R6, R7 | [ ] |
+| R9 | UI assenza per periodo con selezione eventi | R8 | [ ] |
+| R10 | Verifica integrata e chiusura | R1–R9 | [ ] |
+
+Ordine operativo consigliato: R1 → R2 → R3 → R4 → R5 → R6 → R7 → R8 → R9 → R10.
+
+### R1 — Modello dati, origine eventi e contratti
+
+**Obiettivo:** predisporre lo schema senza attivare la funzione nella UI. **Completato il 10/09/2026.**
+
+Punti di ingresso: `supabase/migrations/`, `src/types/attendance.ts`,
+`src/types/athlete-calendar.ts`, `src/types/athlete-dashboard.ts`,
+`src/lib/utils/trainingScheduleEvents.ts`.
+
+Attività:
+
+1. Verificare colonne, FK, cascades, indici e policy reali di `teams`,
+   `team_training_schedules`, `events`, `event_teams`, `event_attendances`.
+2. Introdurre la preferenza persistente di squadra, default false; un'origine
+   stabile per ogni occorrenza automatica e un'identità univoca che impedisca
+   duplicati della stessa occorrenza. Non usare il solo `parent_event_id`.
+3. Pianificare rimozione degli orari senza cancellazione a cascata dello
+   storico: preferire disattivazione degli orari già referenziati. Mantenere
+   riconoscibili le eccezioni manuali delle occorrenze generate.
+4. Aggiungere se necessario un indicatore specifico di assenza anticipata,
+   compatibile con le risposte esistenti e senza cambiare `response_source`.
+5. Definire un contratto additivo unico per disponibilità delle azioni, motivo
+   di chiusura, prossimo evento e prossimo istante di ricalcolo. Separare il
+   fatto «richiede conferma» dal fatto «puoi rispondere adesso».
+6. Registrare qui i nomi esatti di colonne, indici e campi scelti, per R2–R9.
+
+**Accettazione:** schema precedente ancora utilizzabile; eventi legacy non
+riclassificati; assenze compatibili con report esistenti; identità occorrenze
+documentata; nessuna risposta o evento storico perso.
+
+**Verifiche:** migrazione su sviluppo, vincolo di unicità, default su dati
+preesistenti, comportamento delle FK su disattivazione/rimozione, typecheck.
+
+#### Registro R1 — decisioni e inventario verificato
+
+La fotografia runtime del database locale del 10/09/2026 conferma:
+
+- `teams`: `id`, `name`, `code`, `activity_id`, `coach_id`, `is_active` e
+  timestamp; PK `teams_pkey`, unique `teams_code_key`, FK
+  `teams_activity_id_fkey` con `ON DELETE CASCADE`, indici
+  `idx_teams_activity_id` e `idx_teams_coach_id`;
+- `team_training_schedules`: PK `team_training_schedules_pkey`, unique
+  `team_training_schedules_team_id_day_of_week_start_time_key`, FK squadra
+  `ON DELETE CASCADE`, FK palestra `ON DELETE RESTRICT`, check su giorno
+  `0..6` e `end_time > start_time`, indici
+  `idx_team_training_schedules_day`, `idx_team_training_schedules_gym_id` e
+  `idx_team_training_schedules_team_id`;
+- `events`: PK `events_pkey`, `events_check` (`start_time < end_time`), check
+  su `kind`, `event_type` ed `event_kind`, FK attività/palestra con
+  `ON DELETE SET NULL`, FK autore presenti sia come `NO ACTION` legacy sia
+  come `ON DELETE SET NULL`, indici `idx_events_activity_id`,
+  `idx_events_created_by`, `idx_events_event_kind`, `idx_events_gym_id`,
+  `idx_events_parent_event_id`, `idx_events_start_date` e
+  `idx_events_start_time`;
+- `event_teams`: unique `event_teams_event_id_team_id_key`, FK evento e
+  squadra entrambe `ON DELETE CASCADE`, indici
+  `idx_event_teams_event_id` e `idx_event_teams_team_id`;
+- `event_attendances`: unique `event_attendances_event_id_profile_id_key`, FK
+  evento/profilo `ON DELETE CASCADE`, FK
+  `event_attendances_responded_by_auth_user_id_fkey` `ON DELETE SET NULL`,
+  check status `going|maybe|declined`, check `response_source` già esistente,
+  indici `idx_event_attendances_event`, `idx_event_attendances_profile` e
+  `event_attendances_responded_by_auth_user_id_idx`.
+
+Le policy runtime rilevate sono: su `teams` `Admins can manage teams`,
+`Coaches can manage their teams`, `Coaches can view their teams`,
+`teams_admin_all`, `teams_coach_select`, `teams_athlete_select`; su `events`
+`Admins can manage all events`, `events_admin_all`, `events_athlete_select`,
+`events_coach_delete`, `events_coach_insert`, `events_coach_select`,
+`events_coach_update`; su `event_teams` `Admins can manage event teams`,
+`Coaches can delete event teams`, `Coaches can insert event teams`,
+`Coaches can manage their team event associations`, `Coaches can update event
+teams`, `Coaches can view event teams`, `event_teams_admin_all`,
+`event_teams_admin_or_coach_insert`, `event_teams_athlete_select`,
+`event_teams_coach_delete`, `event_teams_coach_insert`,
+`event_teams_coach_select`, `event_teams_coach_update`; su
+`team_training_schedules` `Admins can manage all training schedules`,
+`team_training_schedules_athlete_select`,
+`team_training_schedules_coach_select`; su `event_attendances` le quattro
+policy subject `event_attendances_subject_select/insert/update/delete`.
+
+La migrazione R1 usa soltanto queste tabelle e non modifica policy né
+riclassifica dati legacy.
+
+Nomi scelti per R2–R9:
+
+| Scopo | Nome esatto | Regola |
+|---|---|---|
+| Preferenza squadra | `teams.training_rsvp_enabled boolean NOT NULL DEFAULT false` | Nessuna attivazione retroattiva |
+| Disattivazione orario | `team_training_schedules.is_active boolean NOT NULL DEFAULT true` | Disattivare, non cancellare, gli orari referenziati |
+| Origine occorrenza | `events.generated_from_schedule_id uuid` | FK verso `team_training_schedules(id)` con `ON DELETE SET NULL`; NULL lascia legacy/manuale non classificato |
+| Identità occorrenza | `events.generated_occurrence_date date` | Data locale Europe/Rome; non usa il solo `parent_event_id` |
+| Eccezione manuale | `events.generated_schedule_exception boolean NOT NULL DEFAULT false` | R2 la imposta a `true` quando un'occorrenza generata viene modificata manualmente |
+| Unicità | `events_generated_schedule_occurrence_uidx` | Unique parziale su `(generated_from_schedule_id, generated_occurrence_date)` quando entrambi non NULL |
+| Lookup orari | `team_training_schedules_team_active_idx` | `(team_id, is_active, day_of_week, start_time)` |
+| Lookup generati | `events_generated_schedule_start_idx` | `(generated_from_schedule_id, start_time)` parziale |
+| Assenza anticipata | `event_attendances.is_early_absence boolean NOT NULL DEFAULT false` | `status='declined'` resta invariato e `response_source` non cambia |
+| Lookup assenze | `event_attendances_early_absence_idx` | `(profile_id, event_id)` parziale quando `is_early_absence=true` |
+
+Il contratto TypeScript additivo unico è `AttendanceAvailabilityContract` in
+`src/types/attendance.ts`, esposto opzionalmente come
+`attendance_availability` nei contratti calendario/dashboard. Contiene
+`requires_confirmation`, `can_respond_now`, `actions`,
+`closure_reason`, `next_event` e `next_recalculation_at`; quindi il requisito
+configurativo e la possibilità effettiva di rispondere restano distinti.
+`buildTrainingOccurrenceIdentity()` in
+`src/lib/utils/trainingScheduleEvents.ts` codifica la coppia stabile
+`generated_from_schedule_id + generated_occurrence_date` per il generatore R2.
+
+File modificati: la migrazione
+`20260910133219_r1_training_rsvp_data_contract.sql`, i quattro contratti/helper
+indicati nei punti di ingresso e questo piano. La UI non è stata modificata e
+il generatore esistente non è stato attivato né convertito: la riconciliazione
+è esplicitamente demandata a R2.
+
+Verifiche eseguite: migrazione applicata al database Supabase locale tramite
+`docker exec ... psql -v ON_ERROR_STOP=1`, con `BEGIN/COMMIT`; `npx tsc --noEmit`,
+ESLint sui quattro file TypeScript e `git diff --check` superati. Query runtime
+confermano 3 squadre con `training_rsvp_enabled=false`, 147 eventi legacy con
+origine NULL, 2 risposte con `is_early_absence=false`, default `NOT NULL`, FK
+`ON DELETE SET NULL` e i quattro nuovi indici. Una prova transazionale con
+rollback ha verificato sia il rifiuto dei duplicati da
+`events_generated_schedule_occurrence_uidx` sia l'azzeramento dell'origine
+quando lo schedule viene rimosso. `supabase db push --local --dry-run` ha
+segnalato due migrazioni storiche già riflesse nello schema ma assenti dalla
+history locale; per evitare di riapplicarle, R1 è stata applicata direttamente
+in sviluppo e la history preesistente non è stata alterata. Nessun database
+remoto è stato modificato.
+
+### R2 — Generatore senza cancellazioni indiscriminate
+
+**Obiettivo:** generare o aggiornare allenamenti senza perdere ID e risposte.
+
+Punti di ingresso: `src/lib/utils/trainingScheduleEvents.ts`,
+`src/components/admin/TeamModal.tsx` (`saveTrainingSchedules`),
+nuovo servizio server degli allenamenti e relativo endpoint admin se necessari.
+
+Attività:
+
+1. Sostituire il ciclo delete/reinsert degli orari con salvataggio che conserva
+   gli ID; disattivare gli orari rimossi già collegati ad eventi.
+2. Portare la riconciliazione in un percorso server autorizzato admin; nessuna
+   chiave privilegiata nel browser. Riutilizzare i resolver account esistenti.
+3. Per ogni orario attivo generare fino a fine stagione, includendo oggi se
+   l'ora non è passata. Usare il fuso di Roma anche attraversando l'ora legale.
+4. Conservare occorrenze invariate, relative risposte e modifiche manuali;
+   aggiornare solo le occorrenze future identificabili del nuovo flusso.
+5. Se una modifica/rimozione coinvolge un evento con risposte o un'eccezione
+   manuale, conservarlo e restituire un avviso con gli eventi da gestire
+   manualmente; evitare spostamenti silenziosi di eventi già confermati.
+6. Non eliminare né duplicare automaticamente eventi legacy di origine
+   incerta: rilevare le sovrapposizioni e restituire una nota operativa.
+7. Garantire coerenza evento-collegamento squadra, retry senza duplicati e
+   conteggi reali di creati/aggiornati/conservati/errori. Un batch fallito non
+   deve produrre un falso successo. Rimozione di tutti gli orari gestita.
+
+**Accettazione:** due salvataggi identici mantengono stessi eventi e risposte;
+una modifica anagrafica non rigenera la stagione; nessuna cancellazione storica.
+
+**Verifiche:** integrazione DB e test del generatore per retry, eventi con
+risposte, eccezioni, nessun orario attivo, fine stagione e cambio ora legale.
+
+### R3 — Opzione RSVP e salvataggio squadra
+
+**Obiettivo:** rendere configurabile la funzione durante creazione/modifica.
+
+File: `src/components/admin/TeamModal.tsx`,
+`src/components/admin/TeamsManager.tsx` e percorso server introdotto in R2.
+
+Attività:
+
+1. Aggiungere «Richiedi conferma presenza agli allenamenti» accanto agli orari,
+   con descrizione del prossimo RSVP e delle assenze anticipate.
+2. Caricare/salvare la preferenza, resettare correttamente il form quando si
+   cambia squadra e mantenere il default disattivato per nuove squadre.
+3. Verificare il contratto `onCreate`: creare la squadra una sola volta,
+   ottenere l'ID dal salvataggio e usare il callback per il refresh senza
+   doppia creazione. Conservare l'assegnazione coach.
+4. Collegare il flusso alla riconciliazione R2, anche se tutti gli orari sono
+   rimossi; mostrare chiaramente esito, avvisi ed eventuale successo parziale.
+5. Non chiudere il form come se tutto fosse riuscito quando gli eventi non
+   sono stati salvati. Consentire un retry senza ricreare la squadra.
+
+**Accettazione:** squadra con lunedì/mercoledì e opzione attiva produce eventi
+RSVP; con opzione disattiva no; riapertura conserva la scelta; zero duplicati.
+
+**Verifiche:** test flusso creazione/modifica e fallimento generazione; prova
+UI mobile/desktop, tastiera e loading; controlli tecnici comuni.
+
+### R4 — Resolver unico del prossimo RSVP e API di lettura
+
+**Obiettivo:** decidere lato server quali azioni sono disponibili per il subject.
+
+File: nuovo modulo `src/server/events/`,
+`src/app/api/athlete/dashboard/route.ts`,
+`src/app/api/athlete/calendar/route.ts`,
+`src/app/api/athlete/events/detail/route.ts`, contratti atleta pertinenti.
+
+Attività:
+
+1. Risolvere il subject e le sue squadre autorizzate; selezionare un solo
+   evento futuro automatico RSVP su tutte le squadre, con ordine stabile.
+2. Non usare come universo di ricerca i soli eventi del mese richiesto, le
+   prime dieci righe dashboard o la squadra filtrata nella UI.
+3. Non saltare un evento perché già risposto/declined o con deadline scaduta;
+   far avanzare la selezione solo al suo inizio o se non è più pertinente.
+4. Restituire per ogni evento le capacità del contratto R1: RSVP completo,
+   assenza anticipata, revoca, sola lettura e motivo. Per la revoca verificare
+   che esista effettivamente l'assenza anticipata dell'atleta.
+5. Integrare lo stesso resolver nelle tre API, mantenendo i permessi delegati
+   `view_schedule` e `confirm_attendance` distinti e senza esporre altre squadre.
+6. Includere il prossimo evento rilevante nella dashboard anche quando un
+   limite di lista lo escluderebbe; mantenere gli eventi manuali compatibili.
+
+**Accettazione:** U14 lunedì prevale su U16 martedì in ogni API, anche aprendo
+direttamente martedì o cambiando mese/filtro. Famiglia senza permesso non agisce.
+
+**Verifiche:** test con clock controllato, multi-team, evento condiviso,
+parità di orario, deadline anticipata, già risposto, lista troncata e deleghe.
+
+### R5 — Salvataggio RSVP e protezioni dei percorsi diretti
+
+**Obiettivo:** rendere effettive le regole anche fuori dall'interfaccia.
+
+File: `src/app/api/athlete/events/attendance/route.ts` e `.test.ts`,
+`src/lib/validation/events.ts`, resolver R4, migrazioni di sicurezza pertinenti.
+
+Attività:
+
+1. Riutilizzare R4 per ogni RSVP ordinario del nuovo flusso; rifiutare eventi
+   successivi, iniziati o scaduti, anche senza deadline esplicita.
+2. Preservare identità account/subject e `responded_by_auth_user_id`;
+   validare gli stati e mantenere i normali RSVP manuali compatibili.
+3. Verificare come `subject.dataClient` opera nei casi personale/delegato e
+   quali scritture dirette il client Supabase può eseguire.
+4. Chiudere aggiramenti tramite INSERT/UPDATE/DELETE diretti o RPC pubbliche:
+   le policy attuali sul solo `profile_id` non costituiscono verifica temporale.
+   Scegliere un percorso DB protetto coerente con l'architettura, documentarlo
+   e mantenere i percorsi autorizzati coach/admin e gli eventi manuali.
+5. Effettuare la verifica finale dello stato/tempo al salvataggio, evitando
+   che un evento diventato scaduto durante la richiesta venga accettato.
+6. Restituire errori di dominio comprensibili e non dettagli SQL interni.
+
+**Accettazione:** un atleta non può anticipare RSVP ordinari o modificare
+eventi scaduti del nuovo flusso neppure chiamando direttamente API/Data API.
+
+**Verifiche:** test endpoint e prove DB con ruoli reali personale, familiare
+autorizzato/non autorizzato, altro atleta, coach/admin; nessun test con service
+role spacciato per verifica RLS; confronto deadline al momento della scrittura.
+
+### R6 — UI con un solo RSVP completo e aggiornamento temporale
+
+**Obiettivo:** allineare dashboard, calendario e dettaglio senza filtri locali
+che possano cambiare l'evento selezionato dal server.
+
+File: `src/components/athlete/AthleteDashboard.tsx`, `AthleteAgenda.tsx`,
+`AthleteCalendarManager.tsx`, `AttendanceControl.tsx`,
+`src/components/shared/EventDetailModal.tsx`, tipi e test correlati.
+
+Attività:
+
+1. Consumare le capacità R4 invece di usare soltanto `requires_confirmation`.
+   Mostrare i tre pulsanti solo sul prossimo evento autorizzato.
+2. Conservare tutti gli eventi nel calendario; per quelli successivi non
+   mostrare una richiesta ordinaria. Lo storico mostra lo stato in sola lettura.
+3. Dopo la risposta aggiornare lo stato senza avanzare al successivo.
+4. Ricaricare al prossimo istante rilevante, al ritorno in primo piano e dopo
+   le mutazioni. Non introdurre polling continuo; pulire timer e listener.
+5. Invalidare richieste obsolete al cambio subject; gestire offline e gli
+   errori server quando l'evento scade mentre la schermata resta aperta.
+6. Preservare le superfici coach/admin che riutilizzano il dettaglio condiviso.
+
+**Accettazione:** mai più di un RSVP completo per atleta; il passaggio
+lunedì→martedì avviene senza richiedere logout o riapertura dell'app.
+
+**Verifiche:** test componenti con timer controllato, cambio subject/filtro,
+focus, risposta e scadenza; smoke mobile e dettaglio condiviso coach/admin.
+
+### R7 — API assenze anticipate e revoca
+
+**Obiettivo:** gestire singole e multiple assenze con autorizzazione per evento.
+
+Punti di ingresso: `src/app/api/athlete/events/`,
+`src/lib/validation/events.ts`, servizi R4/R5 e `event_attendances`.
+
+Attività:
+
+1. Definire un endpoint/servizio esplicito per segnalare o revocare l'assenza.
+   Il payload contiene ID evento selezionati e nota facoltativa (massimo 1000
+   caratteri, coerente con validazione esistente), mai un profilo non verificato.
+2. Supportare uno o più ID deduplicati con limite esplicito documentato;
+   verificare su ogni evento futuro origine, RSVP, deadline e appartenenza.
+3. Salvare `declined`, indicatore di assenza anticipata e autore corretto;
+   aggiornare senza duplicati. La revoca può eliminare soltanto la relativa
+   assenza anticipata ancora valida, non una diversa risposta concorrente.
+4. Rendere l'operazione multipla atomica: se un evento selezionato non è più
+   valido, non salvare nessun elemento e chiedere di aggiornare il riepilogo.
+   Usare lo stesso percorso DB protetto di R5, senza un ciclo client di richieste.
+5. Aggiungere il recupero degli eventi selezionabili per periodo sul subject
+   autorizzato; gestire paginazione senza troncamenti silenziosi. Il salvataggio
+   riceve gli ID confermati, senza espandere nuovamente tutto il periodo.
+6. Verificare i report coach/admin esistenti e la comparsa di `declined` senza
+   una seconda tabella RSVP; non modificare le convocazioni di campionato.
+
+**Accettazione:** assenze registrabili sui futuri eventi anche non prossimi;
+nessun RSVP completo anticipato, nessuna scrittura parziale o revoca estranea.
+
+**Verifiche:** singolo/multiplo, richiesta ripetuta, ID duplicati, payload
+misto autorizzato/non autorizzato, scadenza durante invio, rollback, revoca
+concorrente, familiari e Data API diretta; report conteggi coerenti.
+
+### R8 — UI assenza anticipata del singolo allenamento
+
+**Obiettivo:** consentire segnalazione e revoca dal dettaglio evento.
+
+File: `src/components/shared/EventDetailModal.tsx`,
+`src/components/athlete/AthleteCalendarManager.tsx`, `AthleteDashboard.tsx`,
+`AttendanceControl.tsx` e componenti specifici soltanto se necessari.
+
+Attività:
+
+1. Aggiungere «Segnala assenza» agli eventi eleggibili usando le capacità R4;
+   mostrare squadra/data/orario e campo nota facoltativo prima dell'invio R7.
+2. Mostrare stato salvato e «Revoca assenza» dove consentito; revocare
+   ripristina «Da confermare», mai automaticamente «Partecipo».
+3. Quando diventa il prossimo evento, mantenere il messaggio «Hai già
+   comunicato che non parteciperai»; offrire la modifica volontaria entro
+   scadenza, senza una nuova richiesta automatica né avanzamento anticipato.
+4. Aggiornare lista, dettaglio e dashboard; gestire loading, errori, offline,
+   chiusura e cambio subject senza applicare risultati al profilo sbagliato.
+
+**Accettazione:** flusso completo singolo evento, revoca e passaggio a prossimo
+evento usabili da atleta e familiare autorizzato, inaccessibili dopo scadenza.
+
+**Verifiche:** test UI e mutation integrata, nota, doppio invio, errore,
+revoca, cambio subject e conservazione dello stato dopo riapertura.
+
+### R9 — UI assenza per periodo e selezione multipla
+
+**Obiettivo:** comunicare più assenze con un riepilogo esplicito.
+
+File: `src/components/athlete/AthleteCalendarManager.tsx`, nuovo componente
+dedicato al flusso «Comunica assenza», API R7 e relativi test.
+
+Attività:
+
+1. Aggiungere «Comunica assenza» nel calendario solo con permesso di risposta.
+2. Richiedere data iniziale/finale, caricare gli eventi eleggibili del periodo
+   su tutte le squadre autorizzate e mostrare squadra, giorno, ora e stato.
+   Dichiarare l'ambito multi-squadra anche se il calendario era filtrato.
+3. Consentire selezione singola/tutti, nota comune facoltativa e riepilogo
+   con conteggio prima di confermare. Non includere eventi nascosti non caricati.
+4. Mostrare vuoto autentico, periodo non valido, caricamento e paginazione;
+   trattare gli eventi già assenti chiaramente, senza inviti duplicati.
+5. Inviare soltanto gli ID confermati. Se il server rifiuta perché un evento
+   non è più valido, conservare il contesto e aggiornare l'elenco per una nuova
+   conferma; nessun messaggio di successo parziale.
+6. Usare i pattern dialog/sheet esistenti, focus corretto e touch target;
+   al cambio subject chiudere e azzerare periodo/selezione/note.
+
+**Accettazione:** assenza di una settimana selettiva tra U14/U16 salvata in
+un solo flusso, visibile nei singoli eventi; nuovi eventi del periodo esclusi.
+
+**Verifiche:** selezione parziale/totale, due squadre, range su cambio mese
+e ora legale, paginazione, errore atomico, cambio subject, uso a 320/375 px
+e desktop, tastiera e offline.
+
+### R10 — Gate integrato RSVP e assenze
+
+**Obiettivo:** chiudere la funzionalità con evidenze riproducibili.
+
+Attività e scenari obbligatori:
+
+1. Creare una squadra con due giorni e RSVP attivo; verificare calendario e
+   report con un atleta iniziale e un atleta aggiunto dopo la generazione.
+2. Atleta U14 lunedì/U16 martedì: un solo RSVP in dashboard/calendario/dettaglio;
+   rispondere a lunedì non anticipa martedì; il passaggio temporale lo abilita.
+3. Registrare assenza singola e multipla; verificarla lato coach, riaprire la
+   sessione atleta, revocarla e controllare che non sia diventata «Partecipo».
+4. Portare un evento già assente a prossimo: nessuna richiesta duplicata;
+   evento passato/scaduto senza azioni, anche via chiamate dirette.
+5. Ripetere con familiare autorizzato e con sola lettura; cambiare subject
+   durante caricamento/invio e verificare isolamento dei dati.
+6. Modificare squadra/orari, disattivare RSVP, rimuovere tutti gli orari,
+   ritentare un salvataggio: nessuna perdita di storico/risposte o duplicato.
+7. Controllare casi legacy/manuali e convocazioni senza regressioni; verificare
+   tutti i percorsi DB con credenziali di ruolo adeguate e senza esporre segreti.
+8. Eseguire test mirati finali, suite Jest completa, `npx tsc --noEmit`,
+   `npm run build`, ESLint pertinente e `git diff --check`; prova browser
+   atleta/famiglia/coach su mobile e desktop. Distinguere mock da verifiche DB.
+9. Registrare migrazioni applicate, ambiente usato, risultati e limitazioni.
+   Nessun goal è completo se i controlli necessari sono solo descritti.
+
+**Accettazione:** tutti gli scenari superati o impedimenti dichiarati con
+goal lasciato parziale; piano aggiornato senza note di implementazione perse.
+La pubblicazione rimane un'attività successiva esplicitamente richiesta.
+
+### Prompt riutilizzabile per eseguire un goal
+
+> Esegui soltanto il goal R[N] della sezione «Goal operativi RSVP» in
+> `implementation_plan_redesign.md`. Leggi prima `AGENTS.md`, `re_design.md`,
+> il piano e lo stato Git. Verifica che i prerequisiti siano completati e usa
+> i contratti già registrati dai goal precedenti. Implementa tutte le attività
+> di R[N], esegui le verifiche previste e aggiorna il piano con stato, file,
+> migrazioni, test reali e note residue. Non avviare il goal successivo,
+> non fare deploy e non intervenire sui dati legacy fuori dall'ambito previsto.
+
+Registro della scomposizione: modificato soltanto questo documento;
+nessuna implementazione o modifica DB; `git diff --check` eseguito.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

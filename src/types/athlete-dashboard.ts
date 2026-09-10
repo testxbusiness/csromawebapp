@@ -1,3 +1,5 @@
+import type { AttendanceAvailabilityContract } from '@/types/attendance'
+
 export interface AthleteDashboardTeam {
   id: string
   name: string
@@ -19,4 +21,6 @@ export interface AthleteDashboardContract {
   /** Additive index for selectors; legacy consumers can ignore it. */
   teams: AthleteDashboardTeam[]
   unreadMessageCount: number
+  /** Additive next-RSVP contract; legacy dashboard consumers can ignore it. */
+  attendance_availability?: AttendanceAvailabilityContract | null
 }

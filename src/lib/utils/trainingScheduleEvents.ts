@@ -11,6 +11,22 @@ import { SupabaseClient } from '@supabase/supabase-js'
     gym_id: string
     is_active?: boolean
   }
+
+  /** Stable identity for R2 reconciliation: schedule origin plus local date. */
+  export type TrainingOccurrenceIdentity = {
+    generated_from_schedule_id: string
+    generated_occurrence_date: string
+  }
+
+  export function buildTrainingOccurrenceIdentity(
+    scheduleId: string,
+    occurrenceDate: string,
+  ): TrainingOccurrenceIdentity {
+    return {
+      generated_from_schedule_id: scheduleId,
+      generated_occurrence_date: occurrenceDate.slice(0, 10),
+    }
+  }
   type Season = {
     id: string
     end_date: string

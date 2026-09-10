@@ -1,3 +1,5 @@
+import type { AttendanceAvailabilityContract, AttendanceStatus } from '@/types/attendance'
+
 export interface AthleteCalendarTeam {
   id: string
   name: string
@@ -26,6 +28,8 @@ export interface AthleteCalendarEvent {
   requires_confirmation: boolean
   confirmation_deadline: string | null
   my_attendance: AthleteCalendarAttendance | null
+  /** Additive RSVP capability contract; absent on legacy payloads. */
+  attendance_availability?: AttendanceAvailabilityContract | null
   /** Derived presentation flag; it never removes or prioritizes an event. */
   has_conflict?: boolean
 }
@@ -34,4 +38,3 @@ export interface AthleteCalendarContract {
   events: AthleteCalendarEvent[]
   teams: AthleteCalendarTeam[]
 }
-import type { AttendanceStatus } from '@/types/attendance'
