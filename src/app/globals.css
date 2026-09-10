@@ -1127,11 +1127,14 @@ button.cs-list-row{ font:inherit; }
   bottom: 1rem;
   height: calc(100dvh - 2rem);
   max-height: none;
-  translate: -50% 0;
-  transform: none;
+  translate: none;
+  transform: translateX(-50%);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+.cs-modal--centered.cs-modal--form[data-state="open"] {
+  transform: translateX(-50%);
 }
 .cs-modal--form > .cs-modal__header,
 .cs-modal--form > [data-radix-dialog-title] {
@@ -1154,7 +1157,9 @@ button.cs-list-row{ font:inherit; }
     width: auto;
     height: calc(100dvh - 24px);
     translate: none;
+    transform: none;
   }
+  .cs-modal--centered.cs-modal--form[data-state="open"] { transform: none; }
 }
 
 /* === Navbar container missing === */
