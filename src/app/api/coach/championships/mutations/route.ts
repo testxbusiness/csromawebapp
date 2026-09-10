@@ -70,6 +70,13 @@ async function handleMutation(context: CoachMutationContext, body: Record<string
   const action = body.action
   if (action === 'create_championship') {
     if (context.teamIds.size === 0) throw new AccountContextError('Nessuna squadra assegnata al coach', 403)
+    const selectedTeamId = body.team_id ? String(body.team_id) : null
+    if (body.create_group && body.group_name && !selectedTeamId) {
+      throw new AccountContextError('Seleziona la squadra CSRoma del campionato', 400)
+    }
+    if (selectedTeamId && !context.teamIds.has(selectedTeamId)) {
+      throw new AccountContextError('Squadra non autorizzata', 403)
+    }
     const { data: championship, error } = await context.admin.from('championships').insert({
       name: body.name,
       sport: body.sport,
@@ -81,8 +88,7 @@ async function handleMutation(context: CoachMutationContext, body: Record<string
     }).select('id').single()
     if (error) throw new Error('Impossibile creare il campionato')
     if (body.create_group && body.group_name) {
-      const selectedTeamId = body.team_id ? String(body.team_id) : Array.from(context.teamIds)[0]
-      if (!selectedTeamId || !context.teamIds.has(selectedTeamId)) throw new AccountContextError('Squadra non autorizzata', 403)
+      if (!selectedTeamId) throw new AccountContextError('Seleziona la squadra CSRoma del campionato', 400)
 
       const { data: team, error: teamError } = await context.admin.from('teams').select('id, name, code').eq('id', selectedTeamId).single()
       if (teamError || !team) throw new Error('Impossibile caricare la squadra del campionato')
@@ -193,15 +199,57 @@ async function handleMutation(context: CoachMutationContext, body: Record<string
 
   if (action === 'import_matches') {
     await authorizeGroup(context, String(body.group_id))
+    const groupId = String(body.group_id)
     const matches = Array.isArray(body.matches) ? body.matches : []
     if (!matches.length) throw new AccountContextError('Nessuna partita da importare', 400)
+    const importedClubTeamIds = [...new Set(matches.flatMap((match) => {
+      if (!match || typeof match !== 'object') return []
+      const row = match as Record<string, unknown>
+      return [row.home_club_team_id, row.away_club_team_id]
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    }))]
+    if (importedClubTeamIds.length === 0) throw new AccountContextError('Squadre del calendario non valide', 400)
+
+    const { data: group, error: groupError } = await context.admin
+      .from('championship_groups')
+      .select('championship_id')
+      .eq('id', groupId)
+      .maybeSingle()
+    if (groupError || !group) throw new AccountContextError('Girone non trovato', 404)
+
+    const { data: importedClubTeams, error: clubTeamsError } = await context.admin
+      .from('championship_club_teams')
+      .select('id')
+      .eq('championship_id', group.championship_id)
+      .in('id', importedClubTeamIds)
+    if (clubTeamsError || (importedClubTeams ?? []).length !== importedClubTeamIds.length) {
+      throw new AccountContextError('Squadre del calendario non valide per il campionato', 400)
+    }
+
     const { error } = await context.admin.from('championship_matches').upsert(matches, { onConflict: 'championship_group_id,match_day,home_club_team_id,away_club_team_id' })
     if (error) throw new Error('Impossibile importare il calendario')
-    const clubTeamIds = Array.isArray(body.group_club_team_ids) ? body.group_club_team_ids.map(String) : []
-    if (clubTeamIds.length) {
-      const { error: groupTeamsError } = await context.admin.from('championship_group_teams').upsert(clubTeamIds.map((championship_club_team_id) => ({ championship_group_id: body.group_id, championship_club_team_id })), { onConflict: 'championship_group_id,championship_club_team_id' })
-      if (groupTeamsError) throw new Error('Impossibile associare le squadre al girone')
+    const { data: currentGroupTeams, error: currentGroupTeamsError } = await context.admin
+      .from('championship_group_teams')
+      .select('championship_club_team_id')
+      .eq('championship_group_id', groupId)
+    if (currentGroupTeamsError) throw new Error('Impossibile leggere le squadre del girone')
+
+    const importedClubTeamIdSet = new Set(importedClubTeamIds)
+    const staleClubTeamIds = (currentGroupTeams ?? [])
+      .map((entry) => entry.championship_club_team_id as string)
+      .filter((id) => !importedClubTeamIdSet.has(id))
+    if (staleClubTeamIds.length) {
+      const { error: deleteGroupTeamsError } = await context.admin
+        .from('championship_group_teams')
+        .delete()
+        .eq('championship_group_id', groupId)
+        .in('championship_club_team_id', staleClubTeamIds)
+      if (deleteGroupTeamsError) throw new Error('Impossibile aggiornare le squadre del girone')
     }
+    const { error: groupTeamsError } = await context.admin
+      .from('championship_group_teams')
+      .upsert(importedClubTeamIds.map((championship_club_team_id) => ({ championship_group_id: groupId, championship_club_team_id })), { onConflict: 'championship_group_id,championship_club_team_id' })
+    if (groupTeamsError) throw new Error('Impossibile associare le squadre al girone')
     return { ok: true }
   }
 

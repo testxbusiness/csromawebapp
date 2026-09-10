@@ -62,6 +62,7 @@ export default function ChampionshipsManager() {
     activity_id: '',
     start_date: '',
     end_date: '',
+    team_id: '',
     group_name: 'Girone A',
     create_group: true,
   })
@@ -101,6 +102,10 @@ export default function ChampionshipsManager() {
     loading: catalogLoading,
     reload: reloadChampionships,
   } = useChampionshipCatalog({ mode, coachTeamIds: effectiveCoachTeamIds, athleteTeamIds })
+  const assignedTeams = useMemo(
+    () => teams.filter((team) => coachTeamIds.has(team.id)),
+    [coachTeamIds, teams],
+  )
   const {
     matches,
     standings,
@@ -136,6 +141,21 @@ export default function ChampionshipsManager() {
       setCreateForm((prev) => ({ ...prev, season_id: seasons[0].id }))
     }
   }, [createForm.season_id, seasons])
+
+  useEffect(() => {
+    if (!showCreateModal) return
+    setCreateForm((previous) => {
+      const selectedTeamIsAssigned = Boolean(selectedTeamId && coachTeamIds.has(selectedTeamId))
+      const preferredTeamId = selectedTeamIsAssigned
+        ? selectedTeamId
+        : assignedTeams.length === 1
+          ? assignedTeams[0].id
+          : previous.team_id
+      return preferredTeamId === previous.team_id
+        ? previous
+        : { ...previous, team_id: preferredTeamId || '' }
+    })
+  }, [assignedTeams, coachTeamIds, selectedTeamId, showCreateModal])
 
   // Allinea importGroupId al girone selezionato di default
   useEffect(() => {
@@ -281,15 +301,19 @@ export default function ChampionshipsManager() {
       toast.error('Nome e stagione sono obbligatori')
       return
     }
+    if (createForm.create_group && !createForm.team_id) {
+      toast.error('Seleziona la squadra CSRoma del campionato')
+      return
+    }
 
     setSavingResult(true)
     try {
-      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_championship', ...createForm, team_id: selectedTeamId || null, activity_id: createForm.activity_id || null, start_date: createForm.start_date || null, end_date: createForm.end_date || null }) })
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_championship', ...createForm, team_id: createForm.team_id || null, activity_id: createForm.activity_id || null, start_date: createForm.start_date || null, end_date: createForm.end_date || null }) })
       if (!response.ok) throw new Error('Impossibile creare il campionato')
 
       toast.success('Campionato creato')
       setShowCreateModal(false)
-      setCreateForm((prev) => ({ ...prev, name: '', group_name: 'Girone A' }))
+      setCreateForm((prev) => ({ ...prev, name: '', team_id: selectedTeamId || '', group_name: 'Girone A' }))
       await reloadChampionships()
     } catch (err) {
       console.error('Errore creazione campionato', err)
@@ -1100,6 +1124,20 @@ export default function ChampionshipsManager() {
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </Select>
+              </div>
+              <div>
+                <label className="cs-label">Squadra CSRoma *</label>
+                <Select
+                  value={createForm.team_id}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, team_id: e.target.value }))}
+                  disabled={!createForm.create_group || assignedTeams.length === 0}
+                >
+                  <option value="">Seleziona una squadra</option>
+                  {assignedTeams.map((team) => (
+                    <option key={team.id} value={team.id}>{team.name}</option>
+                  ))}
+                </Select>
+                <p className="mt-1 text-xs text-secondary">La squadra selezionata è l’unica CSRoma aggiunta al primo girone.</p>
               </div>
               <div>
                 <label className="cs-label">Stato</label>

@@ -49,4 +49,16 @@ describe('POST /api/coach/championships/mutations', () => {
 
     expect(response.status).toBe(403)
   })
+
+  it('requires an explicit assigned team before creating the first group', async () => {
+    accountMock.mockResolvedValue({ ownerProfileId: 'coach-a', roles: ['coach'] } as Awaited<ReturnType<typeof requireAccountContext>>)
+    createClientMock.mockResolvedValue({} as Awaited<ReturnType<typeof createClient>>)
+    const from = jest.fn((table: string) => table === 'team_coaches' ? query([{ team_id: 'team-a' }, { team_id: 'team-b' }]) : query(null))
+    createAdminClientMock.mockReturnValue({ from } as unknown as ReturnType<typeof createAdminClient>)
+
+    const response = await POST({ json: async () => ({ action: 'create_championship', name: 'Amatoriale', create_group: true, group_name: 'Girone A' }) } as unknown as NextRequest)
+
+    expect(response.status).toBe(400)
+    expect(from).not.toHaveBeenCalledWith('championships')
+  })
 })

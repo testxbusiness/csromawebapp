@@ -4996,6 +4996,32 @@ La fase è superata solo se:
   La causa è riprodotta nel codice locale ed è coerente con il sintomo;
   resta la verifica autenticata dopo deploy. Correzione non ancora pubblicata.
 
+## Correzioni campionati e convocazioni — 10/09/2026
+
+- [x] Un coach con più squadre deve ora scegliere esplicitamente la squadra
+  CSRoma durante la creazione del primo girone. Il Route Handler rifiuta inoltre
+  qualsiasi richiesta senza squadra o con squadra non assegnata, così non può più
+  associare arbitrariamente la prima riga di `team_coaches`.
+- [x] L'importazione del calendario ricostruisce le associazioni
+  girone-squadra dalle squadre che compaiono effettivamente nelle partite e
+  rimuove quelle obsolete; verifica anche che tutte appartengano al campionato.
+  Questo impedisce che un atleta U14 ottenga accesso a un campionato Amatoriale
+  soltanto per un'associazione residua.
+- [x] L'area atleta usa ora il nome già incluso nella partita per avversari e
+  modali, senza mostrare UUID in caso l'avversario non faccia parte del catalogo
+  autorizzato dell'atleta. Lo stato convocazione confronta il profilo personale
+  dell'account quando non è attivo un subject delegato.
+- [x] File principali: `src/app/api/coach/championships/mutations/route.ts`,
+  `src/components/coach/ChampionshipsManager.tsx`,
+  `src/components/athlete/ChampionshipsManager.tsx`,
+  `src/components/championship/types.ts` e test correlati.
+- [x] Verifiche: `npx tsc --noEmit`; Jest mirato (4 suite, 14 test);
+  `npm run build`; `git diff --check`.
+- [-] Il database locale non contiene gli account/campionati `testxbusiness`
+  della Preview. Dopo il deploy, rieseguire una volta l'import del calendario
+  Amatoriale: l'import aggiornato rimuoverà dal relativo girone l'associazione
+  U14 già errata. Verificare poi la Preview autenticata come atleta U14.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

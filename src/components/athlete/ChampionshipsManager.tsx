@@ -20,6 +20,7 @@ import {
   type Convocation,
   type ConvocationMember,
   type GroupTeam,
+  isProfileConvoked,
   type ManagerMode,
   type Match,
   type Season,
@@ -238,8 +239,8 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     return clubTeamId
   }
 
-  const clubTeamPlainName = (clubTeamId: string) => {
-    return clubTeamName(clubTeamId).replace(/\s*\([^)]*\)\s*$/, '')
+  const clubTeamPlainName = (clubTeamId: string, clubTeam?: ClubTeam | null) => {
+    return (clubTeam?.name || clubTeamName(clubTeamId)).replace(/\s*\([^)]*\)\s*$/, '')
   }
 
   const openResultEditor = (match: Match) => {
@@ -517,14 +518,12 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const nextMatchOpponentId = nextMatch && nextMatchClubTeam
     ? nextMatchClubTeam.id === nextMatch.home_club_team_id ? nextMatch.away_club_team_id : nextMatch.home_club_team_id
     : null
+  const athleteProfileId = selectedProfileId || account?.ownerProfileId || null
   const nextMatchConvocationStatus = mode !== 'athlete'
     ? undefined
     : !nextMatchConvocation
       ? 'Convocazione non pubblicata'
-      : nextMatchConvocation.championship_match_convocation_members?.some((member) => {
-        const subjectId = selectedProfileId
-        return Boolean(subjectId && (member.profile_id === subjectId || member.team_members?.profile_id === subjectId))
-      })
+      : isProfileConvoked(nextMatchConvocation, athleteProfileId)
         ? 'Sei convocato'
         : 'Non convocato'
 
@@ -747,10 +746,13 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
           empty={!nextMatch}
           matchDateLabel={nextMatch ? `${nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Data da definire'}${nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0, 5)}` : ''}` : ''}
           roundLabel={nextMatch?.match_day ? `Giornata ${nextMatch.match_day}` : 'Turno da definire'}
-          matchupLabel={nextMatch ? `${clubTeamPlainName(nextMatch.home_club_team_id)} vs ${clubTeamPlainName(nextMatch.away_club_team_id)}` : ''}
+          matchupLabel={nextMatch ? `${clubTeamPlainName(nextMatch.home_club_team_id, nextMatch.home_club_team)} vs ${clubTeamPlainName(nextMatch.away_club_team_id, nextMatch.away_club_team)}` : ''}
           locationLabel={nextMatch?.location_text || 'Luogo da definire'}
           sideLabel={nextMatchSide}
-          opponentLabel={nextMatchOpponentId ? clubTeamPlainName(nextMatchOpponentId) : undefined}
+          opponentLabel={nextMatchOpponentId ? clubTeamPlainName(
+            nextMatchOpponentId,
+            nextMatchClubTeam?.id === nextMatch?.home_club_team_id ? nextMatch?.away_club_team : nextMatch?.home_club_team,
+          ) : undefined}
           convocationStatusLabel={nextMatchConvocationStatus}
           meetingLabel="Ritrovo non indicato"
           onOpenConvocations={() => nextMatch && openConvocationModal(nextMatch)}
@@ -787,7 +789,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
           }
         }}
         title="Modifica risultato"
-        description={resultEditingMatch ? `${clubTeamName(resultEditingMatch.home_club_team_id)} vs ${clubTeamName(resultEditingMatch.away_club_team_id)}` : ''}
+        description={resultEditingMatch ? `${clubTeamPlainName(resultEditingMatch.home_club_team_id, resultEditingMatch.home_club_team)} vs ${clubTeamPlainName(resultEditingMatch.away_club_team_id, resultEditingMatch.away_club_team)}` : ''}
       >
         <div className="space-y-3">
           <p className="text-sm text-slate-500">Inserisci i set separati da virgola (es: 25-20, 25-21, 28-26)</p>
@@ -824,7 +826,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
           }
         }}
         title="Convocazioni"
-        description={convocationMatch ? `${clubTeamPlainName(convocationMatch.home_club_team_id)} vs ${clubTeamPlainName(convocationMatch.away_club_team_id)}` : ''}
+        description={convocationMatch ? `${clubTeamPlainName(convocationMatch.home_club_team_id, convocationMatch.home_club_team)} vs ${clubTeamPlainName(convocationMatch.away_club_team_id, convocationMatch.away_club_team)}` : ''}
       >
         {!convocationMatch && <div className="text-sm text-slate-500">Seleziona una partita</div>}
         {convocationMatch && (

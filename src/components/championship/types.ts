@@ -83,6 +83,16 @@ export type Convocation = {
   championship_club_teams?: ClubTeam
 }
 
+export function isProfileConvoked(
+  convocation: Convocation | null,
+  profileId: string | null | undefined,
+): boolean {
+  if (!convocation || !profileId) return false
+  return Boolean(convocation.championship_match_convocation_members?.some((member) =>
+    member.profile_id === profileId || member.team_members?.profile_id === profileId,
+  ))
+}
+
 export type TeamMember = {
   id: string
   profile_id: string
