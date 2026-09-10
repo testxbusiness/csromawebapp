@@ -216,7 +216,7 @@ export default function TeamModal({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       {/* centrato, coerente con il DS */}
-      <DialogContent className="cs-modal--centered cs-modal--md">
+      <DialogContent className="cs-modal--centered cs-modal--md cs-modal--form">
         <DialogHeader>
           <DialogTitle>{team ? 'Modifica Squadra' : 'Nuova Squadra'}</DialogTitle>
           <DialogDescription className="sr-only">Inserisci o modifica i dati della squadra.</DialogDescription>

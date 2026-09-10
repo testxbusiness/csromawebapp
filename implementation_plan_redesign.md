@@ -5448,6 +5448,10 @@ con `E2E_BASE_URL=http://localhost:3001`, ma il runtime Chromium termina con
 gate precedenti; la verifica reale a 320/375/768/1440 resta quindi da
 ripetere su un host/browser funzionante nel gate integrato R10.
 
+Remediation post-preview: il modal squadra usa una variante viewport-safe con
+header fisso e corpo del form scrollabile, così anche RSVP e azioni finali
+restano raggiungibili su form lunghi desktop e mobile.
+
 ### R4 — Resolver unico del prossimo RSVP e API di lettura
 
 **Obiettivo:** decidere lato server quali azioni sono disponibili per il subject.

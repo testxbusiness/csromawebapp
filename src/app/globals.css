@@ -1120,6 +1120,43 @@ button.cs-list-row{ font:inherit; }
   }
 }
 
+/* Long admin forms stay fully inside the viewport. The header remains visible
+   while the form body, including its footer actions, scrolls independently. */
+.cs-modal--centered.cs-modal--form {
+  top: 1rem;
+  bottom: 1rem;
+  height: calc(100dvh - 2rem);
+  max-height: none;
+  translate: -50% 0;
+  transform: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.cs-modal--form > .cs-modal__header,
+.cs-modal--form > [data-radix-dialog-title] {
+  flex: 0 0 auto;
+}
+.cs-modal--form > form {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 640px){
+  .cs-modal--centered.cs-modal--form {
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+    height: calc(100dvh - 24px);
+    translate: none;
+  }
+}
+
 /* === Navbar container missing === */
 .cs-container { width:100%; max-width:1200px; margin:0 auto; padding-inline:16px; }
 .cs-navbar__inner{
