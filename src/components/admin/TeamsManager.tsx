@@ -13,6 +13,7 @@ interface Team {
   code: string
   activity_id: string
   coach_id?: string
+  training_rsvp_enabled?: boolean
   created_at?: string
   updated_at?: string
   activities?: {
@@ -63,7 +64,7 @@ export default function TeamsManager({ embedded = false }: { embedded?: boolean 
   const loadTeams = useCallback(async () => {
     const { data: teamsData } = await supabase
       .from('teams')
-      .select('id, name, code, activity_id, created_at, updated_at')
+      .select('id, name, code, activity_id, training_rsvp_enabled, created_at, updated_at')
       .order('created_at', { ascending: false })
 
     if (!teamsData || teamsData.length === 0) {
@@ -197,7 +198,7 @@ export default function TeamsManager({ embedded = false }: { embedded?: boolean 
     return `${teamInitials}${activityInitial}${randomNum}`
   }
 
-  const handleCreateTeam = async (teamData: Omit<Team, 'id'>) => {
+  const handleCreateTeam = async (teamData: Omit<Team, 'id'>): Promise<string> => {
     const { coach_id, ...teamPayload } = teamData
 
     const { data, error } = await supabase
@@ -207,47 +208,51 @@ export default function TeamsManager({ embedded = false }: { embedded?: boolean 
       .single()
 
     if (error || !data) {
-      return
+      throw new Error(error?.message ?? 'Errore creazione squadra')
     }
 
     if (coach_id) {
-      await supabase.from('team_coaches').insert({
+      const { error: coachError } = await supabase.from('team_coaches').insert({
         team_id: data.id,
         coach_id,
         role: 'head_coach',
         assigned_at: new Date().toISOString().slice(0, 10)
       })
+      if (coachError) {
+        await supabase.from('teams').delete().eq('id', data.id)
+        throw new Error('Creazione annullata: assegnazione allenatore non riuscita')
+      }
     }
 
-    setShowModal(false)
-    setEditingTeam(null)
-    loadTeams()
+    await loadTeams()
+    return data.id
   }
 
-  const handleUpdateTeam = async (id: string, teamData: Partial<Team>) => {
+  const handleUpdateTeam = async (id: string, teamData: Partial<Team>): Promise<void> => {
     const { coach_id, ...teamPayload } = teamData
 
     if (Object.keys(teamPayload).length > 0) {
-      await supabase
+      const { error } = await supabase
         .from('teams')
         .update(teamPayload)
         .eq('id', id)
+      if (error) throw new Error('Aggiornamento squadra non riuscito')
     }
 
-    await supabase.from('team_coaches').delete().eq('team_id', id)
+    const { error: deleteCoachError } = await supabase.from('team_coaches').delete().eq('team_id', id)
+    if (deleteCoachError) throw new Error('Aggiornamento allenatore non riuscito')
 
     if (coach_id) {
-      await supabase.from('team_coaches').insert({
+      const { error: coachError } = await supabase.from('team_coaches').insert({
         team_id: id,
         coach_id,
         role: 'head_coach',
         assigned_at: new Date().toISOString().slice(0, 10)
       })
+      if (coachError) throw new Error('Aggiornamento allenatore non riuscito')
     }
 
-    setShowModal(false)
-    setEditingTeam(null)
-    loadTeams()
+    await loadTeams()
   }
 
   const handleDeleteTeam = async (id: string) => {

@@ -27,6 +27,7 @@ type ExistingEvent = {
   event_kind: string | null
   event_type: string | null
   kind: string | null
+  requires_confirmation: boolean
 }
 
 export type TrainingReconciliationReport = {
@@ -41,7 +42,7 @@ export type TrainingReconciliationReport = {
   warnings: Array<{ code: string; message: string; eventIds?: string[] }>
 }
 
-const EVENT_FIELDS = 'id,generated_from_schedule_id,generated_occurrence_date,generated_schedule_exception,start_date,end_date,start_time,end_time,title,name,description,location,gym_id,activity_id,event_kind,event_type,kind'
+const EVENT_FIELDS = 'id,generated_from_schedule_id,generated_occurrence_date,generated_schedule_exception,start_date,end_date,start_time,end_time,title,name,description,location,gym_id,activity_id,event_kind,event_type,kind,requires_confirmation'
 
 function emptyReport(): TrainingReconciliationReport {
   return {
@@ -78,6 +79,7 @@ function isSameEvent(event: ExistingEvent, desired: Record<string, unknown>) {
     && (event.title ?? event.name) === desired.title
     && event.description === desired.description && event.location === desired.location
     && event.gym_id === desired.gym_id && event.activity_id === desired.activity_id
+    && event.requires_confirmation === desired.requires_confirmation
 }
 
 export async function reconcileTrainingSchedules(

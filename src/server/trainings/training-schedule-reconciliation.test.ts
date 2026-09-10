@@ -123,4 +123,22 @@ describe('training schedule reconciliation', () => {
     expect(fake.state.team_training_schedules[0].is_active).toBe(false)
     expect(fake.state.events).toHaveLength(0)
   })
+
+  it('sets RSVP generation from the team preference without duplicating occurrences', async () => {
+    const fake = fakeAdmin(baseState())
+    const secondSchedule = { ...schedule, id: 'schedule-2', day_of_week: 3 }
+    fake.state.team_training_schedules.push(secondSchedule)
+    const first = await reconcileTrainingSchedules(fake.client, 'team-1', [schedule, secondSchedule], 'admin-1', new Date('2026-09-07T10:00:00.000Z'))
+
+    expect(first.success).toBe(true)
+    expect(fake.state.events).toHaveLength(8)
+    expect(fake.state.events.every((event) => event.requires_confirmation === true)).toBe(true)
+
+    fake.state.teams[0].training_rsvp_enabled = false
+    const second = await reconcileTrainingSchedules(fake.client, 'team-1', [schedule, secondSchedule], 'admin-1', new Date('2026-09-07T10:00:00.000Z'))
+
+    expect(second.success).toBe(true)
+    expect(fake.state.events).toHaveLength(8)
+    expect(fake.state.events.every((event) => event.requires_confirmation === false)).toBe(true)
+  })
 })

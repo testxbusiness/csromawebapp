@@ -5187,7 +5187,7 @@ default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
 |---|---|---|---|
 | R1 | Modello dati e contratti condivisi | Nessuno | [x] |
 | R2 | Generazione e riconciliazione sicure | R1 | [x] |
-| R3 | Opzione RSVP nel form squadra | R2 | [ ] |
+| R3 | Opzione RSVP nel form squadra | R2 | [x] |
 | R4 | Resolver del prossimo RSVP e API di lettura | R1 | [ ] |
 | R5 | Mutation RSVP e protezioni database | R4 | [ ] |
 | R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [ ] |
@@ -5414,6 +5414,39 @@ RSVP; con opzione disattiva no; riapertura conserva la scelta; zero duplicati.
 
 **Verifiche:** test flusso creazione/modifica e fallimento generazione; prova
 UI mobile/desktop, tastiera e loading; controlli tecnici comuni.
+
+#### Registro R3 — chiusura 10/09/2026
+
+Completato. `TeamModal` mostra la preferenza «Richiedi conferma presenza agli
+allenamenti» accanto agli orari, con descrizione del prossimo RSVP e delle
+assenze anticipate; la preferenza viene inizializzata dalla squadra e resta
+disattivata per le nuove squadre. Gli orari inattivi non vengono riproposti
+nel form dopo una rimozione completa.
+
+Il contratto `onCreate` ora crea la squadra soltanto in `TeamsManager`,
+restituisce l'ID appena persistito e conserva l'assegnazione coach. In caso di
+errore nell'assegnazione il manager annulla la creazione. Dopo una creazione
+riuscita, un errore della riconciliazione mantiene l'ID nel modal: il retry usa
+`onUpdate` e non ricrea la squadra. Il form resta aperto su errori R2 e mostra
+conteggi e avvisi per i casi di successo parziale; la rimozione di tutti gli
+orari passa comunque dalla riconciliazione.
+
+La riconciliazione confronta anche `requires_confirmation`, quindi la modifica
+della preferenza aggiorna le occorrenze future senza duplicare gli eventi o
+alterare quelle protette da risposte/eccezioni manuali.
+
+File principali: `src/components/admin/TeamModal.tsx`,
+`src/components/admin/TeamsManager.tsx`,
+`src/server/trainings/training-schedule-reconciliation.ts`,
+`src/components/admin/TeamModal.test.tsx` e il test R2 della riconciliazione.
+
+Verifiche eseguite: test UI R3 3/3, test mirati R2/route 8/8, suite Jest
+completa 68 suite/247 test, `npx tsc --noEmit`, `npm run build` (73 pagine) e
+`git diff --check` superati. La smoke E2E autenticata admin è stata tentata
+con `E2E_BASE_URL=http://localhost:3001`, ma il runtime Chromium termina con
+`SIGTRAP` durante `chromium.launch` (prima dei test), come già osservato nei
+gate precedenti; la verifica reale a 320/375/768/1440 resta quindi da
+ripetere su un host/browser funzionante nel gate integrato R10.
 
 ### R4 — Resolver unico del prossimo RSVP e API di lettura
 
