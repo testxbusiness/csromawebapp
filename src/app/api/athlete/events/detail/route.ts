@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
+import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     const { data: ev } = await dataClient
       .from('events')
-      .select('*')
+      .select('*, generated_from_schedule_id')
       .eq('id', id)
       .maybeSingle()
     if (!ev) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -59,10 +60,17 @@ export async function GET(request: NextRequest) {
     // Current user's attendance (if any)
     const { data: myAtt } = await dataClient
       .from('event_attendances')
-      .select('status, responded_at')
+      .select('status, responded_at, is_early_absence')
       .eq('event_id', id)
       .eq('profile_id', athleteProfileId)
       .maybeSingle()
+
+    const attendanceAvailability = await resolveAttendanceAvailability(
+      dataClient,
+      athleteProfileId,
+      subject.permissions,
+      [id],
+    )
 
     return NextResponse.json({
       id: ev.id,
@@ -75,6 +83,7 @@ export async function GET(request: NextRequest) {
       requires_confirmation: ev.requires_confirmation,
       confirmation_deadline: ev.confirmation_deadline,
       my_attendance: myAtt || null,
+      attendance_availability: attendanceAvailability.availabilityByEventId.get(id) ?? null,
       gym,
       teams,
       creator,

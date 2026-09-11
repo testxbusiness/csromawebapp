@@ -5188,7 +5188,7 @@ default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
 | R1 | Modello dati e contratti condivisi | Nessuno | [x] |
 | R2 | Generazione e riconciliazione sicure | R1 | [x] |
 | R3 | Opzione RSVP nel form squadra | R2 | [x] |
-| R4 | Resolver del prossimo RSVP e API di lettura | R1 | [ ] |
+| R4 | Resolver del prossimo RSVP e API di lettura | R1 | [x] |
 | R5 | Mutation RSVP e protezioni database | R4 | [ ] |
 | R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [ ] |
 | R7 | API assenze anticipate singole/multiple e revoca | R5 | [ ] |
@@ -5482,6 +5482,28 @@ direttamente martedì o cambiando mese/filtro. Famiglia senza permesso non agisc
 
 **Verifiche:** test con clock controllato, multi-team, evento condiviso,
 parità di orario, deadline anticipata, già risposto, lista troncata e deleghe.
+
+**Completato il 11/09/2026.** Aggiunto `src/server/events/attendance-availability.ts`
+con caricamento server-side delle squadre/eventi autorizzati, selezione globale
+del prossimo evento automatico RSVP (ordinamento per istante e ID), contratto
+`AttendanceAvailabilityContract` per evento, deadline/risposta/assenza anticipata,
+revoca verificata e ricalcolo temporale. Il resolver considera tutte le squadre
+autorizzate anche quando la dashboard è troncata o il calendario è filtrato;
+limita i `team_ids` alle relazioni autorizzate e lascia gli eventi manuali sul
+percorso legacy.
+
+Integrato in `src/app/api/athlete/dashboard/route.ts`,
+`src/app/api/athlete/calendar/route.ts` e
+`src/app/api/athlete/events/detail/route.ts`. La dashboard reinserisce il
+prossimo evento automatico se escluso dal limite locale; `view_schedule` resta
+distinto da `confirm_attendance`, anche per i profili familiari delegati.
+
+File principali modificati: resolver R4, test del resolver e le tre Route Handler
+atleta. Nessuna migrazione o modifica schema aggiuntiva; R5 resta responsabile
+delle mutation e delle protezioni di scrittura.
+
+Verifiche eseguite: test mirati R4 5/5, suite Jest completa 69 suite/252 test,
+`npx tsc --noEmit`, ESLint sui file modificati, `npm run build` e `git diff --check`.
 
 ### R5 — Salvataggio RSVP e protezioni dei percorsi diretti
 

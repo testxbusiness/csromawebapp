@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { buildCalendarEvents } from '@/lib/athlete/calendar-contract'
+import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 import type { AthleteCalendarTeam } from '@/types/athlete-calendar'
 import type { AttendanceStatus } from '@/types/attendance'
 
@@ -18,6 +19,7 @@ type CalendarEventRow = {
   event_kind: string | null
   requires_confirmation: boolean | null
   confirmation_deadline: string | null
+  generated_from_schedule_id: string | null
 }
 type AttendanceRow = {
   event_id: string
@@ -118,7 +120,7 @@ export async function GET(request: NextRequest) {
         const batch = eventIds.slice(i, i + 100)
         const { data: events, error: eventsError } = await dataClient
           .from('events')
-          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, confirmation_deadline')
+          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
           .in('id', batch)
 
         if (eventsError) {
@@ -130,7 +132,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events, error: evErr } = await dataClient
         .from('events')
-        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, confirmation_deadline')
+        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
         .in('id', eventIds)
         .order('start_date', { ascending: true })
 
@@ -170,11 +172,20 @@ export async function GET(request: NextRequest) {
     const attendance = new Map<string, AttendanceRow>(
       ((attendanceRows || []) as AttendanceRow[]).map((row) => [row.event_id, row]),
     )
+    const attendanceAvailability = await resolveAttendanceAvailability(
+      dataClient,
+      athleteProfileId,
+      subject.permissions,
+      eventIds,
+    )
     const transformedEvents = buildCalendarEvents(
       allEvents,
       teamsByEventId,
       attendance,
-    )
+    ).map((event) => ({
+      ...event,
+      attendance_availability: attendanceAvailability.availabilityByEventId.get(event.id) ?? null,
+    }))
 
     return NextResponse.json({
       events: transformedEvents,

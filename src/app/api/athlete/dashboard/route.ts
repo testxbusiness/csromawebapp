@@ -3,6 +3,7 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { buildUnreadMessages, resolveMatchPerspective } from '@/lib/athlete/dashboard-contract'
+import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
     const dataClient = subject.dataClient
     const canViewMessages = subject.permissions.receive_messages
     const canViewPayments = subject.permissions.view_payments
+    const canViewSchedule = subject.permissions.view_schedule
     if (!athleteProfileId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -148,12 +150,14 @@ export async function GET(request: NextRequest) {
         .select('id, name, code, activity_id')
         .in('id', teamIds),
 
-      dataClient
-        .from('event_teams')
-        .select('event_id, team_id, created_at')
-        .in('team_id', teamIds)
-        .order('created_at', { ascending: false })
-        .limit(500),
+      canViewSchedule
+        ? dataClient
+            .from('event_teams')
+            .select('event_id, team_id, created_at')
+            .in('team_id', teamIds)
+            .order('created_at', { ascending: false })
+            .limit(500)
+        : Promise.resolve({ data: [], error: null }),
 
       feeInstallments && feeInstallments.length > 0
         ? dataClient
@@ -179,7 +183,7 @@ export async function GET(request: NextRequest) {
           const batch = eventIds.slice(i, i + 100)
         const { data: events } = await dataClient
           .from('events')
-          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
+          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
           .in('id', batch)
           .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
           .order('start_date', { ascending: true })
@@ -189,7 +193,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events } = await dataClient
         .from('events')
-        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
+        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
         .in('id', eventIds)
         .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
         .order('start_date', { ascending: true })
@@ -221,6 +225,26 @@ export async function GET(request: NextRequest) {
         : Promise.resolve({ data: [] }),
     ])
 
+    const attendanceAvailability = canViewSchedule
+      ? await resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds)
+      : null
+    if (attendanceAvailability?.nextEvent && !allEvents.some((event) => event.id === attendanceAvailability.nextEvent?.id)) {
+      const nextEvent = attendanceAvailability.nextEvent
+      allEvents.push({
+        id: nextEvent.id,
+        title: nextEvent.title || 'Allenamento',
+        start_time: nextEvent.start_time,
+        end_time: nextEvent.end_time,
+        location: nextEvent.location || null,
+        gym_id: null,
+        description: nextEvent.description || null,
+        event_kind: nextEvent.event_kind || 'training',
+        requires_confirmation: nextEvent.requires_confirmation,
+        confirmation_deadline: nextEvent.confirmation_deadline || null,
+        generated_from_schedule_id: nextEvent.generated_from_schedule_id || null,
+      })
+    }
+
     let nextChampionshipMatch = null
     const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
     if (clubTeamIds.length > 0) {
@@ -248,6 +272,11 @@ export async function GET(request: NextRequest) {
     const membershipFeesMap = new Map((membershipFees || []).map(f => [f.id, f]))
     const gymsMap = new Map((gyms || []).map((gym) => [gym.id, gym]))
     const attendanceMap = new Map((attendanceRows || []).map((attendance) => [attendance.event_id, attendance]))
+    if (attendanceAvailability) {
+      for (const [eventId, response] of attendanceAvailability.attendanceByEventId) {
+        if (!attendanceMap.has(eventId)) attendanceMap.set(eventId, response)
+      }
+    }
     const dashboardTeams = (teams || []).map((team) => ({
       id: team.id,
       name: team.name,
@@ -266,6 +295,12 @@ export async function GET(request: NextRequest) {
       if (!eventTeams.some((item) => item.id === team.id)) eventTeams.push(team)
       teamsByEventId.set(link.event_id, eventTeams)
     }
+    if (attendanceAvailability?.nextEvent) {
+      const nextTeams = attendanceAvailability.nextEvent.team_ids
+        .map((teamId) => dashboardTeamsMap.get(teamId))
+        .filter((team): team is (typeof dashboardTeams)[number] => Boolean(team))
+      teamsByEventId.set(attendanceAvailability.nextEvent.id, nextTeams)
+    }
 
     const enrichedEvents = allEvents.map((event) => {
       const gym = event.gym_id ? gymsMap.get(event.gym_id) : null
@@ -277,6 +312,7 @@ export async function GET(request: NextRequest) {
         requires_confirmation: Boolean(event.requires_confirmation),
         confirmation_deadline: event.confirmation_deadline || null,
         my_attendance: attendanceMap.get(event.id) || null,
+        attendance_availability: attendanceAvailability?.availabilityByEventId.get(event.id) ?? null,
         teams: teamsByEventId.get(event.id) || [],
         team_ids: (teamsByEventId.get(event.id) || []).map((team) => team.id),
       }
@@ -378,6 +414,9 @@ export async function GET(request: NextRequest) {
       feeInstallments: enrichedFees,
       activeSeason: seasons,
       teams: dashboardTeams,
+      attendance_availability: attendanceAvailability
+        ? attendanceAvailability.availabilityByEventId.get(attendanceAvailability.nextEvent?.id || '') ?? null
+        : null,
     })
 
   } catch (error) {
