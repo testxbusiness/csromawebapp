@@ -5535,6 +5535,31 @@ eventi scaduti del nuovo flusso neppure chiamando direttamente API/Data API.
 autorizzato/non autorizzato, altro atleta, coach/admin; nessun test con service
 role spacciato per verifica RLS; confronto deadline al momento della scrittura.
 
+**Completato il 13/09/2026.** La route usa `resolveAttendanceAvailability` di R4
+per ogni risposta, inclusi ordine globale multi-squadra, evento iniziato,
+deadline assente o superata, risposta già registrata e delega autorizzata.
+La scrittura usa il RPC `public.record_athlete_attendance`, esplicitamente
+service-only, dopo la risoluzione dell'account/subject: il client autenticato
+(`subject.dataClient`) resta il client di lettura/autorizzazione, mentre il
+client privilegiato è usato solo per la mutation protetta. Il RPC rifà in una
+singola transazione il controllo membership, stato, ordine e tempo con
+`clock_timestamp()`, preserva `profile_id`, `responded_by_auth_user_id`,
+`response_source` e `responded_at`, e mantiene gli eventi manuali compatibili.
+
+Aggiunta migrazione `20260913120000_r5_protect_automatic_attendance_writes.sql`:
+trigger DB per bloccare alle Data API INSERT/UPDATE/DELETE su occorrenze
+automatiche non più eleggibili, policy personali che impediscono di falsificare
+l'attore e revoca delle execute del RPC a `public`, `anon` e `authenticated`.
+Coach/admin restano sul percorso autorizzato esistente; eventi manuali non sono
+vincolati dal guard automatico. Gli errori SQL non vengono restituiti al client,
+ma convertiti in errori di dominio.
+
+Test eseguiti: Route Handler + resolver R4 8/8, `npx tsc --noEmit` e
+`git diff --check`. Prove DB con ruoli reali non eseguibili in questa sessione:
+Postgres locale non risponde su `127.0.0.1:54322` e `supabase status` fallisce
+prima del controllo per un errore EPERM sul telemetry file del CLI; da ripetere
+su staging/host con DB attivo, senza service role come evidenza RLS.
+
 ### R6 — UI con un solo RSVP completo e aggiornamento temporale
 
 **Obiettivo:** allineare dashboard, calendario e dettaglio senza filtri locali
