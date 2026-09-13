@@ -9,6 +9,7 @@ export interface AthleteCalendarTeam {
 export interface AthleteCalendarAttendance {
   status: AttendanceStatus
   responded_at: string | null
+  is_early_absence?: boolean
 }
 
 export interface AthleteCalendarEvent {

@@ -67,11 +67,15 @@ export default function AthleteAgenda({
   events,
   canRespond,
   onAttendanceChange,
+  onEarlyAbsence,
+  onRevokeEarlyAbsence,
   onEventClick,
 }: {
   events: AgendaEvent[]
   canRespond: boolean
   onAttendanceChange: (eventId: string, status: AttendanceStatus) => Promise<void>
+  onEarlyAbsence?: (eventId: string, note: string) => Promise<void>
+  onRevokeEarlyAbsence?: (eventId: string) => Promise<void>
   onEventClick: (id: string) => void
 }) {
   const days = groupEventsByDay(events)
@@ -95,6 +99,8 @@ export default function AthleteAgenda({
                 defaultExpanded={event.id === firstEventId && index === 0}
                 canRespond={canRespond}
                 onAttendanceChange={onAttendanceChange}
+                onEarlyAbsence={onEarlyAbsence}
+                onRevokeEarlyAbsence={onRevokeEarlyAbsence}
                 onEventClick={onEventClick}
               />
             ))}
@@ -115,12 +121,16 @@ function AgendaRow({
   defaultExpanded,
   canRespond,
   onAttendanceChange,
+  onEarlyAbsence,
+  onRevokeEarlyAbsence,
   onEventClick,
 }: {
   event: AgendaEvent
   defaultExpanded: boolean
   canRespond: boolean
   onAttendanceChange: (eventId: string, status: AttendanceStatus) => Promise<void>
+  onEarlyAbsence?: (eventId: string, note: string) => Promise<void>
+  onRevokeEarlyAbsence?: (eventId: string) => Promise<void>
   onEventClick: (id: string) => void
 }) {
   return (
@@ -154,6 +164,10 @@ function AgendaRow({
             canRespond={canRespond}
             onChange={(status) => onAttendanceChange(event.id, status)}
             availability={event.attendance_availability}
+            eventContext={{ teams: event.teams, start: event.start_time, end: event.end_time }}
+            initialEarlyAbsence={event.my_attendance?.is_early_absence === true}
+            onEarlyAbsence={onEarlyAbsence ? (note) => onEarlyAbsence(event.id, note) : undefined}
+            onRevokeEarlyAbsence={onRevokeEarlyAbsence ? () => onRevokeEarlyAbsence(event.id) : undefined}
         />
         <button
           type="button"

@@ -149,4 +149,82 @@ describe('AttendanceControl', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/risposta precedente è stata ripristinata/i))
     expect(screen.queryByText('Risposta salvata')).toBeNull()
   })
+
+  it('shows the event summary and submits an optional early-absence note once', async () => {
+    const user = userEvent.setup()
+    const onEarlyAbsence = jest.fn().mockResolvedValue(undefined)
+    render(<AttendanceControl requiresConfirmation canRespond availability={{ requires_confirmation: true, can_respond_now: false, can_report_early_absence: true, can_revoke_early_absence: false, actions: { respond: false, report_early_absence: true, revoke_early_absence: false }, closure_reason: 'not_next_event', next_event: null, next_recalculation_at: null }} eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z', end: '2026-09-15T18:30:00Z' }} onChange={jest.fn()} onEarlyAbsence={onEarlyAbsence} />)
+    await user.click(screen.getByRole('button', { name: 'Segnala assenza' }))
+    expect(screen.getByText(/U16/)).toBeTruthy()
+    await user.type(screen.getByLabelText(/nota/i), 'Visita medica')
+    await user.click(screen.getByRole('button', { name: 'Conferma assenza' }))
+    await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith('Visita medica'))
+    expect(screen.getByText(/hai già comunicato/i)).toBeTruthy()
+  })
+
+  it('revokes early absence and returns to the neutral response state', async () => {
+    const onRevoke = jest.fn().mockResolvedValue(undefined)
+    render(<AttendanceControl requiresConfirmation canRespond availability={{ requires_confirmation: true, can_respond_now: false, can_report_early_absence: true, can_revoke_early_absence: true, actions: { respond: false, report_early_absence: true, revoke_early_absence: true }, closure_reason: 'already_early_absence', next_event: null, next_recalculation_at: null }} initialStatus="declined" initialEarlyAbsence eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z', end: '2026-09-15T18:30:00Z' }} onChange={jest.fn()} onRevokeEarlyAbsence={onRevoke} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Revoca assenza' }))
+    await waitFor(() => expect(onRevoke).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('Da confermare')).toBeTruthy()
+  })
+
+  it('does not expose early-absence actions after the deadline', () => {
+    render(
+      <AttendanceControl
+        requiresConfirmation
+        canRespond
+        confirmationDeadline="2026-08-27T12:00:00Z"
+        availability={{
+          requires_confirmation: true,
+          can_respond_now: false,
+          can_report_early_absence: true,
+          can_revoke_early_absence: true,
+          actions: { respond: false, report_early_absence: true, revoke_early_absence: true },
+          closure_reason: 'already_early_absence',
+          next_event: null,
+          next_recalculation_at: null,
+        }}
+        initialEarlyAbsence
+        eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z' }}
+        onChange={jest.fn()}
+        onRevokeEarlyAbsence={jest.fn()}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Revoca assenza' })).toBeNull()
+    expect(screen.getByText(/deadline superata/i)).toBeTruthy()
+  })
+
+  it('prevents a second early-absence submission while the first is pending', async () => {
+    const user = userEvent.setup()
+    let resolveReport: (() => void) | undefined
+    const onEarlyAbsence = jest.fn(() => new Promise<void>((resolve) => { resolveReport = resolve }))
+    render(
+      <AttendanceControl
+        requiresConfirmation
+        canRespond
+        availability={{
+          requires_confirmation: true,
+          can_respond_now: false,
+          can_report_early_absence: true,
+          can_revoke_early_absence: false,
+          actions: { respond: false, report_early_absence: true, revoke_early_absence: false },
+          closure_reason: 'not_next_event',
+          next_event: null,
+          next_recalculation_at: null,
+        }}
+        eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z' }}
+        onChange={jest.fn()}
+        onEarlyAbsence={onEarlyAbsence}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Segnala assenza' }))
+    const submit = screen.getByRole('button', { name: 'Conferma assenza' })
+    await user.click(submit)
+    await user.click(submit)
+    expect(onEarlyAbsence).toHaveBeenCalledTimes(1)
+    resolveReport?.()
+  })
 })

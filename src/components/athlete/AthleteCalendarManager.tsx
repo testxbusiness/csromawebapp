@@ -219,6 +219,42 @@ export default function AthleteCalendarManager() {
     }
   }, [loadData, selectedProfileId])
 
+  const mutateEarlyAbsence = useCallback(async (eventId: string, revoke = false, note?: string) => {
+    if (!navigator.onLine) throw new Error('Sei offline: l’assenza non può essere salvata')
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/early-absence', selectedProfileId), {
+      method: revoke ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_ids: [eventId], ...(revoke ? {} : { note }) }),
+    })
+    const result = await response.json().catch(() => null) as { error?: string } | null
+    if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
+    if (subjectContextRef.current !== selectedProfileId) return
+    setEvents((currentEvents) => currentEvents.map((event) => {
+      if (event.id !== eventId) return event
+      const currentAvailability = event.attendance_availability
+      if (!currentAvailability) return event
+      const isNext = currentAvailability.next_event?.id === eventId
+      return {
+        ...event,
+        my_attendance: revoke
+          ? null
+          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+        attendance_availability: {
+          ...currentAvailability,
+          can_respond_now: revoke ? isNext : false,
+          can_report_early_absence: !revoke,
+          can_revoke_early_absence: revoke,
+          actions: {
+            respond: revoke ? isNext : false,
+            report_early_absence: !revoke,
+            revoke_early_absence: revoke,
+          },
+          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
+        },
+      }
+    }))
+    void loadData()
+  }, [loadData, selectedProfileId])
+
   const retryLoad = () => { void loadData() }
 
   const mobileMonthEvents: MonthlyCalendarEvent[] = filteredEvents.map((event) => ({
@@ -259,6 +295,10 @@ export default function AthleteCalendarManager() {
           canRespond={canConfirmAttendance}
           onChange={(status) => saveAttendance(event.id, status)}
           availability={event.attendance_availability}
+          eventContext={{ teams: event.teams, start: event.start_time, end: event.end_time }}
+          initialEarlyAbsence={event.my_attendance?.is_early_absence === true}
+          onEarlyAbsence={(note) => mutateEarlyAbsence(event.id, false, note)}
+          onRevokeEarlyAbsence={() => mutateEarlyAbsence(event.id, true)}
         />
       </div>
     )
@@ -360,7 +400,7 @@ export default function AthleteCalendarManager() {
           ) : filteredEvents.length === 0 ? (
             <EmptyState title={filteredEmptyTitle} />
           ) : mobileViewMode === 'agenda' ? (
-              <AthleteAgenda events={filteredEvents} canRespond={canConfirmAttendance} onAttendanceChange={saveAttendance} onEventClick={(id) => {
+            <AthleteAgenda events={filteredEvents} canRespond={canConfirmAttendance} onAttendanceChange={saveAttendance} onEarlyAbsence={(id, note) => mutateEarlyAbsence(id, false, note)} onRevokeEarlyAbsence={(id) => mutateEarlyAbsence(id, true)} onEventClick={(id) => {
                 const event = filteredEvents.find((item) => item.id === id)
                 if (event) setSelectedEvent(event)
               }} />
@@ -417,6 +457,7 @@ export default function AthleteCalendarManager() {
                     <th>Luogo</th>
                     <th>Squadre</th>
                     <th>Tipo</th>
+                    <th>Stato</th>
                     <th>Azioni</th>
                   </tr>
                 </thead>
@@ -451,6 +492,11 @@ export default function AthleteCalendarManager() {
                         <EventKindBadge kind={event.event_kind} />
                       </td>
                       <td>
+                        {event.my_attendance?.is_early_absence
+                          ? <span className="cs-badge cs-badge--warning" role="status">Assenza comunicata</span>
+                          : <span className="text-sm text-secondary">Da confermare</span>}
+                      </td>
+                      <td>
                         <button
                           onClick={() => setSelectedEvent(event)}
                           className="cs-btn cs-btn--ghost cs-btn--sm"
@@ -476,6 +522,8 @@ export default function AthleteCalendarManager() {
           selectedProfileId={selectedProfileId}
           canRespond={canConfirmAttendance}
           onAttendanceChange={(status) => saveAttendance(selectedEvent.id, status)}
+          onEarlyAbsence={(note) => mutateEarlyAbsence(selectedEvent.id, false, note)}
+          onRevokeEarlyAbsence={() => mutateEarlyAbsence(selectedEvent.id, true)}
         />
       )}
     </>
@@ -488,12 +536,16 @@ function EventDetails({
   selectedProfileId,
   canRespond,
   onAttendanceChange,
+  onEarlyAbsence,
+  onRevokeEarlyAbsence,
 }: {
   id: string
   onClose: () => void
   selectedProfileId: string | null
   canRespond: boolean
   onAttendanceChange: (status: AttendanceStatus) => Promise<void>
+  onEarlyAbsence: (note: string) => Promise<void>
+  onRevokeEarlyAbsence: () => Promise<void>
 }) {
   const [data, setData] = useState<EventDetailData | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -531,6 +583,8 @@ function EventDetails({
       onRetry={() => setRetryToken((current) => current + 1)}
       canRespond={canRespond}
       onAttendanceChange={onAttendanceChange}
+      onEarlyAbsence={onEarlyAbsence}
+      onRevokeEarlyAbsence={onRevokeEarlyAbsence}
     />
   )
 }

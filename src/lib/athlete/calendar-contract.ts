@@ -22,6 +22,7 @@ type RawAttendance = {
   event_id: string
   status: AttendanceStatus
   responded_at?: string | null
+  is_early_absence?: boolean | null
 }
 
 export function deduplicateCalendarEvents(events: RawCalendarEvent[]): RawCalendarEvent[] {
@@ -45,7 +46,7 @@ export function buildCalendarEvents(
     const teamDetails = eventTeams.get(event.id) ?? []
     const response = attendance.get(event.id)
     const myAttendance: AthleteCalendarAttendance | null = response
-      ? { status: response.status, responded_at: response.responded_at ?? null }
+      ? { status: response.status, responded_at: response.responded_at ?? null, is_early_absence: response.is_early_absence === true }
       : null
 
     return {

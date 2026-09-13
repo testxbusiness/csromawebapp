@@ -25,6 +25,7 @@ type AttendanceRow = {
   event_id: string
   status: AttendanceStatus
   responded_at: string | null
+  is_early_absence: boolean
 }
 
 function calendarLoadError() {
@@ -160,7 +161,7 @@ export async function GET(request: NextRequest) {
     // 6. Load only the subject's attendance for events already authorized above.
     const { data: attendanceRows, error: attendanceError } = await dataClient
       .from('event_attendances')
-      .select('event_id, status, responded_at')
+      .select('event_id, status, responded_at, is_early_absence')
       .eq('profile_id', athleteProfileId)
       .in('event_id', eventIds)
 

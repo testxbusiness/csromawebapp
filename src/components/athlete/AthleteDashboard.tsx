@@ -64,7 +64,7 @@ interface Event {
   gym_id?: string | null
   requires_confirmation?: boolean
   confirmation_deadline?: string | null
-  my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null } | null
+  my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null; is_early_absence?: boolean } | null
   teams?: Array<{ id: string; name: string; code: string }>
   team_ids?: string[]
   attendance_availability?: AttendanceAvailabilityContract | null
@@ -225,6 +225,41 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const saveEventAttendance = async (status: 'going' | 'maybe' | 'declined') => {
     if (!selectedEvent) return
     await persistEventAttendance(selectedEvent.id, status)
+  }
+
+  const mutateEarlyAbsence = async (eventId: string, revoke = false, note?: string) => {
+    if (!navigator.onLine) throw new Error('Sei offline: l’assenza non può essere salvata')
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/early-absence', selectedProfileId), { method: revoke ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_ids: [eventId], ...(revoke ? {} : { note }) }) })
+    const result = await response.json().catch(() => null) as { error?: string } | null
+    if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
+    if (lastSubjectKeyRef.current !== subjectKey) return
+    const updateEvent = (event: Event): Event => {
+      if (event.id !== eventId) return event
+      const availability = event.attendance_availability
+      if (!availability) return event
+      const isNext = availability.next_event?.id === eventId
+      return {
+        ...event,
+        my_attendance: revoke
+          ? null
+          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+        attendance_availability: {
+          ...availability,
+          can_respond_now: revoke ? isNext : false,
+          can_report_early_absence: !revoke,
+          can_revoke_early_absence: revoke,
+          actions: {
+            respond: revoke ? isNext : false,
+            report_early_absence: !revoke,
+            revoke_early_absence: revoke,
+          },
+          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
+        },
+      }
+    }
+    setSelectedEvent((current) => current ? updateEvent(current) : current)
+    setUpcomingEvents((current) => current.map(updateEvent))
+    void loadAthleteData()
   }
 
   // Enrich selected message on open
@@ -803,6 +838,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                         {event.location ? ` · ${event.location}` : ''}
                       </span>
                       {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
+                      {event.my_attendance?.is_early_absence && <span className="mt-2 block text-sm font-medium text-[color:var(--cs-text)]" role="status">Assenza comunicata</span>}
                     </ListRow>
                     {index === 0 && (!isDelegatedProfile || permissions?.confirm_attendance === true) && (
                       <AttendanceControl
@@ -812,6 +848,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                         canRespond
                         onChange={(status) => persistEventAttendance(event.id, status)}
                         availability={event.attendance_availability}
+                        eventContext={{ teams: event.teams?.map((team) => team.name) ?? [], start: event.start_time, end: event.end_time }}
+                        initialEarlyAbsence={event.my_attendance?.is_early_absence === true}
+                        onEarlyAbsence={(note) => mutateEarlyAbsence(event.id, false, note)}
+                        onRevokeEarlyAbsence={() => mutateEarlyAbsence(event.id, true)}
                       />
                     )}
                   </div>
@@ -907,8 +947,12 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
             confirmation_deadline: selectedEvent.confirmation_deadline,
             my_attendance: selectedEvent.my_attendance,
             attendance_availability: selectedEvent.attendance_availability,
+            teams: selectedEvent.teams,
           }}
           onAttendanceChange={selectedEvent.requires_confirmation ? saveEventAttendance : undefined}
+          onEarlyAbsence={(note) => mutateEarlyAbsence(selectedEvent.id, false, note)}
+          onRevokeEarlyAbsence={() => mutateEarlyAbsence(selectedEvent.id, true)}
+          canRespond={Boolean(!isDelegatedProfile || permissions?.confirm_attendance)}
         />
       )}
       {selectedMessage && (

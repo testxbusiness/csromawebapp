@@ -19,7 +19,7 @@ export type EventDetailData = {
   description?: string | null
   requires_confirmation?: boolean
   confirmation_deadline?: string | null
-  my_attendance?: { status?: AttendanceStatus; responded_at?: string | null } | null
+  my_attendance?: { status?: AttendanceStatus; responded_at?: string | null; is_early_absence?: boolean } | null
   attendance_availability?: AttendanceAvailabilityContract | null
 }
 
@@ -28,13 +28,15 @@ type EventDetailModalProps = {
   onClose: () => void
   data: EventDetailData | null
   onAttendanceChange?: (status: AttendanceStatus) => Promise<void>
+  onEarlyAbsence?: (note: string) => Promise<void>
+  onRevokeEarlyAbsence?: () => Promise<void>
   canRespond?: boolean
   error?: string | null
   onRetry?: () => void
   children?: React.ReactNode
 }
 
-export default function EventDetailModal({ open, onClose, data, onAttendanceChange, canRespond = true, error = null, onRetry, children }: EventDetailModalProps) {
+export default function EventDetailModal({ open, onClose, data, onAttendanceChange, onEarlyAbsence, onRevokeEarlyAbsence, canRespond = true, error = null, onRetry, children }: EventDetailModalProps) {
   const IconClock = (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" {...props}>
       <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth={2}/>
@@ -162,6 +164,14 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
                     canRespond={canRespond}
                     onChange={onAttendanceChange}
                     availability={data.attendance_availability}
+                    eventContext={{
+                      teams: (data.teams ?? []).map((team) => typeof team === 'string' ? team : team.name),
+                      start: data.start_date,
+                      end: data.end_date,
+                    }}
+                    initialEarlyAbsence={data.my_attendance?.is_early_absence === true}
+                    onEarlyAbsence={onEarlyAbsence}
+                    onRevokeEarlyAbsence={onRevokeEarlyAbsence}
                   />
                 </div>
               )}

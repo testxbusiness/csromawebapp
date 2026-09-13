@@ -5192,7 +5192,7 @@ default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
 | R5 | Mutation RSVP e protezioni database | R4 | [ ] |
 | R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [x] |
 | R7 | API assenze anticipate singole/multiple e revoca | R5 | [x] |
-| R8 | UI assenza anticipata sul singolo evento | R6, R7 | [ ] |
+| R8 | UI assenza anticipata sul singolo evento | R6, R7 | [x] |
 | R9 | UI assenza per periodo con selezione eventi | R8 | [ ] |
 | R10 | Verifica integrata e chiusura | R1–R9 | [ ] |
 
@@ -5698,6 +5698,24 @@ evento usabili da atleta e familiare autorizzato, inaccessibili dopo scadenza.
 
 **Verifiche:** test UI e mutation integrata, nota, doppio invio, errore,
 revoca, cambio subject e conservazione dello stato dopo riapertura.
+
+**Completato il 13/09/2026.** Integrato il flusso singolo in `AttendanceControl`,
+riusato da dettaglio evento, agenda calendario e dashboard atleta/familiare.
+Gli eventi eleggibili mostrano riepilogo squadra/data/orario, nota facoltativa,
+loading/error/offline, stato «Hai già comunicato che non parteciperai» e revoca
+entro deadline. La revoca torna a «Da confermare» e abilita solo una modifica
+volontaria; non seleziona automaticamente «Partecipo». Le chiamate usano
+`/api/athlete/events/early-absence` con `subjectProfileId`, abort/guardie di
+contesto già presenti e refresh del subject per evitare aggiornamenti incrociati.
+Esteso il payload calendario/dashboard con `is_early_absence`.
+
+File principali: `src/components/athlete/AttendanceControl.tsx`,
+`src/components/shared/EventDetailModal.tsx`, `src/components/athlete/AthleteAgenda.tsx`,
+`src/components/athlete/AthleteCalendarManager.tsx`,
+`src/components/athlete/AthleteDashboard.tsx` e contratti/API di lettura.
+Verifiche: 5 suite mirate / 31 test, suite completa 70/264, `npx tsc --noEmit`, `npm run build` e
+`git diff --check` superati. Non eseguita una nuova sessione browser E2E in
+questo goal; le mutation server-side e i test R7 restano il riferimento integrato.
 
 ### R9 — UI assenza per periodo e selezione multipla
 

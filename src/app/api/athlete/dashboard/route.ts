@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
       allEvents.length > 0
         ? dataClient
             .from('event_attendances')
-            .select('event_id, status, responded_at')
+            .select('event_id, status, responded_at, is_early_absence')
             .eq('profile_id', athleteProfileId)
             .in('event_id', allEvents.map((event) => event.id))
         : Promise.resolve({ data: [] }),

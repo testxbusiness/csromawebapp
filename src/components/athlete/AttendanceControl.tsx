@@ -4,6 +4,12 @@ import { useEffect, useState } from 'react'
 import type { AttendanceAvailabilityContract, AttendanceStatus } from '@/types/attendance'
 import { FeedbackState } from '@/components/ui/FeedbackState'
 
+type EventContext = {
+  teams: string[]
+  start?: string
+  end?: string
+}
+
 type AttendanceControlProps = {
   requiresConfirmation: boolean
   confirmationDeadline?: string | null
@@ -11,16 +17,55 @@ type AttendanceControlProps = {
   canRespond: boolean
   onChange: (status: AttendanceStatus) => Promise<void>
   availability?: AttendanceAvailabilityContract | null
+  eventContext?: EventContext
+  initialEarlyAbsence?: boolean
+  onEarlyAbsence?: (note: string) => Promise<void>
+  onRevokeEarlyAbsence?: () => Promise<void>
+}
+
+type EarlyAbsenceSectionProps = {
+  availability: AttendanceAvailabilityContract | null
+  eventContext?: EventContext
+  earlyAbsence: boolean
+  showForm: boolean
+  note: string
+  pending: boolean
+  error: string | null
+  isOnline: boolean
+  onOpen: () => void
+  onCancel: () => void
+  onNoteChange: (value: string) => void
+  onReport: () => Promise<void>
+  onRevoke: () => Promise<void>
 }
 
 const SUCCESS_FEEDBACK_DURATION_MS = 4000
 
-function isDeadlinePassed(deadline?: string | null, now = new Date()) {
+export function isDeadlinePassed(deadline?: string | null, now = new Date()) {
   return Boolean(deadline && new Date(deadline).getTime() <= now.getTime())
 }
 
 function formatDeadline(deadline: string) {
-  return new Date(deadline).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' })
+  return new Date(deadline).toLocaleString('it-IT', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+function formatEventDate(value?: string) {
+  return value
+    ? new Date(value).toLocaleString('it-IT', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+    : '—'
+}
+
+function getStatusLabel(status: AttendanceStatus | null) {
+  if (status === 'going') return 'Partecipo'
+  if (status === 'maybe') return 'Forse'
+  if (status === 'declined') return 'Non partecipo'
+  return 'Da confermare'
 }
 
 export default function AttendanceControl({
@@ -30,12 +75,21 @@ export default function AttendanceControl({
   canRespond,
   onChange,
   availability = null,
+  eventContext,
+  initialEarlyAbsence = false,
+  onEarlyAbsence,
+  onRevokeEarlyAbsence,
 }: AttendanceControlProps) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus)
   const [pendingStatus, setPendingStatus] = useState<AttendanceStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
+  const [earlyAbsence, setEarlyAbsence] = useState(initialEarlyAbsence)
+  const [showForm, setShowForm] = useState(false)
+  const [note, setNote] = useState('')
+  const [earlyPending, setEarlyPending] = useState(false)
+  const [earlyError, setEarlyError] = useState<string | null>(null)
   const deadlinePassed = isDeadlinePassed(confirmationDeadline)
 
   useEffect(() => {
@@ -51,25 +105,114 @@ export default function AttendanceControl({
 
   useEffect(() => {
     setStatus(initialStatus)
+    setEarlyAbsence(initialEarlyAbsence)
     setError(null)
-  }, [initialStatus])
+    setEarlyError(null)
+    setShowForm(false)
+  }, [initialStatus, initialEarlyAbsence])
 
   useEffect(() => {
     if (!showSuccess) return
-    const timeout = window.setTimeout(() => setShowSuccess(false), SUCCESS_FEEDBACK_DURATION_MS)
+    const timeout = window.setTimeout(
+      () => setShowSuccess(false),
+      SUCCESS_FEEDBACK_DURATION_MS,
+    )
     return () => window.clearTimeout(timeout)
   }, [showSuccess])
 
   if (!requiresConfirmation) return null
-  const canRespondNow = availability ? availability.actions.respond : canRespond
 
-  const statusLabel = status === 'going'
-    ? 'Partecipo'
-    : status === 'maybe'
-      ? 'Forse'
-      : status === 'declined'
-        ? 'Non partecipo'
-        : 'Nessuna risposta'
+  // A successful revocation restores the neutral state locally. The user can
+  // then choose an RSVP voluntarily while the authoritative R4 refresh runs.
+  const canRespondNow = availability
+    ? availability.actions.respond ||
+      (!earlyAbsence && availability.closure_reason === 'already_early_absence')
+    : canRespond
+  const statusLabel = getStatusLabel(status)
+  const reason = availability?.closure_reason === 'not_next_event'
+    ? 'La risposta è disponibile sul prossimo evento autorizzato.'
+    : availability?.closure_reason === 'event_started'
+      ? 'L’evento è iniziato: la risposta è in sola lettura.'
+      : availability?.closure_reason === 'already_responded'
+        ? 'La risposta è stata registrata.'
+        : availability?.closure_reason === 'deadline_passed'
+          ? 'La deadline è superata: la risposta è in sola lettura.'
+          : !canRespond
+            ? 'La risposta è gestita dal delegato autorizzato.'
+            : 'La risposta non è disponibile per questo evento.'
+
+  const earlyAbsenceProps: EarlyAbsenceSectionProps = {
+    availability: !deadlinePassed && (onEarlyAbsence || onRevokeEarlyAbsence)
+      ? availability
+      : null,
+    eventContext,
+    earlyAbsence,
+    showForm,
+    note,
+    pending: earlyPending,
+    error: earlyError,
+    isOnline,
+    onOpen: () => {
+      setEarlyError(null)
+      setShowForm(true)
+    },
+    onCancel: () => setShowForm(false),
+    onNoteChange: setNote,
+    onReport: async () => {
+      if (!onEarlyAbsence) return
+      setEarlyPending(true)
+      setEarlyError(null)
+      try {
+        await onEarlyAbsence(note.trim())
+        setEarlyAbsence(true)
+        setShowForm(false)
+      } catch (cause) {
+        setEarlyError(
+          cause instanceof Error ? cause.message : 'Impossibile salvare l’assenza',
+        )
+      } finally {
+        setEarlyPending(false)
+      }
+    },
+    onRevoke: async () => {
+      if (!onRevokeEarlyAbsence) return
+      setEarlyPending(true)
+      setEarlyError(null)
+      try {
+        await onRevokeEarlyAbsence()
+        setEarlyAbsence(false)
+        setStatus(null)
+      } catch (cause) {
+        setEarlyError(
+          cause instanceof Error ? cause.message : 'Impossibile revocare l’assenza',
+        )
+      } finally {
+        setEarlyPending(false)
+      }
+    },
+  }
+
+  if (!canRespondNow || deadlinePassed || !isOnline) {
+    const statusReason = !isOnline
+      ? 'Sei offline: la risposta non è disponibile.'
+      : deadlinePassed
+        ? 'Deadline superata: non è più possibile rispondere.'
+        : reason
+    return (
+      <>
+        <div
+          className="mt-3 border-t border-[color:var(--cs-border)] pt-3 text-sm"
+          role="status"
+        >
+          <span className="font-medium text-[color:var(--cs-text)]">
+            Risposta: {statusLabel}
+          </span>
+          <span className="ml-2 text-secondary">{statusReason}</span>
+        </div>
+        <EarlyAbsenceSection {...earlyAbsenceProps} />
+      </>
+    )
+  }
 
   const handleChange = async (nextStatus: AttendanceStatus) => {
     if (!canRespond || !isOnline || deadlinePassed || pendingStatus) return
@@ -83,57 +226,29 @@ export default function AttendanceControl({
       setShowSuccess(true)
     } catch (cause) {
       setStatus(previousStatus)
-      setError(cause instanceof Error ? cause.message : 'Impossibile salvare la risposta')
+      setError(
+        cause instanceof Error ? cause.message : 'Impossibile salvare la risposta',
+      )
     } finally {
       setPendingStatus(null)
     }
   }
 
-  if (!canRespondNow) {
-    const reason = availability?.closure_reason === 'not_next_event'
-      ? 'La risposta è disponibile sul prossimo evento autorizzato.'
-      : availability?.closure_reason === 'event_started'
-        ? 'L’evento è iniziato: la risposta è in sola lettura.'
-        : availability?.closure_reason === 'already_responded'
-          ? 'La risposta è stata registrata.'
-          : availability?.closure_reason === 'deadline_passed'
-            ? 'La deadline è superata: la risposta è in sola lettura.'
-            : !canRespond
-              ? 'La risposta è gestita dal delegato autorizzato.'
-              : 'La risposta non è disponibile per questo evento.'
-    return (
-      <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3 text-sm text-secondary" role="status">
-        <span className="font-medium text-[color:var(--cs-text)]">Risposta: {statusLabel}</span>
-        <span className="ml-2">{reason}</span>
-      </div>
-    )
-  }
-
-  if (deadlinePassed) {
-    return (
-      <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3 text-sm" role="status">
-        <span className="font-medium text-[color:var(--cs-text)]">Risposta: {statusLabel}</span>
-        <span className="ml-2 text-secondary">Deadline superata: non è più possibile rispondere.</span>
-      </div>
-    )
-  }
-
-  if (!isOnline) {
-    return (
-      <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3 text-sm" role="status">
-        <span className="font-medium text-[color:var(--cs-text)]">Risposta: {statusLabel}</span>
-        <span className="ml-2 text-secondary">Sei offline: la risposta non è disponibile.</span>
-      </div>
-    )
-  }
-
   return (
-    <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3" aria-label="Conferma partecipazione">
+    <div
+      className="mt-3 border-t border-[color:var(--cs-border)] pt-3"
+      aria-label="Conferma partecipazione"
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-secondary">
-          Risposta: <span className="font-medium text-[color:var(--cs-text)]">{statusLabel}</span>
+          Risposta:{' '}
+          <span className="font-medium text-[color:var(--cs-text)]">{statusLabel}</span>
         </p>
-        {confirmationDeadline && <p className="text-xs text-secondary">Rispondi entro {formatDeadline(confirmationDeadline)}</p>}
+        {confirmationDeadline && (
+          <p className="text-xs text-secondary">
+            Rispondi entro {formatDeadline(confirmationDeadline)}
+          </p>
+        )}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         {([
@@ -144,7 +259,9 @@ export default function AttendanceControl({
           <button
             key={nextStatus}
             type="button"
-            className={`cs-btn min-h-11 ${status === nextStatus ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+            className={'cs-btn min-h-11 ' + (
+              status === nextStatus ? 'cs-btn--primary' : 'cs-btn--ghost'
+            )}
             onClick={() => void handleChange(nextStatus)}
             disabled={Boolean(pendingStatus)}
             aria-pressed={status === nextStatus}
@@ -166,8 +283,123 @@ export default function AttendanceControl({
           className="mt-2 px-3 py-2"
         />
       )}
+      <EarlyAbsenceSection {...earlyAbsenceProps} />
     </div>
   )
 }
 
-export { isDeadlinePassed }
+function EarlyAbsenceSection({
+  availability,
+  eventContext,
+  earlyAbsence,
+  showForm,
+  note,
+  pending,
+  error,
+  isOnline,
+  onOpen,
+  onCancel,
+  onNoteChange,
+  onReport,
+  onRevoke,
+}: EarlyAbsenceSectionProps) {
+  if (
+    !availability ||
+    !eventContext ||
+    (!availability.actions.report_early_absence &&
+      !availability.actions.revoke_early_absence)
+  ) {
+    return null
+  }
+
+  return (
+    <div
+      className="mt-3 border-t border-[color:var(--cs-border)] pt-3"
+      aria-label="Assenza anticipata"
+    >
+      {earlyAbsence ? (
+        <>
+          <p className="text-sm font-medium" role="status">
+            Hai già comunicato che non parteciperai
+          </p>
+          <p className="mt-1 text-xs text-secondary">
+            Puoi modificare volontariamente la comunicazione entro la scadenza.
+          </p>
+          {availability.actions.revoke_early_absence && (
+            <button
+              type="button"
+              className="cs-btn cs-btn--outline cs-btn--sm mt-2"
+              onClick={() => void onRevoke()}
+              disabled={pending || !isOnline}
+            >
+              {pending ? 'Revoca…' : 'Revoca assenza'}
+            </button>
+          )}
+        </>
+      ) : showForm ? (
+        <div className="space-y-3 rounded-[var(--cs-radius-md)] bg-[color:var(--cs-surface-2)] p-3">
+          <p className="text-sm font-semibold">Conferma assenza</p>
+          <p className="text-sm text-secondary">
+            {eventContext.teams.length
+              ? eventContext.teams.join(', ')
+              : 'Squadra non disponibile'}{' '}
+            · {formatEventDate(eventContext.start)} – {formatEventDate(eventContext.end)}
+          </p>
+          <label className="block text-sm font-medium" htmlFor="early-absence-note">
+            Nota (facoltativa)
+          </label>
+          <textarea
+            id="early-absence-note"
+            value={note}
+            maxLength={1000}
+            onChange={(event) => onNoteChange(event.target.value)}
+            className="cs-input min-h-20 w-full"
+            placeholder="Aggiungi una nota per lo staff"
+          />
+          {error && (
+            <p className="text-sm text-[color:var(--cs-danger)]" role="alert">
+              {error}
+            </p>
+          )}
+          {!isOnline && (
+            <p className="text-sm text-secondary" role="status">
+              Sei offline: l’assenza non può essere salvata.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="cs-btn cs-btn--primary cs-btn--sm"
+              onClick={() => void onReport()}
+              disabled={pending || !isOnline}
+            >
+              {pending ? 'Salvataggio…' : 'Conferma assenza'}
+            </button>
+            <button
+              type="button"
+              className="cs-btn cs-btn--ghost cs-btn--sm"
+              onClick={onCancel}
+              disabled={pending}
+            >
+              Annulla
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="cs-btn cs-btn--outline cs-btn--sm"
+          onClick={onOpen}
+          disabled={!availability.actions.report_early_absence || !isOnline}
+        >
+          Segnala assenza
+        </button>
+      )}
+      {error && !showForm && (
+        <p className="mt-2 text-sm text-[color:var(--cs-danger)]" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  )
+}
