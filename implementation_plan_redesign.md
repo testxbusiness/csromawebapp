@@ -5667,10 +5667,11 @@ File principali: `src/app/api/athlete/events/early-absence/route.ts` e test,
 `src/lib/validation/early-absence.ts`, `src/server/events/early-absence.ts`,
 resolver R4 e migrazione R7. Verifiche: 3 suite mirate / 13 test, ESLint sui
 file modificati, `npx tsc --noEmit`, `npm run build` e `git diff --check`.
-Migrazione SQL non applicata al DB locale: `supabase migration new` è fallito
-prima della scrittura per `EPERM` su `~/.supabase/telemetry.json`; il file è
-stato creato manualmente con nome timestampato e va provato su staging/host
-con database attivo. Nessun deploy e nessuna modifica alle convocazioni.
+La migrazione è stata applicata in modo mirato al DB locale e al progetto
+staging `csromawebapp-staging` il 13/09/2026; la history di entrambi è stata
+allineata a `20260913130000`. Il comando `supabase migration new` iniziale era
+fallito per `EPERM` su `~/.supabase/telemetry.json`, quindi il file timestampato
+è stato creato manualmente. Nessun deploy e nessuna modifica alle convocazioni.
 
 ### R8 — UI assenza anticipata del singolo allenamento
 
