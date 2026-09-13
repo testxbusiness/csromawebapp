@@ -68,8 +68,28 @@ describe('attendance availability resolver', () => {
 
     expect(result.availabilityByEventId.get('next')).toEqual(expect.objectContaining({
       can_revoke_early_absence: true,
-      actions: { respond: false, report_early_absence: false, revoke_early_absence: true },
+      actions: { respond: false, report_early_absence: true, revoke_early_absence: true },
       closure_reason: 'already_early_absence',
+    }))
+  })
+
+  it('allows early absence for a later future RSVP event without opening full RSVP', () => {
+    const now = new Date('2026-09-10T10:00:00.000Z')
+    const result = buildAttendanceAvailability(
+      [
+        { ...event({ id: 'next' }), start_time: '2026-09-11T18:00:00.000Z' },
+        { ...event({ id: 'later' }), start_time: '2026-09-14T18:00:00.000Z' },
+      ],
+      new Map(),
+      { view_schedule: true, confirm_attendance: true },
+      now,
+    )
+
+    expect(result.availabilityByEventId.get('later')).toEqual(expect.objectContaining({
+      can_respond_now: false,
+      can_report_early_absence: true,
+      actions: { respond: false, report_early_absence: true, revoke_early_absence: false },
+      closure_reason: 'not_next_event',
     }))
   })
 

@@ -5191,7 +5191,7 @@ default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
 | R4 | Resolver del prossimo RSVP e API di lettura | R1 | [x] |
 | R5 | Mutation RSVP e protezioni database | R4 | [ ] |
 | R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [x] |
-| R7 | API assenze anticipate singole/multiple e revoca | R5 | [ ] |
+| R7 | API assenze anticipate singole/multiple e revoca | R5 | [x] |
 | R8 | UI assenza anticipata sul singolo evento | R6, R7 | [ ] |
 | R9 | UI assenza per periodo con selezione eventi | R8 | [ ] |
 | R10 | Verifica integrata e chiusura | R1–R9 | [ ] |
@@ -5643,6 +5643,34 @@ nessun RSVP completo anticipato, nessuna scrittura parziale o revoca estranea.
 **Verifiche:** singolo/multiplo, richiesta ripetuta, ID duplicati, payload
 misto autorizzato/non autorizzato, scadenza durante invio, rollback, revoca
 concorrente, familiari e Data API diretta; report conteggi coerenti.
+
+**Completato il 13/09/2026.** Aggiunto `/api/athlete/events/early-absence` con
+`GET` per il recupero per periodo e paginazione esplicita (`limit` massimo 100,
+`offset`, `has_more`, `next_offset`, `total`), `POST` per segnalare e `DELETE`
+per revocare. I payload accettano ID deduplicati, massimo 100 eventi distinti e
+nota opzionale trim/max 1000; il subject viene sempre risolto server-side con
+`confirm_attendance`, inclusi i familiari autorizzati.
+
+Il resolver R4 ora separa RSVP completo (solo prossimo evento) da assenza
+anticipata (ogni futuro evento automatico RSVP autorizzato), mantenendo deadline,
+origine, appartenenza e risposta già presente. Le nuove RPC service-only
+`record_athlete_early_absence` e `revoke_athlete_early_absence` nella migrazione
+`20260913130000_r7_early_absence_mutations.sql` ripetono i controlli con lock
+sugli eventi e validano tutto prima di scrivere: il bulk è atomico, idempotente
+e la revoca cancella solo la riga ancora marcata `is_early_absence=true`.
+Le policy Data API impediscono di creare/promuovere direttamente un’assenza
+anticipata; report coach/admin continuano a contare `declined` da
+`event_attendances`, senza tabella RSVP aggiuntiva e senza modifiche alle
+convocazioni.
+
+File principali: `src/app/api/athlete/events/early-absence/route.ts` e test,
+`src/lib/validation/early-absence.ts`, `src/server/events/early-absence.ts`,
+resolver R4 e migrazione R7. Verifiche: 3 suite mirate / 13 test, ESLint sui
+file modificati, `npx tsc --noEmit`, `npm run build` e `git diff --check`.
+Migrazione SQL non applicata al DB locale: `supabase migration new` è fallito
+prima della scrittura per `EPERM` su `~/.supabase/telemetry.json`; il file è
+stato creato manualmente con nome timestampato e va provato su staging/host
+con database attivo. Nessun deploy e nessuna modifica alle convocazioni.
 
 ### R8 — UI assenza anticipata del singolo allenamento
 

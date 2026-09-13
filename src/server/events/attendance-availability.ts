@@ -127,10 +127,6 @@ export function buildAttendanceAvailability(
       availabilityByEventId.set(event.id, closedContract(event, nextEvent, 'event_started', now))
       continue
     }
-    if (!nextEvent || event.id !== nextEvent.id) {
-      availabilityByEventId.set(event.id, closedContract(event, nextEvent, 'not_next_event', now))
-      continue
-    }
     if (!permissions.confirm_attendance) {
       availabilityByEventId.set(event.id, closedContract(event, nextEvent, 'not_authorized', now))
       continue
@@ -148,9 +144,9 @@ export function buildAttendanceAvailability(
       availabilityByEventId.set(event.id, {
         requires_confirmation: true,
         can_respond_now: false,
-        can_report_early_absence: false,
+        can_report_early_absence: canRevoke,
         can_revoke_early_absence: canRevoke,
-        actions: { respond: false, report_early_absence: false, revoke_early_absence: canRevoke },
+        actions: { respond: false, report_early_absence: canRevoke, revoke_early_absence: canRevoke },
         closure_reason: canRevoke ? 'already_early_absence' : 'deadline_passed',
         next_event: next,
         next_recalculation_at: recalculation,
@@ -166,13 +162,14 @@ export function buildAttendanceAvailability(
       continue
     }
 
+    const isNextEvent = nextEvent?.id === event.id
     availabilityByEventId.set(event.id, {
       requires_confirmation: true,
-      can_respond_now: true,
+      can_respond_now: isNextEvent,
       can_report_early_absence: true,
       can_revoke_early_absence: false,
-      actions: { respond: true, report_early_absence: true, revoke_early_absence: false },
-      closure_reason: null,
+      actions: { respond: isNextEvent, report_early_absence: true, revoke_early_absence: false },
+      closure_reason: isNextEvent ? null : 'not_next_event',
       next_event: next,
       next_recalculation_at: recalculation,
     })
