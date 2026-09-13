@@ -5724,6 +5724,13 @@ test, typecheck, lint e `git diff --check`.
 Diagnostica post-deploy: il 409 ora registra nei log Vercel solo codice, messaggio,
 dettagli e hint restituiti da Supabase e mappa le cause R7 in messaggi distinti,
 senza esporre dettagli interni o segreti al client.
+Fix database R8: il trigger R5 applicava erroneamente `attendance_event_not_next`
+anche alle RPC R7 quando la Service Role moderna non propagava il claim JWT al
+trigger. La migration `20260913150000_r8_allow_early_absence_non_next.sql` usa un
+flag transazionale dedicato alle sole RPC R7, mantenendo il vincolo sul normale
+RSVP e sulle scritture dirette. Applicata e verificata su staging Supabase e DB
+locale; il locale segnala soltanto un warning preesistente sulla versione della
+collation.
 
 ### R9 — UI assenza per periodo e selezione multipla
 
