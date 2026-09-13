@@ -23,7 +23,7 @@ describe('EarlyAbsencePeriodModal', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ events: [event('u14', 'U14', '2026-09-14'), event('u16', 'U16', '2026-09-15')], has_more: false, next_offset: null }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) })
     const onSaved = jest.fn()
-    render(<EarlyAbsencePeriodModal open subjectProfileId="subject-1" onClose={jest.fn()} onSaved={onSaved} />)
+    render(<EarlyAbsencePeriodModal open subjectProfileId={null} onClose={jest.fn()} onSaved={onSaved} />)
 
     fireEvent.change(screen.getByLabelText('Data iniziale'), { target: { value: '2026-09-14' } })
     fireEvent.change(screen.getByLabelText('Data finale'), { target: { value: '2026-09-20' } })

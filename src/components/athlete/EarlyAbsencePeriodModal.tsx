@@ -73,7 +73,7 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
   const periodValid = Boolean(from && to && from <= to)
 
   const loadPage = useCallback(async (offset: number, replace: boolean) => {
-    if (!periodValid || !subjectProfileId) return
+    if (!periodValid) return
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setState('offline')
       setError(null)
@@ -129,7 +129,7 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
   }
 
   const submit = async () => {
-    if (selectedEvents.length === 0 || submitting || !subjectProfileId) return
+    if (selectedEvents.length === 0 || submitting) return
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setState('offline')
       setError('Sei offline: l’assenza non può essere salvata')
