@@ -43,8 +43,7 @@ async function mutate(request: NextRequest, revoke: boolean) {
     if (eventIds.some((id) => availability.availabilityByEventId.get(id)?.actions[action] !== true)) {
       return NextResponse.json({ error: 'Uno o più eventi non sono più disponibili. Aggiorna il riepilogo.' }, { status: 409 })
     }
-    const rpc = createAdminClient().rpc
-    const { error } = await rpc(revoke ? 'revoke_athlete_early_absence' : 'record_athlete_early_absence', {
+    const { error } = await createAdminClient().rpc(revoke ? 'revoke_athlete_early_absence' : 'record_athlete_early_absence', {
       p_event_ids: eventIds,
       p_profile_id: subject.profileId,
       ...(revoke ? {} : { p_note: parsed.data.note || null }),

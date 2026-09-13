@@ -5716,6 +5716,11 @@ File principali: `src/components/athlete/AttendanceControl.tsx`,
 Verifiche: 5 suite mirate / 31 test, suite completa 70/264, `npx tsc --noEmit`, `npm run build` e
 `git diff --check` superati. Non eseguita una nuova sessione browser E2E in
 questo goal; le mutation server-side e i test R7 restano il riferimento integrato.
+Fix post-deploy: corretto il richiamo del metodo Supabase `rpc` nella route di
+mutation. L'estrazione del metodo (`const rpc = client.rpc`) perdeva il contesto
+interno del client e causava un 500 prima della richiesta POST verso Supabase;
+la chiamata ora resta legata all'istanza (`client.rpc(...)`). Verificati route
+test, typecheck, lint e `git diff --check`.
 
 ### R9 — UI assenza per periodo e selezione multipla
 
