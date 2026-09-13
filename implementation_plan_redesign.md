@@ -5721,6 +5721,9 @@ mutation. L'estrazione del metodo (`const rpc = client.rpc`) perdeva il contesto
 interno del client e causava un 500 prima della richiesta POST verso Supabase;
 la chiamata ora resta legata all'istanza (`client.rpc(...)`). Verificati route
 test, typecheck, lint e `git diff --check`.
+Diagnostica post-deploy: il 409 ora registra nei log Vercel solo codice, messaggio,
+dettagli e hint restituiti da Supabase e mappa le cause R7 in messaggi distinti,
+senza esporre dettagli interni o segreti al client.
 
 ### R9 — UI assenza per periodo e selezione multipla
 

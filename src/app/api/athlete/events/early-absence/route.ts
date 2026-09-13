@@ -7,8 +7,28 @@ import { resolveAttendanceAvailability } from '@/server/events/attendance-availa
 import { selectableEarlyAbsenceEvents } from '@/server/events/early-absence'
 
 function domainError(error: unknown, fallback: string) {
-  if (error && typeof error === 'object' && 'code' in error && (error as { code?: string }).code === 'P0001') {
-    return NextResponse.json({ error: 'Uno o più eventi non sono più disponibili. Aggiorna il riepilogo.' }, { status: 409 })
+  const details = error && typeof error === 'object'
+    ? error as { code?: string; message?: string; details?: string; hint?: string }
+    : {}
+  if (details.code || details.message) {
+    console.error('Athlete early absence mutation failed', {
+      code: details.code,
+      message: details.message,
+      details: details.details,
+      hint: details.hint,
+    })
+  }
+
+  if (details.code === 'P0001') {
+    const errorByMessage: Record<string, string> = {
+      early_absence_event_closed: 'Uno o più eventi non sono più disponibili. Aggiorna il riepilogo.',
+      early_absence_event_not_found: 'Uno o più eventi non sono più disponibili. Aggiorna il riepilogo.',
+      early_absence_subject_not_member: 'Non puoi comunicare l’assenza per uno o più eventi selezionati.',
+      early_absence_response_exists: 'Hai già comunicato una risposta per uno o più eventi selezionati.',
+      early_absence_not_found: 'L’assenza da revocare non risulta più presente. Aggiorna il riepilogo.',
+      early_absence_note_too_long: 'La nota supera il limite consentito.',
+    }
+    return NextResponse.json({ error: errorByMessage[details.message ?? ''] ?? 'Uno o più eventi non sono più disponibili. Aggiorna il riepilogo.' }, { status: 409 })
   }
   return NextResponse.json({ error: fallback }, { status: 500 })
 }
