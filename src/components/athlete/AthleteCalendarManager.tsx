@@ -19,6 +19,7 @@ import AttendanceControl from '@/components/athlete/AttendanceControl'
 import type { AttendanceStatus } from '@/types/attendance'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
+import EarlyAbsencePeriodModal from '@/components/athlete/EarlyAbsencePeriodModal'
 
 type Event = AthleteCalendarEvent
 type CalendarLoadState = 'loading' | 'ready' | 'error' | 'offline'
@@ -37,6 +38,7 @@ export default function AthleteCalendarManager() {
   const [teamMemberships, setTeamMemberships] = useState<TeamLite[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [earlyAbsenceOpen, setEarlyAbsenceOpen] = useState(false)
 
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [mobileViewMode, setMobileViewMode] = useState<'agenda'|'calendar'>('agenda')
@@ -60,6 +62,7 @@ export default function AthleteCalendarManager() {
       setEvents([])
       setTeamMemberships([])
       setSelectedEvent(null)
+      setEarlyAbsenceOpen(false)
       setAccessDenied(false)
       setLoadState('loading')
     }
@@ -341,6 +344,11 @@ export default function AthleteCalendarManager() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
           <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            {canConfirmAttendance && (
+              <button type="button" onClick={() => setEarlyAbsenceOpen(true)} className="cs-btn cs-btn--primary min-h-11">
+                Comunica assenza
+              </button>
+            )}
             <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--success">
               Esporta Excel
             </button>
@@ -524,6 +532,14 @@ export default function AthleteCalendarManager() {
           onAttendanceChange={(status) => saveAttendance(selectedEvent.id, status)}
           onEarlyAbsence={(note) => mutateEarlyAbsence(selectedEvent.id, false, note)}
           onRevokeEarlyAbsence={() => mutateEarlyAbsence(selectedEvent.id, true)}
+        />
+      )}
+      {canConfirmAttendance && (
+        <EarlyAbsencePeriodModal
+          open={earlyAbsenceOpen}
+          subjectProfileId={selectedProfileId}
+          onClose={() => setEarlyAbsenceOpen(false)}
+          onSaved={() => void loadData()}
         />
       )}
     </>

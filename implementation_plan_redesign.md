@@ -5193,7 +5193,7 @@ default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
 | R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [x] |
 | R7 | API assenze anticipate singole/multiple e revoca | R5 | [x] |
 | R8 | UI assenza anticipata sul singolo evento | R6, R7 | [x] |
-| R9 | UI assenza per periodo con selezione eventi | R8 | [ ] |
+| R9 | UI assenza per periodo con selezione eventi | R8 | [x] |
 | R10 | Verifica integrata e chiusura | R1–R9 | [ ] |
 
 Ordine operativo consigliato: R1 → R2 → R3 → R4 → R5 → R6 → R7 → R8 → R9 → R10.
@@ -5761,6 +5761,22 @@ un solo flusso, visibile nei singoli eventi; nuovi eventi del periodo esclusi.
 **Verifiche:** selezione parziale/totale, due squadre, range su cambio mese
 e ora legale, paginazione, errore atomico, cambio subject, uso a 320/375 px
 e desktop, tastiera e offline.
+
+**Completato il 13/09/2026.** Aggiunto `EarlyAbsencePeriodModal.tsx` e
+integrato in `AthleteCalendarManager.tsx`: la CTA è presente solo con
+`confirm_attendance`; il flusso richiede intervallo locale inclusivo, dichiara
+l'ambito tutte le squadre autorizzate indipendentemente dal filtro calendario,
+carica pagine R7, mostra squadra/data/ora/stato, permette selezione singola o
+di tutti gli eventi caricati, nota comune e riepilogo esplicito. Gli eventi già
+in assenza non vengono riproposti dal contratto R7 e il vuoto lo dichiara.
+L'invio usa esclusivamente gli ID selezionati; su rifiuto `409` mantiene aperto
+il contesto, azzera la selezione, aggiorna l'elenco e non mostra successo
+parziale. Offline, loading, periodo invalido, focus/ESC del pattern `Modal`,
+touch target minimi e reset completo al cambio subject sono coperti.
+Test aggiunti in `src/components/athlete/EarlyAbsencePeriodModal.test.tsx`;
+10 test mirati passati, `npx tsc --noEmit`, `npm run build` e `git diff --check`
+passati. Restano da eseguire solo le verifiche browser/E2E reali della matrice
+R10 (inclusi viewport 320/375, cambio DST e offline interattivo).
 
 ### R10 — Gate integrato RSVP e assenze
 
