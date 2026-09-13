@@ -5778,6 +5778,11 @@ Test aggiunti in `src/components/athlete/EarlyAbsencePeriodModal.test.tsx`;
 passati. Restano da eseguire solo le verifiche browser/E2E reali della matrice
 R10 (inclusi viewport 320/375, cambio DST e offline interattivo).
 
+**Remediation 13/09/2026.** Corretto il rendering del payload R7 quando l'evento
+contiene `team_ids` ma non il campo legacy `teams`: la UI usa ora un fallback
+tipizzato per visualizzare la squadra senza eccezioni client-side. Aggiunta
+regressione dedicata; test mirato e typecheck passati.
+
 ### R10 — Gate integrato RSVP e assenze
 
 **Obiettivo:** chiudere la funzionalità con evidenze riproducibili.

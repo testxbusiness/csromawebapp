@@ -19,8 +19,9 @@ describe('EarlyAbsencePeriodModal', () => {
   beforeEach(() => { global.fetch = jest.fn() as jest.Mock })
 
   it('loads a multi-team period, selects partially and submits only confirmed ids', async () => {
+    const { teams: _teams, ...eventWithoutLegacyTeams } = event('u14', 'U14', '2026-09-14')
     ;(global.fetch as jest.Mock)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ events: [event('u14', 'U14', '2026-09-14'), event('u16', 'U16', '2026-09-15')], has_more: false, next_offset: null }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ events: [eventWithoutLegacyTeams, event('u16', 'U16', '2026-09-15')], has_more: false, next_offset: null }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true }) })
     const onSaved = jest.fn()
     render(<EarlyAbsencePeriodModal open subjectProfileId={null} onClose={jest.fn()} onSaved={onSaved} />)

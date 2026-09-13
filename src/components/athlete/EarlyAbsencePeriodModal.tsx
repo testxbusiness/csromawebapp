@@ -20,6 +20,14 @@ type EarlyAbsencePeriodModalProps = {
   onSaved: () => void
 }
 
+function eventTeamLabels(event: AthleteCalendarEvent) {
+  if (Array.isArray(event.teams) && event.teams.length > 0) return event.teams
+  if (Array.isArray(event.team_details) && event.team_details.length > 0) {
+    return event.team_details.map((team) => team.name)
+  }
+  return Array.isArray(event.team_ids) ? event.team_ids : []
+}
+
 function formatEventDate(value: string) {
   return new Intl.DateTimeFormat('it-IT', {
     weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric',
@@ -196,7 +204,7 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
             {events.map((event) => <li key={event.id} className="rounded-lg border border-[color:var(--cs-border)] p-3">
               <label className="flex min-h-11 cursor-pointer items-start gap-3">
                 <input type="checkbox" className="mt-1 size-5 shrink-0" checked={selectedIds.has(event.id)} onChange={() => toggleEvent(event.id)} aria-label={`Seleziona ${event.title}`} />
-                <span className="min-w-0 text-sm"><strong className="block">{event.teams.join(', ') || 'Squadra non indicata'}</strong><span className="block capitalize">{formatEventDate(event.start_time)} · {formatEventTime(event.start_time, event.end_time)}</span><span className="block text-secondary">Stato: {event.my_attendance?.is_early_absence ? 'Assenza già comunicata' : 'Eleggibile'}</span></span>
+                <span className="min-w-0 text-sm"><strong className="block">{eventTeamLabels(event).join(', ') || 'Squadra non indicata'}</strong><span className="block capitalize">{formatEventDate(event.start_time)} · {formatEventTime(event.start_time, event.end_time)}</span><span className="block text-secondary">Stato: {event.my_attendance?.is_early_absence ? 'Assenza già comunicata' : 'Eleggibile'}</span></span>
               </label>
             </li>)}
           </ul>
