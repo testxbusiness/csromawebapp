@@ -47,13 +47,16 @@ export default function AthleteCalendarManager() {
   const [filterEventKind, setFilterEventKind] = useState<CalendarEventKindFilter>('')
 
   const fetchControllerRef = useRef<AbortController | null>(null)
+  const attendanceRequestRef = useRef<AbortController | null>(null)
   const subjectContextRef = useRef<string | null>(selectedProfileId)
+  const nextRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const handleSubjectChange = (event: globalThis.Event) => {
       const nextSubject = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? null
       subjectContextRef.current = nextSubject
       fetchControllerRef.current?.abort()
+      attendanceRequestRef.current?.abort()
       setEvents([])
       setTeamMemberships([])
       setSelectedEvent(null)
@@ -142,6 +145,33 @@ export default function AthleteCalendarManager() {
     }
   }, [authLoading, profileLoading, userId, loadData])
 
+  useEffect(() => {
+    const onFocus = () => { if (document.visibilityState === 'visible') void loadData() }
+    const onOnline = () => void loadData()
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('online', onOnline)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('online', onOnline)
+    }
+  }, [loadData])
+
+  useEffect(() => {
+    if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+    const nextAt = events
+      .map((event) => event.attendance_availability?.next_recalculation_at)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((value) => Number.isFinite(value) && value > Date.now())
+      .sort((a, b) => a - b)[0]
+    if (!nextAt) return
+    nextRefreshTimerRef.current = setTimeout(() => void loadData(), Math.max(0, nextAt - Date.now() + 25))
+    return () => {
+      if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+      nextRefreshTimerRef.current = null
+    }
+  }, [events, loadData])
+
   const filteredEvents = useMemo(
     () => markCalendarConflicts(filterCalendarEvents(events, filterEventKind, selectedTeamId)),
     [events, filterEventKind, selectedTeamId],
@@ -160,21 +190,34 @@ export default function AthleteCalendarManager() {
       throw new Error('Sei offline: la risposta non è disponibile')
     }
 
-    const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_id: eventId, status }),
-    })
-    const result = await response.json().catch(() => null) as { error?: string } | null
-    if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
+    const controller = new AbortController()
+    attendanceRequestRef.current?.abort()
+    attendanceRequestRef.current = controller
+    try {
+      const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: eventId, status }),
+        signal: controller.signal,
+      })
+      const result = await response.json().catch(() => null) as { error?: string } | null
+      if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
+      if (controller.signal.aborted || subjectContextRef.current !== selectedProfileId) return
 
-    const respondedAt = new Date().toISOString()
-    setEvents((currentEvents) => currentEvents.map((event) => (
-      event.id === eventId
-        ? { ...event, my_attendance: { status, responded_at: respondedAt } }
-        : event
-    )))
-  }, [selectedProfileId])
+      const respondedAt = new Date().toISOString()
+      setEvents((currentEvents) => currentEvents.map((event) => (
+        event.id === eventId
+          ? { ...event, my_attendance: { status, responded_at: respondedAt } }
+          : event
+      )))
+      void loadData()
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      throw error
+    } finally {
+      if (attendanceRequestRef.current === controller) attendanceRequestRef.current = null
+    }
+  }, [loadData, selectedProfileId])
 
   const retryLoad = () => { void loadData() }
 
@@ -215,6 +258,7 @@ export default function AthleteCalendarManager() {
           initialStatus={event.my_attendance?.status ?? null}
           canRespond={canConfirmAttendance}
           onChange={(status) => saveAttendance(event.id, status)}
+          availability={event.attendance_availability}
         />
       </div>
     )

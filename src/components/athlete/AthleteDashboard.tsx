@@ -17,6 +17,7 @@ import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContex
 import { useTeamContext } from '@/context/TeamContext'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { useAuth } from '@/hooks/useAuth'
+import type { AttendanceAvailabilityContract } from '@/types/attendance'
 
 interface User {
   id: string
@@ -66,6 +67,7 @@ interface Event {
   my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null } | null
   teams?: Array<{ id: string; name: string; code: string }>
   team_ids?: string[]
+  attendance_availability?: AttendanceAvailabilityContract | null
 }
 
 interface ChampionshipMatch {
@@ -211,6 +213,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         ? { ...event, my_attendance: { status, responded_at: respondedAt } }
         : event
       ))
+      void loadAthleteData()
     } catch (error) {
       if (controller.signal.aborted) return
       throw error
@@ -244,7 +247,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     return () => controller.abort()
   }, [selectedMessage, selectedProfileId, subjectKey])
 
-  const lastLoadTimeRef = useRef<number>(0)
+  const nextRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadAthleteData = useCallback(async () => {
     if (!user?.id || !profile?.id || !accountRole) {
@@ -334,7 +337,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       hasLoadedDashboardRef.current = true
       setIsOffline(false)
       setDashboardStatus('success')
-      lastLoadTimeRef.current = Date.now()
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('Error loading athlete data:', e)
@@ -672,30 +674,34 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     }
   }, [loadAthleteData])
 
-  // Ricarica intelligente quando la tab torna visibile (solo se necessario)
+  // Ricarica quando la tab torna visibile; il server resta la fonte dell'evento attivo.
   useEffect(() => {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
-      if (debounceTimer) clearTimeout(debounceTimer)
-
-      debounceTimer = setTimeout(() => {
-        const now = Date.now()
-        const timeSinceLastLoad = now - lastLoadTimeRef.current
-        if (timeSinceLastLoad > 120000) {
-          void loadAthleteData()
-          lastLoadTimeRef.current = now
-        }
-      }, 1000)
+      void loadAthleteData()
     }
 
     window.addEventListener('visibilitychange', onVisible)
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
       window.removeEventListener('visibilitychange', onVisible)
     }
   }, [loadAthleteData])
+
+  useEffect(() => {
+    if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+    const nextAt = upcomingEvents
+      .map((event) => event.attendance_availability?.next_recalculation_at)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((value) => Number.isFinite(value) && value > Date.now())
+      .sort((a, b) => a - b)[0]
+    if (!nextAt) return
+    nextRefreshTimerRef.current = setTimeout(() => void loadAthleteData(), Math.max(0, nextAt - Date.now() + 25))
+    return () => {
+      if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+      nextRefreshTimerRef.current = null
+    }
+  }, [loadAthleteData, upcomingEvents])
 
   const isDelegatedProfile = (accountRole === 'family_member' || delegatedView) && Boolean(selectedProfileId)
   const isFamilyDashboard = delegatedView || isDelegatedProfile
@@ -805,6 +811,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                         initialStatus={event.my_attendance?.status || null}
                         canRespond
                         onChange={(status) => persistEventAttendance(event.id, status)}
+                        availability={event.attendance_availability}
                       />
                     )}
                   </div>
@@ -899,6 +906,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
             requires_confirmation: selectedEvent.requires_confirmation,
             confirmation_deadline: selectedEvent.confirmation_deadline,
             my_attendance: selectedEvent.my_attendance,
+            attendance_availability: selectedEvent.attendance_availability,
           }}
           onAttendanceChange={selectedEvent.requires_confirmation ? saveEventAttendance : undefined}
         />

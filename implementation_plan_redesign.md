@@ -5190,7 +5190,7 @@ default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
 | R3 | Opzione RSVP nel form squadra | R2 | [x] |
 | R4 | Resolver del prossimo RSVP e API di lettura | R1 | [x] |
 | R5 | Mutation RSVP e protezioni database | R4 | [ ] |
-| R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [ ] |
+| R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [x] |
 | R7 | API assenze anticipate singole/multiple e revoca | R5 | [ ] |
 | R8 | UI assenza anticipata sul singolo evento | R6, R7 | [ ] |
 | R9 | UI assenza per periodo con selezione eventi | R8 | [ ] |
@@ -5587,6 +5587,29 @@ lunedì→martedì avviene senza richiedere logout o riapertura dell'app.
 
 **Verifiche:** test componenti con timer controllato, cambio subject/filtro,
 focus, risposta e scadenza; smoke mobile e dettaglio condiviso coach/admin.
+
+#### Registro R6 — chiusura 13/09/2026
+
+Completato. Dashboard, agenda, calendario e dettaglio condividono ora
+`attendance_availability` del resolver R4: i tre pulsanti RSVP compaiono solo
+quando `actions.respond` è autorizzato dal server; gli eventi successivi e lo
+storico restano visibili con stato in sola lettura. La risposta aggiorna lo
+stato dell'evento corrente e ricarica i dati senza avanzare localmente.
+
+Il calendario e la dashboard ricaricano al focus/ritorno online e al prossimo
+`next_recalculation_at`, senza polling continuo; timer, listener e richieste di
+mutation vengono puliti/abortiti al cambio subject. Gli errori offline e le
+risposte 409 di scadenza restano visibili tramite il controllo esistente, con
+rollback dello stato ottimistico. Il dettaglio condiviso mantiene il contratto
+compatibile per coach/admin.
+
+File principali: `src/components/athlete/AthleteDashboard.tsx`,
+`AthleteAgenda.tsx`, `AthleteCalendarManager.tsx`, `AttendanceControl.tsx`,
+`src/components/shared/EventDetailModal.tsx` e il test del controllo RSVP.
+
+Verifiche eseguite: test mirati componenti 27/27, `npx tsc --noEmit`, ESLint sui
+file modificati e `git diff --check`. Smoke E2E mobile e dettaglio coach/admin
+non eseguiti in questo ambiente.
 
 ### R7 — API assenze anticipate e revoca
 

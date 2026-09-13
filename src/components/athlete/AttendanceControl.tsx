@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { AttendanceStatus } from '@/types/attendance'
+import type { AttendanceAvailabilityContract, AttendanceStatus } from '@/types/attendance'
 import { FeedbackState } from '@/components/ui/FeedbackState'
 
 type AttendanceControlProps = {
@@ -10,6 +10,7 @@ type AttendanceControlProps = {
   initialStatus?: AttendanceStatus | null
   canRespond: boolean
   onChange: (status: AttendanceStatus) => Promise<void>
+  availability?: AttendanceAvailabilityContract | null
 }
 
 const SUCCESS_FEEDBACK_DURATION_MS = 4000
@@ -28,6 +29,7 @@ export default function AttendanceControl({
   initialStatus = null,
   canRespond,
   onChange,
+  availability = null,
 }: AttendanceControlProps) {
   const [status, setStatus] = useState<AttendanceStatus | null>(initialStatus)
   const [pendingStatus, setPendingStatus] = useState<AttendanceStatus | null>(null)
@@ -59,6 +61,7 @@ export default function AttendanceControl({
   }, [showSuccess])
 
   if (!requiresConfirmation) return null
+  const canRespondNow = availability ? availability.actions.respond : canRespond
 
   const statusLabel = status === 'going'
     ? 'Partecipo'
@@ -86,11 +89,22 @@ export default function AttendanceControl({
     }
   }
 
-  if (!canRespond) {
+  if (!canRespondNow) {
+    const reason = availability?.closure_reason === 'not_next_event'
+      ? 'La risposta è disponibile sul prossimo evento autorizzato.'
+      : availability?.closure_reason === 'event_started'
+        ? 'L’evento è iniziato: la risposta è in sola lettura.'
+        : availability?.closure_reason === 'already_responded'
+          ? 'La risposta è stata registrata.'
+          : availability?.closure_reason === 'deadline_passed'
+            ? 'La deadline è superata: la risposta è in sola lettura.'
+            : !canRespond
+              ? 'La risposta è gestita dal delegato autorizzato.'
+              : 'La risposta non è disponibile per questo evento.'
     return (
       <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3 text-sm text-secondary" role="status">
         <span className="font-medium text-[color:var(--cs-text)]">Risposta: {statusLabel}</span>
-        <span className="ml-2">La risposta è gestita dal delegato autorizzato.</span>
+        <span className="ml-2">{reason}</span>
       </div>
     )
   }

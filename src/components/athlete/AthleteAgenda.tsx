@@ -8,7 +8,7 @@ import { EventKindBadge } from '@/components/ui'
 type AgendaEvent = Pick<
   AthleteCalendarEvent,
   'id' | 'title' | 'description' | 'location' | 'start_time' | 'end_time' | 'teams' | 'event_kind'
-  | 'requires_confirmation' | 'confirmation_deadline' | 'my_attendance' | 'has_conflict'
+  | 'requires_confirmation' | 'confirmation_deadline' | 'my_attendance' | 'has_conflict' | 'attendance_availability'
 >
 
 export type AgendaDay = {
@@ -147,15 +147,14 @@ function AgendaRow({
       </summary>
       <div className="border-t border-[color:var(--cs-border-subtle)] px-3 pb-3 pt-2">
         {event.description && <p className="mb-2 text-sm text-[color:var(--cs-text-secondary)]">{event.description}</p>}
-        {defaultExpanded && (
-          <AttendanceControl
+        <AttendanceControl
             requiresConfirmation={event.requires_confirmation}
             confirmationDeadline={event.confirmation_deadline}
             initialStatus={event.my_attendance?.status ?? null}
             canRespond={canRespond}
             onChange={(status) => onAttendanceChange(event.id, status)}
-          />
-        )}
+            availability={event.attendance_availability}
+        />
         <button
           type="button"
           className="cs-btn cs-btn--ghost cs-btn--sm"

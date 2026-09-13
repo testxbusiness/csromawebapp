@@ -59,6 +59,29 @@ describe('AttendanceControl', () => {
     expect(screen.queryByLabelText('Conferma partecipazione')).toBeNull()
   })
 
+  it('consumes the server capability and stays read-only for a later event', () => {
+    render(
+      <AttendanceControl
+        requiresConfirmation
+        canRespond
+        availability={{
+          requires_confirmation: true,
+          can_respond_now: false,
+          can_report_early_absence: false,
+          can_revoke_early_absence: false,
+          actions: { respond: false, report_early_absence: false, revoke_early_absence: false },
+          closure_reason: 'not_next_event',
+          next_event: { id: 'next', start_time: '2026-09-14T10:00:00Z', end_time: '2026-09-14T11:00:00Z', team_ids: ['team-1'] },
+          next_recalculation_at: '2026-09-14T10:00:00Z',
+        }}
+        onChange={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText(/prossimo evento autorizzato/i)).toBeTruthy()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
   it('supports keyboard attendance selection', async () => {
     const user = userEvent.setup()
     const onChange = jest.fn().mockResolvedValue(undefined)
