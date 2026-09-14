@@ -6182,7 +6182,8 @@ modifiche ai componenti condivisi.
 **Piano richiesto il 14/09/2026. Esecutore previsto: Luna, ragionamento Medio.**
 Direzione di riferimento: soluzione A dell'analisi precedente, prossimo impegno
 su superficie scura, marchio leggibile e sezioni secondarie leggere.
-Questa fase è soltanto pianificata: nessun goal implementativo è stato avviato.
+La fase è in corso: DA.1 e DA.2 sono completati; i goal successivi restano
+non avviati.
 G2 e le successive modifiche attendance sono già completati e non vanno rifatti.
 
 ## Registro della fase
@@ -6190,7 +6191,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | Goal | Stato | Dipende da | Risultato |
 |---|---|---|---|
 | DA.1 Struttura e isolamento del layout | [x] | — | Completato il 14/09/2026; radice e regioni responsive dedicate alla dashboard atleta, ordine/ID/condizioni e comportamento invariati; typecheck, test atleta/famiglia mirati e diff check superati |
-| DA.2 Header e identità CSRoma | [ ] | DA.1 | Marchio leggibile e introduzione compatta |
+| DA.2 Header e identità CSRoma | [x] | DA.1 | Completato il 14/09/2026; marchio leggibile su mobile, introduzione personale compatta, altre shell invariate |
 | DA.3 Prossimo impegno dominante | [ ] | DA.2 | Primo evento valorizzato, controllo assenza preservato |
 | DA.4 Agenda e prossima partita | [ ] | DA.3 | Gerarchia sportiva secondaria leggibile |
 | DA.5 Messaggi, quota e squadre | [ ] | DA.4 | Servizi compatti senza perdita di informazioni o azioni |
@@ -6300,6 +6301,34 @@ ID delle sezioni; famiglia e altre pagine conservano presentazione e comportamen
 per farlo entrare; nomi lunghi e selettori non causano overflow; altre shell invariate.
 **Verifiche:** typecheck, test pertinenti shell/dashboard, build per la modifica
 della shell, diff check; smoke header a 320/375/768 px e confronto famiglia/coach.
+
+**Esito DA.2 — 14/09/2026**
+
+- Aggiunto ad `AppHeader` il trattamento visuale opt-in
+  `athlete-dashboard`: mantiene logo originale e nome `CSRoma` leggibili anche
+  su mobile e omette soltanto in questo trattamento il sottotitolo generico
+  `Control Center`; il default degli altri consumer resta invariato.
+- `LayoutShell` attiva il trattamento esclusivamente su `/dashboard` quando il
+  ruolo risolto dall’account è `athlete`, l’area è `personal` e non è presente
+  un soggetto delegato. Non sono stati usati controlli sul ruolo legacy del
+  profilo.
+- Rimossa soltanto l’eyebrow `Area atleta` dall’introduzione personale di
+  `AthleteDashboard`; sono conservati `Oggi, Nome`, stagione, contesto
+  familiare, selettori, utility, menu e notifiche. Nessun dato, filtro,
+  permesso, callback, route, modalità attendance/RSVP o altro consumer è stato
+  modificato.
+- File modificati: `src/components/navigation/AppHeader.tsx`,
+  `src/components/navigation/LayoutShell.tsx`,
+  `src/components/athlete/AthleteDashboard.tsx`, `src/app/globals.css`,
+  `src/components/navigation/AppHeader.test.tsx`,
+  `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati AppHeader, dashboard
+  atleta e dashboard famiglia — 3 suite, 6 test superati; `npm run build`
+  completato; `git diff --check` superato.
+- Smoke browser autenticato a 320/375/768 px e confronto visuale famiglia/coach
+  non eseguiti: non è disponibile in questo ambiente un runtime autenticato;
+  il gate visuale resta aperto per le verifiche responsive previste. Nessun
+  deploy e nessuna modifica al database.
 
 ## DA.3 — Prossimo impegno dominante
 

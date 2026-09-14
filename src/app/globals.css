@@ -673,6 +673,8 @@ button.cs-list-row{ font:inherit; }
 .cs-app-header__brand-copy{ display:none; flex-direction:column; line-height:1; }
 .cs-app-header__brand-copy strong{ color:var(--cs-brand-red); font-size:1rem; }
 .cs-app-header__brand-copy small{ margin-top:3px; color:var(--cs-ink-muted); font-size:.6875rem; }
+.cs-app-header--athlete-dashboard .cs-app-header__brand-copy{ display:flex; }
+.cs-app-header--athlete-dashboard .cs-app-header__brand-copy strong{ white-space:nowrap; }
 .cs-app-header__context{ display:flex; min-width:0; flex:1; align-items:center; gap:var(--cs-sp-3); overflow:hidden; }
 @media (min-width:1024px){ .cs-app-header__back{ display:none; } }
 @media (min-width:1024px){ .cs-app-header__brand-copy{ display:flex; } .cs-app-header__context{ display:flex; } }

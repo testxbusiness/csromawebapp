@@ -811,7 +811,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         className="px-4 py-3"
       />}
       <header className="cs-athlete-dashboard__intro space-y-1 border-b border-[color:var(--cs-border)] pb-4">
-        <p className="cs-eyebrow">{isFamilyDashboard ? 'Area familiare' : 'Area atleta'}</p>
+        {isFamilyDashboard ? <p className="cs-eyebrow">Area familiare</p> : null}
         <h2 id="athlete-welcome" className="text-2xl font-semibold text-[color:var(--cs-text)]">
           Oggi, {profile.first_name}
         </h2>

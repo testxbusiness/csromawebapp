@@ -6,9 +6,11 @@ import { ArrowLeft, Bell, Menu } from 'lucide-react'
 import { Button } from '@/components/ui'
 
 export type AppHeaderVariant = 'mobile-root' | 'mobile-detail' | 'desktop' | 'family' | 'admin'
+export type AppHeaderBrandTreatment = 'default' | 'athlete-dashboard'
 
 type AppHeaderProps = {
   variant?: AppHeaderVariant
+  brandTreatment?: AppHeaderBrandTreatment
   onMenuOpen?: () => void
   onBack?: () => void
   onSignOut?: () => void
@@ -17,10 +19,10 @@ type AppHeaderProps = {
   utilities?: React.ReactNode
 }
 
-export default function AppHeader({ variant = 'desktop', onMenuOpen, onBack, onSignOut, account, context, utilities }: AppHeaderProps) {
+export default function AppHeader({ variant = 'desktop', brandTreatment = 'default', onMenuOpen, onBack, onSignOut, account, context, utilities }: AppHeaderProps) {
   const isDetail = variant === 'mobile-detail'
   return (
-    <header className={`cs-navbar cs-app-header ${variant === 'admin' ? 'cs-admin-topbar' : ''}`}>
+    <header className={`cs-navbar cs-app-header ${variant === 'admin' ? 'cs-admin-topbar' : ''} ${brandTreatment === 'athlete-dashboard' ? 'cs-app-header--athlete-dashboard' : ''}`}>
       <div className="cs-navbar__inner cs-container">
         <div className="cs-app-header__leading">
           {isDetail ? (
@@ -30,7 +32,10 @@ export default function AppHeader({ variant = 'desktop', onMenuOpen, onBack, onS
           )}
           <Link href="/dashboard" className="cs-app-header__brand" aria-label="CSRoma – Dashboard">
             <span className="relative h-8 w-8 lg:h-10 lg:w-10"><Image src="/images/new_csroma_logo_no_bg.svg" alt="CSRoma" fill className="object-contain select-none" sizes="40px" priority /></span>
-            <span className="cs-app-header__brand-copy"><strong>CSRoma</strong><small>Control Center</small></span>
+            <span className="cs-app-header__brand-copy">
+              <strong>CSRoma</strong>
+              {brandTreatment === 'default' ? <small>Control Center</small> : null}
+            </span>
           </Link>
           {context ? <div className="cs-app-header__context">{context}</div> : null}
         </div>
