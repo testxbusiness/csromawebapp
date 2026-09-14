@@ -28,14 +28,14 @@ test.describe('athlete dashboard responsive and offline gate', () => {
     ]) {
       await page.setViewportSize(viewport)
       await page.goto('/dashboard')
-      await expect(page.locator('p.cs-eyebrow', { hasText: 'Area atleta' })).toBeVisible({ timeout: 30_000 })
+      await expect(page.locator('[data-dashboard-context="personal"]')).toBeVisible({ timeout: 30_000 })
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
     }
   })
 
   test('labels the dashboard honestly when the connection is lost', async ({ page, context }) => {
     await login(page)
-    await expect(page.locator('p.cs-eyebrow', { hasText: 'Area atleta' })).toBeVisible({ timeout: 30_000 })
+    await expect(page.locator('[data-dashboard-context="personal"]')).toBeVisible({ timeout: 30_000 })
 
     await context.setOffline(true)
     await expect(page.getByText(/Connessione assente|Dashboard non disponibile offline/)).toBeVisible()

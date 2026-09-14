@@ -850,7 +850,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                       interactive
                       onClick={() => setSelectedEvent(event)}
                       className="cs-athlete-dashboard__featured-event-row"
-                      trailing={<span className="text-xs text-secondary">Dettagli</span>}
+                      trailing={<span className="cs-athlete-dashboard__featured-event-detail text-xs">Dettagli</span>}
                     >
                       <span className="flex flex-wrap items-center gap-2">
                         <EventKindBadge kind={event.event_kind} className="cs-event-kind--solid" />

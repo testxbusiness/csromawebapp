@@ -6536,6 +6536,20 @@ il goal completamente verificato; non intervenire su auth/DB per sbloccarlo.
 - La schermata di loading con spazio verticale ampio è un miglioramento
   opzionale, non un blocco funzionale per DA.7.
 
+**Esito rifiniture pre-DA.7 — 14/09/2026**
+
+- Ridotto il brand copy dell’header atleta solo tra 376 e 479 px e ottimizzato
+  il selettore mobile, lasciando invariati selezione, dati e callback.
+- Reso esplicito il contrasto di `Dettagli` nel protagonista con trattamento
+  coerente su stato normale, hover e focus nei due temi.
+- Aggiunto respiro all’azione `Apri` nelle preview messaggi tramite CSS
+  circoscritto alla dashboard, senza modificare `MessagePreviewRow`.
+- Aggiornato il solo locator E2E obsoleto da `Area atleta` al contesto stabile
+  `data-dashboard-context="personal"`.
+- File modificati: `src/app/globals.css`,
+  `src/components/athlete/AthleteDashboard.tsx`,
+  `tests/e2e/athlete-dashboard.spec.ts`, questo piano.
+
 ## DA.7 — Gate finale e handoff
 
 **Obiettivo:** verificare il risultato cumulativo e chiudere la fase con evidenze.

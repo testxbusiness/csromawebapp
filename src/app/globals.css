@@ -503,6 +503,11 @@ button.cs-list-row{ font:inherit; }
 @media (max-width:767px){
   .cs-subject-switcher--mobile,.cs-team-switcher--mobile{ display:flex; }
 }
+@media (min-width:376px) and (max-width:479px){
+  /* Preserve room for the mobile team value at the narrow 400px layout. */
+  .cs-app-header--athlete-dashboard .cs-app-header__brand-copy{ display:none; }
+  .cs-team-switcher--mobile .cs-select{ font-size:.8125rem; padding-inline:10px; }
+}
 @media (min-width:768px){
   .cs-subject-switcher:not(.cs-subject-switcher--mobile),.cs-team-switcher:not(.cs-team-switcher--mobile){ display:flex; }
 }
@@ -684,6 +689,12 @@ button.cs-list-row{ font:inherit; }
 .cs-athlete-dashboard__service-list .cs-list-row{
   padding-inline: 0;
 }
+@media (max-width: 479px){
+  .cs-athlete-dashboard__service-list .cs-list-row__trailing{
+    padding-block: 4px;
+    padding-inline-start: var(--cs-sp-2);
+  }
+}
 .cs-athlete-dashboard__fee-row{
   align-items: flex-start;
 }
@@ -720,6 +731,19 @@ button.cs-list-row{ font:inherit; }
 .cs-athlete-dashboard__featured-event-row:focus-visible{ outline-color: var(--cs-brand-red); }
 .cs-athlete-dashboard__featured-event-row .cs-list-row__trailing,
 .cs-athlete-dashboard__featured-event-row [role="status"]{ color: rgba(255,255,255,.88); }
+.cs-athlete-dashboard__featured-event-detail{
+  color: #fff;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.cs-athlete-dashboard__featured-event-detail:hover,
+.cs-athlete-dashboard__featured-event-detail:focus-visible,
+.cs-athlete-dashboard__featured-event-row:focus-visible .cs-athlete-dashboard__featured-event-detail{
+  color: #fff;
+  text-decoration-thickness: 2px;
+}
 .cs-athlete-dashboard__featured-event-time{
   color: #fff;
   font-size: clamp(2.5rem, 10vw, 3rem);
