@@ -6522,6 +6522,20 @@ il goal completamente verificato; non intervenire su auth/DB per sbloccarlo.
   focus, zoom 200%, safe-area o screenshot locali; il gate responsive/visuale
   resta aperto. Nessun deploy, modifica DB o avvio di DA.7.
 
+**Rifiniture rilevate prima di DA.7 — 14/09/2026**
+
+- Rendere leggibile il valore del selettore squadra nell’header mobile a 400 px,
+  senza cambiare selezione, dati o callback.
+- Aumentare il contrasto del trailing `Dettagli` nel protagonista, includendo
+  hover e focus e mantenendo il trattamento coerente nei due temi.
+- Dare più respiro all’azione `Apri` nelle preview messaggi sui viewport stretti,
+  senza modificare il componente condiviso o il suo comportamento.
+- Aggiornare esclusivamente l’asserzione E2E obsoleta che cerca `Area atleta`
+  con un selettore stabile già presente, così da poter eseguire le verifiche
+  responsive reali prima del gate DA.7.
+- La schermata di loading con spazio verticale ampio è un miglioramento
+  opzionale, non un blocco funzionale per DA.7.
+
 ## DA.7 — Gate finale e handoff
 
 **Obiettivo:** verificare il risultato cumulativo e chiudere la fase con evidenze.
