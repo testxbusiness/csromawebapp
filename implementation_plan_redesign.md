@@ -6737,6 +6737,25 @@ file, test e note reali.
   impegno; filtro squadra e link al campionato restano invariati.
 - Verifiche: casa/trasferta, orario/località mancanti, filtro vuoto e dark mode.
 
+**Decisione pianificata — evitare la duplicazione tra evento e partita**
+
+- La partita è già un tipo di evento (`event_kind: 'match'`) e il primo evento
+  visibile resta la fonte primaria per gerarchia, apertura dettaglio e
+  attendance.
+- Se il primo evento è una partita, non mostrare anche il pannello riepilogativo
+  separato “Prossima partita”: la gara è già rappresentata nel protagonista.
+- Mostrare il riepilogo “Prossima partita” solo quando il primo evento non è una
+  partita e il riepilogo campionato aggiunge informazione utile.
+- Non introdurre nella prima iterazione matching euristico tra titolo, data,
+  orario o squadre e non modificare API, database, callback, mutazioni, permessi
+  o route. Una partita amichevole/non collegata al campionato non deve causare
+  perdita di informazione: il riepilogo resta visibile se non è possibile
+  stabilire una corrispondenza certa.
+- Conservare l’accesso a `/athlete/campionati`, i filtri squadra, i profili
+  delegati/read-only e il dettaglio evento. Verificare esplicitamente primo
+  evento partita, allenamento seguito da partita, partita amichevole, dati
+  incompleti e profilo familiare.
+
 ### DA.6.R7 — Servizi secondari mobile
 
 - Messaggi: massimo due preview sul mobile e conteggio totale nel titolo, senza
