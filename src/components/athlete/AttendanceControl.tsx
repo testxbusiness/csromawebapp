@@ -199,9 +199,26 @@ export default function AttendanceControl({
   }
 
   if (absenceOnly) {
+    const absenceClosed = deadlinePassed || !isOnline || Boolean(
+      availability &&
+      !availability.actions.report_early_absence &&
+      !availability.actions.revoke_early_absence,
+    )
     return (
       <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3" aria-label="Segnalazione assenza">
-        <p className="text-sm text-secondary">Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.</p>
+        {earlyAbsence ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" role="status">
+            <span>Hai segnalato: <span className="font-medium text-[color:var(--cs-text)]">Assenza</span></span>
+            {absenceClosed && <span className="text-secondary">· {isOnline ? 'Segnalazioni chiuse' : 'Non disponibile offline'}</span>}
+          </div>
+        ) : absenceClosed ? (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" role="status">
+            <span className="font-medium text-[color:var(--cs-text)]">Segnalazione assenza</span>
+            <span className="text-secondary">· {isOnline ? 'Segnalazioni chiuse' : 'Non disponibile offline'}</span>
+          </div>
+        ) : (
+          <p className="text-sm text-secondary">Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.</p>
+        )}
         <EarlyAbsenceSection {...earlyAbsenceProps} />
       </div>
     )
@@ -215,14 +232,14 @@ export default function AttendanceControl({
         : reason
     return (
       <>
-        <div
-          className="mt-3 border-t border-[color:var(--cs-border)] pt-3 text-sm"
-          role="status"
-        >
-          <span className="font-medium text-[color:var(--cs-text)]">
-            Risposta: {statusLabel}
-          </span>
-          <span className="ml-2 text-secondary">{statusReason}</span>
+        <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3 text-sm" role="status" aria-label="Stato risposta">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-medium text-[color:var(--cs-text)]">
+              {status ? <>Hai risposto: {statusLabel}</> : <>Risposta: {statusLabel}</>}
+            </span>
+            <span className="text-secondary">· {isOnline ? 'Risposte chiuse' : 'Risposta non disponibile offline'}</span>
+          </div>
+          <span className="mt-1 block text-xs text-secondary">{statusReason}</span>
         </div>
         <EarlyAbsenceSection {...earlyAbsenceProps} />
       </>

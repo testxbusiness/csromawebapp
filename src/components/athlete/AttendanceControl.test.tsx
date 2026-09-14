@@ -52,6 +52,22 @@ describe('AttendanceControl', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
+  it('renders a compact closed RSVP status without an autonomous feedback panel', () => {
+    render(
+      <AttendanceControl
+        requiresConfirmation
+        canRespond
+        initialStatus="going"
+        confirmationDeadline="2026-08-27T12:00:00Z"
+        onChange={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('status', { name: 'Stato risposta' })).toHaveTextContent('Hai risposto: Partecipo')
+    expect(screen.getByRole('status', { name: 'Stato risposta' })).toHaveTextContent('Risposte chiuse')
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
   it('does not render confirmation controls when the event does not require confirmation', () => {
     render(<AttendanceControl requiresConfirmation={false} canRespond onChange={jest.fn()} />)
 
@@ -177,6 +193,34 @@ describe('AttendanceControl', () => {
     await user.click(screen.getByRole('button', { name: 'Segnala assenza' }))
     await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith(''))
     expect(screen.getByText('Assenza comunicata')).toBeTruthy()
+  })
+
+  it('keeps absence-only closed states free of RSVP participation controls', () => {
+    render(
+      <AttendanceControl
+        requiresConfirmation
+        attendanceMode="absence_only"
+        canRespond
+        confirmationDeadline="2026-08-27T12:00:00Z"
+        availability={{
+          attendance_mode: 'absence_only',
+          requires_confirmation: true,
+          can_respond_now: false,
+          can_report_early_absence: true,
+          can_revoke_early_absence: false,
+          actions: { respond: false, report_early_absence: true, revoke_early_absence: false },
+          closure_reason: 'deadline_passed',
+          next_event: null,
+          next_recalculation_at: null,
+        }}
+        onChange={jest.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Segnalazione assenza')).toBeTruthy()
+    expect(screen.getByText(/Segnalazioni chiuse/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /partecipo|forse|non partecipo/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Segnala assenza' })).toBeNull()
   })
 
   it('does not expose early-absence actions after the deadline', () => {

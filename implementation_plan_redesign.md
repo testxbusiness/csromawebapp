@@ -6199,7 +6199,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.6.R1 Verifica evento attivo | [ ] | DA.6 | Chiarire “in corso”/terminato prima di modificare la gerarchia del protagonista |
 | DA.6.R2 Header mobile contestuale | [-] | DA.6.R1 | Implementato e verificato visivamente a 400 px in tema chiaro/scuro; restano da documentare 320/375/768 e tastiera/focus |
 | DA.6.R3 Protagonista senza contenitore superfluo | [-] | DA.6.R2 | Implementazione completata il 14/09/2026; sul solo dashboard personale mobile rimosso il wrapper visivo del Panel, “Poi in agenda” resa sezione autonoma con gutter 16 px, padding 20 px e spazio 20 px; famiglia e desktop invariati. Gate screenshot/overflow ancora aperto per blocco browser |
-| DA.6.R4 Stato attendance compatto | [ ] | DA.6.R3 | Stato bloccato sintetico; controlli ancora evidenti quando la risposta è aperta |
+| DA.6.R4 Stato attendance compatto | [x] | DA.6.R3 | Completato il 14/09/2026; stato chiuso integrato con separatore discreto, RSVP e sole assenze distinti, azioni aperte preservate |
 | DA.6.R5 Agenda non ridondante | [ ] | DA.6.R4 | Righe compatte, squadra/tipo non ripetuti e dettaglio raggiungibile dall’intera riga |
 | DA.6.R6 Prossima partita sportiva | [ ] | DA.6.R5 | Card partita riconoscibile con luogo sintetico, casa/trasferta e dettagli preservati |
 | DA.6.R7 Servizi secondari mobile | [ ] | DA.6.R6 | Messaggi, quota e squadre compatti; importi e stati coerenti con le regole esistenti |
@@ -6694,6 +6694,28 @@ file, test e note reali.
 - Acceptance: lo stato bloccato non occupa un riquadro autonomo e l’azione aperta
   resta prominente; nessuna mutazione o callback cambia.
 - Verifiche: test RSVP/sole assenze, read-only, delega, offline e focus.
+
+**Esito DA.6.R4 — 14/09/2026**
+
+- `AttendanceControl` ora presenta una risposta RSVP chiusa in forma compatta
+  (“Hai risposto: … · Risposte chiuse”) nello stesso flusso del controllo, con
+  motivazione secondaria ancora disponibile per deadline, evento iniziato,
+  delega, evento successivo e stato offline. Non viene usato un riquadro
+  autonomo di feedback e i tre controlli RSVP restano invariati quando la
+  risposta è aperta.
+- La modalità `absence_only` è stata allineata esplicitamente alla semantica
+  corrente: non mostra mai controlli “Partecipo/Forse/Non partecipo”, mantiene
+  “Segnala assenza” e “Revoca assenza” quando le azioni sono autorizzate e
+  presenta “Segnalazione assenza · Segnalazioni chiuse” solo quando la
+  segnalazione è davvero chiusa per deadline, offline o permessi. Lo stato di
+  assenza comunicata resta leggibile e revocabile dove previsto.
+- Nessuna mutazione, callback, route, permesso o contratto dati è cambiato.
+- File modificati: `src/components/athlete/AttendanceControl.tsx`,
+  `src/components/athlete/AttendanceControl.test.tsx` e questo piano.
+- Verifiche eseguite: suite mirata `AttendanceControl.test.tsx` e
+  `AthleteCalendarManager.test.tsx` — 2 suite, 23 test superati;
+  `npx tsc --noEmit` superato; `git diff --check` superato. La verifica
+  browser/screenshot resta nel gate DA.6/DA.7 e non è stata simulata.
 
 ### DA.6.R5 — Agenda non ridondante
 
