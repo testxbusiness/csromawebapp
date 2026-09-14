@@ -1326,6 +1326,14 @@ button.cs-list-row{ font:inherit; }
   .cs-navbar__inner{ gap:8px; }
 }
 
+@media (max-width:479px){
+  /* Keep the active team readable without competing with the brand/actions row. */
+  .cs-app-header__leading{ flex-wrap:wrap; row-gap:8px; }
+  .cs-app-header__context{ flex:0 0 100%; order:3; width:100%; }
+  .cs-app-header__context .cs-team-switcher--mobile,
+  .cs-app-header__context .cs-subject-switcher--mobile{ min-width:0; }
+}
+
 /* === Theme toggle styles (dimensioni/hover/animazione) === */
 .cs-theme-toggle{
   width:40px; height:40px;

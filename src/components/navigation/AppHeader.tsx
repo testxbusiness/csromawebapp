@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, Bell, Menu } from 'lucide-react'
+import { ArrowLeft, Menu } from 'lucide-react'
 import { Button } from '@/components/ui'
 
 export type AppHeaderVariant = 'mobile-root' | 'mobile-detail' | 'desktop' | 'family' | 'admin'
@@ -41,7 +41,6 @@ export default function AppHeader({ variant = 'desktop', brandTreatment = 'defau
         </div>
         <div className="cs-app-header__actions">
           {utilities}
-          <button type="button" className="cs-btn cs-btn--ghost cs-btn--icon" aria-label="Notifiche"><Bell className="h-4 w-4" aria-hidden="true" /></button>
           {onSignOut ? <button type="button" onClick={onSignOut} className="hidden sm:inline-flex cs-btn cs-btn--primary">Esci</button> : null}
           {account ? <div className="hidden sm:block">{account}</div> : null}
         </div>

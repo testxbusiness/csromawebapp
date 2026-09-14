@@ -16,4 +16,10 @@ describe('AppHeader brand treatment', () => {
 
     expect(screen.getByText('Control Center')).toBeTruthy()
   })
+
+  it('does not expose a non-functional notifications action in the shell', () => {
+    render(<AppHeader variant="mobile-root" />)
+
+    expect(screen.queryByRole('button', { name: 'Notifiche' })).toBeNull()
+  })
 })

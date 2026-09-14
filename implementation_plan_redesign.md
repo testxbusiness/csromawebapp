@@ -6197,7 +6197,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.5 Messaggi, quota e squadre | [x] | DA.4 | Completato il 14/09/2026; servizi compatti, quota separata per importo/stato e membership preservate |
 | DA.6 Responsive, temi e stati | [~] | DA.5 | Composizione responsive 1 colonna/2:1 implementata; gate browser e screenshot ancora aperti |
 | DA.6.R1 Verifica evento attivo | [ ] | DA.6 | Chiarire “in corso”/terminato prima di modificare la gerarchia del protagonista |
-| DA.6.R2 Header mobile contestuale | [ ] | DA.6.R1 | Squadra leggibile sotto il saluto; azioni secondarie ricondotte al profilo senza regressioni |
+| DA.6.R2 Header mobile contestuale | [-] | DA.6.R1 | Implementato il layout contestuale e rimosso il controllo notifiche non operativo; verifica browser 320/375/400/768 e temi ancora aperta per blocco `listen EPERM` |
 | DA.6.R3 Protagonista senza contenitore superfluo | [ ] | DA.6.R2 | Rimosso un livello mobile attorno a protagonista e agenda, con gutter e spaziature canonici |
 | DA.6.R4 Stato attendance compatto | [ ] | DA.6.R3 | Stato bloccato sintetico; controlli ancora evidenti quando la risposta è aperta |
 | DA.6.R5 Agenda non ridondante | [ ] | DA.6.R4 | Righe compatte, squadra/tipo non ripetuti e dettaglio raggiungibile dall’intera riga |
@@ -6607,6 +6607,35 @@ file, test e note reali.
 - Acceptance: a 400 px sono leggibili `Tutte le squadre`, `Under 17` e `Under 15`,
   senza overflow e senza cambiare selezione, persistenza o callback.
 - Verifiche: viewport 320/375/400/768, tastiera, focus, tema chiaro/scuro.
+
+**Esito implementazione DA.6.R2 — 14/09/2026**
+
+- Sotto 480 px l’header mantiene la prima riga per menu, logo e azioni, mentre
+  il contesto va su una seconda riga a larghezza piena. Il selettore mobile usa
+  quindi lo spazio disponibile e conserva label, valore, selezione, persistenza
+  e callback esistenti; non è stato duplicato il DOM dei dati.
+- Verificato il codice della campanella: era un bottone senza handler, stato o
+  destinazione. È stata rimossa dall’`AppHeader`; le notifiche push operative
+  restano nel Profilo già raggiungibile. Tema resta disponibile nell’header e
+  `Esci` resta nel menu mobile esistente, senza rimuovere destinazioni.
+- Aggiunti test per l’assenza dell’azione notifiche non operativa e per la
+  presenza dei valori `Tutte le squadre`, `Under 17` e `Under 15` nel selettore
+  mobile.
+- File modificati: `src/app/globals.css`,
+  `src/components/navigation/AppHeader.tsx`,
+  `src/components/navigation/AppHeader.test.tsx`,
+  `src/components/navigation/TeamSwitcher.test.tsx`,
+  `tests/e2e/athlete-fees-profile.spec.ts`,
+  `tests/e2e/athlete-dashboard.spec.ts`, questo piano.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati AppHeader, TeamSwitcher,
+  AthleteDashboard e FamilyMemberDashboard — 4 suite, 16 test superati;
+  `npm run build` superato; `git diff --check` superato. Estesa la matrice E2E
+  al viewport 400 con controllo dei tre valori e focus sul select.
+- Verifica browser Playwright ancora non disponibile: il server su
+  `localhost:3001` parte, ma Chromium headless termina con `SIGTRAP` in
+  `global-setup.ts` prima dell’esecuzione dei test. Restano aperti il
+  controllo reale a 320/375/400/768 px, tastiera/focus e tema chiaro/scuro;
+  non vengono dichiarati superati né modificati auth/DB per aggirare il blocco.
 
 ### DA.6.R3 — Protagonista senza contenitore superfluo
 

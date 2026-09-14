@@ -19,6 +19,17 @@ function SeedTeams({ count }: { count: number }) {
   return null
 }
 
+function SeedAcceptanceTeams() {
+  const { setTeams } = useTeamContext()
+  useEffect(() => {
+    setTeams([
+      { id: 'under-17', name: 'Under 17', code: 'U17' },
+      { id: 'under-15', name: 'Under 15', code: 'U15' },
+    ])
+  }, [setTeams])
+  return null
+}
+
 describe('TeamSwitcher', () => {
   it('is omitted when the subject has fewer than two teams', () => {
     const { container } = render(<TeamProvider><TeamSwitcher /><SeedTeams count={1} /></TeamProvider>)
@@ -34,5 +45,13 @@ describe('TeamSwitcher', () => {
 
     fireEvent.change(select, { target: { value: 'team-2' } })
     await waitFor(() => expect((select as HTMLSelectElement).value).toBe('team-2'))
+  })
+
+  it('keeps the all-teams and team names available to the mobile select', () => {
+    render(<TeamProvider><TeamSwitcher variant="mobile" /><SeedAcceptanceTeams /></TeamProvider>)
+
+    expect(screen.getByRole('option', { name: 'Tutte le squadre' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Under 17 · U17' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Under 15 · U15' })).toBeTruthy()
   })
 })

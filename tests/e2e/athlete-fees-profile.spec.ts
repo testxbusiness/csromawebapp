@@ -68,9 +68,9 @@ test.describe('athlete Quote e Profilo responsive smoke', () => {
       await expect(page.getByText('Accesso ai documenti')).toHaveCount(0)
       await expectNoHorizontalOverflow(page)
 
-      const notificationsButton = page.getByRole('button', { name: 'Notifiche' })
-      await notificationsButton.focus()
-      await expect(notificationsButton).toBeFocused()
+      const themeButton = page.getByRole('button', { name: /Attiva tema chiaro|Attiva tema scuro/ })
+      await themeButton.focus()
+      await expect(themeButton).toBeFocused()
     }
 
     for (const viewport of viewports) {

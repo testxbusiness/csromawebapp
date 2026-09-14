@@ -23,6 +23,7 @@ test.describe('athlete dashboard responsive and offline gate', () => {
     for (const viewport of [
       { width: 320, height: 800 },
       { width: 375, height: 812 },
+      { width: 400, height: 844 },
       { width: 768, height: 1024 },
       { width: 1440, height: 900 },
     ]) {
@@ -30,6 +31,14 @@ test.describe('athlete dashboard responsive and offline gate', () => {
       await page.goto('/dashboard')
       await expect(page.locator('[data-dashboard-context="personal"]')).toBeVisible({ timeout: 30_000 })
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+
+      if (viewport.width === 400) {
+        const teamSelect = page.locator('.cs-team-switcher--mobile select')
+        await expect(teamSelect).toBeVisible()
+        await expect(teamSelect.locator('option')).toContainText(['Tutte le squadre', 'Under 17', 'Under 15'])
+        await teamSelect.focus()
+        await expect(teamSelect).toBeFocused()
+      }
     }
   })
 
