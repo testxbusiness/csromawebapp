@@ -6664,7 +6664,12 @@ file, test e note reali.
 - File modificati: `src/components/athlete/AthleteDashboard.tsx`,
   `src/app/globals.css`, questo piano.
 - Verifiche: `npx tsc --noEmit`, test dashboard atleta/famiglia (2 suite, 10
-  test) e `git diff --check` superati. Il test E2E dashboard non è avviabile in
+  test) e `git diff --check` superati. Le cinque catture ricevute il
+  14/09/2026 (`Screenshot 2026-09-14 alle 19.44.18.png`, `19.44.24.png`,
+  `19.44.33.png`, `19.45.32.png`, `19.45.39.png`) mostrano il dashboard
+  personale a 400×905 in tema chiaro e scuro: scheda navy dominante, agenda
+  autonoma, gutter coerente, nessun contenuto perso/duplicato o overflow
+  orizzontale visibile. Il test E2E dashboard non è avviabile in
   questa sandbox perché il web server riceve `listen EPERM` su
   `0.0.0.0:3000`. Secondo tentativo su `localhost:3001`: Next si avvia, ma
   Chromium headless termina con `SIGTRAP` in `global-setup.ts`; anche il
