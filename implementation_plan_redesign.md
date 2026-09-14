@@ -6195,7 +6195,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.3 Prossimo impegno dominante | [x] | DA.2 | Completato il 14/09/2026; primo evento dominante con dati completi, dettaglio e attendance preservati |
 | DA.4 Agenda e prossima partita | [x] | DA.3 | Completato il 14/09/2026; agenda secondaria compatta e partita subordinata al protagonista |
 | DA.5 Messaggi, quota e squadre | [x] | DA.4 | Completato il 14/09/2026; servizi compatti, quota separata per importo/stato e membership preservate |
-| DA.6 Responsive, temi e stati | [ ] | DA.5 | Layout solido su mobile/desktop e dati variabili |
+| DA.6 Responsive, temi e stati | [~] | DA.5 | Composizione responsive 1 colonna/2:1 implementata; gate browser e screenshot ancora aperti |
 | DA.7 Gate finale e handoff | [ ] | DA.6 | Evidenze visive e funzionali, esito esplicito |
 
 ## Contratto comune ai sette goal
@@ -6501,6 +6501,26 @@ visiva costante nei due temi; famiglia/coach/admin e altre pagine atleta invaria
 controlli browser sui viewport/temi elencati con screenshot locali del risultato.
 Se l'autenticazione impedisce il browser, registrare il blocco e non dichiarare
 il goal completamente verificato; non intervenire su auth/DB per sbloccarlo.
+
+**Esito DA.6 — 14/09/2026 (parziale)**
+
+- Consolidata la presentazione esistente con una sola griglia DOM: sotto 1024 px
+  una colonna; da 1024 px sport a sinistra e servizi a destra in rapporto 2:1,
+  gap 24 px e larghezza massima 1080 px. Introduzione, feedback globali, ordine
+  DOM, tastiera, bottom navigation e safe-area esistenti restano invariati.
+- Non sono stati cambiati dati, filtri, selezione/ordinamento, permessi,
+  attendance/RSVP, callback, route, stati o consumer famiglia/altri ruoli; non
+  sono state aggiunte altezze fisse, sticky section, estrazioni o refactor.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit` superato; test mirato
+  `AthleteDashboard.test.tsx` — 1 suite, 3 test superati; `git diff --check`
+  superato.
+- E2E `athlete-dashboard.spec.ts` eseguito ma non superato: entrambe le prove
+  si arrestano sull’asserzione legacy `p.cs-eyebrow` “Area atleta”, rimossa da
+  DA.2. Non sono quindi verificati browser 320/375/768/1440, temi, contrasto,
+  focus, zoom 200%, safe-area o screenshot locali; il gate responsive/visuale
+  resta aperto. Nessun deploy, modifica DB o avvio di DA.7.
 
 ## DA.7 — Gate finale e handoff
 

@@ -816,7 +816,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
 
   return (
     <div
-      className="cs-athlete-dashboard mx-auto max-w-5xl space-y-5"
+      className="cs-athlete-dashboard mx-auto space-y-5"
       data-dashboard-context={isFamilyDashboard ? 'family' : 'personal'}
     >
       {dashboardStatus === 'refreshing' && <FeedbackState variant="refreshing" description="Stai visualizzando i dati già caricati mentre controlliamo gli aggiornamenti." />}
@@ -835,6 +835,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         {activeSeason?.name && <p className="text-sm text-secondary">{activeSeason.name}</p>}
       </header>
 
+      <div className="cs-athlete-dashboard__layout">
       <div className="cs-athlete-dashboard__sport">
       {canViewSchedule && (
         <Panel id="athlete-events" className="space-y-3">
@@ -989,6 +990,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           </div>
         )}
       </Panel>
+      </div>
       </div>
       {/* Modals dettagli */}
       {selectedEvent && (
