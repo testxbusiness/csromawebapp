@@ -6134,6 +6134,326 @@ protection disabilitata; nessun finding è relativo alle due migrazioni
 applicate e il loro trattamento resta fuori da questo scope. Produzione non è
 stata modificata.
 
+**Diagnosi preview staging — 14/09/2026.** L'errore storico
+`attendance_event_not_next` del 13/09 proveniva dal guard R8 precedente: la
+migrazione forward `20260913170000` ora imposta il flag transazionale
+`private.early_absence_mutation` nell'RPC e il guard lo accetta, quindi la
+segnalazione assenze non è più limitata al solo prossimo evento. Per il `500`
+di `/api/me/accessible-profiles`, la query RLS su `account_roles` è stata
+riprodotta in sola lettura su staging con lo stesso subject JWT e ruolo
+`authenticated`: restituisce correttamente `athlete`; account attivo e ruolo
+coerenti. Il `401` successivo indica invece che la preview non riceve più una
+sessione valida lato server. Non sono state apportate correzioni applicative:
+per attribuire il 500 storico con certezza servirebbe il payload/stack Vercel
+di quella richiesta, mentre lo stato attuale del database non lo riproduce.
+
+## Analisi layout dashboard atleta — 14/09/2026
+
+Richiesta: proporre soluzioni di sola composizione visuale usando i componenti
+esistenti, prendendo i due mockup allegati come riferimenti e non come nuove
+specifiche funzionali. Analisi completata; implementazione non richiesta.
+
+Riscontri: `AthleteDashboard` presenta cinque Panel di peso simile e tratta
+il primo evento come gli altri due; il CSS di `AppHeader` nasconde il nome
+CSRoma sotto 1024 px. Foundation e G2 risultano già completati: questa proposta
+è un affinamento visuale, non una ripetizione di quei goal.
+
+Direzione consigliata: header con marchio esistente leggibile anche su mobile,
+saluto compatto, primo impegno dominante con ora/data/titolo/luogo/squadre e
+controllo attendance esistente, due eventi successivi in righe compatte,
+partita secondaria, messaggi con preview esistenti, quota e membership con
+separatori leggeri. Alternativa: stessa gerarchia su superficie chiara, con
+accento rosso contenuto. Riutilizzare Panel, ListRow, EventKindBadge,
+StatusBadge, AttendanceControl, MessagePreviewRow e MembershipRow; mantenere
+token, dati, selezione degli eventi, filtri, permessi, route e modali attuali.
+Non introdurre da mockup PagoPA, conteggi confermati, informazioni sportive
+non disponibili o RSVP per gli eventi in modalità sole assenze.
+
+File modificati in questa analisi: solo `implementation_plan_redesign.md`,
+preservando le note preesistenti. Verifica: `git diff --check`; test applicativi
+e browser non eseguiti perché non sono state apportate modifiche UI.
+Residui per l'eventuale implementazione: scelta della direzione, verifica
+responsive 320/375/768/1440, contrasto e dark mode, testi lunghi, multi-team,
+stati vuoti/errore/offline e assenze; limitare al contesto atleta eventuali
+modifiche ai componenti condivisi.
+
+# 21-bis. Dashboard atleta — gerarchia e identità CSRoma
+
+**Piano richiesto il 14/09/2026. Esecutore previsto: Luna, ragionamento Medio.**
+Direzione di riferimento: soluzione A dell'analisi precedente, prossimo impegno
+su superficie scura, marchio leggibile e sezioni secondarie leggere.
+Questa fase è soltanto pianificata: nessun goal implementativo è stato avviato.
+G2 e le successive modifiche attendance sono già completati e non vanno rifatti.
+
+## Registro della fase
+
+| Goal | Stato | Dipende da | Risultato |
+|---|---|---|---|
+| DA.1 Struttura e isolamento del layout | [x] | — | Completato il 14/09/2026; radice e regioni responsive dedicate alla dashboard atleta, ordine/ID/condizioni e comportamento invariati; typecheck, test atleta/famiglia mirati e diff check superati |
+| DA.2 Header e identità CSRoma | [ ] | DA.1 | Marchio leggibile e introduzione compatta |
+| DA.3 Prossimo impegno dominante | [ ] | DA.2 | Primo evento valorizzato, controllo assenza preservato |
+| DA.4 Agenda e prossima partita | [ ] | DA.3 | Gerarchia sportiva secondaria leggibile |
+| DA.5 Messaggi, quota e squadre | [ ] | DA.4 | Servizi compatti senza perdita di informazioni o azioni |
+| DA.6 Responsive, temi e stati | [ ] | DA.5 | Layout solido su mobile/desktop e dati variabili |
+| DA.7 Gate finale e handoff | [ ] | DA.6 | Evidenze visive e funzionali, esito esplicito |
+
+## Contratto comune ai sette goal
+
+- Eseguire un goal alla volta, in ordine, fermandosi alla sua conclusione.
+  Non avviare altri goal o agenti automaticamente.
+- Prima di ogni goal leggere `re_design.md`, questa fase, `AGENTS.md`, lo
+  stato Git e i diff pertinenti; preservare modifiche preesistenti.
+- Ambito: presentazione della dashboard personale atleta. La dashboard famiglia
+  riusa `AthleteDashboard`: preservare il suo layout attraverso il contesto
+  già disponibile; se serve un'opzione di presentazione, renderla esplicita e
+  mantenere il comportamento attuale per i consumatori non coinvolti.
+  Non duplicare l'intera dashboard, il caricamento dati o i controlli operativi.
+- Riutilizzare `Panel`, `ListRow`, `EventKindBadge`, `StatusBadge`,
+  `AttendanceControl`, `MessagePreviewRow`, `MembershipRow`, header e modali
+  esistenti. Non introdurre librerie, asset generati, nuove funzionalità o
+  un secondo design system. Le classi visuali della fase devono essere
+  circoscritte alla dashboard atleta; nessuna ridefinizione globale delle primitive.
+- Consentiti: wrapper, griglia, posizione, spaziatura, tipografia, bordi,
+  superfici usando token esistenti, brevi titoli di sezione coerenti.
+  Vietati: modifiche ad API/DB/auth, selezione/ordinamento degli eventi,
+  filtri, conteggi, mutazioni, politica di lettura messaggi o flussi di pagamento.
+- Conservare massimo tre eventi e tre preview messaggi, la quota più urgente,
+  tutte le membership visibili, ID delle sezioni, collegamenti, modali e filtri.
+  Il protagonista è il primo evento già selezionato dal codice: non forzare
+  il tipo allenamento e non riordinare secondo nuove regole di urgenza.
+- I mockup sono riferimenti visuali: non importare dati dimostrativi, PagoPA,
+  classifiche, conteggi confermati, nuove notifiche o la scritta “dal 1984”.
+- Mantenere la semantica corrente di `absence_only` e RSVP, i permessi delegati,
+  deadline, pending, errori, revoca e blocchi offline. Non ripristinare i tre
+  pulsanti della prima immagine negli eventi in modalità sole assenze.
+- Design: canvas caldo, superfici e colori semantici esistenti; un solo blocco
+  dominante scuro; rosso per marchio/accenti secondo token; badge tipo evento
+  con mapping canonico. Font attuale, nessuna ombra decorativa aggiuntiva.
+  Gutter mobile 16 px, distanze 16/24 px, ora del protagonista 40–48 px
+  responsive, testo informativo almeno 13 px, touch target almeno 44 px.
+- A ogni chiusura aggiornare registro e goal con data, file, verifiche realmente
+  eseguite e note. Un gate non verificato resta esplicitamente aperto.
+
+## DA.1 — Struttura e isolamento del layout
+
+**Obiettivo:** predisporre regioni di pagina ordinate, senza ancora ridisegnare
+il contenuto dei singoli pannelli.
+
+**File di ingresso:** `src/components/athlete/AthleteDashboard.tsx`,
+`src/components/family/FamilyMemberDashboard.tsx`, `src/app/globals.css`.
+Leggere il consumer familiare; modificarlo solo se indispensabile per
+un'opzione esplicita di presentazione.
+
+**Task:**
+- Individuare il contesto personale/familiare effettivo prima di aggiungere classi.
+- Aggiungere una radice visuale dedicata al layout atleta e regioni per
+  introduzione, sport (eventi/partita) e servizi (messaggi/quota/membership).
+- Mantenere l'ordine DOM: introduzione → eventi → partita → messaggi → quota
+  → squadre. Una colonna su mobile; preparare i wrapper per DA.6.
+- Lasciare feedback globali e modali nelle posizioni funzionali appropriate,
+  senza cambiare hook, effetti o callback.
+
+**Accettazione:** stessi contenuti/azioni prima e dopo; nessuna perdita degli
+ID delle sezioni; famiglia e altre pagine conservano presentazione e comportamento.
+**Verifiche:** `npx tsc --noEmit`, test dashboard atleta e famiglia esistenti,
+`git diff --check`; confronto visivo mobile prima/dopo se runtime disponibile.
+
+**Esito DA.1 — 14/09/2026**
+
+- Aggiunta la radice `.cs-athlete-dashboard` con attributo di contesto
+  `personal`/`family`, senza cambiare il consumer `FamilyMemberDashboard`.
+  Inserite le regioni presentazionali `intro`, `sport` (eventi/partita) e
+  `services` (messaggi/quote/squadre), mantenendo l'ordine DOM richiesto e gli
+  ID `athlete-events`, `athlete-messages`, `athlete-fees` e `athlete-teams`.
+- Aggiunte solo regole CSS circoscritte alla dashboard per mantenere una
+  colonna, min-width sicure e spaziatura coerente; nessuna primitiva globale,
+  API, filtro, permesso, callback, route, attendance/RSVP o modal è stata
+  modificata.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati
+  `AthleteDashboard.test.tsx` e `FamilyMemberDashboard.test.tsx` — 2 suite,
+  4 test superati; `git diff --check`.
+- Verifica browser/confronto visivo mobile non eseguita: in questo goal non è
+  stato avviato un runtime locale autenticato; resta da verificare nei goal
+  responsive successivi. DA.2 non avviato; nessun deploy o modifica DB.
+
+## DA.2 — Header e identità CSRoma
+
+**Obiettivo:** rendere riconoscibile la società senza consumare troppo spazio.
+
+**File di ingresso:** `src/components/navigation/AppHeader.tsx`,
+`src/components/navigation/LayoutShell.tsx`, `AthleteDashboard.tsx`, `globals.css`.
+
+**Task:**
+- Esaminare i rami effettivi della shell e attivare la presentazione soltanto
+  per la dashboard atleta personale; niente controlli sul solo ruolo legacy.
+- Mostrare logo originale e nome CSRoma anche su mobile. Consentita una prop
+  visuale opzionale su AppHeader con default invariato per gli altri usi.
+- Nel trattamento dedicato omettere il sottotitolo generico “Control Center”;
+  eliminare l'eyebrow “Area atleta” dall'introduzione della dashboard personale.
+- Conservare “Oggi, Nome” e stagione in una breve introduzione. Non duplicare
+  nome società o selettore squadra nella pagina. Conservare tutte le utility,
+  menu, notifiche e selettori senza inventare badge o nuovi handler.
+
+**Accettazione:** marchio leggibile a 320/375 px; nessun controllo nascosto
+per farlo entrare; nomi lunghi e selettori non causano overflow; altre shell invariate.
+**Verifiche:** typecheck, test pertinenti shell/dashboard, build per la modifica
+della shell, diff check; smoke header a 320/375/768 px e confronto famiglia/coach.
+
+## DA.3 — Prossimo impegno dominante
+
+**Obiettivo:** distinguere nettamente il primo evento dagli altri contenuti.
+
+**File di ingresso:** `AthleteDashboard.tsx`, `globals.css`;
+`AttendanceControl.tsx` e `EventKindBadge.tsx` da leggere per compatibilità.
+
+**Task:**
+- Valorizzare soltanto `visibleEvents[0]` con il Panel esistente: superficie
+  scura da token, padding mobile 20 px, accento rosso sottile, ora in evidenza.
+- Presentare tipo, ora, titolo, data completa, luogo e tutte le squadre già
+  disponibili; nessuna altezza fissa, nessuna immagine di sfondo.
+- Tenere l'apertura del dettaglio nel controllo interattivo esistente e
+  AttendanceControl in un'area distinta dello stesso blocco, senza annidare
+  pulsanti dentro link/pulsanti. Usare una superficie interna chiara se serve
+  a preservare leggibilità del controllo, senza modificarne la logica.
+- Conservare tutte le props e callback attendance, le condizioni di rendering
+  e lo stato “Assenza comunicata”. Nessun countdown relativo nuovo.
+- Gli eventi successivi restano accessibili; la loro rifinitura appartiene a DA.4.
+
+**Accettazione:** primo evento chiaramente dominante; tipo corretto anche per
+partita/riunione; dati lunghi vanno a capo; dettagli e assenza/revoca operativi;
+quando non ci sono eventi usare lo stato vuoto reale senza un grande blocco scuro vuoto.
+**Verifiche:** typecheck, suite AthleteDashboard e AttendanceControl, diff check;
+smoke mobile primo evento/dettaglio e contrasto anche nello stato hover/focus.
+Adeguare test solo per regressioni comportamentali significative, non per classi CSS.
+
+## DA.4 — Agenda compatta e prossima partita
+
+**Obiettivo:** far emergere ciò che segue senza creare un secondo protagonista.
+
+**File di ingresso:** `AthleteDashboard.tsx`, `globals.css`.
+
+**Task:**
+- Presentare gli eventi già visibili di indice 1 e 2 come “Poi in agenda”,
+  usando ListRow con data, ora, titolo, luogo, badge tipo e squadre esistenti.
+- Non duplicare il primo evento nella lista; omettere il titolo della lista
+  se manca un secondo evento. Conservare un accesso chiaro al calendario.
+- Alleggerire il Panel partita: squadre/avversario centrali nella lettura,
+  poi data/ora/luogo/giornata e casa/trasferta. Conservare link al campionato.
+- Nessun nuovo confronto tra API per deduplicare partita/evento e nessun
+  nuovo flusso convocazioni. Mantenere gli stati dati mancanti e filtro vuoto.
+
+**Accettazione:** con uno/due/tre eventi la composizione non lascia buchi;
+nessun evento perso o duplicato dalla ristrutturazione; partita meno dominante
+del primo impegno e leggibile con nomi lunghi.
+**Verifiche:** typecheck, suite AthleteDashboard, diff check; controllo visivo
+mobile con 1/3 eventi, partita presente/assente e filtro squadra.
+
+## DA.5 — Messaggi, quota e appartenenza alla squadra
+
+**Obiettivo:** ridurre il peso dei servizi preservando contenuti e azioni.
+
+**File di ingresso:** `AthleteDashboard.tsx`, `globals.css`; leggere
+`MessagePreviewRow.tsx`, `MembershipRow.tsx` e `ListRow.tsx`.
+
+**Task:**
+- Alleggerire gli involucri delle tre sezioni: separatori, nessuna elevazione,
+  titoli secondari; non cambiare il CSS globale di Panel o ListRow.
+- Conservare fino a tre MessagePreviewRow con mittente, anteprima, squadre,
+  stato lettura e apertura dettaglio; non sostituirle con un semplice contatore.
+- Comporre quota con descrizione/scadenza/squadra a sinistra e importo/stato
+  a destra quando c'è spazio, impilandoli sui viewport stretti.
+- Conservare MembershipRow e numeri per squadra, leggibili ma subordinati
+  all'impegno. Nessun numero unico nel saluto in presenza di più squadre.
+- Se indispensabile, aggiungere solo un'opzione visuale minima alle righe
+  condivise, con default invariato; preferire composizione e CSS circoscritto.
+
+**Accettazione:** messaggi e quota non competono con il protagonista; quota
+scaduta resta riconoscibile tramite badge/testo; nessun “Paga” nuovo; informazioni
+e link esistenti rimangono raggiungibili; nessuna regressione sui consumer condivisi.
+**Verifiche:** typecheck, test dashboard/MessagePreviewRow/MembershipRow,
+diff check; smoke apertura messaggio e squadra e navigazione quote.
+
+## DA.6 — Responsive, temi e stati reali
+
+**Obiettivo:** consolidare la composizione completa senza aggiungere funzionalità.
+
+**File:** quelli della fase; evitare ulteriori estrazioni o refactor.
+
+**Task:**
+- Una colonna sotto 1024 px; da 1024 px griglia principale circa 2:1 con
+  sport a sinistra e servizi a destra, gap 24 px e contenuto massimo 1080 px.
+  Introduzione e feedback globali attraversano entrambe le colonne.
+- Conservare ordine DOM e tastiera coerenti; niente duplicazione DOM per
+  mobile/desktop, sezioni sticky o modifica della bottom navigation.
+- Verificare 320, 375, 768 e 1440 px; safe area e ultimo elemento raggiungibile
+  sopra la bottom bar. Non imporre altezze che tagliano testo o feedback.
+- Verificare tema chiaro/scuro, hover/focus, contrasto testo ordinario 4.5:1,
+  testo grande 3:1, focus visibile e controlli almeno 44 px; zoom 200%.
+- Gestire senza vuoti sproporzionati: loading, errore, offline, refresh,
+  nessun evento, filtro senza risultati, zero messaggi, quota pagata/scaduta,
+  più squadre e titoli lunghi. Non cambiare il significato degli stati.
+
+**Accettazione:** nessun overflow orizzontale/taglio di controlli; priorità
+visiva costante nei due temi; famiglia/coach/admin e altre pagine atleta invariati.
+**Verifiche:** typecheck, test mirati se cambiano JSX/condizioni, diff check;
+controlli browser sui viewport/temi elencati con screenshot locali del risultato.
+Se l'autenticazione impedisce il browser, registrare il blocco e non dichiarare
+il goal completamente verificato; non intervenire su auth/DB per sbloccarlo.
+
+## DA.7 — Gate finale e handoff
+
+**Obiettivo:** verificare il risultato cumulativo e chiudere la fase con evidenze.
+
+**Task:**
+- Rivedere il diff cumulativo DA.1–DA.6, non soltanto l'ultimo diff: nessuna
+  modifica involontaria a logica, API, attendance, permessi o componenti globali.
+- Eseguire `npx tsc --noEmit`, `npm test -- --runInBand`, `npm run build`,
+  `git diff --check` e l'E2E dashboard esistente con configurazione locale
+  verificata. Lo script `next lint` presente non va dichiarato un gate valido
+  senza verificarne l'effettiva compatibilità.
+- Smoke reale: dettaglio primo/secondo evento, assenza e revoca su dati di test
+  autorizzati, messaggio e stato lettura, quote, squadra, cambio filtro;
+  verificare i blocchi offline senza promettere accodamento.
+- Controllare famiglia con/senza permessi per accertare che il riuso dei
+  componenti non abbia esteso azioni o alterato la presentazione fuori scope.
+- Salvare screenshot del risultato in `docs/redesign-dashboard-layout/2026-09-14/`
+  per mobile e desktop nei due temi, evitando credenziali o dati sensibili.
+  Registrare viewport, dati di test e percorsi. Non committare screenshot con
+  informazioni personali reali né generare fixture in produzione.
+- Sono consentite correzioni locali per difetti emersi dal gate; ripetere solo
+  le verifiche interessate. Problemi fuori scope vanno annotati separatamente.
+
+**Accettazione:** evidenze che primo impegno domina, marchio è leggibile e servizi
+sono secondari; flussi preservati; risultati tecnici e limiti riportati con precisione.
+Non marcare completato il gate se mancano prove essenziali. Nessun deploy,
+push o modifica database incluso nella fase.
+
+## Prompt da assegnare a Luna Medio
+
+Sostituire esclusivamente l'ID a ogni esecuzione. Non lanciare tutta la fase
+con un unico prompt. Se il goal precedente non è completo, risolverne prima
+le note bloccanti nel suo ambito.
+
+```text
+Esegui esclusivamente il goal DA.1 della sezione “Dashboard atleta — gerarchia
+e identità CSRoma” in implementation_plan_redesign.md.
+Leggi AGENTS.md, re_design.md, il contratto comune della fase e il goal completo.
+Controlla stato Git, prerequisiti e modifiche già presenti; non rifare goal chiusi.
+Segui la soluzione A documentata, riutilizzando componenti e token esistenti.
+Modifica soltanto la presentazione autorizzata: preserva dati, filtri, permessi,
+modalità sole assenze/RSVP, callback, route e gli altri consumer dei componenti.
+Esegui le verifiche richieste e documenta quelle non eseguibili senza inventare esiti.
+Aggiorna registro e sezione del goal con file, test e note. Fermati alla fine
+di questo goal, senza avviare quello successivo, fare deploy o modificare il DB.
+```
+
+**Registro pianificazione — 14/09/2026:** aggiunti DA.1–DA.7 e prompt operativo;
+modificato solo `implementation_plan_redesign.md`, preservando le note già presenti.
+Check documentale: `git diff --check`. Nessun test applicativo necessario per
+questa modifica documentale; nessun goal avviato né impostazione del modello cambiata.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

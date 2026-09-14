@@ -799,7 +799,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-5">
+    <div
+      className="cs-athlete-dashboard mx-auto max-w-5xl space-y-5"
+      data-dashboard-context={isFamilyDashboard ? 'family' : 'personal'}
+    >
       {dashboardStatus === 'refreshing' && <FeedbackState variant="refreshing" description="Stai visualizzando i dati già caricati mentre controlliamo gli aggiornamenti." />}
       {isOffline && <FeedbackState
         variant="offline"
@@ -807,7 +810,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         description={dashboardHasData ? 'Stai visualizzando gli ultimi dati caricati per questo profilo.' : 'Riconnettiti a internet per caricare i dati della dashboard.'}
         className="px-4 py-3"
       />}
-      <header className="space-y-1 border-b border-[color:var(--cs-border)] pb-4">
+      <header className="cs-athlete-dashboard__intro space-y-1 border-b border-[color:var(--cs-border)] pb-4">
         <p className="cs-eyebrow">{isFamilyDashboard ? 'Area familiare' : 'Area atleta'}</p>
         <h2 id="athlete-welcome" className="text-2xl font-semibold text-[color:var(--cs-text)]">
           Oggi, {profile.first_name}
@@ -816,6 +819,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         {activeSeason?.name && <p className="text-sm text-secondary">{activeSeason.name}</p>}
       </header>
 
+      <div className="cs-athlete-dashboard__sport">
       {canViewSchedule && (
         <Panel id="athlete-events" className="space-y-3">
           <SectionHeading title="Prossimo impegno" href="/athlete/calendar" />
@@ -885,6 +889,9 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         </Panel>
       )}
 
+      </div>
+
+      <div className="cs-athlete-dashboard__services">
       {canReceiveMessages && (
         <Panel id="athlete-messages" className="space-y-3">
           <SectionHeading title="Messaggi non letti" href="/athlete/messages" />
@@ -933,6 +940,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           </div>
         )}
       </Panel>
+      </div>
       {/* Modals dettagli */}
       {selectedEvent && (
         <EventDetailModal

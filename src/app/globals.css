@@ -656,6 +656,12 @@ button.cs-list-row{ font:inherit; }
 .cs-layout{ display:flex; flex:1; min-height:0; width:100%; min-width:0 }
 .cs-main{ flex:1; min-width:0; width:100%; min-height:0; overflow-y:auto; padding: 24px 16px }
 .cs-main--athlete > #app-viewport{ width:100%; max-width:1080px; margin-inline:auto; }
+.cs-athlete-dashboard{ width:100%; min-width:0; }
+.cs-athlete-dashboard__intro,
+.cs-athlete-dashboard__sport,
+.cs-athlete-dashboard__services{ min-width:0; }
+.cs-athlete-dashboard__sport,
+.cs-athlete-dashboard__services{ display:flex; flex-direction:column; gap:var(--cs-sp-5); }
 .cs-navbar, .cs-sidebar, .cs-bottomnav{
   background: var(--cs-surface); border-bottom:1px solid var(--cs-border)
 }
