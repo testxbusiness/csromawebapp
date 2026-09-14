@@ -25,7 +25,11 @@ function eventTeamLabels(event: AthleteCalendarEvent) {
   if (Array.isArray(event.team_details) && event.team_details.length > 0) {
     return event.team_details.map((team) => team.name)
   }
-  return Array.isArray(event.team_ids) ? event.team_ids : []
+  return []
+}
+
+function eventLabel(event: AthleteCalendarEvent) {
+  return event.title?.trim() || 'Evento calendario'
 }
 
 function formatEventDate(value: string) {
@@ -203,8 +207,8 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
           <ul className="max-h-[min(42vh,24rem)] space-y-2 overflow-y-auto pr-1">
             {events.map((event) => <li key={event.id} className="rounded-lg border border-[color:var(--cs-border)] p-3">
               <label className="flex min-h-11 cursor-pointer items-start gap-3">
-                <input type="checkbox" className="mt-1 size-5 shrink-0" checked={selectedIds.has(event.id)} onChange={() => toggleEvent(event.id)} aria-label={`Seleziona ${event.title}`} />
-                <span className="min-w-0 text-sm"><strong className="block">{eventTeamLabels(event).join(', ') || 'Squadra non indicata'}</strong><span className="block capitalize">{formatEventDate(event.start_time)} · {formatEventTime(event.start_time, event.end_time)}</span><span className="block text-secondary">Stato: {event.my_attendance?.is_early_absence ? 'Assenza già comunicata' : 'Eleggibile'}</span></span>
+                <input type="checkbox" className="mt-1 size-5 shrink-0" checked={selectedIds.has(event.id)} onChange={() => toggleEvent(event.id)} aria-label={`Seleziona ${eventLabel(event)}`} />
+                <span className="min-w-0 text-sm"><strong className="block">{eventLabel(event)}</strong><span className="block">Squadra: {eventTeamLabels(event).join(', ') || 'Squadra non indicata'}</span><span className="block capitalize">{formatEventDate(event.start_time)} · {formatEventTime(event.start_time, event.end_time)}</span><span className="block text-secondary">Stato: {event.my_attendance?.is_early_absence ? 'Assenza già comunicata' : 'Eleggibile'}</span></span>
               </label>
             </li>)}
           </ul>
