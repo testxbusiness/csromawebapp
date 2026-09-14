@@ -702,6 +702,24 @@ button.cs-list-row{ font:inherit; }
   padding: var(--cs-sp-3);
 }
 .cs-athlete-dashboard__featured-attendance > [aria-label]{ margin-top: 0; }
+.cs-athlete-dashboard__agenda-next{
+  border-top: 1px solid var(--cs-border);
+  padding-top: var(--cs-sp-4);
+}
+.cs-athlete-dashboard__agenda-next .cs-list-row{
+  padding-block: var(--cs-sp-3);
+}
+.cs-athlete-dashboard__match-row{
+  align-items: flex-start;
+  background: var(--cs-surface-2);
+}
+.cs-athlete-dashboard__matchup{
+  color: var(--cs-text);
+  line-height: 1.45;
+}
+.cs-athlete-dashboard__match-meta{
+  overflow-wrap: anywhere;
+}
 .cs-navbar, .cs-sidebar, .cs-bottomnav{
   background: var(--cs-surface); border-bottom:1px solid var(--cs-border)
 }

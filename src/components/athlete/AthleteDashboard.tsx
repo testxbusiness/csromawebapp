@@ -840,45 +840,28 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         <Panel id="athlete-events" className="space-y-3">
           <SectionHeading title="Prossimo impegno" href="/athlete/calendar" />
           {upcomingEvents.length === 0 ? <FeedbackState variant="empty" title="Nessun impegno programmato" className="py-4" /> : visibleEvents.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun impegno per questa squadra" className="py-4" /> : (
-            <div className="divide-y divide-[color:var(--cs-border)]">
-              {visibleEvents.slice(0, 3).map((event, index) => {
-                const isFeaturedEvent = index === 0
-
+            <div>
+              {(() => {
+                const event = visibleEvents[0]
                 return (
-                  <div key={event.id} className={isFeaturedEvent ? 'cs-athlete-dashboard__featured-event' : 'py-3 first:pt-0 last:pb-0'}>
+                  <div className="cs-athlete-dashboard__featured-event">
                     <ListRow
                       interactive
                       onClick={() => setSelectedEvent(event)}
-                      className={isFeaturedEvent ? 'cs-athlete-dashboard__featured-event-row' : undefined}
-                      leading={isFeaturedEvent ? undefined : <span className="text-xs font-semibold tabular-nums">{new Date(event.start_time).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</span>}
+                      className="cs-athlete-dashboard__featured-event-row"
                       trailing={<span className="text-xs text-secondary">Dettagli</span>}
                     >
-                      {isFeaturedEvent ? (
-                        <>
-                          <span className="flex flex-wrap items-center gap-2">
-                            <EventKindBadge kind={event.event_kind} className="cs-event-kind--solid" />
-                            <span className="cs-athlete-dashboard__featured-event-time tabular-nums">{formatEventTime(event.start_time)}</span>
-                          </span>
-                          <span className="mt-2 block text-xl font-semibold leading-7">{event.title}</span>
-                          <span className="cs-athlete-dashboard__featured-event-date mt-1 block text-sm">{formatEventDate(event.start_time)}</span>
-                          {event.location ? <span className="mt-1 block text-sm">{event.location}</span> : null}
-                        </>
-                      ) : (
-                        <>
-                          <span className="flex flex-wrap items-center gap-2 font-medium">
-                            {event.title}
-                            <EventKindBadge kind={event.event_kind} />
-                          </span>
-                          <span className="mt-1 block text-sm text-secondary">
-                            {formatEventTime(event.start_time)}
-                            {event.location ? ` · ${event.location}` : ''}
-                          </span>
-                        </>
-                      )}
+                      <span className="flex flex-wrap items-center gap-2">
+                        <EventKindBadge kind={event.event_kind} className="cs-event-kind--solid" />
+                        <span className="cs-athlete-dashboard__featured-event-time tabular-nums">{formatEventTime(event.start_time)}</span>
+                      </span>
+                      <span className="mt-2 block text-xl font-semibold leading-7">{event.title}</span>
+                      <span className="cs-athlete-dashboard__featured-event-date mt-1 block text-sm">{formatEventDate(event.start_time)}</span>
+                      {event.location ? <span className="mt-1 block text-sm">{event.location}</span> : null}
                       {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
                       {event.my_attendance?.is_early_absence && <span className="mt-2 block text-sm font-medium text-[color:var(--cs-text)]" role="status">Assenza comunicata</span>}
                     </ListRow>
-                    {index === 0 && (!isDelegatedProfile || permissions?.confirm_attendance === true) && (
+                    {(!isDelegatedProfile || permissions?.confirm_attendance === true) && (
                       <div className="cs-athlete-dashboard__featured-attendance">
                         <AttendanceControl
                           requiresConfirmation={Boolean(event.requires_confirmation)}
@@ -897,7 +880,34 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                     )}
                   </div>
                 )
-              })}
+              })()}
+              {visibleEvents.length > 1 && (
+                <div className="cs-athlete-dashboard__agenda-next mt-5">
+                  <SectionHeading title="Poi in agenda" />
+                  <div className="divide-y divide-[color:var(--cs-border)]">
+                    {visibleEvents.slice(1, 3).map((event) => (
+                      <div key={event.id} className="py-2 first:pt-0 last:pb-0">
+                        <ListRow
+                          interactive
+                          onClick={() => setSelectedEvent(event)}
+                          leading={<span className="text-xs font-semibold tabular-nums">{new Date(event.start_time).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</span>}
+                          trailing={<span className="text-xs text-secondary">Dettagli</span>}
+                        >
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+                            <span>{event.title}</span>
+                            <EventKindBadge kind={event.event_kind} />
+                          </span>
+                          <span className="mt-1 block text-sm text-secondary">
+                            {formatEventTime(event.start_time)}
+                            {event.location ? ` · ${event.location}` : ''}
+                          </span>
+                          {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
+                        </ListRow>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </Panel>
@@ -907,18 +917,18 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         <Panel className="space-y-3">
           <SectionHeading title="Prossima partita" href="/athlete/campionati" />
           {!nextChampionshipMatch ? <FeedbackState variant="empty" title="Nessuna partita in programma" className="py-4" /> : !visibleMatch ? <FeedbackState variant="filtered-empty" title="Nessuna partita per questa squadra" className="py-4" /> : (
-            <ListRow leading={<span className="text-xs font-semibold tabular-nums">{visibleMatch.match_date ? new Date(visibleMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}</span>}>
-              <span className="flex flex-wrap items-center gap-2 font-medium">
+            <ListRow className="cs-athlete-dashboard__match-row" leading={<span className="text-xs font-semibold tabular-nums">{visibleMatch.match_date ? new Date(visibleMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}</span>}>
+              <span className="cs-athlete-dashboard__matchup flex flex-wrap items-center gap-2 font-semibold">
                 {visibleMatch.team?.name || (visibleMatch.is_home ? visibleMatch.home_club_team?.name : visibleMatch.away_club_team?.name) || 'Squadra'}
                 <span aria-hidden="true">—</span>
                 {visibleMatch.opponent?.name || (visibleMatch.is_home ? visibleMatch.away_club_team?.name : visibleMatch.home_club_team?.name) || 'Avversario da definire'}
-                {visibleMatch.is_home !== undefined && <StatusBadge status="neutral" label={visibleMatch.is_home ? 'Casa' : 'Trasferta'} />}
               </span>
-              <span className="mt-1 block text-sm text-secondary">
+              <span className="cs-athlete-dashboard__match-meta mt-2 block text-sm text-secondary">
                 {visibleMatch.start_time ? visibleMatch.start_time.slice(0, 5) : 'Orario da definire'}
                 {visibleMatch.location_text ? ` · ${visibleMatch.location_text}` : ''}
                 {visibleMatch.match_day ? ` · Giornata ${visibleMatch.match_day}` : ''}
               </span>
+              {visibleMatch.is_home !== undefined && <span className="mt-2 block"><StatusBadge status="neutral" label={visibleMatch.is_home ? 'Casa' : 'Trasferta'} /></span>}
             </ListRow>
           )}
         </Panel>

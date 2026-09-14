@@ -6193,7 +6193,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.1 Struttura e isolamento del layout | [x] | — | Completato il 14/09/2026; radice e regioni responsive dedicate alla dashboard atleta, ordine/ID/condizioni e comportamento invariati; typecheck, test atleta/famiglia mirati e diff check superati |
 | DA.2 Header e identità CSRoma | [x] | DA.1 | Completato il 14/09/2026; marchio leggibile su mobile, introduzione personale compatta, altre shell invariate |
 | DA.3 Prossimo impegno dominante | [x] | DA.2 | Completato il 14/09/2026; primo evento dominante con dati completi, dettaglio e attendance preservati |
-| DA.4 Agenda e prossima partita | [ ] | DA.3 | Gerarchia sportiva secondaria leggibile |
+| DA.4 Agenda e prossima partita | [x] | DA.3 | Completato il 14/09/2026; agenda secondaria compatta e partita subordinata al protagonista |
 | DA.5 Messaggi, quota e squadre | [ ] | DA.4 | Servizi compatti senza perdita di informazioni o azioni |
 | DA.6 Responsive, temi e stati | [ ] | DA.5 | Layout solido su mobile/desktop e dati variabili |
 | DA.7 Gate finale e handoff | [ ] | DA.6 | Evidenze visive e funzionali, esito esplicito |
@@ -6402,6 +6402,30 @@ nessun evento perso o duplicato dalla ristrutturazione; partita meno dominante
 del primo impegno e leggibile con nomi lunghi.
 **Verifiche:** typecheck, suite AthleteDashboard, diff check; controllo visivo
 mobile con 1/3 eventi, partita presente/assente e filtro squadra.
+
+**Esito DA.4 — 14/09/2026**
+
+- Separato il primo evento già filtrato dal codice dalla lista secondaria:
+  gli indici 1 e 2 sono presentati una sola volta sotto “Poi in agenda” con
+  `ListRow`, data, ora, titolo, luogo, `EventKindBadge` e squadre disponibili.
+  Il titolo non appare con un solo evento e il link al calendario resta nella
+  testata “Prossimo impegno”.
+- Alleggerito il blocco “Prossima partita” senza cambiare il payload o il
+  filtro: squadre/avversario sono la prima informazione, seguiti da ora,
+  luogo, giornata e badge casa/trasferta. Restano link al campionato, fallback
+  per dati mancanti e stato di filtro vuoto.
+- Non sono stati introdotti confronti API, deduplicazioni, convocazioni,
+  dati nuovi, modifiche a permessi, attendance/RSVP, callback, route o altri
+  consumer. La dashboard familiare continua a riusare lo stesso componente.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirato
+  `AthleteDashboard.test.tsx` — 1 suite, 3 test superati; `git diff --check`
+  superato.
+- Controllo visivo mobile con 1/3 eventi, partita presente/assente e filtro
+  squadra non eseguito: non è disponibile un runtime autenticato con dati
+  autorizzati. Il gate visivo responsive resta aperto per DA.6; nessun deploy,
+  agente successivo o modifica DB avviati.
 
 ## DA.5 — Messaggi, quota e appartenenza alla squadra
 
