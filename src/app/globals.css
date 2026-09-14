@@ -662,6 +662,46 @@ button.cs-list-row{ font:inherit; }
 .cs-athlete-dashboard__services{ min-width:0; }
 .cs-athlete-dashboard__sport,
 .cs-athlete-dashboard__services{ display:flex; flex-direction:column; gap:var(--cs-sp-5); }
+.cs-athlete-dashboard__featured-event{
+  margin: 4px 0;
+  overflow: hidden;
+  border: 1px solid var(--cs-navy);
+  border-left: 3px solid var(--cs-brand-red);
+  border-radius: var(--cs-r-lg);
+  background: var(--cs-navy);
+  color: #fff;
+}
+.cs-athlete-dashboard__featured-event-row{
+  align-items: flex-start;
+  min-height: 0;
+  padding: var(--cs-sp-5);
+  border-bottom: 0;
+  background: transparent;
+}
+.cs-athlete-dashboard__featured-event-row:hover{ background: color-mix(in oklab, var(--cs-navy), white 8%); }
+.cs-athlete-dashboard__featured-event-row:focus-visible{ outline-color: var(--cs-brand-red); }
+.cs-athlete-dashboard__featured-event-row .cs-list-row__trailing,
+.cs-athlete-dashboard__featured-event-row [role="status"]{ color: rgba(255,255,255,.88); }
+.cs-athlete-dashboard__featured-event-time{
+  color: #fff;
+  font-size: clamp(2.5rem, 10vw, 3rem);
+  font-weight: 700;
+  line-height: 1;
+}
+.cs-athlete-dashboard__featured-event-date{ color: rgba(255,255,255,.82); }
+.cs-athlete-dashboard__featured-event .cs-badge--neutral{
+  border-color: rgba(255,255,255,.28);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+}
+.cs-athlete-dashboard__featured-event > .cs-athlete-dashboard__featured-attendance{
+  margin: 0 var(--cs-sp-5) var(--cs-sp-5);
+  border-radius: var(--cs-r-md);
+  background: var(--cs-surface);
+  color: var(--cs-text);
+  padding: var(--cs-sp-3);
+}
+.cs-athlete-dashboard__featured-attendance > [aria-label]{ margin-top: 0; }
 .cs-navbar, .cs-sidebar, .cs-bottomnav{
   background: var(--cs-surface); border-bottom:1px solid var(--cs-border)
 }

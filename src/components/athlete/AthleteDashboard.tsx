@@ -133,6 +133,22 @@ function SectionHeading({ title, href }: { title: string; href?: string }) {
   )
 }
 
+function formatEventTime(value: string) {
+  return new Date(value).toLocaleTimeString('it-IT', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatEventDate(value: string) {
+  return new Date(value).toLocaleDateString('it-IT', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
 export default function AthleteDashboard({ user, profile, delegatedView = false }: AthleteDashboardProps) {
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const { selectedTeamId: activeTeamId, setTeams, resetTeam } = useTeamContext()
@@ -826,39 +842,58 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           {upcomingEvents.length === 0 ? <FeedbackState variant="empty" title="Nessun impegno programmato" className="py-4" /> : visibleEvents.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun impegno per questa squadra" className="py-4" /> : (
             <div className="divide-y divide-[color:var(--cs-border)]">
               {visibleEvents.slice(0, 3).map((event, index) => {
+                const isFeaturedEvent = index === 0
+
                 return (
-                  <div key={event.id} className="py-3 first:pt-0 last:pb-0">
+                  <div key={event.id} className={isFeaturedEvent ? 'cs-athlete-dashboard__featured-event' : 'py-3 first:pt-0 last:pb-0'}>
                     <ListRow
                       interactive
                       onClick={() => setSelectedEvent(event)}
-                      leading={<span className="text-xs font-semibold tabular-nums">{new Date(event.start_time).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</span>}
+                      className={isFeaturedEvent ? 'cs-athlete-dashboard__featured-event-row' : undefined}
+                      leading={isFeaturedEvent ? undefined : <span className="text-xs font-semibold tabular-nums">{new Date(event.start_time).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</span>}
                       trailing={<span className="text-xs text-secondary">Dettagli</span>}
                     >
-                      <span className="flex flex-wrap items-center gap-2 font-medium">
-                        {event.title}
-                        <EventKindBadge kind={event.event_kind} />
-                      </span>
-                      <span className="mt-1 block text-sm text-secondary">
-                        {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                        {event.location ? ` · ${event.location}` : ''}
-                      </span>
+                      {isFeaturedEvent ? (
+                        <>
+                          <span className="flex flex-wrap items-center gap-2">
+                            <EventKindBadge kind={event.event_kind} className="cs-event-kind--solid" />
+                            <span className="cs-athlete-dashboard__featured-event-time tabular-nums">{formatEventTime(event.start_time)}</span>
+                          </span>
+                          <span className="mt-2 block text-xl font-semibold leading-7">{event.title}</span>
+                          <span className="cs-athlete-dashboard__featured-event-date mt-1 block text-sm">{formatEventDate(event.start_time)}</span>
+                          {event.location ? <span className="mt-1 block text-sm">{event.location}</span> : null}
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex flex-wrap items-center gap-2 font-medium">
+                            {event.title}
+                            <EventKindBadge kind={event.event_kind} />
+                          </span>
+                          <span className="mt-1 block text-sm text-secondary">
+                            {formatEventTime(event.start_time)}
+                            {event.location ? ` · ${event.location}` : ''}
+                          </span>
+                        </>
+                      )}
                       {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
                       {event.my_attendance?.is_early_absence && <span className="mt-2 block text-sm font-medium text-[color:var(--cs-text)]" role="status">Assenza comunicata</span>}
                     </ListRow>
                     {index === 0 && (!isDelegatedProfile || permissions?.confirm_attendance === true) && (
-                      <AttendanceControl
-                        requiresConfirmation={Boolean(event.requires_confirmation)}
-                        attendanceMode={event.attendance_mode}
-                        confirmationDeadline={event.confirmation_deadline}
-                        initialStatus={event.my_attendance?.status || null}
-                        canRespond
-                        onChange={(status) => persistEventAttendance(event.id, status)}
-                        availability={event.attendance_availability}
-                        eventContext={{ teams: event.teams?.map((team) => team.name) ?? [], start: event.start_time, end: event.end_time }}
-                        initialEarlyAbsence={event.my_attendance?.is_early_absence === true}
-                        onEarlyAbsence={(note) => mutateEarlyAbsence(event.id, false, note)}
-                        onRevokeEarlyAbsence={() => mutateEarlyAbsence(event.id, true)}
-                      />
+                      <div className="cs-athlete-dashboard__featured-attendance">
+                        <AttendanceControl
+                          requiresConfirmation={Boolean(event.requires_confirmation)}
+                          attendanceMode={event.attendance_mode}
+                          confirmationDeadline={event.confirmation_deadline}
+                          initialStatus={event.my_attendance?.status || null}
+                          canRespond
+                          onChange={(status) => persistEventAttendance(event.id, status)}
+                          availability={event.attendance_availability}
+                          eventContext={{ teams: event.teams?.map((team) => team.name) ?? [], start: event.start_time, end: event.end_time }}
+                          initialEarlyAbsence={event.my_attendance?.is_early_absence === true}
+                          onEarlyAbsence={(note) => mutateEarlyAbsence(event.id, false, note)}
+                          onRevokeEarlyAbsence={() => mutateEarlyAbsence(event.id, true)}
+                        />
+                      </div>
                     )}
                   </div>
                 )

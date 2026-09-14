@@ -6192,7 +6192,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 |---|---|---|---|
 | DA.1 Struttura e isolamento del layout | [x] | — | Completato il 14/09/2026; radice e regioni responsive dedicate alla dashboard atleta, ordine/ID/condizioni e comportamento invariati; typecheck, test atleta/famiglia mirati e diff check superati |
 | DA.2 Header e identità CSRoma | [x] | DA.1 | Completato il 14/09/2026; marchio leggibile su mobile, introduzione personale compatta, altre shell invariate |
-| DA.3 Prossimo impegno dominante | [ ] | DA.2 | Primo evento valorizzato, controllo assenza preservato |
+| DA.3 Prossimo impegno dominante | [x] | DA.2 | Completato il 14/09/2026; primo evento dominante con dati completi, dettaglio e attendance preservati |
 | DA.4 Agenda e prossima partita | [ ] | DA.3 | Gerarchia sportiva secondaria leggibile |
 | DA.5 Messaggi, quota e squadre | [ ] | DA.4 | Servizi compatti senza perdita di informazioni o azioni |
 | DA.6 Responsive, temi e stati | [ ] | DA.5 | Layout solido su mobile/desktop e dati variabili |
@@ -6356,6 +6356,30 @@ quando non ci sono eventi usare lo stato vuoto reale senza un grande blocco scur
 **Verifiche:** typecheck, suite AthleteDashboard e AttendanceControl, diff check;
 smoke mobile primo evento/dettaglio e contrasto anche nello stato hover/focus.
 Adeguare test solo per regressioni comportamentali significative, non per classi CSS.
+
+**Esito DA.3 — 14/09/2026**
+
+- Valorizzato esclusivamente `visibleEvents[0]` dentro il Panel esistente:
+  superficie scura con token `--cs-navy`, bordo/accento CSRoma rosso, padding
+  mobile da 20 px e ora prominente responsive. Gli eventi successivi conservano
+  il rendering e l’accesso al dettaglio attuali, in attesa di DA.4.
+- Il protagonista mostra il badge `EventKindBadge` canonico, ora, data completa,
+  titolo, luogo e tutte le squadre già presenti nei dati. Non sono state
+  aggiunte altezze fisse, immagini, countdown o dati dimostrativi.
+- `ListRow` resta l’unico controllo interattivo per aprire il dettaglio;
+  `AttendanceControl` è in una superficie distinta dello stesso blocco, senza
+  annidamento di controlli. Props, callback, condizioni delegated/permission,
+  modalità `absence_only`, RSVP, deadline, assenza comunicata, revoca, errori e
+  stato offline sono invariati.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati
+  `AthleteDashboard.test.tsx` e `AttendanceControl.test.tsx` — 2 suite,
+  18 test superati; `git diff --check` superato.
+- Smoke browser mobile su primo evento/dettaglio e verifica visuale reale di
+  contrasto hover/focus non eseguiti: l’ambiente non dispone di un runtime
+  autenticato/dati autorizzati per la dashboard. Il gate visuale resta aperto
+  per i goal responsive successivi; non sono stati modificati auth, DB o deploy.
 
 ## DA.4 — Agenda compatta e prossima partita
 
