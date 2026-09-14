@@ -6198,7 +6198,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.6 Responsive, temi e stati | [~] | DA.5 | Composizione responsive 1 colonna/2:1 implementata; gate browser e screenshot ancora aperti |
 | DA.6.R1 Verifica evento attivo | [ ] | DA.6 | Chiarire “in corso”/terminato prima di modificare la gerarchia del protagonista |
 | DA.6.R2 Header mobile contestuale | [-] | DA.6.R1 | Implementato e verificato visivamente a 400 px in tema chiaro/scuro; restano da documentare 320/375/768 e tastiera/focus |
-| DA.6.R3 Protagonista senza contenitore superfluo | [ ] | DA.6.R2 | Rimosso un livello mobile attorno a protagonista e agenda, con gutter e spaziature canonici |
+| DA.6.R3 Protagonista senza contenitore superfluo | [-] | DA.6.R2 | Implementazione completata il 14/09/2026; sul solo dashboard personale mobile rimosso il wrapper visivo del Panel, “Poi in agenda” resa sezione autonoma con gutter 16 px, padding 20 px e spazio 20 px; famiglia e desktop invariati. Gate screenshot/overflow ancora aperto per blocco browser |
 | DA.6.R4 Stato attendance compatto | [ ] | DA.6.R3 | Stato bloccato sintetico; controlli ancora evidenti quando la risposta è aperta |
 | DA.6.R5 Agenda non ridondante | [ ] | DA.6.R4 | Righe compatte, squadra/tipo non ripetuti e dettaglio raggiungibile dall’intera riga |
 | DA.6.R6 Prossima partita sportiva | [ ] | DA.6.R5 | Card partita riconoscibile con luogo sintetico, casa/trasferta e dettagli preservati |
@@ -6648,6 +6648,29 @@ file, test e note reali.
   il goal resta parziale fino a quella verifica esplicita.
 
 ### DA.6.R3 — Protagonista senza contenitore superfluo
+
+**Esito implementazione DA.6.R3 — 14/09/2026**
+
+- Sul dashboard personale sotto 768 px il `Panel` esterno di “Prossimo impegno”
+  non disegna più una seconda superficie: la scheda navy resta il blocco
+  dominante e mantiene il proprio padding interno di 20 px.
+- “Poi in agenda” è ora una sezione semantica autonoma, con superficie,
+  bordo, radius e padding interno di 20 px; il gutter della pagina resta 16 px
+  e la distanza dalla scheda protagonista è 20 px. Le righe mantengono tutto il
+  contenuto e i dettagli, senza altezze fisse.
+- La regola è limitata a `data-dashboard-context="personal"`: famiglia e
+  desktop non cambiano. Nessun dato, ordinamento, permesso, callback, route o
+  contenuto è stato duplicato o rimosso.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, questo piano.
+- Verifiche: `npx tsc --noEmit`, test dashboard atleta/famiglia (2 suite, 10
+  test) e `git diff --check` superati. Il test E2E dashboard non è avviabile in
+  questa sandbox perché il web server riceve `listen EPERM` su
+  `0.0.0.0:3000`. Secondo tentativo su `localhost:3001`: Next si avvia, ma
+  Chromium headless termina con `SIGTRAP` in `global-setup.ts`; anche il
+  browser interattivo non è disponibile perché il kernel Computer Use si
+  resetta all’avvio. Screenshot/overflow 320/375/400/768/1440 restano quindi
+  parte del gate browser DA.6.
 
 - Eliminare sul mobile un solo livello di wrapper attorno a “Prossimo impegno”
   e agenda, mantenendo la scheda scura come superficie dominante.

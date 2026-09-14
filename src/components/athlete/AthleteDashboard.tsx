@@ -861,7 +861,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       <div className="cs-athlete-dashboard__layout">
       <div className="cs-athlete-dashboard__sport">
       {canViewSchedule && (
-        <Panel id="athlete-events" className="space-y-3">
+        <Panel id="athlete-events" className="cs-athlete-dashboard__protagonist-panel space-y-3">
           <SectionHeading title="Prossimo impegno" href="/athlete/calendar" />
           {upcomingEvents.length === 0 ? <FeedbackState variant="empty" title="Nessun impegno programmato" className="py-4" /> : visibleEvents.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun impegno per questa squadra" className="py-4" /> : (
             <div>
@@ -910,7 +910,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                 )
               })()}
               {visibleEvents.length > 1 && (
-                <div className="cs-athlete-dashboard__agenda-next mt-5">
+                <section className="cs-athlete-dashboard__agenda-next mt-5" aria-label="Poi in agenda">
                   <SectionHeading title="Poi in agenda" />
                   <div className="divide-y divide-[color:var(--cs-border)]">
                     {visibleEvents.slice(1, 3).map((event) => (
@@ -934,7 +934,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                       </div>
                     ))}
                   </div>
-                </div>
+                </section>
               )}
             </div>
           )}
