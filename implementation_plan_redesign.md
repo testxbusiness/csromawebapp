@@ -6069,7 +6069,7 @@ per permessi sullo schema `private`; è presente un warning preesistente di
 collation del database locale. Nessun accesso a staging, produzione o deploy.
 
 **Handoff repository/staging — 14/09/2026.** Il commit locale
-`c2b8c59` (`feat(attendance): add absence-only mode`) contiene implementazione,
+`46b3786` (`feat(attendance): add absence-only mode`) contiene implementazione,
 migrazione, test e questo registro. Il push verso `origin/redesign` e
 l'applicazione staging restano in attesa: il dry-run del progetto collegato
 `csromawebapp-staging` ha rilevato una history divergente, con
@@ -6078,6 +6078,61 @@ l'applicazione staging restano in attesa: il dry-run del progetto collegato
 della history, né alcuna scrittura su staging o produzione; servono i file SQL
 mancanti o una decisione esplicita e verificata sulla riconciliazione prima di
 applicare la migration `20260914120000` in sicurezza.
+
+**Recupero migration history staging — 14/09/2026.** Il dump di sola lettura
+del catalogo `supabase_migrations.schema_migrations` ha consentito di recuperare
+in locale, byte-per-byte rispetto agli statement remoti, i file
+`20260913113243_r7_early_absence_mutations.sql` e
+`20260913164229_r8_allow_early_absence_non_next.sql`. Il dry-run non può ancora
+proseguire: staging non registra i file locali `20251007152643` (master legacy),
+`20260806133634` (hardening esplicitamente preparato ma non applicato) e
+`20260913150000`. Quest'ultimo non coincide con l'R8 remoto delle 16:42 e va
+quindi trattato come un vero aggiornamento successivo, con timestamp corretto.
+Non usare `--include-all`: rieseguirebbe anche il master e l'hardening. La
+verifica successiva ha stabilito che quei due file devono restare nel percorso
+delle migrazioni perché sono già registrati in produzione. Staging presenta gli
+oggetti essenziali che essi creano (tabelle, funzioni, trigger e policy), ma
+non le rispettive righe di history: dopo una verifica completa possono quindi
+essere marcati **applied** soltanto su staging, senza rieseguire SQL. L'R8
+locale va invece rinumerato come migrazione forward successiva a
+`20260913164229`, poi applicato normalmente. Nessuna modifica è stata eseguita
+su staging.
+
+**Verifica produzione — 14/09/2026.** Il connettore Supabase read-only ha
+confermato che il progetto produzione `csromawebapp` (`qyiholnatsrvpoqoplje`)
+è fermo a `20260819130000_allow_coach_message_reads`: non contiene R1/R5/R7/R8
+né la modalità sole assenze. Registra invece `20251007152643_master_migration_fixed`
+e `20260806133634_prod_rls_hardening`, assenti solo dalla history di staging.
+Produzione può quindi ricevere, in ordine, le migrazioni dal
+`20260910133219` in avanti tramite il medesimo commit dopo la prova su staging;
+non richiede alcuna repair per i due artefatti storici. Le query al catalogo
+produzione hanno confermato inoltre l'assenza delle funzioni/RPC attendance
+R5–R8 e delle colonne `attendance_mode`/assenza anticipata. Nessuna scrittura
+è stata effettuata su staging o produzione.
+
+**Scope di rilascio corrente — 14/09/2026.** Produzione resta espressamente
+fuori dallo scope: nessuna migration, repair della history, deploy o modifica
+di configurazione sarà eseguita sul progetto `csromawebapp`. Le informazioni
+read-only raccolte su produzione servono soltanto a progettare una promozione
+successiva. L'obiettivo operativo corrente è ripristinare la history di
+**staging**, rinumerare l'R8 locale come migrazione forward e applicare/verificare
+solo le migrazioni richieste su `csromawebapp-staging`.
+
+**Applicazione staging — 14/09/2026.** Dopo avere verificato gli oggetti
+storici nello schema, la history di `csromawebapp-staging` è stata riconciliata
+senza eseguire SQL per `20251007152643` e `20260806133634`. L'aggiornamento R8
+prima locale-only è stato rinumerato da `20260913150000` a
+`20260913170000` per renderlo una migrazione forward rispetto al R8 remoto.
+Il dry-run ha proposto esclusivamente `20260913170000` e `20260914120000` e
+`supabase db push --linked` le ha applicate con successo. Query post-deploy:
+colonne e vincoli `attendance_mode`/pre-assenza presenti, RPC attendance
+presenti e zero eventi futuri configurati di allenamento/partita fuori dalla
+modalità `absence_only`. Il catalogo staging registra entrambe le versioni.
+Il security advisor continua a segnalare tre tabelle RLS senza policy, due
+funzioni `SECURITY DEFINER` eseguibili da authenticated e la leaked-password
+protection disabilitata; nessun finding è relativo alle due migrazioni
+applicate e il loro trattamento resta fuori da questo scope. Produzione non è
+stata modificata.
 
 # 22. Criterio finale di successo
 
