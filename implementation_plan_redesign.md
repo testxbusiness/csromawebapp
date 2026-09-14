@@ -6197,7 +6197,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.5 Messaggi, quota e squadre | [x] | DA.4 | Completato il 14/09/2026; servizi compatti, quota separata per importo/stato e membership preservate |
 | DA.6 Responsive, temi e stati | [~] | DA.5 | Composizione responsive 1 colonna/2:1 implementata; gate browser e screenshot ancora aperti |
 | DA.6.R1 Verifica evento attivo | [ ] | DA.6 | Chiarire “in corso”/terminato prima di modificare la gerarchia del protagonista |
-| DA.6.R2 Header mobile contestuale | [-] | DA.6.R1 | Implementato il layout contestuale e rimosso il controllo notifiche non operativo; verifica browser 320/375/400/768 e temi ancora aperta per blocco `listen EPERM` |
+| DA.6.R2 Header mobile contestuale | [-] | DA.6.R1 | Implementato e verificato visivamente a 400 px in tema chiaro/scuro; restano da documentare 320/375/768 e tastiera/focus |
 | DA.6.R3 Protagonista senza contenitore superfluo | [ ] | DA.6.R2 | Rimosso un livello mobile attorno a protagonista e agenda, con gutter e spaziature canonici |
 | DA.6.R4 Stato attendance compatto | [ ] | DA.6.R3 | Stato bloccato sintetico; controlli ancora evidenti quando la risposta è aperta |
 | DA.6.R5 Agenda non ridondante | [ ] | DA.6.R4 | Righe compatte, squadra/tipo non ripetuti e dettaglio raggiungibile dall’intera riga |
@@ -6636,6 +6636,16 @@ file, test e note reali.
   `global-setup.ts` prima dell’esecuzione dei test. Restano aperti il
   controllo reale a 320/375/400/768 px, tastiera/focus e tema chiaro/scuro;
   non vengono dichiarati superati né modificati auth/DB per aggirare il blocco.
+
+**Evidenza screenshot manuali — 14/09/2026**
+
+- Ricevuti tre screenshot da staging a 400 px: tema chiaro, tema scuro e
+  scroll della dashboard.
+- Confermati visivamente selettore su riga dedicata sotto il brand, valori
+  `Tutte le squadre`, `Under 17` e `Under 15` leggibili, assenza di overflow
+  orizzontale e composizione coerente nei due temi.
+- Gli screenshot non provano da soli tastiera/focus né i viewport 320/375/768;
+  il goal resta parziale fino a quella verifica esplicita.
 
 ### DA.6.R3 — Protagonista senza contenitore superfluo
 
