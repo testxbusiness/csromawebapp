@@ -6,6 +6,8 @@ import { requireSubjectAthleteContext } from '@/server/auth/require-subject-prof
 import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 import { selectableEarlyAbsenceEvents } from '@/server/events/early-absence'
 
+type TeamLabel = { id: string; name: string; code: string | null }
+
 function domainError(error: unknown, fallback: string) {
   const details = error && typeof error === 'object'
     ? error as { code?: string; message?: string; details?: string; hint?: string }
@@ -41,7 +43,27 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(await createClient(), searchParams.get('subjectProfileId'), 'view_schedule')
     const result = await resolveAttendanceAvailability(subject.dataClient, subject.profileId, subject.permissions)
     const page = selectableEarlyAbsenceEvents(result, parsed.data.from, parsed.data.to, parsed.data.offset, parsed.data.limit)
-    return NextResponse.json({ ...page, limit: parsed.data.limit, offset: parsed.data.offset })
+    const authorizedTeamIds = result.authorizedTeamIds ?? []
+    const teamLabels = new Map<string, TeamLabel>()
+    if (authorizedTeamIds.length > 0) {
+      const { data: teams, error: teamsError } = await subject.dataClient
+        .from('teams')
+        .select('id, name, code')
+        .in('id', authorizedTeamIds)
+      if (teamsError) throw teamsError
+      for (const team of (teams as TeamLabel[] | null) ?? []) teamLabels.set(team.id, team)
+    }
+    const events = page.events.map((event) => {
+      const teamDetails = (Array.isArray(event.team_ids) ? event.team_ids : [])
+        .map((teamId) => teamLabels.get(teamId))
+        .filter((team): team is TeamLabel => Boolean(team))
+      return {
+        ...event,
+        teams: teamDetails.map((team) => team.name || team.code || 'Squadra non indicata'),
+        team_details: teamDetails,
+      }
+    })
+    return NextResponse.json({ ...page, events, limit: parsed.data.limit, offset: parsed.data.offset })
   } catch (error) {
     if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })
     return domainError(error, 'Impossibile caricare gli eventi selezionabili')
