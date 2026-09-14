@@ -6196,7 +6196,15 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.4 Agenda e prossima partita | [x] | DA.3 | Completato il 14/09/2026; agenda secondaria compatta e partita subordinata al protagonista |
 | DA.5 Messaggi, quota e squadre | [x] | DA.4 | Completato il 14/09/2026; servizi compatti, quota separata per importo/stato e membership preservate |
 | DA.6 Responsive, temi e stati | [~] | DA.5 | Composizione responsive 1 colonna/2:1 implementata; gate browser e screenshot ancora aperti |
-| DA.7 Gate finale e handoff | [ ] | DA.6 | Evidenze visive e funzionali, esito esplicito |
+| DA.6.R1 Verifica evento attivo | [ ] | DA.6 | Chiarire “in corso”/terminato prima di modificare la gerarchia del protagonista |
+| DA.6.R2 Header mobile contestuale | [ ] | DA.6.R1 | Squadra leggibile sotto il saluto; azioni secondarie ricondotte al profilo senza regressioni |
+| DA.6.R3 Protagonista senza contenitore superfluo | [ ] | DA.6.R2 | Rimosso un livello mobile attorno a protagonista e agenda, con gutter e spaziature canonici |
+| DA.6.R4 Stato attendance compatto | [ ] | DA.6.R3 | Stato bloccato sintetico; controlli ancora evidenti quando la risposta è aperta |
+| DA.6.R5 Agenda non ridondante | [ ] | DA.6.R4 | Righe compatte, squadra/tipo non ripetuti e dettaglio raggiungibile dall’intera riga |
+| DA.6.R6 Prossima partita sportiva | [ ] | DA.6.R5 | Card partita riconoscibile con luogo sintetico, casa/trasferta e dettagli preservati |
+| DA.6.R7 Servizi secondari mobile | [ ] | DA.6.R6 | Messaggi, quota e squadre compatti; importi e stati coerenti con le regole esistenti |
+| DA.6.R8 Identità atleta e floating action | [ ] | DA.6.R7 | Copy atleta, decorazione discreta e pulsante flottante senza sovrapposizioni |
+| DA.7 Gate finale e handoff | [ ] | DA.6.R1–DA.6.R8 | Evidenze visive e funzionali, esito esplicito |
 
 ## Contratto comune ai sette goal
 
@@ -6549,6 +6557,101 @@ il goal completamente verificato; non intervenire su auth/DB per sbloccarlo.
 - File modificati: `src/app/globals.css`,
   `src/components/athlete/AthleteDashboard.tsx`,
   `tests/e2e/athlete-dashboard.spec.ts`, questo piano.
+
+## Azioni operative derivate dall’analisi visuale — 14/09/2026
+
+Queste azioni trasformano l’analisi ricevuta in sotto-goal eseguibili dopo la
+chiusura del gate browser di DA.6 e prima di DA.7. Restano nel perimetro della
+presentazione atleta/famiglia: nessuna modifica a API, DB, auth, permessi,
+filtri, ordinamento autorevole, attendance/RSVP o comportamento dei componenti
+condivisi. Eseguire un solo sotto-goal alla volta e aggiornare il registro con
+file, test e note reali.
+
+### DA.6.R1 — Verifica dell’evento effettivamente attivo
+
+- Confrontare `start_time` e `end_time` del primo evento già selezionato dal
+  codice con l’orario corrente e con gli eventi successivi.
+- Definire soltanto la resa visuale dello stato `In corso` quando l’intervallo
+  è attivo; se l’evento è terminato, documentare la discrepanza senza introdurre
+  un nuovo ordinamento client-side.
+- Acceptance: il protagonista rappresenta l’evento corretto secondo il
+  contratto dati esistente, con stato esplicito e senza alterare payload o API.
+- Verifiche: test su evento futuro, in corso, terminato, assente e titoli lunghi.
+
+### DA.6.R2 — Header mobile contestuale
+
+- Progettare il layout sotto 480 px con logo, menu/campanella e selettore
+  squadra leggibile sotto il saluto o nel contesto immediatamente associato.
+- Valutare lo spostamento di tema e `Esci` nel Profilo solo se il percorso è già
+  disponibile; non rimuovere destinazioni necessarie dal menu.
+- Acceptance: a 400 px sono leggibili `Tutte le squadre`, `Under 17` e `Under 15`,
+  senza overflow e senza cambiare selezione, persistenza o callback.
+- Verifiche: viewport 320/375/400/768, tastiera, focus, tema chiaro/scuro.
+
+### DA.6.R3 — Protagonista senza contenitore superfluo
+
+- Eliminare sul mobile un solo livello di wrapper attorno a “Prossimo impegno”
+  e agenda, mantenendo la scheda scura come superficie dominante.
+- Rendere “Poi in agenda” una sezione autonoma; usare gutter 16 px, padding
+  interno 20 px e 20–24 px tra sezioni, senza altezze fisse.
+- Acceptance: nessun contenuto perso o duplicato; famiglia e desktop non cambiano
+  senza una motivazione verificata.
+- Verifiche: screenshot e overflow su 320/375/400/768/1440.
+
+### DA.6.R4 — Stato attendance compatto
+
+- Per risposta chiusa mostrare uno stato breve, ad esempio “Hai risposto:
+  Partecipo” e “Risposte chiuse”, integrato nella scheda con separatore discreto.
+- Conservare controlli, deadline, pending, errore, revoca, `absence_only` e
+  permessi delegati quando la risposta è ancora disponibile.
+- Acceptance: lo stato bloccato non occupa un riquadro autonomo e l’azione aperta
+  resta prominente; nessuna mutazione o callback cambia.
+- Verifiche: test RSVP/sole assenze, read-only, delega, offline e focus.
+
+### DA.6.R5 — Agenda non ridondante
+
+- Ridurre ogni riga a data/ora, tipo e squadra una sola volta, luogo e affordance
+  di apertura; evitare badge che ripetono informazioni già nel titolo.
+- Conservare massimo tre eventi, separatori singoli, ordine corrente e dettaglio
+  completo al tocco dell’intera riga.
+- Acceptance: “Oggi · 20:00 / Allenamento · Under 17 / Cardarelli” e formato
+  analogo per date future risultano leggibili senza duplicazioni.
+- Verifiche: 0/1/3 eventi, multi-team, titoli lunghi, tastiera e modal dettaglio.
+
+### DA.6.R6 — Prossima partita con gerarchia sportiva
+
+- Presentare squadra CSRoma, avversario, data/ora, casa o trasferta e località
+  breve; lasciare l’indirizzo completo al dettaglio esistente.
+- Applicare lo stesso linguaggio di superfici/radius, con richiamo rosso
+  subordinato al protagonista e senza inventare dati mancanti.
+- Acceptance: la partita è riconoscibile come sportiva ma non supera il primo
+  impegno; filtro squadra e link al campionato restano invariati.
+- Verifiche: casa/trasferta, orario/località mancanti, filtro vuoto e dark mode.
+
+### DA.6.R7 — Servizi secondari mobile
+
+- Messaggi: massimo due preview sul mobile e conteggio totale nel titolo, senza
+  duplicare lo stato “Non letto” se il contesto lo rende già esplicito.
+- Quote: mantenere descrizione, rata, squadra, scadenza, importo e stato in una
+  composizione stabile; usare la formattazione italiana `120,00 €` solo se
+  compatibile con il formatter esistente.
+- Squadre: titolo “Le tue squadre”, nome e numero di maglia sulla stessa riga;
+  conservare una riga per membership e il numero autorevole per squadra.
+- Acceptance: nessuna azione, informazione, route o consumer condiviso viene
+  rimosso; stati scaduta/in scadenza restano prioritari.
+- Verifiche: zero/due/tre messaggi, quota pagata/scaduta, più squadre e mobile.
+
+### DA.6.R8 — Identità atleta e floating action
+
+- Sostituire il copy amministrativo della vista atleta con testo operativo
+  (“Allenamenti, partite e comunicazioni”) o rimuoverlo se ridondante; uniformare
+  “Dashboard” a “Oggi” dove è solo una label di navigazione.
+- Valutare una decorazione campo molto discreta esclusivamente sulla scheda
+  scura e riposizionare il pulsante flottante per non coprire contenuti o CTA.
+- Acceptance: identità coerente, contrasto e focus preservati, nessun overlay su
+  testi/comandi e nessuna nuova funzione introdotta.
+- Verifiche: viewport mobile, safe-area, tastiera, zoom 200%, reduced motion e
+  tema chiaro/scuro.
 
 ## DA.7 — Gate finale e handoff
 
