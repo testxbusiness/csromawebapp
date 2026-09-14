@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import AthleteDashboard from './AthleteDashboard'
+import AthleteDashboard, { getFeaturedEventState } from './AthleteDashboard'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
 jest.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }))
@@ -110,5 +110,57 @@ describe('AthleteDashboard delegated mode', () => {
     const attendanceCall = (globalThis.fetch as jest.Mock).mock.calls.find(([url]) => url.includes('/events/attendance'))
     await waitFor(() => expect(attendanceCall?.[1].signal.aborted).toBe(true))
     expect(screen.queryByText('Risposta salvata')).toBeNull()
+  })
+})
+
+describe('featured event state', () => {
+  const now = new Date('2026-09-14T18:00:00.000Z')
+
+  it.each([
+    ['future', '2026-09-14T19:00:00.000Z', '2026-09-14T20:00:00.000Z', 'upcoming'],
+    ['in progress', '2026-09-14T17:00:00.000Z', '2026-09-14T19:00:00.000Z', 'in_progress'],
+    ['ended', '2026-09-14T16:00:00.000Z', '2026-09-14T17:00:00.000Z', 'ended'],
+  ])('%s event is classified from its interval', (_name, start_time, end_time, expected) => {
+    expect(getFeaturedEventState({ start_time, end_time }, now)).toBe(expected)
+  })
+
+  it('returns unknown for absent/invalid timing data', () => {
+    expect(getFeaturedEventState({ start_time: '', end_time: '' }, now)).toBe('unknown')
+  })
+
+  it('keeps the contract-selected ended event ahead of a later event', async () => {
+    const current = Date.now()
+    const endedEvent = { id: 'ended-first', title: 'Evento già terminato', start_time: new Date(current - 7_200_000).toISOString(), end_time: new Date(current - 3_600_000).toISOString(), requires_confirmation: false }
+    const laterEvent = { id: 'later-event', title: 'Evento successivo', start_time: new Date(current + 3_600_000).toISOString(), end_time: new Date(current + 7_200_000).toISOString(), requires_confirmation: false }
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ activeSeason: null, teamMemberships: [], upcomingEvents: [endedEvent, laterEvent], unreadMessages: [], feeInstallments: [], teams: [] }),
+    }) as jest.Mock
+
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'child-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} delegatedView />)
+
+    await waitFor(() => expect(screen.getByText('Evento già terminato')).toBeTruthy())
+    expect(screen.getByRole('status', { name: 'Terminato' })).toBeTruthy()
+    expect(screen.getByText('Evento successivo')).toBeTruthy()
+  })
+
+  it('keeps a long title renderable while exposing an explicit state', async () => {
+    const title = 'Allenamento con titolo molto lungo per verificare il ritorno a capo nella scheda protagonista'
+    const start = new Date(Date.now() + 3_600_000).toISOString()
+    const end = new Date(Date.now() + 7_200_000).toISOString()
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        activeSeason: null,
+        teamMemberships: [],
+        upcomingEvents: [{ id: 'long-event', title, start_time: start, end_time: end, requires_confirmation: false }],
+        unreadMessages: [], feeInstallments: [], teams: [],
+      }),
+    }) as jest.Mock
+
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'child-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} delegatedView />)
+
+    await waitFor(() => expect(screen.getByText(title)).toBeTruthy())
+    expect(screen.getByRole('status', { name: 'Prossimo' })).toBeTruthy()
   })
 })

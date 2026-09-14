@@ -149,6 +149,29 @@ function formatEventDate(value: string) {
   })
 }
 
+export type FeaturedEventState = 'upcoming' | 'in_progress' | 'ended' | 'unknown'
+
+/** Classifies the event selected by the existing dashboard contract. */
+export function getFeaturedEventState(event: Pick<Event, 'start_time' | 'end_time'>, now = new Date()): FeaturedEventState {
+  const start = new Date(event.start_time).getTime()
+  const end = new Date(event.end_time).getTime()
+  const timestamp = now.getTime()
+
+  if (![start, end, timestamp].every(Number.isFinite) || start >= end) return 'unknown'
+  if (timestamp < start) return 'upcoming'
+  if (timestamp < end) return 'in_progress'
+  return 'ended'
+}
+
+function featuredEventStateLabel(state: FeaturedEventState) {
+  switch (state) {
+    case 'upcoming': return 'Prossimo'
+    case 'in_progress': return 'In corso'
+    case 'ended': return 'Terminato'
+    default: return 'Stato non disponibile'
+  }
+}
+
 export default function AthleteDashboard({ user, profile, delegatedView = false }: AthleteDashboardProps) {
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const { selectedTeamId: activeTeamId, setTeams, resetTeam } = useTeamContext()
@@ -844,6 +867,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
             <div>
               {(() => {
                 const event = visibleEvents[0]
+                const eventState = getFeaturedEventState(event)
                 return (
                   <div className="cs-athlete-dashboard__featured-event">
                     <ListRow
@@ -855,6 +879,9 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                       <span className="flex flex-wrap items-center gap-2">
                         <EventKindBadge kind={event.event_kind} className="cs-event-kind--solid" />
                         <span className="cs-athlete-dashboard__featured-event-time tabular-nums">{formatEventTime(event.start_time)}</span>
+                        <span aria-label={featuredEventStateLabel(eventState)} className={`cs-athlete-dashboard__featured-event-state cs-athlete-dashboard__featured-event-state--${eventState}`} role="status">
+                          {featuredEventStateLabel(eventState)}
+                        </span>
                       </span>
                       <span className="mt-2 block text-xl font-semibold leading-7">{event.title}</span>
                       <span className="cs-athlete-dashboard__featured-event-date mt-1 block text-sm">{formatEventDate(event.start_time)}</span>

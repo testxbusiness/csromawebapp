@@ -6578,10 +6578,30 @@ file, test e note reali.
   contratto dati esistente, con stato esplicito e senza alterare payload o API.
 - Verifiche: test su evento futuro, in corso, terminato, assente e titoli lunghi.
 
+**Esito DA.6.R1 — 14/09/2026**
+
+- Mantenuta la selezione esistente `visibleEvents[0]`: non è stato introdotto
+  alcun ordinamento o riordino client-side e non sono stati modificati payload,
+  API, filtri o consumer famiglia.
+- Aggiunta in `AthleteDashboard` la classificazione visuale dell’intervallo
+  dell’evento già selezionato: `Prossimo` prima di `start_time`, `In corso`
+  da `start_time` incluso fino a `end_time` escluso, `Terminato` da `end_time`
+  incluso. Timing non valido/assente produce `Stato non disponibile`.
+- Discrepanza documentata: se il contratto consegna come primo evento un
+  impegno già terminato mentre esiste un evento successivo, il protagonista
+  resta quello fornito dal contratto e mostra `Terminato`; la UI non promuove
+  il successivo, perché ciò altererebbe l’ordinamento autorevole.
+- Stato reso come testo accessibile e titolo lungo lasciato libero di andare a
+  capo, con stile circoscritto alla scheda protagonista.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`, `src/app/globals.css`.
+- Verifiche eseguite: test mirato `AthleteDashboard.test.tsx` — 1 suite, 9
+  test superati; `npx tsc --noEmit`; `git diff --check`.
+
 ### DA.6.R2 — Header mobile contestuale
 
 - Progettare il layout sotto 480 px con logo, menu/campanella e selettore
-  squadra leggibile sotto il saluto o nel contesto immediatamente associato.
+  squadra leggibile sotto il saluto o nel contesto immediatamente associato. Verifica se la campanella ha una qualche funzionalità, se nessuna va eliminata per avere più spazio.
 - Valutare lo spostamento di tema e `Esci` nel Profilo solo se il percorso è già
   disponibile; non rimuovere destinazioni necessarie dal menu.
 - Acceptance: a 400 px sono leggibili `Tutte le squadre`, `Under 17` e `Under 15`,

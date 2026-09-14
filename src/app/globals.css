@@ -750,6 +750,25 @@ button.cs-list-row{ font:inherit; }
   font-weight: 700;
   line-height: 1;
 }
+.cs-athlete-dashboard__featured-event-state{
+  align-self: center;
+  border: 1px solid rgba(255,255,255,.42);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: .02em;
+}
+.cs-athlete-dashboard__featured-event-state--in_progress{
+  border-color: #b9f6d0;
+  background: rgba(25,135,84,.34);
+}
+.cs-athlete-dashboard__featured-event-state--ended{
+  border-color: rgba(255,255,255,.3);
+  background: rgba(255,255,255,.1);
+}
 .cs-athlete-dashboard__featured-event-date{ color: rgba(255,255,255,.82); }
 .cs-athlete-dashboard__featured-event .cs-badge--neutral{
   border-color: rgba(255,255,255,.28);
