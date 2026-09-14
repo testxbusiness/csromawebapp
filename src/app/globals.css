@@ -662,6 +662,38 @@ button.cs-list-row{ font:inherit; }
 .cs-athlete-dashboard__services{ min-width:0; }
 .cs-athlete-dashboard__sport,
 .cs-athlete-dashboard__services{ display:flex; flex-direction:column; gap:var(--cs-sp-5); }
+.cs-athlete-dashboard__service-panel{
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: var(--cs-elevation-0);
+  padding: 0;
+}
+.cs-athlete-dashboard__service-panel h3{
+  color: var(--cs-ink-muted);
+  font-size: var(--cs-type-label-size);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.cs-athlete-dashboard__service-list .cs-list-row{
+  padding-inline: 0;
+}
+.cs-athlete-dashboard__fee-row{
+  align-items: flex-start;
+}
+.cs-athlete-dashboard__fee-summary{
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--cs-sp-2);
+  min-width: max-content;
+  text-align: right;
+}
+@media (max-width: 479px){
+  .cs-athlete-dashboard__fee-row{ flex-wrap: wrap; }
+  .cs-athlete-dashboard__fee-row .cs-list-row__content{ flex-basis: calc(100% - 44px); }
+  .cs-athlete-dashboard__fee-row .cs-list-row__trailing{ margin-left: auto; }
+}
 .cs-athlete-dashboard__featured-event{
   margin: 4px 0;
   overflow: hidden;

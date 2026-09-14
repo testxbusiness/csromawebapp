@@ -802,7 +802,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     />
   }
   if (!subjectDataIsCurrent || dashboardStatus === 'loading') {
-    return <LoadingState label="Caricamento dashboard..." />
+    return <LoadingState label="Un attimo, si scende in campo…" />
   }
   if (dashboardStatus === 'error') {
     return <FeedbackState
@@ -938,10 +938,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
 
       <div className="cs-athlete-dashboard__services">
       {canReceiveMessages && (
-        <Panel id="athlete-messages" className="space-y-3">
+        <Panel id="athlete-messages" className="cs-athlete-dashboard__service-panel space-y-3">
           <SectionHeading title="Messaggi non letti" href="/athlete/messages" />
           {unreadMessages.length === 0 ? <FeedbackState variant="empty" title="Nessun messaggio non letto" className="py-4" /> : visibleMessages.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun messaggio per questa squadra" className="py-4" /> : (
-            <div className="divide-y divide-[color:var(--cs-border)]">
+            <div className="cs-athlete-dashboard__service-list divide-y divide-[color:var(--cs-border)]">
               {visibleMessages.slice(0, 3).map((message) => (
                 <MessagePreviewRow key={message.id} message={message} onOpen={() => setSelectedMessage(message)} />
               ))}
@@ -951,13 +951,17 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       )}
 
       {canViewPayments && (
-        <Panel id="athlete-fees" className="space-y-3">
+        <Panel id="athlete-fees" className="cs-athlete-dashboard__service-panel space-y-3">
           <SectionHeading title="Prossima quota" href="/athlete/fees" />
           {feeInstallments.length === 0 ? <FeedbackState variant="empty" title="Nessuna quota associativa" className="py-4" /> : visibleFees.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessuna quota per questa squadra" className="py-4" /> : !mostUrgentVisibleFee ? <FeedbackState variant="empty" title="Tutte le rate risultano pagate" className="py-4" /> : (
-            <ListRow trailing={<StatusBadge status={mostUrgentVisibleFee.status === 'overdue' ? 'danger' : mostUrgentVisibleFee.status === 'due_soon' ? 'warning' : 'neutral'} label={feeStatusLabel(mostUrgentVisibleFee.status)} />}>
-              <span className="flex flex-wrap items-center gap-x-3 gap-y-1 font-medium">
+            <ListRow className="cs-athlete-dashboard__fee-row" trailing={(
+              <span className="cs-athlete-dashboard__fee-summary">
+                <span className="tabular-nums font-semibold">€{Number(mostUrgentVisibleFee.amount).toFixed(2)}</span>
+                <StatusBadge status={mostUrgentVisibleFee.status === 'overdue' ? 'danger' : mostUrgentVisibleFee.status === 'due_soon' ? 'warning' : 'neutral'} label={feeStatusLabel(mostUrgentVisibleFee.status)} />
+              </span>
+            )}>
+              <span className="block font-medium">
                 {mostUrgentVisibleFee.membership_fee.name} · Rata {mostUrgentVisibleFee.installment_number}
-                <span className="tabular-nums">€{Number(mostUrgentVisibleFee.amount).toFixed(2)}</span>
               </span>
               <span className="mt-1 block text-sm text-secondary">
                 {mostUrgentVisibleFee.membership_fee.team.name}
@@ -970,10 +974,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         </Panel>
       )}
 
-      <Panel id="athlete-teams" className="space-y-3">
+      <Panel id="athlete-teams" className="cs-athlete-dashboard__service-panel space-y-3">
         <SectionHeading title="Squadre e numeri di maglia" />
         {teamMemberships.length === 0 ? <FeedbackState variant="empty" title="Non sei iscritto a nessuna squadra" className="py-4" /> : visibleMemberships.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessuna membership per questa squadra" className="py-4" /> : (
-          <div className="divide-y divide-[color:var(--cs-border)]">
+          <div className="cs-athlete-dashboard__service-list divide-y divide-[color:var(--cs-border)]">
             {visibleMemberships.map((membership) => (
               <MembershipRow
                 key={membership.id}

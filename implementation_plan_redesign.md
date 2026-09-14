@@ -6194,7 +6194,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.2 Header e identità CSRoma | [x] | DA.1 | Completato il 14/09/2026; marchio leggibile su mobile, introduzione personale compatta, altre shell invariate |
 | DA.3 Prossimo impegno dominante | [x] | DA.2 | Completato il 14/09/2026; primo evento dominante con dati completi, dettaglio e attendance preservati |
 | DA.4 Agenda e prossima partita | [x] | DA.3 | Completato il 14/09/2026; agenda secondaria compatta e partita subordinata al protagonista |
-| DA.5 Messaggi, quota e squadre | [ ] | DA.4 | Servizi compatti senza perdita di informazioni o azioni |
+| DA.5 Messaggi, quota e squadre | [x] | DA.4 | Completato il 14/09/2026; servizi compatti, quota separata per importo/stato e membership preservate |
 | DA.6 Responsive, temi e stati | [ ] | DA.5 | Layout solido su mobile/desktop e dati variabili |
 | DA.7 Gate finale e handoff | [ ] | DA.6 | Evidenze visive e funzionali, esito esplicito |
 
@@ -6451,6 +6451,29 @@ scaduta resta riconoscibile tramite badge/testo; nessun “Paga” nuovo; inform
 e link esistenti rimangono raggiungibili; nessuna regressione sui consumer condivisi.
 **Verifiche:** typecheck, test dashboard/MessagePreviewRow/MembershipRow,
 diff check; smoke apertura messaggio e squadra e navigazione quote.
+
+**Esito DA.5 — 14/09/2026**
+
+- Alleggeriti i tre servizi con classi circoscritte alla dashboard atleta:
+  superfici trasparenti senza elevazione, titoli secondari e separatori interni;
+  `Panel` e `ListRow` condivisi non sono stati modificati.
+- Conservate fino a tre `MessagePreviewRow` con mittente, anteprima, squadre,
+  stato lettura e apertura del dettaglio. La quota mantiene descrizione, rata,
+  squadra, attività/codice e scadenza; importo e `StatusBadge` sono composti a
+  destra sui viewport ampi e restano impilabili sui viewport stretti.
+- `MembershipRow` e tutti i numeri di maglia per squadra restano visibili e
+  subordinati ai servizi; non sono stati aggiunti pagamenti, dati, filtri,
+  permessi, callback, route, modifiche attendance/RSVP o cambi ai consumer
+  famiglia/altri ruoli.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati dashboard,
+  `MessagePreviewRow` e `MembershipRow` — 3 suite, 8 test superati;
+  `git diff --check` superato.
+- Smoke browser per apertura messaggio, dettaglio squadra e navigazione quote
+  non eseguito: non è disponibile un runtime autenticato con dati autorizzati.
+  Il gate browser/responsive resta aperto per DA.6; nessun deploy, modifica DB
+  o avvio di DA.6 eseguiti.
 
 ## DA.6 — Responsive, temi e stati reali
 
