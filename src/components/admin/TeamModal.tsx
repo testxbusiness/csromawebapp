@@ -328,9 +328,9 @@ export default function TeamModal({
                 onChange={(e) => setForm({ ...form, training_rsvp_enabled: e.target.checked })}
               />
               <span>
-                <span className="block text-sm font-medium">Richiedi conferma presenza agli allenamenti</span>
+                <span className="block text-sm font-medium">Abilita segnalazione assenze agli allenamenti</span>
                 <span className="mt-1 block text-xs text-secondary">
-                  Gli atleti potranno rispondere al prossimo allenamento e segnalare in anticipo le assenze.
+                  Gli atleti potranno comunicare e revocare un’assenza fino all’inizio dell’allenamento.
                 </span>
               </span>
             </label>

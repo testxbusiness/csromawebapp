@@ -34,6 +34,9 @@ export async function POST(req: NextRequest) {
     if (!event) return NextResponse.json({ error: 'Evento non trovato o non accessibile' }, { status: 404 })
 
     const capability = availability.availabilityByEventId.get(event_id)
+    if (event.attendance_mode === 'absence_only') {
+      return NextResponse.json({ error: 'Per questo evento puoi soltanto segnalare un’assenza' }, { status: 409 })
+    }
     if (event.generated_from_schedule_id && event.requires_confirmation === true && !capability?.actions.respond) {
       const errorByReason = {
         not_required: 'Questo evento non richiede una risposta',

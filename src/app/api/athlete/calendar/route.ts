@@ -18,6 +18,7 @@ type CalendarEventRow = {
   event_type: string | null
   event_kind: string | null
   requires_confirmation: boolean | null
+  attendance_mode: 'rsvp' | 'absence_only' | null
   confirmation_deadline: string | null
   generated_from_schedule_id: string | null
 }
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
         const batch = eventIds.slice(i, i + 100)
         const { data: events, error: eventsError } = await dataClient
           .from('events')
-          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
+          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
           .in('id', batch)
 
         if (eventsError) {
@@ -133,7 +134,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events, error: evErr } = await dataClient
         .from('events')
-        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
+        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
         .in('id', eventIds)
         .order('start_date', { ascending: true })
 

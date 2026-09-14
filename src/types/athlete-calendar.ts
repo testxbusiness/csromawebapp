@@ -1,4 +1,4 @@
-import type { AttendanceAvailabilityContract, AttendanceStatus } from '@/types/attendance'
+import type { AttendanceAvailabilityContract, AttendanceMode, AttendanceStatus } from '@/types/attendance'
 
 export interface AthleteCalendarTeam {
   id: string
@@ -27,6 +27,7 @@ export interface AthleteCalendarEvent {
   team_ids: string[]
   event_kind: string | null
   requires_confirmation: boolean
+  attendance_mode?: AttendanceMode
   confirmation_deadline: string | null
   my_attendance: AthleteCalendarAttendance | null
   /** Additive RSVP capability contract; absent on legacy payloads. */

@@ -725,15 +725,20 @@ type AttendanceEntry = {
 }
 
 type AttendanceReport = {
+  attendance_mode?: 'rsvp' | 'absence_only'
   going: AttendanceEntry[]
   maybe: AttendanceEntry[]
   declined: AttendanceEntry[]
   no_response: AttendanceProfile[]
+  available?: AttendanceProfile[]
+  absent?: AttendanceEntry[]
   counts: {
     going: number
     maybe: number
     declined: number
     no_response: number
+    available?: number
+    absent?: number
   }
 }
 
@@ -761,10 +766,13 @@ function CoachEventAttendancePanel({ eventId, teamId }: { eventId: string; teamI
         if (!response.ok) throw new Error(result.error || 'Errore caricamento conferme')
         if (active) {
           setReport({
+            attendance_mode: result.attendance_mode,
             going: result.going ?? [],
             maybe: result.maybe ?? [],
             declined: result.declined ?? [],
             no_response: result.no_response ?? [],
+            available: result.available ?? [],
+            absent: result.absent ?? [],
             counts: result.counts ?? emptyAttendanceReport.counts,
           })
         }
@@ -798,9 +806,13 @@ function CoachEventAttendancePanel({ eventId, teamId }: { eventId: string; teamI
 
   return (
     <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4" aria-label="Report conferme partecipazione">
-      <div className="text-sm font-semibold mb-3">Report conferme partecipazione</div>
-      <p className="mb-3 text-xs text-secondary">In attesa indica che l&apos;atleta non ha ancora risposto; non è un rifiuto.</p>
+      <div className="text-sm font-semibold mb-3">{report.attendance_mode === 'absence_only' ? 'Disponibilità della rosa' : 'Report conferme partecipazione'}</div>
+      <p className="mb-3 text-xs text-secondary">{report.attendance_mode === 'absence_only' ? 'Gli attesi sono gli atleti della rosa senza un’assenza comunicata; non sono presenze effettive.' : 'In attesa indica che l’atleta non ha ancora risposto; non è un rifiuto.'}</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {report.attendance_mode === 'absence_only' ? <>
+          <div className="cs-card cs-card--primary p-3"><StatusBadge status="neutral" label={`Attesi · ${report.counts.available ?? 0}`} /><div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.available ?? [])}</div></div>
+          <div className="cs-card cs-card--primary p-3"><StatusBadge status="declined" label={`Assenti · ${report.counts.absent ?? 0}`} /><div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.absent ?? [])}</div></div>
+        </> : <>
         <div className="cs-card cs-card--primary p-3">
           <StatusBadge status="going" label={`Confermati · ${report.counts.going}`} />
           <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.going)}</div>
@@ -817,6 +829,7 @@ function CoachEventAttendancePanel({ eventId, teamId }: { eventId: string; teamI
           <StatusBadge status="pending" label={`In attesa · ${report.counts.no_response}`} />
           <div className="max-h-40 space-y-1 overflow-y-auto text-sm">{renderNames(report.no_response)}</div>
         </div>
+        </>}
       </div>
     </div>
   )

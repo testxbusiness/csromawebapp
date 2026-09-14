@@ -63,6 +63,7 @@ export async function GET(request: NextRequest) {
       location: ev.location,
       event_type: ev.event_type,
       requires_confirmation: ev.requires_confirmation,
+      attendance_mode: ev.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
       confirmation_deadline: ev.confirmation_deadline,
       gym,
       teams,

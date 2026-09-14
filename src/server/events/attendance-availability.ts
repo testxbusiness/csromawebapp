@@ -5,6 +5,7 @@ import type {
   AttendanceAvailabilityContract,
   AttendanceClosureReason,
   AttendanceNextEvent,
+  AttendanceMode,
   AttendanceStatus,
 } from '@/types/attendance'
 
@@ -23,6 +24,7 @@ export type AttendanceResolverEvent = {
   event_kind?: string | null
   event_type?: string | null
   requires_confirmation: boolean | null
+  attendance_mode?: AttendanceMode | null
   confirmation_deadline?: string | null
   generated_from_schedule_id?: string | null
   team_ids: string[]
@@ -33,6 +35,7 @@ type AttendanceResolverResponse = {
   status: AttendanceStatus
   responded_at: string | null
   is_early_absence: boolean
+  response_source?: string | null
 }
 
 export type AttendanceAvailabilityResult = {
@@ -48,7 +51,7 @@ type TeamMembership = { team_id: string }
 
 type RawEvent = Omit<AttendanceResolverEvent, 'team_ids'>
 
-const EVENT_SELECT = 'id,start_time,end_time,title,description,location,event_kind,event_type,requires_confirmation,confirmation_deadline,generated_from_schedule_id'
+const EVENT_SELECT = 'id,start_time,end_time,title,description,location,event_kind,event_type,requires_confirmation,attendance_mode,confirmation_deadline,generated_from_schedule_id'
 
 function uniqueSorted(values: string[]) {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right))
@@ -64,7 +67,11 @@ function isFuture(event: AttendanceResolverEvent, now: Date) {
 }
 
 function isAutomaticRsvpEvent(event: AttendanceResolverEvent) {
-  return Boolean(event.generated_from_schedule_id) && event.requires_confirmation === true
+  return Boolean(event.generated_from_schedule_id) && event.requires_confirmation === true && event.attendance_mode !== 'absence_only'
+}
+
+function attendanceMode(event: AttendanceResolverEvent): AttendanceMode {
+  return event.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp'
 }
 
 function earliestRecalculation(event: AttendanceResolverEvent, now: Date) {
@@ -94,6 +101,7 @@ function closedContract(
   now: Date,
 ): AttendanceAvailabilityContract {
   return {
+    attendance_mode: attendanceMode(event),
     requires_confirmation: event.requires_confirmation === true,
     can_respond_now: false,
     can_report_early_absence: false,
@@ -118,7 +126,8 @@ export function buildAttendanceAvailability(
   const availabilityByEventId = new Map<string, AttendanceAvailabilityContract>()
 
   for (const event of events) {
-    if (!isAutomaticRsvpEvent(event)) continue
+    if (event.requires_confirmation !== true) continue
+    if (attendanceMode(event) !== 'absence_only' && !isAutomaticRsvpEvent(event)) continue
     if (!permissions.view_schedule) {
       availabilityByEventId.set(event.id, closedContract(event, nextEvent, 'not_authorized', now))
       continue
@@ -137,11 +146,35 @@ export function buildAttendanceAvailability(
     const deadlinePassed = Boolean(event.confirmation_deadline)
       && new Date(event.confirmation_deadline as string).getTime() <= now.getTime()
     const next = nextEventContract(nextEvent)
-    const recalculation = earliestRecalculation(nextEvent, now)
+    const recalculation = nextEvent ? earliestRecalculation(nextEvent, now) : null
+
+    if (attendanceMode(event) === 'absence_only') {
+      const closed = deadlinePassed
+      const communicated = hasEarlyAbsence || response?.status === 'declined'
+      // A prior self/parent decline is treated as an absence after migration,
+      // but staff-recorded absences remain visible and cannot be removed here.
+      const canRevoke = !closed && (hasEarlyAbsence || (
+        response?.status === 'declined' &&
+        (response.response_source === 'self' || response.response_source === 'parent')
+      ))
+      availabilityByEventId.set(event.id, {
+        attendance_mode: 'absence_only',
+        requires_confirmation: true,
+        can_respond_now: false,
+        can_report_early_absence: !communicated && !closed,
+        can_revoke_early_absence: canRevoke,
+        actions: { respond: false, report_early_absence: !communicated && !closed, revoke_early_absence: canRevoke },
+        closure_reason: communicated ? 'already_early_absence' : closed ? 'deadline_passed' : null,
+        next_event: next,
+        next_recalculation_at: earliestRecalculation(event, now),
+      })
+      continue
+    }
 
     if (hasEarlyAbsence) {
       const canRevoke = !deadlinePassed
       availabilityByEventId.set(event.id, {
+        attendance_mode: 'rsvp',
         requires_confirmation: true,
         can_respond_now: false,
         can_report_early_absence: canRevoke,
@@ -164,6 +197,7 @@ export function buildAttendanceAvailability(
 
     const isNextEvent = nextEvent?.id === event.id
     availabilityByEventId.set(event.id, {
+      attendance_mode: 'rsvp',
       requires_confirmation: true,
       can_respond_now: isNextEvent,
       can_report_early_absence: true,
@@ -227,7 +261,7 @@ async function loadRows(
     ? { data: [], error: null }
     : await client
       .from('event_attendances')
-      .select('event_id, status, responded_at, is_early_absence')
+      .select('event_id, status, responded_at, is_early_absence, response_source')
       .eq('profile_id', profileId)
       .in('event_id', visibleEventIds)
   if (attendanceError) throw attendanceError

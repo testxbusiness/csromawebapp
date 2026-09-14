@@ -10,6 +10,7 @@ type EventPayload = {
   end_time: string
   event_kind?: string
   requires_confirmation?: boolean
+  attendance_mode?: 'rsvp' | 'absence_only'
   confirmation_deadline?: string | null
   selected_teams: string[]
 }
@@ -48,6 +49,7 @@ function eventRow(event: EventPayload, accountId: string, occurrence?: Occurrenc
     event_kind: event.event_kind || 'training',
     requires_confirmation: Boolean(event.requires_confirmation),
     confirmation_deadline: event.requires_confirmation ? event.confirmation_deadline || null : null,
+    attendance_mode: event.requires_confirmation && ['training', 'match'].includes(event.event_kind || 'training') ? 'absence_only' : 'rsvp',
     created_by: accountId,
     name: event.title,
     start_time: occurrence?.start_date ?? event.start_time,

@@ -28,6 +28,7 @@ type ExistingEvent = {
   event_type: string | null
   kind: string | null
   requires_confirmation: boolean
+  attendance_mode?: 'rsvp' | 'absence_only'
 }
 
 export type TrainingReconciliationReport = {
@@ -42,7 +43,7 @@ export type TrainingReconciliationReport = {
   warnings: Array<{ code: string; message: string; eventIds?: string[] }>
 }
 
-const EVENT_FIELDS = 'id,generated_from_schedule_id,generated_occurrence_date,generated_schedule_exception,start_date,end_date,start_time,end_time,title,name,description,location,gym_id,activity_id,event_kind,event_type,kind,requires_confirmation'
+const EVENT_FIELDS = 'id,generated_from_schedule_id,generated_occurrence_date,generated_schedule_exception,start_date,end_date,start_time,end_time,title,name,description,location,gym_id,activity_id,event_kind,event_type,kind,requires_confirmation,attendance_mode'
 
 function emptyReport(): TrainingReconciliationReport {
   return {
@@ -80,6 +81,7 @@ function isSameEvent(event: ExistingEvent, desired: Record<string, unknown>) {
     && event.description === desired.description && event.location === desired.location
     && event.gym_id === desired.gym_id && event.activity_id === desired.activity_id
     && event.requires_confirmation === desired.requires_confirmation
+    && event.attendance_mode === desired.attendance_mode
 }
 
 export async function reconcileTrainingSchedules(
@@ -271,6 +273,7 @@ export async function reconcileTrainingSchedules(
         generated_from_schedule_id: schedule.id, generated_occurrence_date: occurrence.localDate,
         generated_schedule_exception: false, created_by: createdBy,
         requires_confirmation: typedTeam.training_rsvp_enabled,
+        attendance_mode: typedTeam.training_rsvp_enabled ? 'absence_only' : 'rsvp',
       }
       if (!existing) {
         const { data: inserted, error } = await admin.from('events').insert(desired).select('id').single()

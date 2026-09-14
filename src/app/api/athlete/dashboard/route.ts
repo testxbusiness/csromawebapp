@@ -183,7 +183,7 @@ export async function GET(request: NextRequest) {
           const batch = eventIds.slice(i, i + 100)
         const { data: events } = await dataClient
           .from('events')
-          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
+          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
           .in('id', batch)
           .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
           .order('start_date', { ascending: true })
@@ -193,7 +193,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events } = await dataClient
         .from('events')
-        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline, generated_from_schedule_id')
+        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
         .in('id', eventIds)
         .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
         .order('start_date', { ascending: true })
@@ -240,6 +240,7 @@ export async function GET(request: NextRequest) {
         description: nextEvent.description || null,
         event_kind: nextEvent.event_kind || 'training',
         requires_confirmation: nextEvent.requires_confirmation,
+        attendance_mode: nextEvent.attendance_mode,
         confirmation_deadline: nextEvent.confirmation_deadline || null,
         generated_from_schedule_id: nextEvent.generated_from_schedule_id || null,
       })
@@ -310,6 +311,7 @@ export async function GET(request: NextRequest) {
         // A registered gym takes precedence over the free-text location.
         location: gymLocation || event.location || null,
         requires_confirmation: Boolean(event.requires_confirmation),
+        attendance_mode: event.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
         confirmation_deadline: event.confirmation_deadline || null,
         my_attendance: attendanceMap.get(event.id) || null,
         attendance_availability: attendanceAvailability?.availabilityByEventId.get(event.id) ?? null,

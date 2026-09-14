@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
           event_type: event_type || 'one_time',
           event_kind: event_kind || 'training',
           requires_confirmation: !!requires_confirmation,
+          attendance_mode: requires_confirmation && ['training', 'match'].includes(event_kind || 'training') ? 'absence_only' : 'rsvp',
           confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
           created_by: account.ownerProfileId,
           // Legacy required fields
@@ -415,6 +416,7 @@ export async function PUT(request: NextRequest) {
         event_type,
         event_kind: event_kind || 'training',
         requires_confirmation: !!requires_confirmation,
+        attendance_mode: requires_confirmation && ['training', 'match'].includes(event_kind || 'training') ? 'absence_only' : 'rsvp',
         confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
         // Legacy fields kept in sync
         name: title,
@@ -438,6 +440,7 @@ export async function PUT(request: NextRequest) {
           activity_id: activity_id || null,
           event_type,
           requires_confirmation: !!requires_confirmation,
+          attendance_mode: requires_confirmation && ['training', 'match'].includes(event_kind || 'training') ? 'absence_only' : 'rsvp',
           confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
           // Legacy fields kept in sync
           name: title,

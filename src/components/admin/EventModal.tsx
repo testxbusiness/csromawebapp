@@ -322,25 +322,25 @@ export default function EventModal({
           </div>
 
           <div className="cs-card p-4">
-            <label className="cs-field__label mb-2">Conferma partecipazione</label>
+            <label className="cs-field__label mb-2">Gestione disponibilità</label>
             <label className="inline-flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={!!form.requires_confirmation}
                 onChange={(e) => setForm({ ...form, requires_confirmation: e.target.checked })}
               />
-              <span>Vuoi chiedere conferma partecipazione (RSVP)?</span>
+              <span>Abilita segnalazione assenze</span>
             </label>
             {form.requires_confirmation && (
               <div className="mt-3">
-                <label className="cs-field__label">Scadenza conferma (opzionale)</label>
+                <label className="cs-field__label">Scadenza segnalazione (opzionale)</label>
                 <input
                   type="datetime-local"
                   className="cs-input"
                   value={form.confirmation_deadline}
                   onChange={(e) => setForm({ ...form, confirmation_deadline: e.target.value })}
                 />
-                <p className="text-xs text-secondary mt-1">Se vuota, si può rispondere fino all’inizio dell’evento.</p>
+                <p className="text-xs text-secondary mt-1">Se vuota, l’assenza può essere comunicata o revocata fino all’inizio dell’evento.</p>
               </div>
             )}
           </div>

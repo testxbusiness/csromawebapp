@@ -5826,6 +5826,259 @@ La pubblicazione rimane un'attività successiva esplicitamente richiesta.
 Registro della scomposizione: modificato soltanto questo documento;
 nessuna implementazione o modifica DB; `git diff --check` eseguito.
 
+## Valutazione proposta — gestione delle sole assenze — 14/09/2026
+
+**Stato: analisi completata; proposta da discutere, non implementata né
+approvata come implementazione.** Non sostituisce ancora le regole confermate
+di R1–R10 o di `re_design.md`. **Ambito indicato dall'utente durante l'analisi:
+«allenamenti e partite»**, superando l'ipotesi iniziale limitata agli allenamenti
+automatici. Includere quindi allenamenti automatici/manuali e partite; altri
+tipi di evento restano fuori dall'estensione.
+
+**Chiarimento dell'utente del 14/09/2026:** per le partite la priorità è
+raccogliere le assenze **prima della convocazione**, così il coach può scegliere
+sapendo chi non potrà esserci. La gestione successiva alla convocazione è
+rimandata a una fase due. Obiettivo di adozione: portare la comunicazione delle
+assenze nell'app, invece che a voce. Questa decisione definisce l'ambito di
+prodotto, senza avviare l'implementazione.
+
+### Stato effettivo rilevato
+
+- R1–R9 hanno implementazione presente; ultimo goal funzionale registrato R9,
+  seguito dalle correzioni per ricerca personale, payload squadre e titoli.
+  R10 è aperto. R5 è descritto come completato nel proprio registro ma ha
+  checkbox vuota e prove DB con ruoli reali ancora da documentare: verificare
+  la chiusura nel gate, senza ripetere l'implementazione.
+- `AttendanceControl.tsx` concentra i tre pulsanti RSVP e il flusso singolo
+  di assenza. Quest'ultimo richiede attualmente apertura del form e conferma:
+  non è ancora un'azione a un clic.
+- R7/R8 salvano già `declined` + `is_early_absence=true` nella tabella
+  `event_attendances`, anche su eventi futuri non prossimi; la revoca elimina
+  la riga. R9 riusa lo stesso endpoint per selezioni multiple atomiche.
+- Resolver e RPC rifiutano un'assenza se esiste una risposta ordinaria.
+  Eliminare soltanto i pulsanti lascerebbe quindi bloccati alcuni atleti.
+- Coach/admin ricavano già i destinatari dalla rosa corrente deduplicata,
+  dividendoli in `going`, `maybe`, `declined`, `no_response`; il report coach
+  e quello admin non leggono ancora una modalità di gestione dall'evento.
+- Le partite di campionato hanno già `championship_matches.event_id`
+  (nullable nel contratto TypeScript), riutilizzabile per le assenze. Le
+  convocazioni sono separate, in `championship_match_convocations` e
+  `championship_match_convocation_members`; il flusso letto non contiene una
+  risposta di partecipazione sul membro convocato. L'RPC R7/R8 oggi esclude
+  partite e allenamenti manuali perché richiede `generated_from_schedule_id`.
+  La sincronizzazione DB delle partite va verificata su staging: il repository
+  ne cita la funzione `sync_championship_match_event` ma non ne contiene qui
+  la definizione nelle migrazioni analizzate.
+
+### Comportamento UX proposto
+
+- Atleta/familiare: «Segnala solo se non puoi esserci», un pulsante
+  «Segnala assenza» con salvataggio immediato e feedback «Assenza comunicata»;
+  successiva azione «Annulla assenza». La nota rimane facoltativa e non deve
+  aggiungere un passaggio obbligatorio. Nel bulk resta il riepilogo esplicito.
+- Nessuna azione per chi partecipa, nessuna etichetta «Da confermare» per gli
+  eventi in questa modalità. Assenza comunicabile/revocabile su ogni evento
+  futuro eleggibile; mantenere deadline e chiusura all'inizio come primo default.
+- Coach: «Attesi 15 su 18 · Assenti 3», con entrambi gli elenchi e spiegazione
+  «Gli attesi sono gli atleti della rosa senza un'assenza comunicata».
+  Non chiamarli presenze confermate o effettivamente rilevate. Lo zero assenti
+  significa nessuna assenza comunicata, non verifica della partecipazione.
+- Partite, fase uno: «Disponibili» = rosa meno assenze comunicate, con dicitura
+  che chiarisce il criterio e lista degli assenti. L'atleta può segnalare
+  l'assenza quando la partita è già in calendario, senza attendere una
+  convocazione. Il coach consulta l'indisponibilità nel momento della scelta
+  dei convocati. Nessun conteggio basato sui convocati e nessuna conferma
+  successiva richiesti in questa fase.
+- Adozione proposta: stesso comando «Segnala assenza» per allenamento e partita,
+  accessibile da dashboard/calendario/dettaglio, senza nota o conferma obbligatoria;
+  conservare l'assenza per periodo anche per le partite eleggibili. Copy breve:
+  «Non puoi esserci? Segnala l'assenza qui: il coach la vedrà nell'app».
+  L'organizzazione accompagna il rilascio con una regola condivisa tra coach,
+  atleti e familiari: le assenze vanno registrate nell'app. Nessun messaggio
+  viene inviato da questa analisi; promemoria/push non fanno parte della fase uno.
+- Rimandare il post-convocazione non introduce automaticamente una chiusura
+  delle segnalazioni al salvataggio della convocazione. La prima fase conserva
+  il limite temporale dell'evento/deadline, senza dipendere dallo stato della
+  convocazione; eventuali regole speciali successive appartengono alla fase due.
+- Design system invariato: token, font, componenti e responsive esistenti;
+  stato neutro per assenza non segnalata, stato testuale per assenza comunicata,
+  focus visibile, target almeno 44 px, pending/error/offline espliciti.
+
+### Intervento tecnico minimo consigliato
+
+1. **Riutilizzare dati e percorsi R7–R9.** Nessuna nuova tabella presenze,
+   nessuna creazione preventiva di righe `going`, nessun cron o push.
+   Conservare i nomi tecnici e il permesso familiare `confirm_attendance`
+   per ridurre propagazione e migrazioni; aggiornare il copy di
+   `TeamModal` a «Abilita segnalazione assenze agli allenamenti».
+2. **Distinguere stabilmente la modalità dell'evento.** Per conservare il
+   significato dello storico e degli RSVP manuali, proposta di una piccola
+   colonna evento `attendance_mode` (`rsvp` / `absence_only`, nomi da validare
+   nell'implementazione), con default compatibile. Il generatore assegna la
+   nuova modalità alle occorrenze previste; attivazione mirata per allenamenti
+   e partite futuri già presenti, senza riscrivere eventi passati. Includere
+   form evento manuale e sincronizzazione partita→evento per i nuovi eventi.
+   Riutilizzare la preferenza squadra esistente, senza aggiungere un secondo
+   selettore di modalità. Deducendo tutto dalla sola origine si risparmierebbe
+   la colonna, ma si reinterpretarebbe anche lo storico: non è il default
+   consigliato. Una migrazione delle funzioni/protezioni DB serve comunque.
+3. **Allineare resolver, API, RPC e scritture dirette.** Per `absence_only`
+   disabilitare le risposte ordinarie e mantenere segnalazione/revoca su tutti
+   gli eventi aperti. La regola «un solo prossimo RSVP» non serve in questa
+   modalità; conservare il prossimo evento per la dashboard e i ricalcoli
+   temporali per inizio/deadline. Adeguare anche gli aggiornamenti locali dopo
+   revoca: oggi possono riabilitare `respond` prima del refresh.
+   Generalizzare l'eleggibilità R7/R8 alla modalità dell'evento, superando il
+   requisito dell'origine automatica; estendere gli stessi controlli DB a
+   partite e allenamenti manuali, preservando la verifica delle squadre.
+4. **Definire la transizione dei dati già risposti.** Inventariare su staging
+   le risposte future degli eventi interessati prima di migrare. Preservare
+   tutte le righe storiche; non convertire automaticamente `maybe` in una
+   conferma esplicita. Negli eventi convertiti gli attesi sono per definizione
+   tutti i membri senza `declined`; le precedenti risposte non devono impedire
+   di comunicare un'assenza. Una precedente `declined` ordinaria deve restare
+   visibile come assenza e avere una regola esplicita di revoca; preservare
+   provenienza e distinguere eventuali registrazioni dello staff. Resolver e
+   RPC vanno adeguati insieme, senza cancellazioni massive delle risposte.
+5. **Calcolare i report sul server.** Aggiungere modalità, rosa totale,
+   elenco/conteggio attesi e assenti, preservando il contratto RSVP per gli
+   altri eventi. Formula: membri unici nell'ambito autorizzato meno membri
+   con `status='declined'` per quell'evento. Sottrarre solo atleti ancora
+   appartenenti alla rosa considerata; rispettare filtri e assegnazioni coach.
+   Riutilizzare il calcolo tra coach e admin per evitare divergenze.
+   Per le partite collegare `event_id`, partita e club-team autorizzato;
+   calcolare disponibilità e assenze sulla rosa della squadra, anche senza
+   alcuna convocazione salvata. Non occorre un resolver dei partecipanti
+   convocati per il conteggio di fase uno.
+6. **Aggiornare tutte le superfici interessate.** Controllo condiviso, dashboard
+   e calendario atleta/famiglia, dettaglio evento, dashboard/report coach,
+   report admin e testi di configurazione. Non basta cambiare una sola label.
+   Nel campionato atleta riusare il controllo di assenza sull'evento collegato;
+   nella selezione convocati coach mostrare l'indisponibilità già comunicata
+   accanto al nome, distinguendo chiaramente gli assenti dai disponibili.
+   Caricare dati aggiornati all'apertura della selezione; non imporre un nuovo
+   passaggio di conferma e non modificare automaticamente convocazioni salvate.
+   Non creare un secondo sistema di risposte sulle righe di convocazione.
+
+Punti di ingresso verificati: `src/types/attendance.ts`,
+`src/server/events/attendance-availability.ts`, `src/server/events/early-absence.ts`,
+`src/app/api/athlete/events/{attendance,early-absence}/route.ts`,
+`src/components/athlete/{AttendanceControl,AthleteDashboard,AthleteAgenda,AthleteCalendarManager,EarlyAbsencePeriodModal}.tsx`,
+`src/components/shared/EventDetailModal.tsx`,
+`src/app/api/{coach,admin}/events/attendance/route.ts`,
+`src/components/coach/{CoachDashboard,CoachCalendarManager}.tsx`,
+`src/components/admin/{TeamModal,EventsManager}.tsx`,
+`src/server/trainings/training-schedule-reconciliation.ts`, contratti API
+dashboard/calendario/dettaglio, `src/components/championship/types.ts`,
+`src/components/championship/useChampionshipConvocations.ts`,
+`src/components/championship/ChampionshipConvocationModal.tsx`,
+`src/components/athlete/ChampionshipsManager.tsx`,
+`src/app/api/athlete/championships/route.ts`, form evento manuale,
+sincronizzazione DB delle partite, nuove migrazioni e test pertinenti.
+
+### Ordine proposto e verifiche residue
+
+Impatto stimato qualitativamente **medio per allenamenti e partite**: riuso
+consistente del lavoro R1–R9, con modifiche trasversali necessarie alla semantica
+del dato. Il chiarimento pre-convocazione riduce l'ambito: serve mostrare le
+assenze della rosa durante la scelta, senza introdurre presenze dei convocati
+o un flusso di risposta successivo.
+Non è una riscrittura e non è una sola modifica visuale.
+
+Prima di eseguire R10 sul vecchio comportamento, aggiornare requisiti/piano
+secondo l'ambito chiarito. Poi procedere con tre interventi sequenziali:
+contratto e protezioni DB/API con transizione; UI e report; R10 aggiornato.
+Non avviare questi interventi senza una richiesta di implementazione.
+
+Gate: rosa 18/assenze 3/attesi 15, zero comunicazioni, nuovo atleta, atleta
+rimosso, atleta multi-team contato una volta, filtro coach autorizzato,
+segnalazione/revoca singola e multipla, vecchie risposte `going/maybe/declined`,
+deadline e evento iniziato, famiglia con/senza permesso, cambio subject durante
+invio, errore/offline, scritture dirette, storico e altri eventi invariati,
+allenamento manuale, assenza partita senza convocazione esistente, elenco
+disponibili/assenti nella scelta convocati, revoca visibile al coach, nessuna
+modifica automatica alle convocazioni salvate, `event_id` mancante,
+partita annullata o riprogrammata e
+rigenerazione senza perdita di dati. Eseguire prove DB con ruoli reali e gate
+tecnici/browser previsti da R10.
+
+Note emerse dalla lettura da includere nel gate: il selettore R7 per periodo
+filtra `report_early_absence`, che oggi resta vero anche per assenze già
+registrate, mentre il copy R9 dichiara di escluderle; verificare e allineare
+query/payload/UI. Il report coach senza filtro usa tutte le squadre dell'evento
+dopo avere verificato almeno un'assegnazione: verificare l'ambito autorizzato
+prima di riusare questo insieme nel nuovo conteggio. I report usano la rosa
+corrente e non una fotografia storica: il nuovo conteggio non va presentato
+come registro delle presenze effettive passate.
+
+**Registro di questa analisi:** modificato soltanto
+`implementation_plan_redesign.md`; letti requisiti, piano, stato/history Git,
+componenti, route, resolver, generatore e migrazioni R1/R5/R7/R8. Nessuna
+modifica applicativa o DB, nessun accesso staging, nessun deploy. Test
+applicativi non eseguiti (analisi/documentazione); `git diff --check` eseguito.
+Restano da concordare trattamento delle risposte future già presenti,
+attivazione della gestione
+assenze sugli eventi con l'opzione oggi disattivata e conferma del limite
+temporale per comunicare/revocare assenze.
+
+**Fase due, esclusa dall'intervento iniziale:** riepilogo attesi sui soli
+convocati, gestione dedicata delle indisponibilità successive alla convocazione,
+eventuali avvisi al coach o sostituzioni. La presenza effettiva all'evento è
+un concetto distinto e non viene dedotta dall'assenza di segnalazioni.
+
+**Registro del chiarimento:** aggiornata soltanto questa sezione del piano
+con priorità pre-convocazione, adozione del canale app e rinvio della fase due;
+nessuna modifica applicativa/DB. Verifica: `git diff --check`.
+
+### Implementazione fase uno — 14/09/2026
+
+Implementata la gestione **sole assenze** per gli eventi configurati, con
+compatibilità RSVP e storico preservati:
+
+- nuova migrazione `20260914120000_absence_only_attendance_mode.sql`: modalità
+  esplicita `events.attendance_mode` (`rsvp`/`absence_only`), conversione dei
+  soli eventi futuri già configurati di tipo allenamento/partita, protezioni
+  DB per impedire RSVP ordinari nella nuova modalità e conservazione del valore
+  RSVP precedente durante una temporanea segnalazione di assenza;
+- il resolver, le API atleta e il controllo condiviso distinguono le due
+  modalità: in `absence_only` resta soltanto “Segnala assenza” immediato e
+  “Revoca assenza”, con nota facoltativa, deadline/inizio evento, contesto
+  familiare e verifiche server-side invariati;
+- allenamenti automatici generati dalla preferenza di squadra e nuovi eventi
+  manuali allenamento/partita configurati da coach/admin usano `absence_only`;
+  gli altri eventi e i dati storici rimangono RSVP;
+- report coach/admin centralizzati: `Attesi = rosa corrente − assenti`, con
+  elenco di attesi e assenti, testo che esclude l’interpretazione come presenza
+  effettiva e restrizione del report coach alle sole squadre assegnate;
+- dashboard coach aggiornata con disponibilità della rosa per il prossimo
+  allenamento/partita configurato.
+
+Limite esplicito: la fase due post-convocazione resta esclusa. Il dettaglio
+campionato continua a usare il suo flusso esistente; non sono state introdotte
+risposte sulle righe di convocazione né modifiche automatiche alle convocazioni
+salvate. Per esporre il controllo direttamente nella schermata campionato è
+necessario completare prima la verifica staging della sincronizzazione
+`championship_matches.event_id` descritta nell’analisi.
+
+Verifiche reali: migrazione applicata solo al Supabase locale con ruolo
+`supabase_admin` (colonna, vincoli e funzioni verificati; 147 eventi futuri
+configurati convertiti), test mirati 8 suite/36 test, suite completa Jest 72
+suite/272 test, `npx tsc --noEmit`, `npm run build` e `git diff --check`
+superati. Il primo tentativo locale come `postgres` è stato rollback completo
+per permessi sullo schema `private`; è presente un warning preesistente di
+collation del database locale. Nessun accesso a staging, produzione o deploy.
+
+**Handoff repository/staging — 14/09/2026.** Il commit locale
+`c2b8c59` (`feat(attendance): add absence-only mode`) contiene implementazione,
+migrazione, test e questo registro. Il push verso `origin/redesign` e
+l'applicazione staging restano in attesa: il dry-run del progetto collegato
+`csromawebapp-staging` ha rilevato una history divergente, con
+`20260913113243` e `20260913164229` presenti solo sul remoto e
+`20260913150000` presente solo in locale. Non è stata eseguita alcuna repair
+della history, né alcuna scrittura su staging o produzione; servono i file SQL
+mancanti o una decisione esplicita e verificata sulla riconciliazione prima di
+applicare la migration `20260914120000` in sicurezza.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

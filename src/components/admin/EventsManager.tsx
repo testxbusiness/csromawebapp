@@ -942,15 +942,20 @@ type AttendanceEntry = {
 }
 
 type AttendanceReport = {
+  attendance_mode?: 'rsvp' | 'absence_only'
   going: AttendanceEntry[]
   maybe: AttendanceEntry[]
   declined: AttendanceEntry[]
   no_response: AttendanceProfile[]
+  available?: AttendanceProfile[]
+  absent?: AttendanceEntry[]
   counts: {
     going: number
     maybe: number
     declined: number
     no_response: number
+    available?: number
+    absent?: number
   }
 }
 
@@ -971,10 +976,13 @@ function EventAttendancePanel({ eventId }: { eventId: string }) {
       const j = await res.json() as Partial<AttendanceReport>
       if (res.ok) {
         setLists({
+          attendance_mode: j.attendance_mode,
           going: j.going ?? [],
           maybe: j.maybe ?? [],
           declined: j.declined ?? [],
           no_response: j.no_response ?? [],
+          available: j.available ?? [],
+          absent: j.absent ?? [],
           counts: j.counts ?? emptyAttendanceReport.counts,
         })
       }
@@ -993,8 +1001,13 @@ function EventAttendancePanel({ eventId }: { eventId: string }) {
   )
   return (
     <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4" aria-label="Report conferme partecipazione">
-      <div className="text-sm font-semibold mb-3">Report conferme partecipazione</div>
+      <div className="text-sm font-semibold mb-3">{lists.attendance_mode === 'absence_only' ? 'Disponibilità della rosa' : 'Report conferme partecipazione'}</div>
+      {lists.attendance_mode === 'absence_only' && <p className="mb-3 text-xs text-secondary">Gli attesi sono gli atleti della rosa senza un’assenza comunicata; non sono presenze effettive.</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {lists.attendance_mode === 'absence_only' ? <>
+          <div className="cs-card cs-card--primary p-3"><div className="text-sm font-semibold mb-1">Attesi ({lists.counts.available ?? 0})</div><div className="space-y-1 text-sm">{renderNames(lists.available ?? [])}</div></div>
+          <div className="cs-card cs-card--primary p-3"><div className="text-sm font-semibold mb-1">Assenti ({lists.counts.absent ?? 0})</div><div className="space-y-1 text-sm">{renderNames(lists.absent ?? [])}</div></div>
+        </> : <>
         <div className="cs-card cs-card--primary p-3">
           <div className="text-sm font-semibold mb-1">Confermati ({lists.counts.going})</div>
           <div className="space-y-1 text-sm">{renderNames(lists.going)}</div>
@@ -1011,6 +1024,7 @@ function EventAttendancePanel({ eventId }: { eventId: string }) {
           <div className="text-sm font-semibold mb-1">Nessuna risposta ({lists.counts.no_response})</div>
           <div className="space-y-1 text-sm">{renderNames(lists.no_response)}</div>
         </div>
+        </>}
       </div>
     </div>
   )

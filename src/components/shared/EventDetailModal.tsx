@@ -4,7 +4,7 @@ import * as React from 'react'
 import { CalendarDays } from 'lucide-react'
 import { ErrorState, EventKindBadge, LoadingState, ResponsiveDetail } from '@/components/ui'
 import AttendanceControl from '@/components/athlete/AttendanceControl'
-import type { AttendanceAvailabilityContract, AttendanceStatus } from '@/types/attendance'
+import type { AttendanceAvailabilityContract, AttendanceMode, AttendanceStatus } from '@/types/attendance'
 
 type TeamLike = { id?: string; name: string; code?: string | null } | string
 export type EventDetailData = {
@@ -18,6 +18,7 @@ export type EventDetailData = {
   creator?: { first_name?: string; last_name?: string } | null
   description?: string | null
   requires_confirmation?: boolean
+  attendance_mode?: AttendanceMode
   confirmation_deadline?: string | null
   my_attendance?: { status?: AttendanceStatus; responded_at?: string | null; is_early_absence?: boolean } | null
   attendance_availability?: AttendanceAvailabilityContract | null
@@ -159,6 +160,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
                 <div className="sm:col-span-2" id="event-detail-attendance">
                   <AttendanceControl
                     requiresConfirmation
+                    attendanceMode={data.attendance_mode}
                     confirmationDeadline={data.confirmation_deadline}
                     initialStatus={data.my_attendance?.status ?? null}
                     canRespond={canRespond}

@@ -293,6 +293,7 @@ export default function AthleteCalendarManager() {
         </div>
         <AttendanceControl
           requiresConfirmation={event.requires_confirmation}
+          attendanceMode={event.attendance_mode}
           confirmationDeadline={event.confirmation_deadline}
           initialStatus={event.my_attendance?.status ?? null}
           canRespond={canConfirmAttendance}

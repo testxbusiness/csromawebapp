@@ -22,6 +22,7 @@ type RawEvent = {
   description?: string | null
   event_kind?: string | null
   requires_confirmation?: boolean | null
+  attendance_mode?: 'rsvp' | 'absence_only' | null
   confirmation_deadline?: string | null
 }
 
@@ -95,6 +96,7 @@ export function buildDashboardEvents(
       ...event,
       location: gym?.name ? `${gym.name}${gym.city ? ` - ${gym.city}` : ''}` : event.location || null,
       requires_confirmation: Boolean(event.requires_confirmation),
+      attendance_mode: event.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
       confirmation_deadline: event.confirmation_deadline || null,
       my_attendance: attendance.get(event.id) || null,
       /** Additive fields; existing event fields remain unchanged. */

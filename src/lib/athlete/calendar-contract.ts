@@ -15,6 +15,7 @@ type RawCalendarEvent = {
   event_type?: string | null
   event_kind?: string | null
   requires_confirmation?: boolean | null
+  attendance_mode?: 'rsvp' | 'absence_only' | null
   confirmation_deadline?: string | null
 }
 
@@ -63,6 +64,7 @@ export function buildCalendarEvents(
       team_ids: teamDetails.map((team) => team.id),
       event_kind: event.event_kind ?? null,
       requires_confirmation: Boolean(event.requires_confirmation),
+      attendance_mode: event.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
       confirmation_deadline: event.confirmation_deadline ?? null,
       my_attendance: myAttendance,
     }

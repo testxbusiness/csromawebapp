@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { buildAttendanceReport, type AttendanceReportEntry, type AttendanceReportProfile } from '@/server/events/attendance-report'
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +42,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Squadra non assegnata al coach' }, { status: 403 })
     }
 
-    const visibleTeamIds = requestedTeamId ? [requestedTeamId] : teamIds
+    // Never expand an event to a team the coach does not supervise. An event
+    // may belong to several teams and authorization must restrict that set.
+    const assignedTeamIds = assignments.map((assignment) => assignment.team_id)
+    const visibleTeamIds = requestedTeamId ? [requestedTeamId] : assignedTeamIds
     const { data: members, error: membersError } = await admin
       .from('team_members')
       .select('profile_id, profiles(id, first_name, last_name, email)')
@@ -53,38 +57,19 @@ export async function GET(request: NextRequest) {
     )).filter((profile): profile is NonNullable<typeof profile> => Boolean(profile))
     const profiles = Array.from(new Map(profileRows.map((profile) => [profile.id, profile] as const)).values())
 
-    const { data: attendances, error: attendancesError } = await admin
-      .from('event_attendances')
+    const [{ data: event, error: eventError }, { data: attendances, error: attendancesError }] = await Promise.all([
+      admin.from('events').select('attendance_mode').eq('id', eventId).maybeSingle(),
+      admin.from('event_attendances')
       .select('profile_id, status, responded_at, profiles(first_name,last_name,email)')
-      .eq('event_id', eventId)
+      .eq('event_id', eventId),
+    ])
+    if (eventError || !event) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (attendancesError) throw attendancesError
-
-    const byProfileId = new Map((attendances || []).map((attendance) => [attendance.profile_id, attendance]))
-    const going = []
-    const maybe = []
-    const declined = []
-    const noResponse = []
-
-    for (const profile of profiles) {
-      const attendance = byProfileId.get(profile.id)
-      if (!attendance) noResponse.push(profile)
-      else if (attendance.status === 'going') going.push(attendance)
-      else if (attendance.status === 'maybe') maybe.push(attendance)
-      else declined.push(attendance)
-    }
-
-    return NextResponse.json({
-      going,
-      maybe,
-      declined,
-      no_response: noResponse,
-      counts: {
-        going: going.length,
-        maybe: maybe.length,
-        declined: declined.length,
-        no_response: noResponse.length,
-      },
-    })
+    return NextResponse.json(buildAttendanceReport(
+      event.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
+      profiles as AttendanceReportProfile[],
+      (attendances ?? []) as unknown as AttendanceReportEntry[],
+    ))
   } catch (error) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })

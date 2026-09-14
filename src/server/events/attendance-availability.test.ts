@@ -122,4 +122,33 @@ describe('attendance availability resolver', () => {
     expect(result.nextEvent).toBeNull()
     expect(result.availabilityByEventId.has('manual')).toBe(false)
   })
+
+  it('allows only absence reporting for future training and match events in absence-only mode', () => {
+    const training = event({ id: 'training', attendance_mode: 'absence_only', generated_from_schedule_id: 'schedule-1' })
+    const match = event({ id: 'match', attendance_mode: 'absence_only', generated_from_schedule_id: null, event_kind: 'match' })
+    const result = buildAttendanceAvailability([training, match], new Map(), { view_schedule: true, confirm_attendance: true }, now)
+
+    expect(result.nextEvent).toBeNull()
+    expect(result.availabilityByEventId.get('training')).toEqual(expect.objectContaining({
+      attendance_mode: 'absence_only',
+      actions: { respond: false, report_early_absence: true, revoke_early_absence: false },
+    }))
+    expect(result.availabilityByEventId.get('match')).toEqual(expect.objectContaining({
+      attendance_mode: 'absence_only',
+      can_respond_now: false,
+      can_report_early_absence: true,
+    }))
+  })
+
+  it('keeps a migrated self-decline visible as an absence and allows its revocation', () => {
+    const converted = event({ id: 'converted', attendance_mode: 'absence_only' })
+    const result = buildAttendanceAvailability([converted], new Map([[
+      'converted', { event_id: 'converted', status: 'declined', responded_at: now.toISOString(), is_early_absence: false, response_source: 'self' },
+    ]]), { view_schedule: true, confirm_attendance: true }, now)
+    expect(result.availabilityByEventId.get('converted')).toEqual(expect.objectContaining({
+      can_report_early_absence: false,
+      can_revoke_early_absence: true,
+      closure_reason: 'already_early_absence',
+    }))
+  })
 })

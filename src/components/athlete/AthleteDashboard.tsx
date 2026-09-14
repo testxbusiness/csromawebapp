@@ -63,6 +63,7 @@ interface Event {
   event_kind?: 'training' | 'match' | 'meeting' | 'other'
   gym_id?: string | null
   requires_confirmation?: boolean
+  attendance_mode?: 'rsvp' | 'absence_only'
   confirmation_deadline?: string | null
   my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null; is_early_absence?: boolean } | null
   teams?: Array<{ id: string; name: string; code: string }>
@@ -843,6 +844,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                     {index === 0 && (!isDelegatedProfile || permissions?.confirm_attendance === true) && (
                       <AttendanceControl
                         requiresConfirmation={Boolean(event.requires_confirmation)}
+                        attendanceMode={event.attendance_mode}
                         confirmationDeadline={event.confirmation_deadline}
                         initialStatus={event.my_attendance?.status || null}
                         canRespond
@@ -944,6 +946,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
             location: selectedEvent.location || undefined,
             description: selectedEvent.description || undefined,
             requires_confirmation: selectedEvent.requires_confirmation,
+            attendance_mode: selectedEvent.attendance_mode,
             confirmation_deadline: selectedEvent.confirmation_deadline,
             my_attendance: selectedEvent.my_attendance,
             attendance_availability: selectedEvent.attendance_availability,

@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
         const batch = eventIds.slice(i, i + 100)
         const { data: events } = await supabase
           .from('events')
-          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, confirmation_deadline')
+          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, attendance_mode, confirmation_deadline')
           .in('id', batch)
           .gte('start_date', fromDate.toISOString())
           .lte('start_date', throughDate.toISOString())
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events, error: evErr } = await supabase
         .from('events')
-        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, confirmation_deadline')
+        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, attendance_mode, confirmation_deadline')
         .in('id', eventIds)
         .gte('start_date', fromDate.toISOString())
         .lte('start_date', throughDate.toISOString())
@@ -162,6 +162,7 @@ export async function GET(request: NextRequest) {
         parent_event_id: ev.parent_event_id,
         created_by: ev.created_by,
         requires_confirmation: ev.requires_confirmation,
+        attendance_mode: ev.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
         confirmation_deadline: ev.confirmation_deadline
       }))
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())

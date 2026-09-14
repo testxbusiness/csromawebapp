@@ -10,9 +10,9 @@ import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/u
 type User = { id: string; email?: string }
 type Profile = { id: string; first_name: string; last_name: string; role: string }
 type Team = { id: string; name: string; code?: string | null; activity?: string | null }
-type CoachEvent = { id: string; title: string; start_time: string; end_time?: string | null; location?: string | null; event_kind?: 'training' | 'match' | 'meeting' | 'other' | null; teams?: string[]; requires_confirmation?: boolean }
+type CoachEvent = { id: string; title: string; start_time: string; end_time?: string | null; location?: string | null; event_kind?: 'training' | 'match' | 'meeting' | 'other' | null; teams?: string[]; requires_confirmation?: boolean; attendance_mode?: 'rsvp' | 'absence_only' }
 type CoachMessage = { id: string; subject: string; content?: string; created_at?: string }
-type AttendanceCounts = { going: number; maybe: number; declined: number; no_response: number }
+type AttendanceCounts = { going: number; maybe: number; declined: number; no_response: number; available?: number; absent?: number }
 type CoachDashboardProps = { user: User; profile: Profile }
 
 function formatDate(value: string) {
@@ -51,6 +51,7 @@ export default function CoachDashboard({ profile }: CoachDashboardProps) {
   const [events, setEvents] = useState<CoachEvent[]>([])
   const [messages, setMessages] = useState<CoachMessage[]>([])
   const [attendance, setAttendance] = useState<AttendanceCounts | null>(null)
+  const [attendanceMode, setAttendanceMode] = useState<'rsvp' | 'absence_only'>('rsvp')
   const [loading, setLoading] = useState(true)
   const [loadState, setLoadState] = useState<LoadState>('ready')
   const [error, setError] = useState<string | null>(null)
@@ -84,14 +85,16 @@ export default function CoachDashboard({ profile }: CoachDashboardProps) {
       setMessages(messagePayload.messages ?? [])
       if (calendar.teams) setTeams(calendar.teams)
 
-      const nextTraining = nextEvents.find((event) => event.requires_confirmation && event.event_kind === 'training')
+      const nextTraining = nextEvents.find((event) => event.requires_confirmation && (event.event_kind === 'training' || event.event_kind === 'match'))
       if (!nextTraining) {
         setAttendance(null)
+        setAttendanceMode('rsvp')
         return
       }
       const attendanceResponse = await fetch(`/api/coach/events/attendance?event_id=${nextTraining.id}${selectedTeamId ? `&team_id=${encodeURIComponent(selectedTeamId)}` : ''}`, { cache: 'no-store' })
-      const attendancePayload = await attendanceResponse.json() as { counts?: AttendanceCounts }
+      const attendancePayload = await attendanceResponse.json() as { counts?: AttendanceCounts; attendance_mode?: 'rsvp' | 'absence_only' }
       setAttendance(attendanceResponse.ok ? attendancePayload.counts ?? null : null)
+      setAttendanceMode(attendanceResponse.ok && attendancePayload.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp')
     } catch (reason) {
       setLoadState(classifiedLoadState ?? loadStateFromError(reason))
       setError(reason instanceof Error ? reason.message : 'Impossibile caricare la home coach')
@@ -128,8 +131,8 @@ export default function CoachDashboard({ profile }: CoachDashboardProps) {
           {nextEvent ? <div className="space-y-4"><div className="flex items-start gap-3"><div className="rounded-xl bg-[color:var(--cs-surface-selected)] p-3 text-[color:var(--cs-brand-red)]"><CalendarDays className="h-5 w-5" aria-hidden="true" /></div><div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-wide text-[color:var(--cs-ink-muted)]">Prossimo impegno</p><h2 className="cs-type-h3 truncate">{nextEvent.title}</h2><p className="text-sm text-[color:var(--cs-ink-muted)]">{formatDate(nextEvent.start_time)} · {formatTime(nextEvent.start_time)}{nextEvent.location ? ` · ${nextEvent.location}` : ''}</p></div><EventKindBadge kind={nextEvent.event_kind} /></div>{conflictIds.size > 0 ? <div className="flex items-center gap-2 rounded-lg border border-[color:var(--cs-warning-canonical)]/40 bg-[color:var(--cs-warning-canonical)]/10 p-3 text-sm"><CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" /><span>{conflictIds.size} impegni coinvolti in una sovrapposizione.</span></div> : null}<SectionLink href="/coach/calendar">Apri calendario</SectionLink></div> : <FeedbackState variant="empty" title="Nessun impegno imminente" description="Non risultano eventi nei prossimi giorni." action={<SectionLink href="/coach/calendar">Apri calendario</SectionLink>} />}
         </CoachPanel>
 
-        <CoachPanel title="Chi sarà presente?" description="Stato delle conferme per il prossimo allenamento.">
-          {attendance ? <div className="space-y-4"><div className="grid grid-cols-4 gap-2 text-center"><AttendanceStat label="Confermati" value={attendance.going} tone="success" /><AttendanceStat label="Forse" value={attendance.maybe} tone="warning" /><AttendanceStat label="No" value={attendance.declined} tone="danger" /><AttendanceStat label="In attesa" value={attendance.no_response} tone="neutral" /></div><p className="text-sm text-[color:var(--cs-ink-muted)]">{answered} risposte ricevute su {answered + attendance.no_response} atleti.</p><SectionLink href="/coach/calendar">Gestisci presenze</SectionLink></div> : <FeedbackState variant="empty" title="Nessuna conferma da mostrare" description="Il prossimo allenamento non richiede RSVP oppure non è ancora in calendario." />}
+        <CoachPanel title={attendanceMode === 'absence_only' ? 'Chi è disponibile?' : 'Chi sarà presente?'} description={attendanceMode === 'absence_only' ? 'Disponibilità calcolata dalle assenze comunicate per il prossimo evento.' : 'Stato delle conferme per il prossimo allenamento.'}>
+          {attendance ? attendanceMode === 'absence_only' ? <div className="space-y-4"><div className="grid grid-cols-2 gap-2 text-center"><AttendanceStat label="Attesi" value={attendance.available ?? 0} tone="neutral" /><AttendanceStat label="Assenti" value={attendance.absent ?? 0} tone="danger" /></div><p className="text-sm text-[color:var(--cs-ink-muted)]">Gli attesi sono gli atleti della rosa senza un’assenza comunicata, non presenze effettive.</p><SectionLink href="/coach/calendar">Apri disponibilità</SectionLink></div> : <div className="space-y-4"><div className="grid grid-cols-4 gap-2 text-center"><AttendanceStat label="Confermati" value={attendance.going} tone="success" /><AttendanceStat label="Forse" value={attendance.maybe} tone="warning" /><AttendanceStat label="No" value={attendance.declined} tone="danger" /><AttendanceStat label="In attesa" value={attendance.no_response} tone="neutral" /></div><p className="text-sm text-[color:var(--cs-ink-muted)]">{answered} risposte ricevute su {answered + attendance.no_response} atleti.</p><SectionLink href="/coach/calendar">Gestisci presenze</SectionLink></div> : <FeedbackState variant="empty" title="Nessuna disponibilità da mostrare" description="Il prossimo evento non abilita la gestione delle assenze oppure non è ancora in calendario." />}
         </CoachPanel>
 
         <CoachPanel title="Qual è la prossima partita?" description="Il prossimo appuntamento agonistico delle tue squadre.">

@@ -170,6 +170,15 @@ describe('AttendanceControl', () => {
     expect(screen.getByText('Da confermare')).toBeTruthy()
   })
 
+  it('saves an absence-only report immediately without requiring a note', async () => {
+    const user = userEvent.setup()
+    const onEarlyAbsence = jest.fn().mockResolvedValue(undefined)
+    render(<AttendanceControl requiresConfirmation attendanceMode="absence_only" canRespond availability={{ attendance_mode: 'absence_only', requires_confirmation: true, can_respond_now: false, can_report_early_absence: true, can_revoke_early_absence: false, actions: { respond: false, report_early_absence: true, revoke_early_absence: false }, closure_reason: null, next_event: null, next_recalculation_at: null }} eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z', end: '2026-09-15T18:30:00Z' }} onChange={jest.fn()} onEarlyAbsence={onEarlyAbsence} />)
+    await user.click(screen.getByRole('button', { name: 'Segnala assenza' }))
+    await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith(''))
+    expect(screen.getByText('Assenza comunicata')).toBeTruthy()
+  })
+
   it('does not expose early-absence actions after the deadline', () => {
     render(
       <AttendanceControl

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { AttendanceAvailabilityContract, AttendanceStatus } from '@/types/attendance'
+import type { AttendanceAvailabilityContract, AttendanceMode, AttendanceStatus } from '@/types/attendance'
 import { FeedbackState } from '@/components/ui/FeedbackState'
 
 type EventContext = {
@@ -12,6 +12,7 @@ type EventContext = {
 
 type AttendanceControlProps = {
   requiresConfirmation: boolean
+  attendanceMode?: AttendanceMode
   confirmationDeadline?: string | null
   initialStatus?: AttendanceStatus | null
   canRespond: boolean
@@ -37,6 +38,7 @@ type EarlyAbsenceSectionProps = {
   onNoteChange: (value: string) => void
   onReport: () => Promise<void>
   onRevoke: () => Promise<void>
+  absenceOnly?: boolean
 }
 
 const SUCCESS_FEEDBACK_DURATION_MS = 4000
@@ -70,6 +72,7 @@ function getStatusLabel(status: AttendanceStatus | null) {
 
 export default function AttendanceControl({
   requiresConfirmation,
+  attendanceMode,
   confirmationDeadline,
   initialStatus = null,
   canRespond,
@@ -85,7 +88,7 @@ export default function AttendanceControl({
   const [error, setError] = useState<string | null>(null)
   const [showSuccess, setShowSuccess] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
-  const [earlyAbsence, setEarlyAbsence] = useState(initialEarlyAbsence)
+  const [earlyAbsence, setEarlyAbsence] = useState(initialEarlyAbsence || (attendanceMode === 'absence_only' && initialStatus === 'declined'))
   const [showForm, setShowForm] = useState(false)
   const [note, setNote] = useState('')
   const [earlyPending, setEarlyPending] = useState(false)
@@ -105,11 +108,11 @@ export default function AttendanceControl({
 
   useEffect(() => {
     setStatus(initialStatus)
-    setEarlyAbsence(initialEarlyAbsence)
+    setEarlyAbsence(initialEarlyAbsence || (attendanceMode === 'absence_only' && initialStatus === 'declined'))
     setError(null)
     setEarlyError(null)
     setShowForm(false)
-  }, [initialStatus, initialEarlyAbsence])
+  }, [initialStatus, initialEarlyAbsence, attendanceMode])
 
   useEffect(() => {
     if (!showSuccess) return
@@ -121,6 +124,8 @@ export default function AttendanceControl({
   }, [showSuccess])
 
   if (!requiresConfirmation) return null
+
+  const absenceOnly = availability?.attendance_mode === 'absence_only' || attendanceMode === 'absence_only'
 
   // A successful revocation restores the neutral state locally. The user can
   // then choose an RSVP voluntarily while the authoritative R4 refresh runs.
@@ -190,6 +195,16 @@ export default function AttendanceControl({
         setEarlyPending(false)
       }
     },
+    absenceOnly,
+  }
+
+  if (absenceOnly) {
+    return (
+      <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3" aria-label="Segnalazione assenza">
+        <p className="text-sm text-secondary">Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.</p>
+        <EarlyAbsenceSection {...earlyAbsenceProps} />
+      </div>
+    )
   }
 
   if (!canRespondNow || deadlinePassed || !isOnline) {
@@ -302,6 +317,7 @@ function EarlyAbsenceSection({
   onNoteChange,
   onReport,
   onRevoke,
+  absenceOnly = false,
 }: EarlyAbsenceSectionProps) {
   if (
     !availability ||
@@ -319,9 +335,7 @@ function EarlyAbsenceSection({
     >
       {earlyAbsence ? (
         <>
-          <p className="text-sm font-medium" role="status">
-            Hai già comunicato che non parteciperai
-          </p>
+          <p className="text-sm font-medium" role="status">{absenceOnly ? 'Assenza comunicata' : 'Hai già comunicato che non parteciperai'}</p>
           <p className="mt-1 text-xs text-secondary">
             Puoi modificare volontariamente la comunicazione entro la scadenza.
           </p>
@@ -389,10 +403,10 @@ function EarlyAbsenceSection({
         <button
           type="button"
           className="cs-btn cs-btn--outline cs-btn--sm"
-          onClick={onOpen}
+          onClick={() => { if (absenceOnly) void onReport(); else onOpen() }}
           disabled={!availability.actions.report_early_absence || !isOnline}
         >
-          Segnala assenza
+          {pending ? 'Salvataggio…' : 'Segnala assenza'}
         </button>
       )}
       {error && !showForm && (
