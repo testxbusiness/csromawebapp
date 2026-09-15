@@ -264,7 +264,7 @@ Per un goal `[x]` aggiungere sempre:
 | G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
-| G12.1 Contratto rollover e invarianti DB | [ ] | G9.5,G9.6 | Rendere versionati e testabili unicità stagione attiva, archiviazione non distruttiva e confini persona/iscrizione/squadra. |
+| G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Parziale il 15/09/2026: aggiunti migration/index e contratti Zod tipizzati con test; PK `season_profiles(profile_id, season_id)` e FK `season_profiles → seasons ON DELETE RESTRICT` preservati. Opzione 1 eseguita su locale; verifica staging completata e, su conferma esplicita, applicata la sola `20260915112357_season_rollover_invariants.sql`: history remota aggiornata, un solo indice equivalente `unique_active_season`, commento `is_active` verificato, vincoli idempotenti e RLS richiesti presenti. Resta non dimostrata l’applicabilità dell’intera catena da zero perché la baseline `20251007152643_master_migration_fixed.sql` fallisce nel database shadow con sintassi preesistente (`CREATE EXTENSION` senza terminatore prima del successivo `CREATE`). Advisor staging: warning preesistenti su due `SECURITY DEFINER` esposte e leaked-password protection. Nessuna altra migration o mutazione funzionale eseguita. |
 | G12.2 API bozza stagione 2026/2027 | [ ] | G12.1 | Creare la stagione target inattiva tramite Route Handler admin validato, senza copiare o attivare dati. |
 | G12.3 Copia selettiva palestre e attività | [ ] | G12.2 | Copiare nella target soltanto le anagrafiche scelte, con nuovi ID e senza dipendenze operative. |
 | G12.4 Bozze e mappa squadre target | [ ] | G12.3 | Creare squadre 2026/2027 come bozze minime o mapparle a target esistenti, senza configurazioni stagionali. |
@@ -7149,6 +7149,59 @@ su DB esistente; nessun dato applicativo modificato.
 
 **Verifiche:** migration list/diff locale, query catalogo vincoli e indici,
 advisors, test degli schema Zod, `npx tsc --noEmit`, `git diff --check`.
+
+**Registro esecuzione — 15/09/2026:** aggiunti
+`supabase/migrations/20260915112357_season_rollover_invariants.sql`, generata
+con `supabase migration new`, e
+`src/lib/validation/seasonRollover.ts` con relativi test. La migration aggiunge
+soltanto l'indice unico parziale `seasons_single_active_idx` su
+`is_active = true`; sul DB locale era già presente l'equivalente
+`unique_active_season`, che la migration riconosce senza duplicare. L'idempotenza delle iscrizioni resta affidata alle
+unicità già presenti (`season_profiles` PK composta e `team_members`
+`UNIQUE(profile_id, team_id)`). Non sono stati introdotti cascade, hard delete,
+funzioni privilegiate o modifiche ai dati.
+
+Check eseguiti: test Zod 3/3, `npx tsc --noEmit`, `supabase migration
+list --local`, `supabase db advisors --local --type security --level warn` (nessun
+problema), `git diff --check`. Come baseline tecnica dell'opzione 1 è stato
+generato il dump schema-only `public` in
+`/private/tmp/csroma-g12-1-schema.sql`; il blocco idempotente della migration è
+stato eseguito sul DB locale esistente e la query successiva ha confermato un
+solo indice equivalente (`unique_active_season`). `supabase db diff --local` non completabile:
+la shadow database fallisce sulla baseline preesistente
+`20251007152643_master_migration_fixed.sql` con errore di sintassi presso
+`CREATE`. Il catalogo locale è stato comunque verificato via
+`supabase db query --local`: esiste `unique_active_season`, la FK
+`season_profiles → seasons` è `ON DELETE RESTRICT`, le unicità di
+`season_profiles`, `team_members` e `team_coaches` sono presenti e tutte le
+tabelle richieste hanno RLS abilitato; policy e grant sono stati ispezionati.
+La migration riconosce l'indice locale equivalente senza duplicarlo. Nessun
+database applicativo, staging o produzione è stato mutato. Il goal resta
+bloccato solo sulla prova di applicabilità da zero finché la baseline non è
+resa eseguibile in un goal autorizzato. Questa opzione chiude la verifica sullo
+schema corrente, ma non dimostra l'applicabilità dell'intera catena da zero;
+G12.1 resta quindi `[!]` secondo l'Acceptance originale.
+
+**Verifica staging — 15/09/2026:** sul progetto collegato
+`csromawebapp-staging`, `supabase migration list --linked` mostra history
+allineata fino a `20260914120000`; `supabase db push --linked --dry-run`
+propone esclusivamente `20260915112357_season_rollover_invariants.sql` e non
+esegue modifiche. Query catalogo read-only hanno confermato l'indice unico
+parziale `unique_active_season`, la PK e la FK `season_profiles.season_id`
+con `ON DELETE RESTRICT`, le unicità di `team_members`/`team_coaches` e RLS
+abilitato su tutte le tabelle richieste. `supabase db diff --linked` non è
+conclusivo perché la shadow database fallisce sulla baseline storica invalida.
+Gli advisor security staging riportano warning già presenti su
+`check_gym_schedule_conflicts`, `refresh_championship_standings` e leaked
+password protection; nessuno riguarda la migration G12.1.
+
+**Applicazione staging — 15/09/2026:** eseguito `supabase db push --linked`
+con la sola migration G12.1, dopo il dry-run e la conferma esplicita
+dell'utente. Verificata la presenza della versione
+`20260915112357` in `supabase_migrations.schema_migrations`, l'indice unico
+parziale esistente e il commento su `seasons.is_active`. La CLI ha riportato
+un warning non bloccante durante la cache pg-delta per un certificato locale
+assente; l'applicazione della migration è terminata con successo.
 
 ## G12.2 — API per creare la bozza 2026/2027
 
