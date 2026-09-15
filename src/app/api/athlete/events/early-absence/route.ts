@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const parsed = earlyAbsencePeriodSchema.safeParse(Object.fromEntries(searchParams.entries()))
     if (!parsed.success) return NextResponse.json({ error: 'Periodo o paginazione non validi' }, { status: 400 })
     const subject = await requireSubjectAthleteContext(await createClient(), searchParams.get('subjectProfileId'), 'view_schedule')
-    const result = await resolveAttendanceAvailability(subject.dataClient, subject.profileId, subject.permissions)
+    const result = await resolveAttendanceAvailability(subject.dataClient, subject.profileId, subject.permissions, [], new Date(), subject.activeTeamIds ?? [])
     const page = selectableEarlyAbsenceEvents(result, parsed.data.from, parsed.data.to, parsed.data.offset, parsed.data.limit)
     const authorizedTeamIds = result.authorizedTeamIds ?? []
     const teamLabels = new Map<string, TeamLabel>()
@@ -80,7 +80,7 @@ async function mutate(request: NextRequest, revoke: boolean) {
     if (!parsed.success) return NextResponse.json({ error: 'Payload non valido' }, { status: 400 })
     const eventIds = parsed.data.event_ids
     if (eventIds.length > EARLY_ABSENCE_MAX_EVENT_IDS) return NextResponse.json({ error: `È possibile selezionare al massimo ${EARLY_ABSENCE_MAX_EVENT_IDS} eventi` }, { status: 400 })
-    const availability = await resolveAttendanceAvailability(subject.dataClient, subject.profileId, subject.permissions, eventIds)
+    const availability = await resolveAttendanceAvailability(subject.dataClient, subject.profileId, subject.permissions, eventIds, new Date(), subject.activeTeamIds ?? [])
     const action = revoke ? 'revoke_early_absence' : 'report_early_absence'
     if (eventIds.some((id) => availability.availabilityByEventId.get(id)?.actions[action] !== true)) {
       return NextResponse.json({ error: 'Uno o più eventi non sono più disponibili. Aggiorna il riepilogo.' }, { status: 409 })

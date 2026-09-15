@@ -3,6 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { requireAccountContext } from '@/server/auth/require-account-context'
 import { GET } from './route'
 
+jest.mock('@/server/seasons/active-season', () => ({
+  resolveActiveSeason: jest.fn().mockResolvedValue({ id: 'season-active', name: 'Attiva', start_date: '2026-09-01', end_date: '2027-06-30', is_active: true }),
+  resolveActiveSeasonTeamIds: jest.fn().mockResolvedValue(['team-a']),
+}))
+
 jest.mock('@/lib/supabase/server', () => ({ createClient: jest.fn() }))
 jest.mock('@/server/auth/require-account-context', () => ({ requireAccountContext: jest.fn() }))
 jest.mock('next/server', () => ({

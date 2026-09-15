@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
     const canViewMessages = subject.permissions.receive_messages
     const canViewPayments = subject.permissions.view_payments
     const canViewSchedule = subject.permissions.view_schedule
@@ -21,21 +22,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Execute all queries in parallel
-    const [seasonRes, memberRes, feeRes] = await Promise.all([
-      // 1. Get active season
-      dataClient
-        .from('seasons')
-        .select('*')
-        .eq('is_active', true)
-        .single(),
-
-      // 2. Get team memberships
+    const [memberRes, feeRes] = await Promise.all([
       dataClient
         .from('team_members')
         .select('id, team_id, jersey_number')
-        .eq('profile_id', athleteProfileId),
+        .eq('profile_id', athleteProfileId)
+        .in('team_id', activeTeamIds),
 
-      // 3. Get fee installments
       canViewPayments
         ? dataClient
             .from('fee_installments')
@@ -47,7 +40,6 @@ export async function GET(request: NextRequest) {
         : Promise.resolve({ data: [] })
     ])
 
-    const seasons = seasonRes.data
     const memberships = memberRes.data
     const feeInstallments = feeRes.data
 
@@ -133,7 +125,7 @@ export async function GET(request: NextRequest) {
         unreadMessages: directUnreadMessages.slice(0, 5),
         unreadMessageCount: directUnreadMessages.length,
         feeInstallments: [],
-        activeSeason: seasons,
+        activeSeason: subject.activeSeason ?? null,
         teams: [],
       })
     }
@@ -164,6 +156,7 @@ export async function GET(request: NextRequest) {
             .from('membership_fees')
             .select('id, team_id, name')
             .in('id', (feeInstallments || []).map(f => f.membership_fee_id).filter(Boolean))
+            .in('team_id', activeTeamIds)
         : Promise.resolve({ data: [] }),
 
       dataClient
@@ -226,7 +219,7 @@ export async function GET(request: NextRequest) {
     ])
 
     const attendanceAvailability = canViewSchedule
-      ? await resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds)
+      ? await resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds, new Date(), activeTeamIds)
       : null
     if (attendanceAvailability?.nextEvent && !allEvents.some((event) => event.id === attendanceAvailability.nextEvent?.id)) {
       const nextEvent = attendanceAvailability.nextEvent
@@ -414,7 +407,7 @@ export async function GET(request: NextRequest) {
       unreadMessages,
       unreadMessageCount: deduplicatedUnreadMessages.length,
       feeInstallments: enrichedFees,
-      activeSeason: seasons,
+      activeSeason: subject.activeSeason ?? null,
       teams: dashboardTeams,
       attendance_availability: attendanceAvailability
         ? attendanceAvailability.availabilityByEventId.get(attendanceAvailability.nextEvent?.id || '') ?? null

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET(request: Request) {
   try {
@@ -9,9 +10,13 @@ export async function GET(request: Request) {
     if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json([])
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
 
     const requestedTeamId = new URL(request.url).searchParams.get('team_id')
     if (requestedTeamId) {
+      if (!activeTeamIds.has(requestedTeamId)) return NextResponse.json({ error: 'Squadra non appartenente alla stagione attiva' }, { status: 403 })
       const { data: assignment, error: assignmentError } = await supabase
         .from('team_coaches')
         .select('team_id')
@@ -59,6 +64,8 @@ export async function GET(request: Request) {
       .eq('type', 'coach_payment')
       .eq('coach_id', account.ownerProfileId)
     if (requestedTeamId) paymentsQuery = paymentsQuery.eq('team_id', requestedTeamId)
+    else if (activeTeamIds.size > 0) paymentsQuery = paymentsQuery.in('team_id', [...activeTeamIds])
+    else return NextResponse.json([])
     const { data, error } = await paymentsQuery.order('due_date', { ascending: true, nullsFirst: true })
 
     if (error) {

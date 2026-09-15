@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 import { buildAttendanceReport, type AttendanceReportEntry, type AttendanceReportProfile } from '@/server/events/attendance-report'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,6 +12,9 @@ export async function GET(request: NextRequest) {
     if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ error: 'Nessuna stagione attiva configurata' }, { status: 403 })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
 
     const searchParams = new URL(request.url).searchParams
     const eventId = searchParams.get('event_id')
@@ -23,7 +27,7 @@ export async function GET(request: NextRequest) {
       .eq('event_id', eventId)
     if (eventLinksError) throw eventLinksError
 
-    const teamIds = [...new Set((eventLinks || []).map((link) => link.team_id))]
+    const teamIds = [...new Set((eventLinks || []).map((link) => link.team_id).filter((teamId) => activeTeamIds.has(teamId)))]
     if (teamIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     if (requestedTeamId && !teamIds.includes(requestedTeamId)) {
       return NextResponse.json({ error: 'Squadra non associata all’evento' }, { status: 403 })

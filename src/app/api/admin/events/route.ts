@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { eventCreateSchema, eventUpdateSchema } from '@/lib/validation/eventCrud'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function POST(request: NextRequest) {
   try {
@@ -198,7 +199,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const teamId = searchParams.get('team_id')
     const teamIdsParam = searchParams.get('team_ids')
-    const teamIds = Array.from(
+    let teamIds = Array.from(
       new Set(
         (teamIdsParam ? teamIdsParam.split(',') : [])
           .map((id) => id.trim())
@@ -224,6 +225,18 @@ export async function GET(request: NextRequest) {
     }
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '200'), 1), visible ? 500 : 5000)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
+
+    const requestedSeasonId = searchParams.get('season_id')
+    const activeSeason = requestedSeasonId
+      ? null
+      : await resolveActiveSeason(adminClient)
+    const operationalSeasonId = requestedSeasonId ?? activeSeason?.id
+    if (!operationalSeasonId) return NextResponse.json({ events: [], total: 0 })
+    const seasonTeamIds = new Set(await resolveActiveSeasonTeamIds(adminClient, operationalSeasonId))
+    teamIds = teamIds.length > 0
+      ? teamIds.filter((id) => seasonTeamIds.has(id))
+      : [...seasonTeamIds]
+    if (teamIds.length === 0) return NextResponse.json({ events: [], total: 0 })
 
     // Se filtriamo per squadra, recupera gli event_ids prima con batching
     let eventIds: string[] | null = null

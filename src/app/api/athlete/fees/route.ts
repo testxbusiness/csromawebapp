@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_payments')
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
     if (!athleteProfileId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest) {
       .from('membership_fees')
       .select('id, team_id, name, description, total_amount, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count')
       .in('id', feeIds)
+      .in('team_id', activeTeamIds)
 
     if (feesErr) {
       console.error('Error loading membership fees:', feesErr)

@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       subject.permissions,
       [event_id],
       now,
+      subject.activeTeamIds ?? [],
     )
     const event = availability.events.find((candidate) => candidate.id === event_id)
     if (!event) return NextResponse.json({ error: 'Evento non trovato o non accessibile' }, { status: 404 })

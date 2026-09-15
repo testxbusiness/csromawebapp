@@ -217,11 +217,14 @@ async function loadRows(
   profileId: string,
   eventIds: string[],
   now: Date,
+  allowedTeamIds?: string[],
 ): Promise<AttendanceAvailabilityResult> {
-  const { data: membershipRows, error: membershipError } = await client
+  let membershipQuery = client
     .from('team_members')
     .select('team_id')
     .eq('profile_id', profileId)
+  if (allowedTeamIds) membershipQuery = membershipQuery.in('team_id', allowedTeamIds)
+  const { data: membershipRows, error: membershipError } = await membershipQuery
   if (membershipError) throw membershipError
 
   const authorizedTeamIds = uniqueSorted((membershipRows as TeamMembership[] | null ?? []).map((row) => row.team_id).filter(Boolean))
@@ -284,11 +287,12 @@ export async function resolveAttendanceAvailability(
   permissions: PermissionSet,
   eventIds: string[] = [],
   now = new Date(),
+  allowedTeamIds?: string[],
 ): Promise<AttendanceAvailabilityResult> {
   if (!permissions.view_schedule) {
     return { authorizedTeamIds: [], events: [], attendanceByEventId: new Map(), availabilityByEventId: new Map(), nextEvent: null }
   }
-  const result = await loadRows(client, profileId, eventIds, now)
+  const result = await loadRows(client, profileId, eventIds, now, allowedTeamIds)
   const rebuilt = buildAttendanceAvailability(result.events, result.attendanceByEventId, permissions, now)
   return { ...result, ...rebuilt }
 }

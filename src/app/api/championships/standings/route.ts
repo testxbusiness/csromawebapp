@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 import { resolveAthleteChampionshipContext } from '@/server/championships/resolve-athlete-championship'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 const groupIdSchema = z.string().uuid()
 const subjectProfileIdSchema = z.string().uuid()
@@ -32,6 +33,10 @@ export async function GET(request: NextRequest) {
       : account.roles.includes('coach')
         ? 'coach'
         : 'athlete'
+    const activeSeason = role === 'admin' ? null : await resolveActiveSeason(supabase)
+    const activeTeamIds = activeSeason
+      ? new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
+      : new Set<string>()
 
     if (role === 'athlete' || requestedSubjectProfileId) {
       const subject = await resolveAthleteChampionshipContext(supabase, requestedSubjectProfileId)
@@ -75,6 +80,7 @@ export async function GET(request: NextRequest) {
       const teamIds = clubTeams
         .map((clubTeam) => clubTeam.team_id)
         .filter((teamId): teamId is string => Boolean(teamId))
+        .filter((teamId) => activeTeamIds.has(teamId))
 
       if (!teamIds.length) {
         return NextResponse.json({ standings: [] }, { status: 200 })

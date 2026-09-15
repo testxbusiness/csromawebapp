@@ -271,7 +271,7 @@ Per un goal `[x]` aggiungere sempre:
 | G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
 | G12.6 Esecuzione atomica iscrizioni | [x] | G12.5 | Completato il 15/09/2026; batch server-side su RPC PostgreSQL transazionale e idempotente: crea/aggiorna solo `season_profiles` target per gli inclusi e le membership target selezionate, senza mutare la source o creare iscrizioni familiari. Audit append-only con batch key e conteggi autorevoli; validati profilo source, stagione/ruolo/team target e rollback completo. Test applicativi 2 suite/5 test, fixture DB transazionale locale, advisor security locale, typecheck e diff check superati. Nessuna mutazione staging/produzione, deploy o attivazione. |
 | G12.7 Wizard admin selezione profili | [x] | G12.6 | Completato il 15/09/2026: wizard responsive a sei passi in `/admin/seasons` con scelte esplicite strutture/squadre, profili opt-in con ricerca e filtri, mapping univoco proposto, assegnazioni multi-team con ruolo/maglia modificabili, riepilogo inclusi/esclusi/senza squadra e conferma esplicita. Usa esclusivamente le route admin server-side già autorizzate e il batch G12.6; nessuna attivazione o mutazione della 2025/2026. Verifiche mirate 7/7, typecheck, build e diff check superati. Non eseguite E2E/manuali su viewport 320/390/768/1440, focus trap reale o browser con sessione admin; non eseguite mutazioni/query DB, staging o produzione. |
-| G12.8 Isolamento runtime per stagione attiva | [ ] | G12.6 | Impedire letture miste tra stagione archiviata e attiva in atleta, famiglia, coach e admin. |
+| G12.8 Isolamento runtime per stagione attiva | [x] | G12.6 | Completato il 15/09/2026; introdotto resolver server-side unico per zero/una/multiple stagioni attive e filtrate autorizzazioni e letture operative atleta/famiglia/coach per attività, squadre e membership della stagione attiva; storico admin non alterato. Typecheck, 13 suite/43 test mirati, build e diff check superati. Nessun accesso o mutazione DB runtime, staging/produzione, deploy o attivazione. |
 | G12.9 Dry-run, esecuzione 2026/2027 e gate | [ ] | G12.1–G12.8 | Backup/evidenze, esecuzione autorizzata, attivazione atomica, conteggi post-run e verifica assenza di perdita dati. |
 
 ---
@@ -7666,6 +7666,49 @@ admin; nessun dato della source compare sotto l'etichetta target.
 **Verifiche:** test personali e familiari per incluso/escluso, stessa/altra
 squadra, coach multi-team, zero/doppia stagione attiva, cambio subject e race;
 test admin storico; typecheck, suite interessate, build e diff check.
+
+**Registro esecuzione — 15/09/2026 — PASS:** aggiunto
+`src/server/seasons/active-season.ts`, che risolve la stagione operativa con
+`limit(2)` e gestisce esplicitamente nessuna stagione e configurazione con più
+stagioni attive, senza usare `.single()` come controllo implicito. Il resolver
+restituisce inoltre gli ID delle squadre derivate da attività della stagione.
+
+`requireSubjectAthleteContext` ora richiede la `season_profiles` attiva della
+stagione globalmente attiva e rende disponibili stagione/squadre correnti al
+runtime. L’endpoint dei profili accessibili familiari espone soltanto soggetti
+iscritti nella stagione attiva; quando non ce ne sono, l’account familiare
+resta autenticabile ma riceve una lista vuota esplicita. Le superfici atleta e familiare filtrano membership, calendario,
+eventi/dettagli, presenze, disponibilità RSVP, messaggi, profilo, quote e
+campionati per le squadre della stagione attiva. Le superfici coach filtrano
+team, calendario/eventi, messaggi, pagamenti, report presenze e mutazioni
+campionati allo stesso confine. Un coach o atleta escluso dalla target non può
+quindi usare le superfici operative della nuova stagione; account e relazioni
+familiari globali non vengono modificati. Il contesto client esistente mantiene
+già abort/guard sulle risposte asincrone al cambio subject. `TeamContext` ora
+ricarica le squadre coach su focus/visibility con abort della richiesta
+precedente, così una stagione attivata altrove invalida il team selezionato
+locale senza applicare una risposta obsoleta.
+
+File modificati: resolver stagione e test dedicato; resolver auth/soggetto,
+disponibilità presenze e campionati; route operative atleta, famiglia, coach e
+admin (inclusi calendario admin e KPI incassi), test route e questo piano.
+
+Verifiche eseguite: `npx tsc --noEmit`; suite mirata con resolver stagione,
+disponibilità presenze, campionati, route atleta, coach, calendario admin e
+context — 13 suite, 43 test superati; `npm run build`; `git diff --check`. Il test del resolver copre zero
+stagioni attive e doppia stagione attiva.
+
+Non eseguite: test dedicato della route profili familiari e KPI admin, query
+catalogo/fixture Supabase, verifica con dati reali di incluso/escluso e coach
+multi-team, E2E/manuali di cambio stagione, race reale nel browser e test storico
+admin dedicato. Non vengono dichiarati esiti per
+queste verifiche. Nessuna migration, insert/update/delete, hard delete,
+modifica di profiles/account/relazioni, accesso o mutazione staging/produzione,
+deploy o attivazione eseguiti. Il controllo repository-only delle migrazioni ha
+confermato la presenza degli invarianti e delle migration G12.1/G12.3/G12.4/
+G12.6; `supabase migration list --local` non è eseguibile in questo ambiente
+per `EPERM` sulla telemetria in `~/.supabase/telemetry.json.tmp`, quindi non si
+attribuisce alcun esito alla migration history runtime. G12.9 non avviato.
 
 ## G12.9 — Dry-run, esecuzione 2026/2027, attivazione e gate
 

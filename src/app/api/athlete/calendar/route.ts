@@ -44,12 +44,14 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
 
     // 1. Get athlete's team memberships
     const { data: memberships, error: memberErr } = await dataClient
       .from('team_members')
       .select('team_id')
       .eq('profile_id', athleteProfileId)
+      .in('team_id', activeTeamIds)
 
     if (memberErr) {
       console.error('Error loading athlete team memberships:', memberErr)
@@ -179,6 +181,8 @@ export async function GET(request: NextRequest) {
       athleteProfileId,
       subject.permissions,
       eventIds,
+      new Date(),
+      activeTeamIds,
     )
     const transformedEvents = buildCalendarEvents(
       allEvents,

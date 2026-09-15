@@ -56,7 +56,7 @@ describe('POST /api/athlete/events/attendance', () => {
     } as unknown as NextRequest)
 
     expect(response.status).toBe(200)
-    expect(availabilityMock).toHaveBeenCalledWith({}, 'subject-1', expect.anything(), ['11111111-1111-4111-8111-111111111111'], expect.any(Date))
+    expect(availabilityMock).toHaveBeenCalledWith({}, 'subject-1', expect.anything(), ['11111111-1111-4111-8111-111111111111'], expect.any(Date), [])
     expect(createAdminClientMock).toHaveBeenCalled()
     expect(rpc).toHaveBeenCalledWith('record_athlete_attendance', {
       p_event_id: '11111111-1111-4111-8111-111111111111', p_profile_id: 'subject-1', p_status: 'going', p_note: 'ok',

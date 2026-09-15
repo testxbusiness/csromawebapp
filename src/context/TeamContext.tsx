@@ -36,6 +36,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [selectedTeamId, setSelectedTeamIdState] = useState<string | null>(null)
   const contextKey = storageKey(activeArea, selectedProfileId)
   const previousContextKey = useRef(contextKey)
+  const coachTeamsRequestRef = useRef<AbortController | null>(null)
   const initialized = useRef(false)
 
   useEffect(() => {
@@ -76,20 +77,39 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     })
   }, [contextKey])
 
+  const loadCoachTeams = useCallback(async (signal?: AbortSignal) => {
+    if (role !== 'coach' || !account?.ownerProfileId) return
+    try {
+      const response = await fetch('/api/coach/teams', { signal, cache: 'no-store', headers: { Accept: 'application/json' } })
+      if (!response.ok) return
+      const payload = await response.json() as { teams?: TeamOption[] }
+      if (!signal?.aborted) setTeams(payload.teams ?? [])
+    } catch (error: unknown) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setTeams([])
+    }
+  }, [account?.ownerProfileId, role, setTeams])
+
   useEffect(() => {
     if (role !== 'coach' || !account?.ownerProfileId) return
     const controller = new AbortController()
-    void fetch('/api/coach/teams', { signal: controller.signal, cache: 'no-store', headers: { Accept: 'application/json' } })
-      .then(async (response) => {
-        if (!response.ok) return
-        const payload = await response.json() as { teams?: TeamOption[] }
-        if (!controller.signal.aborted) setTeams(payload.teams ?? [])
-      })
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) setTeams([])
-      })
-    return () => controller.abort()
-  }, [account?.ownerProfileId, role, setTeams])
+    coachTeamsRequestRef.current = controller
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      coachTeamsRequestRef.current?.abort()
+      const nextController = new AbortController()
+      coachTeamsRequestRef.current = nextController
+      void loadCoachTeams(nextController.signal)
+    }
+    void loadCoachTeams(controller.signal)
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      coachTeamsRequestRef.current?.abort()
+      coachTeamsRequestRef.current = null
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [account?.ownerProfileId, loadCoachTeams, role])
 
   const setSelectedTeamId = useCallback((teamId: string | null) => {
     if (teamId && !teams.some((team) => team.id === teamId)) return

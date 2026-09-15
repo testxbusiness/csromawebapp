@@ -11,11 +11,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
     const client = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
 
     const [{ data: profile, error: profileError }, { data: athleteProfile, error: athleteError }, { data: memberships, error: membershipsError }] = await Promise.all([
       client.from('profiles').select('id, first_name, last_name, email, phone, birth_date').eq('id', subject.profileId).maybeSingle(),
       client.from('athlete_profiles').select('profile_id, membership_number, medical_certificate_expiry').eq('profile_id', subject.profileId).maybeSingle(),
-      client.from('team_members').select('id, team_id, jersey_number').eq('profile_id', subject.profileId),
+      client.from('team_members').select('id, team_id, jersey_number').eq('profile_id', subject.profileId).in('team_id', activeTeamIds),
     ])
 
     if (profileError || athleteError || membershipsError) {

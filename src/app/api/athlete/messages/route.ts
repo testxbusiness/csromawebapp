@@ -17,12 +17,14 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'receive_messages')
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
 
     // Get athlete team IDs
     const { data: memberships, error: tmErr } = await dataClient
       .from('team_members')
       .select('team_id')
       .eq('profile_id', athleteProfileId)
+      .in('team_id', activeTeamIds)
 
     if (tmErr) {
       console.error('Error loading athlete team memberships:', tmErr)

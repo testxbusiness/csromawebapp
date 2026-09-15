@@ -73,6 +73,11 @@ interface Team {
   name: string
   code: string
 }
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
+}
 
 function visibleMonthRange(date: Date): { from: string; to: string } {
   const first = new Date(date.getFullYear(), date.getMonth(), 1)
@@ -89,6 +94,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [filterSeasonId, setFilterSeasonId] = useState<string>('')
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [filterTeams, setFilterTeams] = useState<string[]>([])
   const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false)
@@ -141,6 +148,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   useEffect(() => {
     loadEvents(visibleRequest(new Date()))
     loadTeams()
+    loadSeasons()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -172,6 +180,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     from?: string
     to?: string
     visible?: boolean
+    seasonId?: string
   }) => {
     setLoading(true)
     try {
@@ -179,9 +188,11 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       const selectedEventKinds = overrides?.eventKinds ?? filterEventKinds
       const selectedFrom = overrides?.from ?? filterFrom
       const selectedTo = overrides?.to ?? filterTo
+      const selectedSeasonId = overrides?.seasonId ?? filterSeasonId
 
       const params = new URLSearchParams()
       if (selectedTeamIds.length > 0) params.set('team_ids', selectedTeamIds.join(','))
+      if (selectedSeasonId) params.set('season_id', selectedSeasonId)
       if (selectedFrom) params.set('from', new Date(selectedFrom).toISOString())
       if (selectedTo) params.set('to', new Date(selectedTo).toISOString())
       if (overrides?.visible) {
@@ -259,6 +270,16 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       .order('name')
 
     setTeams(data || [])
+  }
+
+  const loadSeasons = async () => {
+    const { data } = await supabase
+      .from('seasons')
+      .select('id, name, is_active')
+      .order('start_date', { ascending: false })
+    const nextSeasons = data || []
+    setSeasons(nextSeasons)
+    setFilterSeasonId((current) => current || nextSeasons.find((season) => season.is_active)?.id || '')
   }
 
   const toggleTeamFilter = (teamId: string) => {
@@ -482,7 +503,16 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
 
       {/* Filtri */}
       <div className="hidden md:block cs-card cs-card--primary p-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+          <div>
+            <label htmlFor="admin-calendar-season" className="cs-field__label">Stagione</label>
+            <select id="admin-calendar-season" className="cs-input w-full min-h-[44px]" value={filterSeasonId} onChange={(event) => {
+              setFilterSeasonId(event.target.value)
+              setFilterTeams([])
+            }}>
+              {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+            </select>
+          </div>
           <div>
             <label className="cs-field__label">Squadra</label>
             <div className="relative" ref={teamDropdownRef}>
@@ -632,6 +662,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             <button
               onClick={() => {
                 setFilterTeams([])
+                setFilterSeasonId(seasons.find((season) => season.is_active)?.id || '')
                 setFilterEventKinds([])
                 setFilterFrom('')
                 setFilterTo('')
@@ -655,7 +686,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           aria-haspopup="dialog"
         >
           <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Filtri</span>
-          <span className="text-xs text-secondary">{filterTeams.length + filterEventKinds.length + (filterFrom || filterTo ? 1 : 0)} attivi</span>
+          <span className="text-xs text-secondary">{filterTeams.length + filterEventKinds.length + (filterFrom || filterTo ? 1 : 0) + (filterSeasonId ? 1 : 0)} attivi</span>
         </button>
       </div>
 
@@ -674,6 +705,15 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         }}>Applica</button></div>}
       >
         <div className="space-y-5">
+          <div>
+            <label htmlFor="admin-calendar-season-mobile" className="cs-field__label">Stagione</label>
+            <select id="admin-calendar-season-mobile" className="cs-input mt-1 w-full" value={filterSeasonId} onChange={(event) => {
+              setFilterSeasonId(event.target.value)
+              setFilterTeams([])
+            }}>
+              {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+            </select>
+          </div>
           <fieldset>
             <legend className="cs-field__label">Squadre</legend>
             <div className="space-y-1" role="group" aria-label="Filtra per squadre">

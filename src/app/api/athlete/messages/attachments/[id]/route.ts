@@ -15,6 +15,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .from('team_members')
       .select('team_id')
       .eq('profile_id', subject.profileId)
+      .in('team_id', subject.activeTeamIds ?? [])
     if (membershipError) return noStoreJson({ error: 'Allegato non accessibile' }, 404)
     const teamIds = memberships?.map((membership) => membership.team_id).filter(Boolean) ?? []
     const recipientFilters = [`profile_id.eq.${subject.profileId}`]

@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
     if (!athleteProfileId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Verify membership to any team of event
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
       .select('team_id')
       .in('team_id', teamIds)
       .eq('profile_id', athleteProfileId)
+      .in('team_id', activeTeamIds)
     if (!member || member.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     // Only expose team context that was authorized for this subject. An event
     // may also be linked to teams where the subject is not a member.
@@ -70,6 +72,8 @@ export async function GET(request: NextRequest) {
       athleteProfileId,
       subject.permissions,
       [id],
+      new Date(),
+      activeTeamIds,
     )
 
     return NextResponse.json({

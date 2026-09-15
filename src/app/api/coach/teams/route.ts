@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET() {
   try {
     const supabase = await createClient()
     const account = await requireAccountContext(supabase)
     if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ teams: [] })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
 
     const { data: assignments, error: assignmentError } = await supabase
       .from('team_coaches')
@@ -14,7 +18,7 @@ export async function GET() {
       .eq('coach_id', account.ownerProfileId)
     if (assignmentError) throw assignmentError
 
-    const teamIds = [...new Set((assignments ?? []).map((assignment) => assignment.team_id))]
+    const teamIds = [...new Set((assignments ?? []).map((assignment) => assignment.team_id).filter((id) => activeTeamIds.has(id)))]
     if (teamIds.length === 0) return NextResponse.json({ teams: [] })
 
     const { data: teams, error: teamError } = await supabase

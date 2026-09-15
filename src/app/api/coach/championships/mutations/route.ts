@@ -1,21 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 type CoachMutationContext = {
   admin: ReturnType<typeof createAdminClient>
   coachId: string
   teamIds: Set<string>
+  activeSeasonId: string
 }
 
 async function getContext(): Promise<CoachMutationContext> {
   const client = await createClient()
   const account = await requireAccountContext(client)
   if (!account.roles.includes('coach')) throw new AccountContextError('Ruolo coach non abilitato', 403)
+  const activeSeason = await resolveActiveSeason(client)
+  if (!activeSeason) throw new AccountContextError('Nessuna stagione attiva configurata', 403)
+  const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(client, activeSeason.id))
   const admin = createAdminClient()
   const { data, error } = await admin.from('team_coaches').select('team_id').eq('coach_id', account.ownerProfileId)
   if (error) throw new AccountContextError('Impossibile verificare le squadre assegnate', 500)
-  return { admin, coachId: account.ownerProfileId, teamIds: new Set((data ?? []).map((row) => row.team_id as string)) }
+  return { admin, coachId: account.ownerProfileId, teamIds: new Set((data ?? []).map((row) => row.team_id as string).filter((id) => activeTeamIds.has(id))), activeSeasonId: activeSeason.id }
 }
 
 async function authorizeGroup(context: CoachMutationContext, groupId: string) {
@@ -69,6 +74,9 @@ async function authorizeChampionshipSetup(context: CoachMutationContext, champio
 async function handleMutation(context: CoachMutationContext, body: Record<string, unknown>) {
   const action = body.action
   if (action === 'create_championship') {
+    if (body.season_id !== context.activeSeasonId) {
+      throw new AccountContextError('Il campionato deve appartenere alla stagione attiva', 403)
+    }
     if (context.teamIds.size === 0) throw new AccountContextError('Nessuna squadra assegnata al coach', 403)
     const selectedTeamId = body.team_id ? String(body.team_id) : null
     if (body.create_group && body.group_name && !selectedTeamId) {

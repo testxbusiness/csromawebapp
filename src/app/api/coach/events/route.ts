@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 type EventPayload = {
   title: string
@@ -21,10 +22,13 @@ async function coachContext() {
   const client = await createClient()
   const account = await requireAccountContext(client)
   if (!account.roles.includes('coach')) throw new AccountContextError('Ruolo coach non abilitato', 403)
+  const activeSeason = await resolveActiveSeason(client)
+  if (!activeSeason) throw new AccountContextError('Nessuna stagione attiva configurata', 403)
+  const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(client, activeSeason.id))
   const admin = createAdminClient()
   const { data, error } = await admin.from('team_coaches').select('team_id').eq('coach_id', account.ownerProfileId)
   if (error) throw new AccountContextError('Impossibile verificare le squadre assegnate', 500)
-  return { account, admin, assignedTeamIds: new Set((data ?? []).map((row) => row.team_id as string)) }
+  return { account, admin, assignedTeamIds: new Set((data ?? []).map((row) => row.team_id as string).filter((id) => activeTeamIds.has(id))) }
 }
 
 function validEventPayload(value: unknown): value is EventPayload {

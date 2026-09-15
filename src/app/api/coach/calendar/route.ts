@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,9 @@ export async function GET(request: NextRequest) {
     if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ events: [], teams: [] })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
     const requestedTeamId = new URL(request.url).searchParams.get('team_id')
 
     // 1. Resolve assignments and team rows separately. Keeping the assignment
@@ -25,7 +29,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events: [], teams: [] })
     }
 
-    const assignedTeamIds = [...new Set((coachTeams || []).map(row => row.team_id))]
+    const assignedTeamIds = [...new Set((coachTeams || []).map(row => row.team_id).filter((id) => activeTeamIds.has(id)))]
     if (requestedTeamId && !assignedTeamIds.includes(requestedTeamId)) {
       return NextResponse.json({ error: 'Squadra non assegnata al coach' }, { status: 403 })
     }

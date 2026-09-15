@@ -91,13 +91,16 @@ function throwQueryError(message: string): never {
 export async function resolveAthleteChampionshipsForSubject(
   dataClient: SupabaseClient,
   subjectProfileId: string,
+  activeTeamIds?: string[],
 ): Promise<AthleteChampionshipResolution> {
-  const { data: membershipRows, error: membershipError } = await dataClient
+  let membershipQuery = dataClient
     .from('team_members')
     .select('team_id, created_at, teams(id, name, code)')
     .eq('profile_id', subjectProfileId)
     .eq('role', 'athlete')
     .order('created_at', { ascending: true })
+  if (activeTeamIds) membershipQuery = membershipQuery.in('team_id', activeTeamIds)
+  const { data: membershipRows, error: membershipError } = await membershipQuery
 
   if (membershipError) throwQueryError('Impossibile risolvere le squadre dell’atleta')
 
@@ -209,6 +212,6 @@ export async function resolveAthleteChampionshipContext(
   requestedProfileId: string | null,
 ) {
   const subject = await requireSubjectAthleteContext(supabase, requestedProfileId, 'view_schedule')
-  const resolution = await resolveAthleteChampionshipsForSubject(subject.dataClient, subject.profileId)
+  const resolution = await resolveAthleteChampionshipsForSubject(subject.dataClient, subject.profileId, subject.activeTeamIds ?? [])
   return { ...subject, ...resolution }
 }

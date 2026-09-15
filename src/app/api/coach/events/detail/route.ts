@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,13 +13,16 @@ export async function GET(request: NextRequest) {
 
     const account = await requireAccountContext(supabase)
     if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ error: 'Nessuna stagione attiva configurata' }, { status: 403 })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
 
     // Verify access: event belongs to teams coached by user
     const { data: links } = await supabase
       .from('event_teams')
       .select('team_id')
       .eq('event_id', id)
-    const teamIds = (links || []).map(l => l.team_id)
+    const teamIds = (links || []).map(l => l.team_id).filter((teamId) => activeTeamIds.has(teamId))
     if (teamIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const { data: allowed } = await supabase
       .from('team_coaches')
