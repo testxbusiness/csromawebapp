@@ -7,6 +7,7 @@ import { SeasonsModal } from './SeasonsModal'
 import { Button } from '@/components/ui/Button'
 import { EmptyState, LoadingState } from '@/components/ui'
 import { BarChart3 } from 'lucide-react'
+import SeasonRolloverWizard from './SeasonRolloverWizard'
 
 interface Season {
   id?: string
@@ -25,6 +26,7 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
   const [modalOpen, setModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [rolloverOpen, setRolloverOpen] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const loadSeasons = useCallback(async () => {
@@ -116,6 +118,14 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
     return <LoadingState label="Caricamento stagioni..." />
   }
 
+  if (rolloverOpen) {
+    return <SeasonRolloverWizard
+      seasons={seasons}
+      onClose={() => setRolloverOpen(false)}
+      onCompleted={() => { void loadSeasons() }}
+    />
+  }
+
   const handleSubmit = (data: Omit<Season, 'id'>) => {
     if (editingSeason?.id) {
       handleUpdateSeason(editingSeason.id, data)
@@ -144,6 +154,11 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
           >
             Nuova Stagione
           </Button>
+          {seasons.some((season) => season.name === 'Stagione 2025/2026') && seasons.some((season) => season.name === 'Stagione 2026/2027') && (
+            <Button variant="outline" onClick={() => setRolloverOpen(true)}>
+              Avvia rollover 2026/2027
+            </Button>
+          )}
         </div>
       </div>
 

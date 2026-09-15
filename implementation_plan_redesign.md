@@ -270,7 +270,7 @@ Per un goal `[x]` aggiungere sempre:
 | G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione; G12.3 resta `[!]` per la sua verifica DB separata. |
 | G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
 | G12.6 Esecuzione atomica iscrizioni | [x] | G12.5 | Completato il 15/09/2026; batch server-side su RPC PostgreSQL transazionale e idempotente: crea/aggiorna solo `season_profiles` target per gli inclusi e le membership target selezionate, senza mutare la source o creare iscrizioni familiari. Audit append-only con batch key e conteggi autorevoli; validati profilo source, stagione/ruolo/team target e rollback completo. Test applicativi 2 suite/5 test, fixture DB transazionale locale, advisor security locale, typecheck e diff check superati. Nessuna mutazione staging/produzione, deploy o attivazione. |
-| G12.7 Wizard admin selezione profili | [ ] | G12.6 | UI a passi con includi/escludi, stessa/altra squadra, riepilogo e conferma esplicita. |
+| G12.7 Wizard admin selezione profili | [x] | G12.6 | Completato il 15/09/2026: wizard responsive a sei passi in `/admin/seasons` con scelte esplicite strutture/squadre, profili opt-in con ricerca e filtri, mapping univoco proposto, assegnazioni multi-team con ruolo/maglia modificabili, riepilogo inclusi/esclusi/senza squadra e conferma esplicita. Usa esclusivamente le route admin server-side già autorizzate e il batch G12.6; nessuna attivazione o mutazione della 2025/2026. Verifiche mirate 7/7, typecheck, build e diff check superati. Non eseguite E2E/manuali su viewport 320/390/768/1440, focus trap reale o browser con sessione admin; non eseguite mutazioni/query DB, staging o produzione. |
 | G12.8 Isolamento runtime per stagione attiva | [ ] | G12.6 | Impedire letture miste tra stagione archiviata e attiva in atleta, famiglia, coach e admin. |
 | G12.9 Dry-run, esecuzione 2026/2027 e gate | [ ] | G12.1–G12.8 | Backup/evidenze, esecuzione autorizzata, attivazione atomica, conteggi post-run e verifica assenza di perdita dati. |
 
@@ -7609,6 +7609,29 @@ esclusa; il payload inviato coincide con il riepilogo visibile.
 **Verifiche:** test componenti per filtri/selezione/mapping/warning/riepilogo,
 focus trap e tastiera, viewport 320/390/768/1440, offline e failure/retry;
 typecheck, suite mirata, build e diff check.
+
+**Registro esecuzione — 15/09/2026:** aggiunti
+`src/components/admin/SeasonRolloverWizard.tsx` e
+`src/components/admin/SeasonRolloverWizard.test.tsx`; integrato l'avvio del
+wizard in `src/components/admin/SeasonsManager.tsx` quando sono presenti
+2025/2026 e la bozza inattiva 2026/2027. Il wizard mantiene tutte le scelte
+locali fino alla conferma, non preseleziona i profili, consente inclusione
+esplicita dei risultati filtrati, propone la stessa squadra solo quando il
+mapping è univoco, rende modificabili ruolo/numero di maglia e prepara il
+payload completo di inclusi ed esclusi per la RPC batch di G12.6. Il passo di
+riepilogo espone l'impatto sui familiari senza trattarli come iscrizioni; il
+submit è disabilitato senza conferma, protetto dal doppio invio e non esegue
+attivazione della stagione. Loading, offline, errore server, retry, empty e
+success sono distinti; il browser warning protegge le modifiche non salvate.
+
+Verifiche eseguite: suite mirata wizard/manager — 2 suite e 7 test superati;
+`npx tsc --noEmit`; `npm run build`; `git diff --check`.
+La suite copre opt-in, filtri, mapping, riepilogo/payload, failure/retry e
+offline. Non eseguite E2E o smoke manuale autenticato, focus trap reale e
+verifica visuale ai quattro viewport richiesti; non eseguite query DB,
+mutazioni staging/produzione, deploy o attivazione. Nessun file di dati,
+profilo, account, relazione o migration è stato modificato; G12.8 e G12.9
+non avviati.
 
 ## G12.8 — Isolamento delle letture sulla stagione attiva
 
