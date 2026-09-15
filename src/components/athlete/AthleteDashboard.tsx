@@ -930,12 +930,13 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                       <span className="cs-athlete-dashboard__featured-event-date mt-1 block text-sm">{formatEventDate(event.start_time)}</span>
                       {event.location ? <span className="mt-1 block text-sm">{event.location}</span> : null}
                       {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
-                      {event.my_attendance?.is_early_absence && <span className="mt-2 block text-sm font-medium text-[color:var(--cs-text)]" role="status">Assenza comunicata</span>}
+                      {event.my_attendance?.is_early_absence && <span className="mt-2 block text-sm font-medium text-[color:var(--cs-text)]" role="status">Assenza segnalata</span>}
                     </ListRow>
                     {(!isDelegatedProfile || permissions?.confirm_attendance === true) && (
                       <div className="cs-athlete-dashboard__featured-attendance">
                         <AttendanceControl
                           requiresConfirmation={Boolean(event.requires_confirmation)}
+                          eventKind={event.event_kind}
                           attendanceMode={event.attendance_mode}
                           confirmationDeadline={event.confirmation_deadline}
                           initialStatus={event.my_attendance?.status || null}

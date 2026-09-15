@@ -160,6 +160,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
                 <div className="sm:col-span-2" id="event-detail-attendance">
                   <AttendanceControl
                     requiresConfirmation
+                    eventKind={data.event_kind}
                     attendanceMode={data.attendance_mode}
                     confirmationDeadline={data.confirmation_deadline}
                     initialStatus={data.my_attendance?.status ?? null}

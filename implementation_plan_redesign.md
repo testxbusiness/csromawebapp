@@ -6934,6 +6934,37 @@ modificato solo `implementation_plan_redesign.md`, preservando le note già pres
 Check documentale: `git diff --check`. Nessun test applicativo necessario per
 questa modifica documentale; nessun goal avviato né impostazione del modello cambiata.
 
+**Esito DA.7 — 15/09/2026 — PASS WITH ISSUES**
+
+- Corretto il vincolo funzionale esplicito della richiesta: nella dashboard,
+  agenda, calendario e dettaglio atleta, gli eventi `training` e `match` usano
+  sempre il percorso sola-assenza; non vengono più mostrati i controlli
+  “Partecipo”, “Forse” o “Non partecipo”. Restano disponibili motivazione,
+  invio, feedback di errore, stato “Assenza segnalata” e “Annulla segnalazione”
+  quando le capacità server-side lo consentono. Rimossa anche la label
+  “Da confermare” dalla tabella calendario atleta.
+- File modificati in questo intervento: `src/components/athlete/AttendanceControl.tsx`,
+  `src/components/athlete/AttendanceControl.test.tsx`,
+  `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteAgenda.tsx`,
+  `src/components/athlete/AthleteCalendarManager.tsx`,
+  `src/components/athlete/AthleteCalendarManager.test.tsx`,
+  `src/components/shared/EventDetailModal.tsx`.
+- Verifiche eseguite: test mirati 3 suite/49 test; suite Jest completa 73
+  suite/301 test; `npm run build`; `npx tsc --noEmit`; `git diff --check`.
+  Il primo typecheck lanciato in parallelo al build ha prodotto soltanto errori
+  transitori di file `.next/types` mancanti; ripetuto serialmente dopo il build,
+  è passato.
+- Non completati: smoke browser autenticato, verifica su dati autorizzati di
+  assenza/revoca, viewport 360/400/1440, entrambi i temi, zoom/tastiera reale e
+  screenshot in `docs/redesign-dashboard-layout/2026-09-14/`. Il tentativo E2E
+  con le credenziali locali configurate ha avviato il server su `localhost:3001`,
+  ma Playwright Chromium termina con `SIGTRAP`; il tentativo di bind automatico
+  sulla porta 3000 fallisce con `listen EPERM`. È stata provata anche Firefox
+  headless, che termina con `SIGABRT`, mentre il browser nativo CUA non è
+  disponibile in questo ambiente. Il gate visuale DA.7 resta aperto. Nessun
+  deploy, push o modifica database eseguiti.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

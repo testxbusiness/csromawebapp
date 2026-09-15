@@ -159,6 +159,7 @@ function AgendaRow({
         {event.description && <p className="mb-2 text-sm text-[color:var(--cs-text-secondary)]">{event.description}</p>}
         <AttendanceControl
             requiresConfirmation={event.requires_confirmation}
+            eventKind={event.event_kind ?? undefined}
             confirmationDeadline={event.confirmation_deadline}
             initialStatus={event.my_attendance?.status ?? null}
             canRespond={canRespond}

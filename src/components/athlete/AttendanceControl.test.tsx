@@ -75,6 +75,35 @@ describe('AttendanceControl', () => {
     expect(screen.queryByLabelText('Conferma partecipazione')).toBeNull()
   })
 
+  it.each(['training', 'match'] as const)('allows only absence reporting for %s events', (eventKind) => {
+    const onChange = jest.fn().mockResolvedValue(undefined)
+    const onEarlyAbsence = jest.fn().mockResolvedValue(undefined)
+
+    render(
+      <AttendanceControl
+        requiresConfirmation
+        eventKind={eventKind}
+        canRespond
+        availability={{
+          requires_confirmation: true,
+          can_respond_now: true,
+          can_report_early_absence: true,
+          can_revoke_early_absence: false,
+          actions: { respond: true, report_early_absence: true, revoke_early_absence: false },
+          closure_reason: null,
+          next_event: null,
+          next_recalculation_at: null,
+        }}
+        eventContext={{ teams: ['Under 14'], start: '2026-09-15T17:00:00Z' }}
+        onChange={onChange}
+        onEarlyAbsence={onEarlyAbsence}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: /partecipo|forse|non partecipo/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Segnala assenza' })).toBeTruthy()
+  })
+
   it('consumes the server capability and stays read-only for a later event', () => {
     render(
       <AttendanceControl
@@ -183,7 +212,7 @@ describe('AttendanceControl', () => {
     render(<AttendanceControl requiresConfirmation canRespond availability={{ requires_confirmation: true, can_respond_now: false, can_report_early_absence: true, can_revoke_early_absence: true, actions: { respond: false, report_early_absence: true, revoke_early_absence: true }, closure_reason: 'already_early_absence', next_event: null, next_recalculation_at: null }} initialStatus="declined" initialEarlyAbsence eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z', end: '2026-09-15T18:30:00Z' }} onChange={jest.fn()} onRevokeEarlyAbsence={onRevoke} />)
     fireEvent.click(screen.getByRole('button', { name: 'Revoca assenza' }))
     await waitFor(() => expect(onRevoke).toHaveBeenCalledTimes(1))
-    expect(screen.getByText('Da confermare')).toBeTruthy()
+    expect(screen.getByText('Nessuna risposta')).toBeTruthy()
   })
 
   it('saves an absence-only report immediately without requiring a note', async () => {
@@ -192,7 +221,7 @@ describe('AttendanceControl', () => {
     render(<AttendanceControl requiresConfirmation attendanceMode="absence_only" canRespond availability={{ attendance_mode: 'absence_only', requires_confirmation: true, can_respond_now: false, can_report_early_absence: true, can_revoke_early_absence: false, actions: { respond: false, report_early_absence: true, revoke_early_absence: false }, closure_reason: null, next_event: null, next_recalculation_at: null }} eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z', end: '2026-09-15T18:30:00Z' }} onChange={jest.fn()} onEarlyAbsence={onEarlyAbsence} />)
     await user.click(screen.getByRole('button', { name: 'Segnala assenza' }))
     await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith(''))
-    expect(screen.getByText('Assenza comunicata')).toBeTruthy()
+    expect(screen.getAllByText('Assenza segnalata').length).toBeGreaterThan(0)
   })
 
   it('keeps absence-only closed states free of RSVP participation controls', () => {

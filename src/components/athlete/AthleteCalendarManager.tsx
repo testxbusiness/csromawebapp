@@ -291,6 +291,7 @@ export default function AthleteCalendarManager() {
         </div>
         <AttendanceControl
           requiresConfirmation={event.requires_confirmation}
+          eventKind={event.event_kind ?? undefined}
           attendanceMode={event.attendance_mode}
           confirmationDeadline={event.confirmation_deadline}
           initialStatus={event.my_attendance?.status ?? null}
@@ -500,8 +501,8 @@ export default function AthleteCalendarManager() {
                       </td>
                       <td>
                         {event.my_attendance?.is_early_absence
-                          ? <span className="cs-badge cs-badge--warning" role="status">Assenza comunicata</span>
-                          : <span className="text-sm text-secondary">Da confermare</span>}
+                          ? <span className="cs-badge cs-badge--warning" role="status">Assenza segnalata</span>
+                          : <span className="text-sm text-secondary">Nessuna assenza segnalata</span>}
                       </td>
                       <td>
                         <button

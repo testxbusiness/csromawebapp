@@ -105,7 +105,7 @@ describe('AthleteCalendarManager load states', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('switches to the shared mobile month while preserving athlete agenda metadata and attendance controls', async () => {
+  it('switches to the shared mobile month while preserving athlete agenda metadata and absence reporting', async () => {
     const start = new Date(2026, 8, 7, 18, 0, 0)
     const end = new Date(start)
     end.setHours(20, 0, 0, 0)
@@ -139,9 +139,8 @@ describe('AthleteCalendarManager load states', () => {
     fireEvent.click(screen.getByRole('button', { name: /settembre.*2 eventi/i }))
 
     expect(screen.getAllByText('U16').length).toBeGreaterThan(0)
-    expect(screen.getByText('Risposta:')).toBeTruthy()
-    expect(screen.getAllByText('Forse').length).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Partecipo' })).toBeTruthy()
+    expect(screen.getByText(/Non puoi esserci\?/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /partecipo|forse|non partecipo/i })).toBeNull()
   })
 
   it('loads a family subject calendar with view_schedule while keeping attendance read-only', async () => {
@@ -182,7 +181,7 @@ describe('AthleteCalendarManager load states', () => {
 
     await waitFor(() => expect(screen.getByText('Allenamento famiglia')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: /1 settembre.*1 eventi/i }))
-    expect(screen.getByText(/La risposta è gestita dal delegato autorizzato/)).toBeTruthy()
+    expect(screen.getByText(/La segnalazione dell’assenza non è disponibile/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Partecipo' })).toBeNull()
     expect(global.fetch).toHaveBeenCalledWith('/api/athlete/calendar', expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })

@@ -12,6 +12,7 @@ type EventContext = {
 
 type AttendanceControlProps = {
   requiresConfirmation: boolean
+  eventKind?: 'training' | 'match' | 'meeting' | 'other' | string
   attendanceMode?: AttendanceMode
   confirmationDeadline?: string | null
   initialStatus?: AttendanceStatus | null
@@ -67,11 +68,12 @@ function getStatusLabel(status: AttendanceStatus | null) {
   if (status === 'going') return 'Partecipo'
   if (status === 'maybe') return 'Forse'
   if (status === 'declined') return 'Non partecipo'
-  return 'Da confermare'
+  return 'Nessuna risposta'
 }
 
 export default function AttendanceControl({
   requiresConfirmation,
+  eventKind,
   attendanceMode,
   confirmationDeadline,
   initialStatus = null,
@@ -125,7 +127,11 @@ export default function AttendanceControl({
 
   if (!requiresConfirmation) return null
 
-  const absenceOnly = availability?.attendance_mode === 'absence_only' || attendanceMode === 'absence_only'
+  // Athletes can only communicate an absence for trainings and matches. The
+  // server-provided mode remains authoritative for other event kinds.
+  const absenceOnly = eventKind === 'training' || eventKind === 'match'
+    || availability?.attendance_mode === 'absence_only'
+    || attendanceMode === 'absence_only'
 
   // A successful revocation restores the neutral state locally. The user can
   // then choose an RSVP voluntarily while the authoritative R4 refresh runs.
@@ -208,7 +214,7 @@ export default function AttendanceControl({
       <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3" aria-label="Segnalazione assenza">
         {earlyAbsence ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" role="status">
-            <span>Hai segnalato: <span className="font-medium text-[color:var(--cs-text)]">Assenza</span></span>
+            <span>{absenceOnly ? 'Assenza segnalata' : <>Hai segnalato: <span className="font-medium text-[color:var(--cs-text)]">Assenza</span></>}</span>
             {absenceClosed && <span className="text-secondary">· {isOnline ? 'Segnalazioni chiuse' : 'Non disponibile offline'}</span>}
           </div>
         ) : absenceClosed ? (
@@ -217,7 +223,11 @@ export default function AttendanceControl({
             <span className="text-secondary">· {isOnline ? 'Segnalazioni chiuse' : 'Non disponibile offline'}</span>
           </div>
         ) : (
-          <p className="text-sm text-secondary">Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.</p>
+          <p className="text-sm text-secondary">
+            {canRespond
+              ? 'Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.'
+              : 'La segnalazione dell’assenza non è disponibile per questo profilo.'}
+          </p>
         )}
         <EarlyAbsenceSection {...earlyAbsenceProps} />
       </div>
@@ -352,7 +362,7 @@ function EarlyAbsenceSection({
     >
       {earlyAbsence ? (
         <>
-          <p className="text-sm font-medium" role="status">{absenceOnly ? 'Assenza comunicata' : 'Hai già comunicato che non parteciperai'}</p>
+          <p className="text-sm font-medium" role="status">{absenceOnly ? 'Assenza segnalata' : 'Hai già comunicato che non parteciperai'}</p>
           <p className="mt-1 text-xs text-secondary">
             Puoi modificare volontariamente la comunicazione entro la scadenza.
           </p>
@@ -363,7 +373,7 @@ function EarlyAbsenceSection({
               onClick={() => void onRevoke()}
               disabled={pending || !isOnline}
             >
-              {pending ? 'Revoca…' : 'Revoca assenza'}
+              {pending ? (absenceOnly ? 'Annullamento…' : 'Revoca…') : (absenceOnly ? 'Annulla segnalazione' : 'Revoca assenza')}
             </button>
           )}
         </>
