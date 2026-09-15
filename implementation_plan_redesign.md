@@ -6980,6 +6980,16 @@ questa modifica documentale; nessun goal avviato né impostazione del modello ca
   conservativa. Verifiche dopo la correzione: dashboard mirata 24 test,
   suite completa 73 suite/301 test, typecheck, build e diff check superati.
 
+**Follow-up card messaggi mobile — 15/09/2026**
+
+- Lo screenshot mobile fornito dall’utente mostrava i messaggi non letti come
+  sezione libera, mentre “Poi in agenda” era racchiusa nella card canonica.
+- Aggiunta la stessa card responsive al pannello `#athlete-messages` della
+  dashboard atleta personale: superficie, bordo, raggio e padding coerenti;
+  le righe mantengono il contenuto e i divisori esistenti. Desktop e dashboard
+  familiare/delegata restano invariati.
+- Verifiche: test dashboard mirato, typecheck e `git diff --check` superati.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
