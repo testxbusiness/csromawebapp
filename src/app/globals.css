@@ -788,7 +788,12 @@ button.cs-list-row{ font:inherit; }
   padding-top: var(--cs-sp-4);
 }
 .cs-athlete-dashboard__agenda-next .cs-list-row{
+  min-height: 0;
   padding-block: var(--cs-sp-3);
+  border-bottom-color: var(--cs-border);
+}
+.cs-athlete-dashboard__agenda-next > div > .cs-list-row:last-child{
+  border-bottom: 0;
 }
 @media (max-width:767px){
   /* The personal mobile dashboard keeps the navy protagonist as the dominant

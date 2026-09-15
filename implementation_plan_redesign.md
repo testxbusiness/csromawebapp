@@ -6200,7 +6200,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.6.R2 Header mobile contestuale | [-] | DA.6.R1 | Implementato e verificato visivamente a 400 px in tema chiaro/scuro; restano da documentare 320/375/768 e tastiera/focus |
 | DA.6.R3 Protagonista senza contenitore superfluo | [-] | DA.6.R2 | Implementazione completata il 14/09/2026; sul solo dashboard personale mobile rimosso il wrapper visivo del Panel, “Poi in agenda” resa sezione autonoma con gutter 16 px, padding 20 px e spazio 20 px; famiglia e desktop invariati. Gate screenshot/overflow ancora aperto per blocco browser |
 | DA.6.R4 Stato attendance compatto | [x] | DA.6.R3 | Completato il 14/09/2026; stato chiuso integrato con separatore discreto, RSVP e sole assenze distinti, azioni aperte preservate |
-| DA.6.R5 Agenda non ridondante | [ ] | DA.6.R4 | Righe compatte, squadra/tipo non ripetuti e dettaglio raggiungibile dall’intera riga |
+| DA.6.R5 Agenda non ridondante | [x] | DA.6.R4 | Completato il 15/09/2026; righe compatte con data/ora relativa, tipo, squadre aggregate, luogo e affordance unica; titolo completo conservato nel dettaglio/accessibilità; test 0/1/3 eventi, multi-team, titolo lungo e apertura dettaglio superati |
 | DA.6.R6 Prossima partita sportiva | [x] | DA.6.R5 | Completato il 15/09/2026; riepilogo nascosto solo con legame esplicito evento-partita, nessun matching euristico; dati incompleti/amichevoli restano visibili |
 | DA.6.R7 Servizi secondari mobile | [ ] | DA.6.R6 | Messaggi, quota e squadre compatti; importi e stati coerenti con le regole esistenti |
 | DA.6.R8 Identità atleta e floating action | [ ] | DA.6.R7 | Copy atleta, decorazione discreta e pulsante flottante senza sovrapposizioni |
@@ -6726,6 +6726,26 @@ file, test e note reali.
 - Acceptance: “Oggi · 20:00 / Allenamento · Under 17 / Cardarelli” e formato
   analogo per date future risultano leggibili senza duplicazioni.
 - Verifiche: 0/1/3 eventi, multi-team, titoli lunghi, tastiera e modal dettaglio.
+
+**Esito DA.6.R5 — 15/09/2026**
+
+- La preview “Poi in agenda” della dashboard usa una riga unica e compatta:
+  data/ora relativa (“Oggi”, “Domani” o data futura), tipo, squadre aggregate,
+  luogo e “Apri dettagli”. Il titolo lungo non viene ripetuto visivamente
+  insieme al tipo/squadra, ma resta nel nome accessibile della riga e nel modal
+  completo già esistente.
+- Conservati `visibleEvents.slice(1, 3)`, ordine corrente, filtro squadra,
+  callback e apertura del `EventDetailModal`; rimossi solo il wrapper e il
+  `divide-y` che aggiungevano un secondo separatore rispetto al bordo di
+  `ListRow`. Nessuna modifica a dati, autorizzazioni, mutazioni o route.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`, `src/app/globals.css` e
+  questo piano.
+- Verifiche eseguite: `npm test -- --runInBand
+  src/components/athlete/AthleteDashboard.test.tsx` — 1 suite, 18 test
+  superati, inclusi 0/1/3 eventi e focus + Invio sulla riga; `npx tsc --noEmit` superato;
+  `git diff --check` superato.
+  La verifica browser/screenshot responsive resta nel gate DA.6/DA.7.
 
 ### DA.6.R6 — Prossima partita con gerarchia sportiva
 

@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import AthleteDashboard, { getFeaturedEventState, shouldShowNextChampionshipMatchSummary } from './AthleteDashboard'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import AthleteDashboard, { formatAgendaDateTime, getFeaturedEventState, shouldShowNextChampionshipMatchSummary } from './AthleteDashboard'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
 jest.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }))
@@ -162,6 +163,70 @@ describe('featured event state', () => {
 
     await waitFor(() => expect(screen.getByText(title)).toBeTruthy())
     expect(screen.getByRole('status', { name: 'Prossimo' })).toBeTruthy()
+  })
+})
+
+describe('dashboard agenda preview', () => {
+  it('does not render an agenda section when there are no events', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ activeSeason: null, teamMemberships: [], upcomingEvents: [], unreadMessages: [], feeInstallments: [], teams: [] }),
+    }) as jest.Mock
+
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'athlete-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} />)
+
+    await waitFor(() => expect(screen.getByText('Nessun impegno programmato')).toBeTruthy())
+    expect(screen.queryByLabelText('Poi in agenda')).toBeNull()
+  })
+
+  it('does not render a secondary agenda when there is only the protagonist event', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        activeSeason: null,
+        teamMemberships: [],
+        upcomingEvents: [{ id: 'event-1', title: 'Allenamento unico', event_kind: 'training', start_time: '2026-09-15T20:00:00+02:00', end_time: '2026-09-15T21:00:00+02:00', requires_confirmation: false }],
+        unreadMessages: [], feeInstallments: [], teams: [],
+      }),
+    }) as jest.Mock
+
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'athlete-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} />)
+
+    await waitFor(() => expect(screen.getByText('Allenamento unico')).toBeTruthy())
+    expect(screen.queryByLabelText('Poi in agenda')).toBeNull()
+  })
+
+  it('uses a compact local date/time label for today, tomorrow and future dates', () => {
+    const now = new Date('2026-09-15T10:00:00+02:00')
+
+    expect(formatAgendaDateTime('2026-09-15T20:00:00+02:00', now)).toBe('Oggi · 20:00')
+    expect(formatAgendaDateTime('2026-09-16T20:00:00+02:00', now)).toBe('Domani · 20:00')
+    expect(formatAgendaDateTime('2026-09-20T20:00:00+02:00', now)).toMatch(/domenica 20 settembre · 20:00/)
+  })
+
+  it('keeps three agenda events readable with one team/type/place line and a full-row detail action', async () => {
+    const events = [
+      { id: 'event-1', title: 'Protagonista', event_kind: 'training', start_time: '2026-09-15T18:00:00+02:00', end_time: '2026-09-15T19:00:00+02:00', requires_confirmation: false },
+      { id: 'event-2', title: 'Allenamento Under 17 con un titolo molto lungo che non deve rompere la riga', event_kind: 'training', start_time: '2026-09-15T20:00:00+02:00', end_time: '2026-09-15T21:00:00+02:00', location: 'Cardarelli', teams: [{ id: 'team-17', name: 'Under 17', code: 'U17' }], requires_confirmation: false },
+      { id: 'event-3', title: 'Riunione tecnica', event_kind: 'meeting', start_time: '2026-09-16T20:00:00+02:00', end_time: '2026-09-16T21:00:00+02:00', location: 'Sala riunioni', teams: [{ id: 'team-17', name: 'Under 17', code: 'U17' }, { id: 'team-15', name: 'Under 15', code: 'U15' }], requires_confirmation: false },
+    ]
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ activeSeason: null, teamMemberships: [], upcomingEvents: events, unreadMessages: [], feeInstallments: [], teams: [] }) }) as jest.Mock
+
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'athlete-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Apri dettaglio: Riunione tecnica' })).toBeTruthy())
+    expect(screen.getByText('Oggi · 20:00')).toBeTruthy()
+    expect(screen.getByText('Domani · 20:00')).toBeTruthy()
+    expect(screen.getByText('Cardarelli')).toBeTruthy()
+    expect(screen.getByText('Under 17 · Under 15')).toBeTruthy()
+    const secondEventRow = screen.getByRole('button', { name: 'Apri dettaglio: Allenamento Under 17 con un titolo molto lungo che non deve rompere la riga' })
+    expect(within(secondEventRow).getAllByLabelText('Tipo evento: Allenamento')).toHaveLength(1)
+
+    const detailRow = screen.getByRole('button', { name: 'Apri dettaglio: Riunione tecnica' })
+    detailRow.focus()
+    expect(document.activeElement).toBe(detailRow)
+    await userEvent.setup().keyboard('{Enter}')
+    expect(await screen.findByRole('heading', { name: /Dettaglio evento/i })).toBeTruthy()
   })
 })
 

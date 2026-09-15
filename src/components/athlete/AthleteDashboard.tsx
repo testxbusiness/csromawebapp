@@ -151,6 +151,21 @@ function formatEventDate(value: string) {
   })
 }
 
+export function formatAgendaDateTime(value: string, now = new Date()) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Data non disponibile'
+
+  const dateOnly = (item: Date) => new Date(item.getFullYear(), item.getMonth(), item.getDate()).getTime()
+  const dayDelta = Math.round((dateOnly(date) - dateOnly(now)) / 86_400_000)
+  const dayLabel = dayDelta === 0
+    ? 'Oggi'
+    : dayDelta === 1
+      ? 'Domani'
+      : date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  return `${dayLabel} · ${date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
+}
+
 export type FeaturedEventState = 'upcoming' | 'in_progress' | 'ended' | 'unknown'
 
 /** Classifies the event selected by the existing dashboard contract. */
@@ -929,26 +944,33 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
               {visibleEvents.length > 1 && (
                 <section className="cs-athlete-dashboard__agenda-next mt-5" aria-label="Poi in agenda">
                   <SectionHeading title="Poi in agenda" />
-                  <div className="divide-y divide-[color:var(--cs-border)]">
+                  <div>
                     {visibleEvents.slice(1, 3).map((event) => (
-                      <div key={event.id} className="py-2 first:pt-0 last:pb-0">
-                        <ListRow
-                          interactive
-                          onClick={() => setSelectedEvent(event)}
-                          leading={<span className="text-xs font-semibold tabular-nums">{new Date(event.start_time).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })}</span>}
-                          trailing={<span className="text-xs text-secondary">Dettagli</span>}
-                        >
-                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
-                            <span>{event.title}</span>
+                      <ListRow
+                        key={event.id}
+                        interactive
+                        onClick={() => setSelectedEvent(event)}
+                        aria-label={`Apri dettaglio: ${event.title}`}
+                        trailing={<span className="text-xs font-semibold text-secondary">Apri dettagli</span>}
+                      >
+                        <span className="flex min-w-0 flex-col gap-1">
+                          <span className="text-sm font-semibold tabular-nums text-[color:var(--cs-text)]">
+                            {formatAgendaDateTime(event.start_time)}
+                          </span>
+                          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                             <EventKindBadge kind={event.event_kind} />
+                            {event.teams && event.teams.length > 0 && (
+                              <span className="min-w-0 truncate text-[color:var(--cs-text-secondary)]">
+                                {event.teams.map((team) => team.name).join(' · ')}
+                              </span>
+                            )}
                           </span>
-                          <span className="mt-1 block text-sm text-secondary">
-                            {formatEventTime(event.start_time)}
-                            {event.location ? ` · ${event.location}` : ''}
-                          </span>
-                          {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
-                        </ListRow>
-                      </div>
+                          {event.location ? (
+                            <span className="truncate text-sm text-[color:var(--cs-text-secondary)]">{event.location}</span>
+                          ) : null}
+                          <span className="sr-only">{event.title}</span>
+                        </span>
+                      </ListRow>
                     ))}
                   </div>
                 </section>
