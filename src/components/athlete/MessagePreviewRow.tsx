@@ -11,7 +11,7 @@ export type MessagePreview = {
   teams?: Array<{ id: string; name: string; code?: string }>
 }
 
-export function MessagePreviewRow({ message, onOpen }: { message: MessagePreview; onOpen: () => void }) {
+export function MessagePreviewRow({ message, onOpen, showReadState = true }: { message: MessagePreview; onOpen: () => void; showReadState?: boolean }) {
   const sender = message.created_by_profile
     ? `${message.created_by_profile.first_name || ''} ${message.created_by_profile.last_name || ''}`.trim()
     : ''
@@ -20,8 +20,8 @@ export function MessagePreviewRow({ message, onOpen }: { message: MessagePreview
     <ListRow
       interactive
       onClick={onOpen}
-      aria-label={`${message.is_read ? 'Messaggio letto' : 'Messaggio non letto'}: ${message.subject}`}
-      trailing={<div className="flex flex-wrap items-center justify-end gap-2"><StatusBadge status={message.is_read ? 'neutral' : 'info'} label={message.is_read ? 'Letto' : 'Non letto'} /><span className="text-xs text-secondary">Apri</span></div>}
+      aria-label={`${showReadState ? (message.is_read ? 'Messaggio letto' : 'Messaggio non letto') : 'Messaggio'}: ${message.subject}`}
+      trailing={<div className="flex flex-wrap items-center justify-end gap-2">{showReadState ? <StatusBadge status={message.is_read ? 'neutral' : 'info'} label={message.is_read ? 'Letto' : 'Non letto'} /> : null}<span className="text-xs text-secondary">Apri</span></div>}
     >
       <span className="font-medium">{message.subject}</span>
       <span className="mt-1 block truncate text-sm text-secondary">

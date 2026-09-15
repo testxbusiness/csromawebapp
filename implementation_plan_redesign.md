@@ -6202,7 +6202,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.6.R4 Stato attendance compatto | [x] | DA.6.R3 | Completato il 14/09/2026; stato chiuso integrato con separatore discreto, RSVP e sole assenze distinti, azioni aperte preservate |
 | DA.6.R5 Agenda non ridondante | [x] | DA.6.R4 | Completato il 15/09/2026; righe compatte con data/ora relativa, tipo, squadre aggregate, luogo e affordance unica; titolo completo conservato nel dettaglio/accessibilità; test 0/1/3 eventi, multi-team, titolo lungo e apertura dettaglio superati |
 | DA.6.R6 Prossima partita sportiva | [x] | DA.6.R5 | Completato il 15/09/2026; riepilogo nascosto solo con legame esplicito evento-partita, nessun matching euristico; dati incompleti/amichevoli restano visibili |
-| DA.6.R7 Servizi secondari mobile | [ ] | DA.6.R6 | Messaggi, quota e squadre compatti; importi e stati coerenti con le regole esistenti |
+| DA.6.R7 Servizi secondari mobile | [x] | DA.6.R6 | Completato il 15/09/2026; massimo due preview messaggi su mobile con conteggio nel titolo e stato non duplicato, quota con composizione stabile/importo italiano e stato paid/urgenza preservati, membership con titolo “Le tue squadre” e nome/numero sulla stessa riga |
 | DA.6.R8 Identità atleta e floating action | [ ] | DA.6.R7 | Copy atleta, decorazione discreta e pulsante flottante senza sovrapposizioni |
 | DA.7 Gate finale e handoff | [ ] | DA.6.R1–DA.6.R8 | Evidenze visive e funzionali, esito esplicito |
 
@@ -6811,6 +6811,34 @@ file, test e note reali.
 - Acceptance: nessuna azione, informazione, route o consumer condiviso viene
   rimosso; stati scaduta/in scadenza restano prioritari.
 - Verifiche: zero/due/tre messaggi, quota pagata/scaduta, più squadre e mobile.
+
+**Esito DA.6.R7 — 15/09/2026**
+
+- La dashboard usa il conteggio autorevole `unreadMessageCount` nel titolo dei
+  messaggi (fallback compatibile ai dati legacy), mantiene fino a tre righe su
+  desktop e nasconde soltanto la terza sotto 768 px. Nella dashboard il titolo
+  esplicita già il contesto “non letti”, quindi le righe non duplicano il badge;
+  `MessagePreviewRow` conserva il default precedente per gli altri consumer.
+- La quota mantiene nome/descrizione disponibile, rata, squadra, attività,
+  codice, scadenza, importo e stato; l’importo usa lo stesso `Intl.NumberFormat`
+  `it-IT` già usato dalle quote. Scaduta, in scadenza e parziale conservano la
+  priorità esistente; una quota pagata resta visibile quando non ci sono rate
+  non pagate.
+- La sezione è intitolata “Le tue squadre”; ogni `MembershipRow` conserva una
+  riga per membership e rende nome e numero autorevole per squadra sulla stessa
+  riga, senza alterare il dettaglio o la modalità read-only delegata.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/MessagePreviewRow.tsx`,
+  `src/components/athlete/MembershipRow.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`, `src/app/globals.css`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati dashboard, messaggi,
+  membership e quote — 4 suite, 31 test superati; suite completa Jest — 73
+  suite, 299 test superati; `npm run build`; `git diff --check`.
+- Smoke browser autenticato e screenshot mobile non eseguiti perché questo
+  ambiente non dispone di un runtime autenticato/dati autorizzati; il gate
+  visuale responsive resta aperto per DA.6/DA.7. Nessuna route, azione,
+  informazione, autorizzazione, consumer condiviso o modifica DB è stata
+  rimossa.
 
 ### DA.6.R8 — Identità atleta e floating action
 

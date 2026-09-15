@@ -272,3 +272,92 @@ describe('next championship match summary visibility', () => {
     expect(screen.queryByText('Prossima partita')).toBeNull()
   })
 })
+
+describe('dashboard secondary services', () => {
+  const permissions = {
+    view_schedule: true,
+    confirm_attendance: false,
+    view_payments: true,
+    view_medical_status: false,
+    view_documents: false,
+    sign_documents: false,
+    receive_messages: true,
+  }
+
+  const renderFamilyDashboard = (payload: Record<string, unknown>) => {
+    ;(useAccessibleProfiles as jest.Mock).mockReturnValue({
+      selectedProfileId: 'child-1',
+      selectedProfile: {
+        profile: { id: 'child-1', first_name: 'Luca', last_name: 'Rossi', email: null },
+        relationship: { permissions },
+      },
+    })
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => payload }) as jest.Mock
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'child-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} delegatedView />)
+  }
+
+  const basePayload = { activeSeason: null, teamMemberships: [], upcomingEvents: [], feeInstallments: [], teams: [] }
+
+  it.each([
+    ['zero', [], 0],
+    ['two', [
+      { id: 'message-1', subject: 'Avviso 1', content: 'Test 1', is_read: false },
+      { id: 'message-2', subject: 'Avviso 2', content: 'Test 2', is_read: false },
+    ], 2],
+    ['three', [
+      { id: 'message-1', subject: 'Avviso 1', content: 'Test 1', is_read: false },
+      { id: 'message-2', subject: 'Avviso 2', content: 'Test 2', is_read: false },
+      { id: 'message-3', subject: 'Avviso 3', content: 'Test 3', is_read: false },
+    ], 3],
+  ])('renders the %s message state with the total in the heading', async (_label, messages, count) => {
+    renderFamilyDashboard({ ...basePayload, unreadMessages: messages, unreadMessageCount: count })
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: `Messaggi non letti (${count})` })).toBeTruthy())
+    expect(screen.queryAllByRole('button', { name: /^Messaggio:/ })).toHaveLength(Math.min(messages.length, 3))
+    expect(screen.queryByText('Non letto')).toBeNull()
+    if (messages.length === 0) expect(screen.getByText('Nessun messaggio non letto')).toBeTruthy()
+  })
+
+  it('keeps an overdue fee ahead of a paid fee and formats the amount in Italian', async () => {
+    renderFamilyDashboard({
+      ...basePayload,
+      unreadMessages: [],
+      feeInstallments: [
+        { id: 'paid', installment_number: 1, due_date: '2026-09-01', amount: 80, status: 'paid', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } },
+        { id: 'overdue', installment_number: 2, due_date: '2026-08-01', amount: 120, status: 'overdue', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } },
+      ],
+    })
+
+    await waitFor(() => expect(screen.getByText('Scaduta')).toBeTruthy())
+    expect(screen.getByText(/120,00/)).toBeTruthy()
+    expect(screen.queryByText('80,00')).toBeNull()
+  })
+
+  it('shows the paid state when no unpaid installment is available', async () => {
+    renderFamilyDashboard({
+      ...basePayload,
+      unreadMessages: [],
+      feeInstallments: [{ id: 'paid', installment_number: 1, due_date: '2026-09-01', amount: 120, status: 'paid', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } }],
+    })
+
+    await waitFor(() => expect(screen.getByText('Pagata')).toBeTruthy())
+    expect(screen.getByText(/120,00/)).toBeTruthy()
+  })
+
+  it('keeps each team membership and its authoritative jersey number', async () => {
+    renderFamilyDashboard({
+      ...basePayload,
+      unreadMessages: [],
+      teamMemberships: [
+        { id: 'membership-1', jersey_number: 7, team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } },
+        { id: 'membership-2', jersey_number: 12, team: { id: 'team-2', name: 'U18', code: 'U18', activity: { name: 'Volley' } } },
+      ],
+    })
+
+    await waitFor(() => expect(screen.getByText('Le tue squadre')).toBeTruthy())
+    expect(screen.getByText('U16')).toBeTruthy()
+    expect(screen.getByText('U18')).toBeTruthy()
+    expect(screen.getByText('#7')).toBeTruthy()
+    expect(screen.getByText('#12')).toBeTruthy()
+  })
+})

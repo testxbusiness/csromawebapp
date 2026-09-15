@@ -21,9 +21,16 @@ type MembershipRowProps = {
 }
 
 export function MembershipRow({ membership, readOnly = false, onOpen }: MembershipRowProps) {
+  const trailing = membership.jersey_number !== null && membership.jersey_number !== undefined
+    ? <span className="shrink-0 font-semibold tabular-nums">#{membership.jersey_number}</span>
+    : <span className="shrink-0 text-xs text-secondary">Numero non assegnato</span>
+
   const content = (
     <>
-      <span className="font-medium">{membership.team.name}</span>
+      <span className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate font-medium">{membership.team.name}</span>
+        {trailing}
+      </span>
       <span className="mt-1 block text-sm text-secondary">
         {membership.team.activity?.name || 'Attività non disponibile'} · {membership.team.code}
       </span>
@@ -34,12 +41,8 @@ export function MembershipRow({ membership, readOnly = false, onOpen }: Membersh
       )}
     </>
   )
-  const trailing = membership.jersey_number !== null && membership.jersey_number !== undefined
-    ? <span className="font-semibold tabular-nums">#{membership.jersey_number}</span>
-    : <span className="text-xs text-secondary">Numero non assegnato</span>
-
   if (onOpen && !readOnly) {
-    return <ListRow interactive onClick={onOpen} trailing={trailing}>{content}</ListRow>
+    return <ListRow interactive onClick={onOpen}>{content}</ListRow>
   }
-  return <ListRow trailing={trailing}>{content}</ListRow>
+  return <ListRow>{content}</ListRow>
 }

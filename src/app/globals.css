@@ -689,6 +689,9 @@ button.cs-list-row{ font:inherit; }
 .cs-athlete-dashboard__service-list .cs-list-row{
   padding-inline: 0;
 }
+@media (max-width:767px){
+  .cs-athlete-dashboard__message-preview--third{ display:none; }
+}
 @media (max-width: 479px){
   .cs-athlete-dashboard__service-list .cs-list-row__trailing{
     padding-block: 4px;

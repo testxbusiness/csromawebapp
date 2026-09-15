@@ -107,6 +107,7 @@ interface FeeInstallment {
   status: 'not_due' | 'due_soon' | 'overdue' | 'paid' | 'partially_paid'
   membership_fee: {
     name: string
+    description?: string | null
     team: {
       id?: string
       name: string
@@ -149,6 +150,10 @@ function formatEventDate(value: string) {
     month: 'long',
     year: 'numeric',
   })
+}
+
+function formatFeeAmount(value: number | null | undefined): string {
+  return value == null ? '—' : new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(value)
 }
 
 export function formatAgendaDateTime(value: string, now = new Date()) {
@@ -210,6 +215,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
+  const [unreadMessageCount, setUnreadMessageCount] = useState<number | null>(null)
   const [feeInstallments, setFeeInstallments] = useState<FeeInstallment[]>([])
   const [nextChampionshipMatch, setNextChampionshipMatch] = useState<ChampionshipMatch | null>(null)
   const [dashboardStatus, setDashboardStatus] = useState<DashboardStatus>('loading')
@@ -242,6 +248,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setTeamMemberships([])
       setUpcomingEvents([])
       setUnreadMessages([])
+      setUnreadMessageCount(null)
       setFeeInstallments([])
       setNextChampionshipMatch(null)
       setSelectedEvent(null)
@@ -377,6 +384,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setUpcomingEvents([])
       setNextChampionshipMatch(null)
       setUnreadMessages([])
+      setUnreadMessageCount(null)
       setFeeInstallments([])
       resetTeam()
     }
@@ -432,6 +440,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setUpcomingEvents(result.upcomingEvents || [])
       setNextChampionshipMatch(result.nextChampionshipMatch || null)
       setUnreadMessages(result.unreadMessages || [])
+      setUnreadMessageCount(typeof result.unreadMessageCount === 'number' ? result.unreadMessageCount : null)
       setFeeInstallments(result.feeInstallments || [])
       setTeams((result.teams || []).map((team: { id: string; name: string; code?: string; activity?: { name?: string } | null }) => ({
         id: team.id,
@@ -845,6 +854,8 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const visibleMatch = nextChampionshipMatch && selectedTeamMatches(nextChampionshipMatch.team_ids) ? nextChampionshipMatch : null
   const showNextChampionshipMatch = shouldShowNextChampionshipMatchSummary(visibleEvents[0], visibleMatch)
   const mostUrgentVisibleFee = selectMostUrgentFee(visibleFees)
+    ?? (visibleFees.length > 0 && visibleFees.every((fee) => fee.status === 'paid') ? visibleFees[0] : undefined)
+  const messageTitleCount = activeTeamId ? visibleMessages.length : unreadMessageCount ?? unreadMessages.length
 
   if (accessDenied || dashboardStatus === 'denied') return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
   if (dashboardStatus === 'offline' && !dashboardHasData) {
@@ -1006,11 +1017,13 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       <div className="cs-athlete-dashboard__services">
       {canReceiveMessages && (
         <Panel id="athlete-messages" className="cs-athlete-dashboard__service-panel space-y-3">
-          <SectionHeading title="Messaggi non letti" href="/athlete/messages" />
+          <SectionHeading title={`Messaggi non letti (${messageTitleCount})`} href="/athlete/messages" />
           {unreadMessages.length === 0 ? <FeedbackState variant="empty" title="Nessun messaggio non letto" className="py-4" /> : visibleMessages.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun messaggio per questa squadra" className="py-4" /> : (
             <div className="cs-athlete-dashboard__service-list divide-y divide-[color:var(--cs-border)]">
-              {visibleMessages.slice(0, 3).map((message) => (
-                <MessagePreviewRow key={message.id} message={message} onOpen={() => setSelectedMessage(message)} />
+              {visibleMessages.slice(0, 3).map((message, index) => (
+                <div key={message.id} className={index === 2 ? 'cs-athlete-dashboard__message-preview--third' : undefined}>
+                  <MessagePreviewRow message={message} showReadState={false} onOpen={() => setSelectedMessage(message)} />
+                </div>
               ))}
             </div>
           )}
@@ -1023,11 +1036,11 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           {feeInstallments.length === 0 ? <FeedbackState variant="empty" title="Nessuna quota associativa" className="py-4" /> : visibleFees.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessuna quota per questa squadra" className="py-4" /> : !mostUrgentVisibleFee ? <FeedbackState variant="empty" title="Tutte le rate risultano pagate" className="py-4" /> : (
             <ListRow className="cs-athlete-dashboard__fee-row" trailing={(
               <span className="cs-athlete-dashboard__fee-summary">
-                <span className="tabular-nums font-semibold">€{Number(mostUrgentVisibleFee.amount).toFixed(2)}</span>
-                <StatusBadge status={mostUrgentVisibleFee.status === 'overdue' ? 'danger' : mostUrgentVisibleFee.status === 'due_soon' ? 'warning' : 'neutral'} label={feeStatusLabel(mostUrgentVisibleFee.status)} />
+                <span className="tabular-nums font-semibold">{formatFeeAmount(mostUrgentVisibleFee.amount)}</span>
+                <StatusBadge status={mostUrgentVisibleFee.status === 'overdue' ? 'danger' : mostUrgentVisibleFee.status === 'due_soon' || mostUrgentVisibleFee.status === 'partially_paid' ? 'warning' : mostUrgentVisibleFee.status === 'paid' ? 'success' : 'neutral'} label={feeStatusLabel(mostUrgentVisibleFee.status)} />
               </span>
             )}>
-              <span className="block font-medium">
+              <span className="block font-medium" title={mostUrgentVisibleFee.membership_fee.description || undefined}>
                 {mostUrgentVisibleFee.membership_fee.name} · Rata {mostUrgentVisibleFee.installment_number}
               </span>
               <span className="mt-1 block text-sm text-secondary">
@@ -1042,7 +1055,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       )}
 
       <Panel id="athlete-teams" className="cs-athlete-dashboard__service-panel space-y-3">
-        <SectionHeading title="Squadre e numeri di maglia" />
+        <SectionHeading title="Le tue squadre" />
         {teamMemberships.length === 0 ? <FeedbackState variant="empty" title="Non sei iscritto a nessuna squadra" className="py-4" /> : visibleMemberships.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessuna membership per questa squadra" className="py-4" /> : (
           <div className="cs-athlete-dashboard__service-list divide-y divide-[color:var(--cs-border)]">
             {visibleMemberships.map((membership) => (
