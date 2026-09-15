@@ -269,7 +269,7 @@ Per un goal `[x]` aggiungere sempre:
 | G12.3 Copia selettiva palestre e attività | [!] | G12.2 | Implementati preview admin e batch transazionale idempotente; resta da eseguire la verifica DB su fixture locale/staging autorizzata. |
 | G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione; G12.3 resta `[!]` per la sua verifica DB separata. |
 | G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
-| G12.6 Esecuzione atomica iscrizioni | [ ] | G12.5 | Creare solo `season_profiles` e membership squadra scelte nella target, preservando integralmente la source. |
+| G12.6 Esecuzione atomica iscrizioni | [x] | G12.5 | Completato il 15/09/2026; batch server-side su RPC PostgreSQL transazionale e idempotente: crea/aggiorna solo `season_profiles` target per gli inclusi e le membership target selezionate, senza mutare la source o creare iscrizioni familiari. Audit append-only con batch key e conteggi autorevoli; validati profilo source, stagione/ruolo/team target e rollback completo. Test applicativi 2 suite/5 test, fixture DB transazionale locale, advisor security locale, typecheck e diff check superati. Nessuna mutazione staging/produzione, deploy o attivazione. |
 | G12.7 Wizard admin selezione profili | [ ] | G12.6 | UI a passi con includi/escludi, stessa/altra squadra, riepilogo e conferma esplicita. |
 | G12.8 Isolamento runtime per stagione attiva | [ ] | G12.6 | Impedire letture miste tra stagione archiviata e attiva in atleta, famiglia, coach e admin. |
 | G12.9 Dry-run, esecuzione 2026/2027 e gate | [ ] | G12.1–G12.8 | Backup/evidenze, esecuzione autorizzata, attivazione atomica, conteggi post-run e verifica assenza di perdita dati. |
@@ -7534,6 +7534,43 @@ source identici prima e dopo; errore intenzionale dimostra rollback completo.
 **Verifiche:** test DB transazionali di successo, retry, rollback, non-admin,
 team cross-season e profilo estraneo; query differenziale source; advisors,
 typecheck, test route e diff check.
+
+**Registro esecuzione — 15/09/2026:** aggiunti
+`supabase/migrations/20260915144045_season_rollover_profiles_batch.sql`,
+`src/server/admin/season-rollover-profile-batch.ts`, il Route Handler
+`src/app/api/admin/season-profile-batch/route.ts` e i test del servizio/Route
+Handler. La migration crea la tabella audit append-only interna e la RPC
+`rollover_profiles_batch`, eseguibile solo da `service_role`; la route verifica
+`requireGlobalRole('admin')` prima di usare il client privilegiato. Il payload
+è validato con Zod, la RPC deriva tipo/stato e appartenenza dalla source,
+accetta solo team target della stagione inattiva e ruoli compatibili, non crea
+`season_profiles` per familiari e non esegue alcuna delete o update della
+2025/2026. La batch key e la PK/unique esistenti rendono il retry idempotente;
+l'audit conserva actor, source/target e conteggi senza dati personali completi.
+
+Verifiche eseguite: test servizio/Route Handler — 2 suite, 5 test superati;
+fixture transazionale locale con inclusi/esclusi, atleta e coach, atleta
+multi-team su due squadre target, retry
+(`replayed=true`), audit singolo, team cross-season e profilo estraneo;
+rollback intenzionale senza righe target parziali; query differenziale source
+con conteggi/checksum invariati (`season_profiles 50`, `team_members 69`,
+`team_coaches 4`); advisor security locale — nessun problema; `npx tsc
+--noEmit`; `git diff --check`. La migration è stata applicata soltanto al DB
+locale per la verifica ed è stata usata dentro fixture rollback-safe; non è
+stata registrata/applicata su staging o produzione. Il comando CLI
+`supabase migration new` è riuscito con telemetria disabilitata; la migration
+è sotto `/supabase/` ignorato dal `.gitignore` locale, ma il file è presente
+nel workspace. Nessun deploy, attivazione o mutazione staging/produzione;
+G12.7 e successivi non avviati.
+
+**Applicazione staging autorizzata — 15/09/2026:** su conferma esplicita
+dell'utente, la migration è stata applicata esclusivamente al progetto
+Supabase `csromawebapp-staging` tramite plugin, con versione remota
+`20260915153331_season_rollover_profiles_batch`. Verificati migration history,
+presenza della tabella audit con RLS, presenza della RPC e ACL: `anon` e
+`authenticated` non hanno `EXECUTE`, `service_role` sì; l'audit è vuoto. Non
+sono state eseguite iscrizioni, creazioni di stagione, mutazioni dati,
+attivazioni o modifiche a produzione.
 
 ## G12.7 — Wizard admin per selezione profili e squadre
 
