@@ -6,7 +6,7 @@
 >
 > **Principio guida:** nessun goal deve richiedere a Codex di reinterpretare l'architettura generale. Ogni goal deve avere un confine chiaro, dipendenze esplicite, criteri di accettazione e verifiche tecniche.
 >
-> **Ordine vincolante:** Baseline → Foundation → Atleta → Famiglia → Coach → Admin → Consolidamento.
+> **Ordine vincolante:** Baseline → Foundation → Atleta → Famiglia → Coach → Admin → Consolidamento → Rollover stagionale.
 >
 > **Stack di riferimento:** Next.js 15 App Router, React 19, TypeScript strict, Tailwind CSS 4 + CSS custom properties, Supabase, PWA custom service worker.
 
@@ -264,6 +264,15 @@ Per un goal `[x]` aggiungere sempre:
 | G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
+| G12.1 Contratto rollover e invarianti DB | [ ] | G9.5,G9.6 | Rendere versionati e testabili unicità stagione attiva, archiviazione non distruttiva e confini persona/iscrizione/squadra. |
+| G12.2 API bozza stagione 2026/2027 | [ ] | G12.1 | Creare la stagione target inattiva tramite Route Handler admin validato, senza copiare o attivare dati. |
+| G12.3 Copia selettiva palestre e attività | [ ] | G12.2 | Copiare nella target soltanto le anagrafiche scelte, con nuovi ID e senza dipendenze operative. |
+| G12.4 Bozze e mappa squadre target | [ ] | G12.3 | Creare squadre 2026/2027 come bozze minime o mapparle a target esistenti, senza configurazioni stagionali. |
+| G12.5 Preview profili candidati | [ ] | G12.4 | Restituire candidati, ruoli stagionali, genitori collegati e team sorgente/destinazione senza mutazioni. |
+| G12.6 Esecuzione atomica iscrizioni | [ ] | G12.5 | Creare solo `season_profiles` e membership squadra scelte nella target, preservando integralmente la source. |
+| G12.7 Wizard admin selezione profili | [ ] | G12.6 | UI a passi con includi/escludi, stessa/altra squadra, riepilogo e conferma esplicita. |
+| G12.8 Isolamento runtime per stagione attiva | [ ] | G12.6 | Impedire letture miste tra stagione archiviata e attiva in atleta, famiglia, coach e admin. |
+| G12.9 Dry-run, esecuzione 2026/2027 e gate | [ ] | G12.1–G12.8 | Backup/evidenze, esecuzione autorizzata, attivazione atomica, conteggi post-run e verifica assenza di perdita dati. |
 
 ---
 
@@ -7012,7 +7021,435 @@ questa modifica documentale; nessun goal avviato né impostazione del modello ca
 - Verifiche: `src/components/athlete/AthleteDashboard.test.tsx` (24 test),
   `npx tsc --noEmit` e `git diff --check` superati.
 
-# 22. Criterio finale di successo
+# 22. Fase 12 — Rollover stagione 2026/2027 e selezione profili
+
+## Obiettivo della fase
+
+Creare la stagione `Stagione 2026/2027` con periodo `2026-09-01` →
+`2027-06-30`, permettere all'amministratore di scegliere quali atleti e
+collaboratori iscrivere nella nuova stagione e assegnare ogni persona a zero,
+una o più squadre della nuova stagione. Il workflow consente inoltre di copiare
+selettivamente le anagrafiche di palestre e attività; per le squadre crea bozze
+minime da riconfigurare prima dell'uso operativo.
+
+La `Stagione 2025/2026` diventa archiviata esclusivamente nel senso operativo
+di `is_active = false`: non viene eliminata e nessuna sua iscrizione,
+appartenenza, quota, rata, evento, documento, messaggio, presenza, campionato o
+convocazione viene spostata o cancellata.
+
+Una persona esclusa dal rollover:
+
+- conserva la riga globale in `profiles` e gli eventuali dati specializzati in
+  `athlete_profiles`/`coach_profiles`;
+- conserva account, ruoli account e relazioni familiari;
+- conserva `season_profiles` e `team_members` riferiti alla 2025/2026;
+- non riceve alcuna riga `season_profiles` o `team_members` nella 2026/2027.
+
+Una persona inclusa riceve nuove relazioni stagionali nella 2026/2027 senza
+modificare quelle storiche. Il rollover non duplica mai `profiles`, account o
+relazioni familiari.
+
+I genitori/familiari non sono iscrizioni stagionali da duplicare: profilo,
+account, ruoli account e `profile_relationships` restano globali. Il wizard li
+mostra solo come informazione derivata accanto agli atleti collegati. Se almeno
+un atleta collegato viene incluso nella 2026/2027, il familiare continua ad
+accedere a quel subject secondo i permessi esistenti; se nessun atleta collegato
+viene incluso, l'account resta valido ma non dispone di subject nella stagione
+attiva. Non creare `season_profiles` con tipo `family_member`.
+
+## Contratto funzionale vincolante
+
+### Identità e storia
+
+- `profiles` rappresenta la persona ed è indipendente dalla stagione.
+- `season_profiles` rappresenta la partecipazione della persona a una stagione.
+- `team_members`/`team_coaches` rappresentano l'assegnazione a squadre che,
+  tramite `activities`, appartengono a una sola stagione.
+- “Resta nella stessa squadra” significa assegnare il profilo alla nuova squadra
+  2026/2027 mappata dalla squadra 2025/2026; non significa riutilizzare il
+  vecchio `team_id`.
+- “Passa a un'altra squadra” significa scegliere esplicitamente una o più
+  squadre della 2026/2027 compatibili con il tipo di profilo.
+- Una persona può essere inclusa senza squadra quando il dominio lo consente
+  (per esempio staff/admin); per atleta o coach mostrare un warning esplicito,
+  senza inventare una squadra.
+- Numero di maglia e ruolo nella squadra sono valori della nuova membership:
+  possono essere proposti dalla sorgente ma devono essere confermabili o
+  modificabili per ogni squadra target.
+- Palestre e attività sono record stagionali: quelle confermate vengono copiate
+  con nuovi ID e mantengono soltanto i campi anagrafici approvati.
+- Una squadra target è sempre un nuovo record 2026/2027 o un record target già
+  esistente. Non eredita automaticamente orari, palestra, quote, coach,
+  campionati o altre configurazioni della squadra source.
+
+### Cosa non viene copiato automaticamente
+
+Il rollover profili non copia quote, rate, pagamenti, eventi, presenze, assenze,
+messaggi, read state, push subscription, documenti, campionati, partite,
+convocazioni o orari di allenamento. Questi dati rimangono storici nella
+2025/2026 oppure vengono configurati separatamente nella nuova stagione.
+
+Il catalogo minimo di palestre, attività e squadre target deve essere preparato
+prima di assegnare i profili. Può essere creato manualmente o mediante le copie
+controllate di G12.3–G12.4, ma ogni record creato nella target ha un nuovo ID. I
+codici squadra devono rispettare i vincoli reali del database; nessuna
+collisione va risolta sovrascrivendo la squadra sorgente.
+
+### Stati e sicurezza
+
+- La nuova stagione nasce sempre inattiva.
+- Creazione bozza, preparazione strutture e selezione profili sono ripetibili e
+  idempotenti; un retry non duplica iscrizioni o membership.
+- Solo un admin verificato server-side può leggere preview o eseguire rollover.
+- Il client non usa mai `service_role` e non decide autonomamente appartenenze o
+  compatibilità delle squadre.
+- L'esecuzione finale delle iscrizioni è atomica: errore su una persona o
+  membership annulla l'intero batch.
+- L'attivazione della 2026/2027 e la disattivazione della 2025/2026 sono una
+  singola operazione atomica distinta dal salvataggio della bozza.
+- Nessuna cancellazione fisica di stagione fa parte della fase. Il comando
+  `Elimina` deve essere rimosso o bloccato per stagioni con dati, privilegiando
+  `Archivia`.
+- Prima dell'attivazione devono essere disponibili preview e conteggi: inclusi,
+  esclusi, senza squadra, stessa squadra, altra squadra e warning.
+- Audit: registrare attore, source/target, conteggi e timestamp; non inserire
+  dati personali completi nei log applicativi.
+
+## G12.1 — Contratto rollover e invarianti database
+
+**Obiettivo:** rendere esplicite e versionate le garanzie prima di costruire il
+workflow.
+
+**Task singolo:**
+
+- Ispezionare schema locale e migrazioni applicate per `seasons`,
+  `season_profiles`, `gyms`, `activities`, `teams`, `team_members`,
+  `team_coaches`, `team_training_schedules`, `membership_fees` e relative
+  foreign key.
+- Creare la migration con `supabase migration new`; non inventare manualmente il
+  timestamp.
+- Portare nelle migrazioni versionate l'unicità parziale di una sola stagione
+  attiva se il DB la possiede ma il repository no.
+- Aggiungere i soli vincoli/indici necessari all'idempotenza del rollover. Non
+  cambiare `ON DELETE RESTRICT` di `season_profiles` e non introdurre cascade da
+  stagione a profilo.
+- Definire tipi e schema Zod condivisi per source season, target season, scelta
+  palestra/attività, bozza/mapping team e selezione profili. Input esterno sempre
+  validato.
+- Documentare con test/query che archiviare significa aggiornare `is_active`,
+  non eliminare la stagione.
+- Verificare RLS, grant ed eventuali funzioni privilegiate con gli advisor
+  disponibili. Una funzione `SECURITY DEFINER`, se realmente necessaria, deve
+  avere `search_path` esplicito, verifica `auth.uid()`/ruolo admin, revoke da
+  `PUBLIC`/`anon` e grant minimo.
+
+**Acceptance:** lo schema impedisce due stagioni attive e preserva la FK
+`season_profiles → seasons ON DELETE RESTRICT`; migrazione applicabile da zero e
+su DB esistente; nessun dato applicativo modificato.
+
+**Verifiche:** migration list/diff locale, query catalogo vincoli e indici,
+advisors, test degli schema Zod, `npx tsc --noEmit`, `git diff --check`.
+
+## G12.2 — API per creare la bozza 2026/2027
+
+**Obiettivo:** sostituire l'insert diretto dal browser con un confine server
+validato e con errori visibili.
+
+**Task singolo:**
+
+- Aggiungere un Route Handler admin per creare o recuperare idempotentemente la
+  stagione con nome `Stagione 2026/2027`, inizio `2026-09-01`, fine
+  `2027-06-30` e `is_active = false`.
+- Verificare `requireGlobalRole('admin')` prima di usare l'admin client.
+- Rifiutare date invertite, target sovrapposto ambiguo, nome/date discordanti e
+  tentativo di creazione già attiva.
+- Se esiste già una target con gli stessi identificatori, restituirla senza
+  duplicarla; se esiste con dati incompatibili, restituire conflitto esplicito.
+- Instradare la creazione da `SeasonsManager` al Route Handler; il modal resta
+  aperto durante pending/failure e mostra success/error comprensibili.
+- Non disattivare la 2025/2026 e non creare ancora profili, team o altre entità.
+
+**Acceptance:** un admin ottiene una sola bozza inattiva 2026/2027; retry
+identico; non-admin 403; errore DB visibile; zero mutazioni fuori `seasons`.
+
+**Verifiche:** test Route Handler auth/validation/idempotenza/conflitto, test
+manager pending/error/success, `npx tsc --noEmit`, suite mirata, build e diff
+check.
+
+## G12.3 — Copia selettiva di palestre e attività
+
+**Obiettivo:** preparare le anagrafiche riutilizzabili della 2026/2027 senza
+trascinare configurazioni operative della stagione precedente.
+
+**Task singolo:**
+
+- Aggiungere preview server-side delle palestre e attività della 2025/2026,
+  includendo lo stato di un'eventuale corrispondenza già presente nella target.
+- Permettere una scelta esplicita per ogni elemento: `Copia`, `Collega a target
+  esistente`, `Non portare`.
+- Per una palestra copiare soltanto `name`, `address`, `contact_info`, `city`,
+  `capacity` e `is_active`, con nuovo ID e `season_id` della 2026/2027.
+- Per un'attività copiare soltanto `name`, `description` e `is_active`, con nuovo
+  ID e `season_id` della 2026/2027.
+- Non copiare eventi, pagamenti, team, schedule, associazioni palestra-team,
+  quote, documenti, campionati o altre dipendenze.
+- Validare server-side source e target, impedire mapping cross-season e rendere
+  copia/mapping idempotenti. Una collisione o corrispondenza ambigua richiede
+  scelta dell'admin e non deve aggiornare la source.
+- Mostrare elementi creati, collegati, esclusi e in conflitto, mantenendo la
+  bozza 2026/2027 inattiva.
+
+**Acceptance:** la target contiene esattamente le palestre e attività approvate
+come nuovi record o mapping espliciti; source e dipendenze sono invariate; retry
+senza duplicati.
+
+**Verifiche:** test Route Handler/servizio per copia, mapping esistente,
+esclusione, collisione, ID cross-season, retry e non-admin; query differenziale
+source/target su fixture transazionale; typecheck, build e diff check.
+
+## G12.4 — Bozze e mappa squadre target
+
+**Obiettivo:** creare l'identità minima delle squadre 2026/2027 lasciando vuota
+la configurazione che può cambiare tra stagioni.
+
+**Task singolo:**
+
+- Aggiungere preview server-side delle squadre 2025/2026 e delle squadre già
+  presenti nella target, usando la mappa attività approvata in G12.3.
+- Per ogni squadra offrire tre scelte esplicite:
+  `Crea bozza 2026/2027`, `Collega a squadra target esistente`, `Non ricreare`.
+- La bozza copia soltanto il nome come proposta e il riferimento alla nuova
+  attività; crea un nuovo ID, `is_active = true` e un nuovo codice globale
+  modificabile, proponendo un suffisso riconoscibile come `-2627`.
+- Non copiare `coach_id`, `team_coaches`, `team_members`,
+  `training_rsvp_enabled`, giorni/orari, palestre di allenamento, quote/rate,
+  eventi, documenti, messaggi, campionati, partite o convocazioni. Questi valori
+  ripartono vuoti/default e vengono configurati separatamente.
+- Consentire rinomina e cambio attività prima della creazione per casi come
+  cambio categoria. Una collisione di codice blocca la singola proposta e non
+  modifica la squadra source.
+- Persistire o ricostruire in modo idempotente una mappa
+  `source_team_id → target_team_id`; validare che il target appartenga alla
+  2026/2027. Consentire più source verso un target per fusioni; non usare la
+  mappa come assegnazione automatica irreversibile, perché i singoli profili
+  possono essere distribuiti su team target diversi nel passo successivo.
+- Mostrare con chiarezza bozze create, target collegati, squadre non ricreate e
+  configurazioni rimaste intenzionalmente vuote.
+
+**Acceptance:** ogni team selezionabile per i profili appartiene alla
+2026/2027; le squadre 2025/2026 e tutte le dipendenze restano intatte; nessun
+orario, palestra, quota o staff viene ereditato implicitamente.
+
+**Verifiche:** test per tre scelte, cambio nome/attività, codice proposto e
+collisione, fusione, target cross-season, retry e non-admin; query DB di
+conteggio su fixture transazionale; typecheck, build e diff check.
+
+## G12.5 — Preview read-only dei profili candidati
+
+**Obiettivo:** costruire la lista autorevole sulla quale l'admin effettua la
+scelta.
+
+**Task singolo:**
+
+- Aggiungere un servizio server e un endpoint admin read-only che carichino i
+  `season_profiles` della 2025/2026 con dati anagrafici minimi, `profile_type`,
+  stato, squadre sorgente, jersey/ruolo squadra e mapping target disponibile.
+- Separare atleti e collaboratori, mantenendo supporto per una persona con più
+  squadre e senza deduplicarla in modo distruttivo.
+- Per ogni atleta mostrare soltanto come contesto i familiari con relazione
+  attiva e i permessi pertinenti, senza inserirli tra i candidati stagionali e
+  senza esporre dati personali non necessari.
+- Includere l'eventuale stato target già presente per rendere sicuri resume e
+  retry.
+- Non restituire note personali, dati medici, credenziali, auth user ID o altri
+  campi non necessari alla selezione.
+- Produrre warning tipizzati: mapping mancante, target già iscritto, nessuna
+  squadra, profilo inattivo o classificazione incoerente.
+- Non eseguire insert/update/delete.
+
+**Acceptance:** la preview rappresenta ogni candidato una sola volta con tutte
+le sue membership sorgente e sole squadre target autorizzate; una persona non
+presente nella source non può essere iniettata via ID client.
+
+**Verifiche:** test servizio/route con atleta stessa squadra, cambio squadra,
+multi-team, collaboratore senza team, familiare collegato, già migrato, escluso
+e ID estraneo; privacy del payload, auth admin, typecheck e diff check.
+
+## G12.6 — Esecuzione atomica delle iscrizioni selezionate
+
+**Obiettivo:** applicare la scelta senza alterare la stagione sorgente.
+
+**Task singolo:**
+
+- Implementare una singola operazione DB transazionale per il batch confermato.
+- Per ogni incluso, upsert idempotente di `season_profiles` nella target con
+  `profile_type`, stato e source audit coerenti.
+- Creare soltanto le nuove `team_members`/`team_coaches` target selezionate,
+  dopo aver verificato appartenenza del profilo alla source, stagione dei team,
+  compatibilità del ruolo e assenza di ID non autorizzati.
+- Per ogni escluso non effettuare alcuna mutazione: non impostare il profilo
+  globale inattivo e non rimuovere righe source.
+- Non creare iscrizioni stagionali per i familiari: account e
+  `profile_relationships` restano invariati e l'accesso deriva dai subject
+  inclusi nella target.
+- Non aggiornare né cancellare membership 2025/2026.
+- Un errore su una riga annulla l'intero batch. Retry dello stesso payload non
+  crea duplicati e non modifica dati non inclusi.
+- Restituire conteggi autorevoli e warning, senza dettagli sensibili nei log.
+- Registrare un audit del batch con attore, source/target e conteggi.
+
+**Acceptance:** fixture mista con inclusi/esclusi, stessa/altra squadra e
+multi-team produce esattamente le relazioni target richieste; checksum/conteggi
+source identici prima e dopo; errore intenzionale dimostra rollback completo.
+
+**Verifiche:** test DB transazionali di successo, retry, rollback, non-admin,
+team cross-season e profilo estraneo; query differenziale source; advisors,
+typecheck, test route e diff check.
+
+## G12.7 — Wizard admin per selezione profili e squadre
+
+**Obiettivo:** consentire la decisione operativa persona per persona senza
+nascondere l'impatto.
+
+**Task singolo:**
+
+- Integrare in `/admin/seasons` un wizard responsive con passi:
+  `Stagione` → `Palestre e attività` → `Squadre` → `Profili` →
+  `Assegnazioni` → `Riepilogo`.
+- Nel passo strutture rendere esplicite le tre scelte definite in G12.3 e G12.4
+  e segnalare che le squadre create sono bozze senza orari, palestre, quote o
+  staff ereditati.
+- Nella lista profili offrire ricerca, filtro atleta/collaboratore/squadra e
+  scelta esplicita `Porta nella nuova stagione` / `Non portare`.
+- Non preselezionare tutti in modo silenzioso. È consentito “seleziona tutti i
+  risultati filtrati” solo come azione esplicita, reversibile e con conteggio.
+- Per gli inclusi proporre il mapping della stessa squadra quando univoco e
+  permettere altra squadra, più squadre o nessuna squadra con warning.
+- Rendere jersey e ruolo target modificabili dove applicabile.
+- Mostrare gli esclusi nel riepilogo con copy: “Resteranno nella 2025/2026 e non
+  saranno iscritti alla 2026/2027”.
+- Mostrare i genitori collegati come conseguenza della scelta sull'atleta, non
+  come checkbox di migrazione: relazione e permessi restano invariati.
+- Prima dell'invio mostrare conteggi inclusi/esclusi/senza squadra e richiedere
+  conferma esplicita; bloccare doppio submit, cambio pagina accidentale e
+  chiusura con modifiche non salvate.
+- Stati loading, empty, denied, offline, validation error e unexpected error
+  devono essere distinti. Nessuna mutation offline o aggiornamento ottimistico.
+
+**Acceptance:** l'admin può rappresentare nella stessa bozza atleta confermato
+nella stessa squadra, atleta spostato, collaboratore multi-team e persona
+esclusa; il payload inviato coincide con il riepilogo visibile.
+
+**Verifiche:** test componenti per filtri/selezione/mapping/warning/riepilogo,
+focus trap e tastiera, viewport 320/390/768/1440, offline e failure/retry;
+typecheck, suite mirata, build e diff check.
+
+## G12.8 — Isolamento delle letture sulla stagione attiva
+
+**Obiettivo:** dopo l'attivazione impedire che dashboard e autorizzazioni
+combinino la stagione 2026/2027 con team o iscrizioni 2025/2026.
+
+**Task singolo:**
+
+- Centralizzare la risoluzione della singola stagione attiva e gestire
+  esplicitamente zero o più risultati senza affidarsi a errori `.single()` non
+  interpretati.
+- Correggere i resolver atleta e subject delegato: l'iscrizione `active` deve
+  appartenere alla stagione globalmente attiva, non a una stagione qualunque.
+- Filtrare `team_members`, `team_coaches`, quote, eventi, campionati e altri dati
+  operativi tramite team/attività della stagione attiva dove la schermata è
+  dichiarata corrente.
+- Mantenere le schermate storiche admin esplicitamente filtrabili per stagione;
+  non cancellare né rendere irraggiungibile la 2025/2026 agli amministratori.
+- Al cambio stagione invalidare cache/context subject-team e impedire che
+  risposte asincrone della source vengano applicate alla target.
+- Non cambiare ruoli account o permessi familiari globali; l'accesso operativo
+  dipende anche dalla membership nella stagione corrente.
+- Per un familiare calcolare i subject disponibili nella stagione attiva: il
+  genitore resta autenticabile anche quando nessun atleta collegato è stato
+  incluso, ma l'area familiare deve mostrare uno stato vuoto/esplicito e non dati
+  storici della source.
+
+**Acceptance:** incluso vede solo team/dati 2026/2027; escluso non accede alle
+superfici operative della nuova stagione ma resta consultabile nello storico
+admin; nessun dato della source compare sotto l'etichetta target.
+
+**Verifiche:** test personali e familiari per incluso/escluso, stessa/altra
+squadra, coach multi-team, zero/doppia stagione attiva, cambio subject e race;
+test admin storico; typecheck, suite interessate, build e diff check.
+
+## G12.9 — Dry-run, esecuzione 2026/2027, attivazione e gate
+
+**Obiettivo:** eseguire il passaggio reale solo con evidenze, backup e conferma
+dell'utente.
+
+**Task singolo:**
+
+- Eseguire prima su database locale/staging una fixture rappresentativa e il
+  dry-run completo; non usare profili reali in screenshot o log committati.
+- Prima di qualsiasi mutazione sull'ambiente indicato dall'utente, acquisire un
+  backup/ripristino verificabile o confermare il meccanismo di recovery
+  disponibile e salvare conteggi/checksum non sensibili della 2025/2026.
+- Mostrare all'utente il riepilogo finale delle scelte e ottenere conferma
+  esplicita per l'esecuzione reale e, separatamente, per l'attivazione.
+- Creare/verificare la bozza `Stagione 2026/2027` (`2026-09-01` →
+  `2027-06-30`), applicare struttura e profili selezionati, quindi confrontare
+  i conteggi attesi con quelli persistiti.
+- Attivare la target e archiviare la source con una sola operazione atomica.
+  Non eseguire hard delete.
+- Verificare post-run: una sola stagione attiva, source invariata, target con i
+  soli inclusi, membership target corrette, esclusi assenti dalla target,
+  palestre/attività selezionate, squadre come bozze senza configurazioni
+  ereditate, login/area atleta/famiglia/coach coerenti e storico admin
+  consultabile.
+- In caso di scostamento non tentare correzioni distruttive automatiche:
+  fermarsi, mantenere evidenze e usare il recovery concordato.
+
+**Acceptance:** 2026/2027 attiva e 2025/2026 inattiva; nessuna riga storica
+persa; inclusi ed esclusi coincidono con il riepilogo approvato; controlli
+cross-role superati. Il goal non può essere marcato completo con il solo test
+locale se l'esecuzione reale era parte dell'incarico.
+
+**Verifiche:** query pre/post e checksum source, test DB, `npx tsc --noEmit`,
+suite Jest completa, `npm run build`, `git diff --check`, E2E admin/atleta/
+famiglia/coach e smoke manuale del wizard. Registrare ambiente e limiti senza
+salvare credenziali o dati personali.
+
+## Prompt da assegnare a Luna Medio
+
+Usare un'esecuzione separata per ciascun ID, in ordine da G12.1 a G12.9. Non
+assegnare l'intera fase in un singolo prompt. G12.9 richiede conferma umana per
+le mutazioni reali e non deve essere avviato come automazione non presidiata.
+
+```text
+Esegui esclusivamente il goal G12.1 della sezione “Rollover stagione 2026/2027
+e selezione profili” in implementation_plan_redesign.md.
+Leggi AGENTS.md, re_design.md, il contratto completo della Fase 12 e il goal.
+Controlla stato Git, schema/migrazioni Supabase e prerequisiti; non rifare goal
+chiusi e non iniziare goal successivi.
+Preserva integralmente dati e relazioni della Stagione 2025/2026. Non duplicare
+profiles/account/relazioni, non riusare team ID storici e non introdurre hard
+delete. Mantieni autorizzazione server-side, TypeScript strict e operazioni
+idempotenti; usa una transazione per i batch indicati dal goal.
+Esegui soltanto le verifiche richieste e documenta quelle non eseguibili senza
+inventare esiti. Aggiorna registro e sezione del goal con file, test e note.
+Fermati alla fine del goal senza deploy, attivazione o mutazioni su staging/
+produzione, salvo che il goal G12.9 e l'utente le abbiano autorizzate
+esplicitamente.
+```
+
+Sostituire soltanto `G12.1` con l'ID successivo. Prima di ogni esecuzione,
+risolvere eventuali note bloccanti del goal precedente nel loro ambito.
+
+**Registro pianificazione — 15/09/2026:** aggiunta la Fase 12 G12.1–G12.9 per
+la creazione controllata della stagione 2026/2027, la copia selettiva di
+palestre/attività, le squadre target come bozze minime, la selezione granulare
+di atleti/collaboratori, la continuità derivata dei genitori e la conservazione
+integrale della 2025/2026. Modificato solo
+`implementation_plan_redesign.md`; nessuna migration, mutation DB o creazione
+stagione eseguita durante la pianificazione.
+
+# 23. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
 
