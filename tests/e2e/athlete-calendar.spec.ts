@@ -19,26 +19,27 @@ test.describe('athlete calendar responsive and accessible views', () => {
     test.skip(!athleteEmail || !athletePassword, 'Set E2E_ATHLETE_EMAIL and E2E_ATHLETE_PASSWORD to run athlete calendar checks.')
   })
 
-  test('opens the desktop weekly agenda and keeps month view available', async ({ page }) => {
+  test('opens the desktop month view and keeps weekly view available', async ({ page }) => {
     await login(page)
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/athlete/calendar')
 
     await expect(page.getByRole('heading', { name: 'Gestione Calendario', exact: true })).toBeVisible()
-    await expect(page.locator('.fc-timegrid')).toBeVisible({ timeout: 30_000 })
+    await expect(page.locator('.fc-daygrid')).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('button', { name: 'Settimana', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Mese', exact: true })).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
   })
 
-  test('keeps the compact agenda usable on mobile without horizontal overflow', async ({ page }) => {
+  test('opens the month view on mobile and keeps the agenda available without horizontal overflow', async ({ page }) => {
     await login(page)
     await page.setViewportSize({ width: 375, height: 812 })
     await page.goto('/athlete/calendar')
 
-    await expect(page.getByLabel('Agenda eventi')).toBeVisible({ timeout: 30_000 })
-    await expect(page.getByRole('button', { name: 'Agenda', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await page.getByRole('button', { name: 'Mese', exact: true }).click()
+    await expect(page.getByLabel('Calendario mensile')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('button', { name: 'Mese', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    await page.getByRole('button', { name: 'Agenda', exact: true }).click()
+    await expect(page.getByLabel('Agenda eventi')).toBeVisible()
     await expect(page.getByLabel('Calendario mensile')).toBeVisible()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
   })

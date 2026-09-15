@@ -134,10 +134,10 @@ describe('AthleteCalendarManager load states', () => {
     render(<AthleteCalendarManager />)
 
     await waitFor(() => expect(screen.getByText('Allenamento mese')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: /^Mese$/ }))
+    expect(screen.getByRole('button', { name: /^Mese$/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(screen.getByRole('button', { name: /settembre.*2 eventi/i }))
 
-    expect(screen.getByRole('button', { name: /^Mese$/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getAllByText('U16').length).toBeGreaterThan(0)
     expect(screen.getByText('Risposta:')).toBeTruthy()
     expect(screen.getAllByText('Forse').length).toBeGreaterThan(0)
@@ -181,6 +181,7 @@ describe('AthleteCalendarManager load states', () => {
     render(<AthleteCalendarManager />)
 
     await waitFor(() => expect(screen.getByText('Allenamento famiglia')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /1 settembre.*1 eventi/i }))
     expect(screen.getByText(/La risposta è gestita dal delegato autorizzato/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Partecipo' })).toBeNull()
     expect(global.fetch).toHaveBeenCalledWith('/api/athlete/calendar', expect.objectContaining({ signal: expect.any(AbortSignal) }))

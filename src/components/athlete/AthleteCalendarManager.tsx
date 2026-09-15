@@ -41,11 +41,9 @@ export default function AthleteCalendarManager() {
   const [earlyAbsenceOpen, setEarlyAbsenceOpen] = useState(false)
 
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
-  const [mobileViewMode, setMobileViewMode] = useState<'agenda'|'calendar'>('agenda')
+  const [mobileViewMode, setMobileViewMode] = useState<'agenda'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
-  // Desktop opens on the operational weekly agenda; month remains available
-  // through FullCalendar's view switcher.
-  const [calView, setCalView] = useState<'month'|'week'>('week')
+  const [calView, setCalView] = useState<'month'|'week'>('month')
   const [filterEventKind, setFilterEventKind] = useState<CalendarEventKindFilter>('')
 
   const fetchControllerRef = useRef<AbortController | null>(null)

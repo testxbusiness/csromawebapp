@@ -259,7 +259,7 @@ Per un goal `[x]` aggiungere sempre:
 | G11.3 Calendario mensile mobile condiviso | [x] | G11.1 | Completato il 07/09/2026; aggiunto `MonthlyMobileCalendar` condiviso con griglia 7×6, indicatori/legenda per tipologia, gestione eventi multi-giorno, agenda della data selezionata, preview desktop hover/focus e supporto reduced motion. Integrato sotto 768px in coach/admin; FullCalendar mantenuto da 768px. Suite Jest completa 62/217, build Next, typecheck e diff check superati. |
 | G11.4 Integrazione calendario coach mobile | [x] | G11.2,G11.3 | Completato il 07/09/2026; integrato `MonthlyMobileCalendar` in `/coach/calendar` mantenendo `TeamContext`, filtri su squadre autorizzate, dettaglio/modifica, form e mutation coach esistenti. Il tap sul giorno seleziona la giornata e l’agenda, senza aprire eventi; l’agenda vuota offre “Nuovo evento per questa giornata” con data/ora locale precompilata. Calendario mobile visibile anche con zero eventi o filtro vuoto; error/denied/offline e risultati vuoti restano espliciti. Modificati `src/components/coach/CoachCalendarManager.tsx`, `src/components/calendar/MonthlyMobileCalendar.tsx` e relativo test. Jest completo 62 suite/218 test, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. |
 | G11.5 Integrazione calendario admin mobile | [x] | G11.2,G11.3 | Completato il 07/09/2026; integrato `MonthlyMobileCalendar` in `/admin/calendar`, spostati i filtri multi-selezione squadra/tipologia/intervallo in uno sheet mobile accessibile con conteggio, Applica e Reset; mantenuti vista elenco, export Excel, CRUD/modale evento e aggiunta selezione bulk con eliminazione tramite le DELETE admin esistenti. Il calendario carica l’intervallo visibile con `visible=1`, limite 500 e overlap multi-giorno; l’API valida date, ordine e ampiezza dell’intervallo mantenendo `requireGlobalRole('admin')`, paginazione legacy e route/schema/RLS invariati. Esteso il recupero FullCalendar al range visibile. Remediation del 07/09/2026: corretto il loop di refresh desktop causato da `datesSet` che smontava il calendario mentre `loading` era attivo; il caricamento iniziale resta bloccante, i refresh successivi mantengono il calendario montato e deduplicano il range. `npx tsc --noEmit`, `npm test -- --runInBand` (62 suite/218 test), `npm run build` e `git diff --check` superati. |
-| G11.5a Vista mese atleta condivisa e coerenza cross-role | [x] | G11.3,G11.4,G11.5 | Completato il 07/09/2026: integrato `MonthlyMobileCalendar` nella sola vista Mese mobile atleta/famiglia; Agenda resta il default. Aggiunto renderer agenda role-specifico per mantenere squadre, conflitti, stato/deadline e `AttendanceControl` autorizzato senza pulsanti annidati; label vista uniformata a `Mese`. FullCalendar e default desktop, route, filtri, contesto subject/team e autorizzazioni invariati. Test mirati 23/23, suite completa 62 suite/220 test, typecheck, build e diff check superati. |
+| G11.5a Vista mese atleta condivisa e coerenza cross-role | [x] | G11.3,G11.4,G11.5 | Completato il 07/09/2026: integrato `MonthlyMobileCalendar` nella sola vista Mese mobile atleta/famiglia; inizialmente Agenda era il default. Aggiunto renderer agenda role-specifico per mantenere squadre, conflitti, stato/deadline e `AttendanceControl` autorizzato senza pulsanti annidati; label vista uniformata a `Mese`. FullCalendar e default desktop, route, filtri, contesto subject/team e autorizzazioni invariati. Test mirati 23/23, suite completa 62 suite/220 test, typecheck, build e diff check superati. Default aggiornato il 15/09/2026 a Mese su mobile e desktop per allineamento con il calendario coach. |
 | G11.6 Test e gate calendario cross-role | [!] | G11.4,G11.5,G11.5a | BLOCCATO il 07/09/2026 dopo verifiche unit/component, Route Handler e gate tecnici superati. Su server production dedicato, E2E admin 5/5, atleta 2/2, famiglia 2/2 e coach 1/1 passano; coach touch 1/1 passa. Il run dev parallelo precedente resta flaky (`ERR_ABORTED`/sidebar non trovata), quindi non viene usato come evidenza UI. Aggiunti casi MonthlyMobileCalendar per quattro tipi, tipo sconosciuto, multiday, ordinamento locale e navigazione tastiera, smoke mobile Agenda/Mese famiglia/atleta, sei viewport + dark/reduced-motion coach, touch coach, mese mobile/desktop admin e GET admin per intervalli/limite/overlap. Blocco esterno: Chromium headless non applica lo zoom browser 200% da tastiera e il servizio Computer Use interattivo non si avvia (`Sky Computer Use service startup request failed`); resta da eseguire zoom reale e dark mode completa per ogni ruolo, poi G11.V. |
 | G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
@@ -1611,10 +1611,12 @@ Arricchisci il payload calendario atleta con team id/name/code e dati necessari 
 
 ---
 
-## G3.2 — Agenda mobile come vista default
+## G3.2 — Agenda mobile come vista default (decisione superseduta)
 
-**Obiettivo**  
-Sostituire il mese come default mobile con agenda/lista.
+**Obiettivo storico**
+Sostituire il mese come default mobile con agenda/lista. Dal 15/09/2026 il
+default è stato riallineato a Mese per atleta/famiglia, come nel calendario
+coach; Agenda resta una vista alternativa.
 
 **Task**
 - [ ] Raggruppare per giorno.
@@ -1724,7 +1726,8 @@ Implementa deduplica multi-team e segnalazione conflitti temporali nel calendari
 Adattare il calendario ai desktop senza trasformarlo in UI admin.
 
 **Task**
-- [x] Agenda/settimana default desktop.
+- [x] Agenda/settimana default desktop (superseduto il 15/09/2026: Mese è ora
+  il default atleta/famiglia).
 - [x] Vista mese disponibile.
 - [x] Filtri tipo/team.
 - [x] Detail laterale.
@@ -4781,15 +4784,16 @@ preservato le garanzie server-side. Non cambiare schema, RLS o route.
 
 **Decisione approvata e implementata il 07/09/2026**
 Estendere il mese compatto della Fase 11 all'area atleta e al calendario
-familiare che la riutilizza. La scelta conserva il requisito di `re_design.md`
-§9.2: Agenda è il default mobile atleta, Mese è una vista secondaria.
+familiare che la riutilizza. Il default iniziale dell'area atleta è ora Mese,
+allineato al calendario coach, sia su mobile sia su desktop; Agenda resta
+disponibile come vista alternativa.
 Eseguire questo goal prima di G11.6 perché il gate verifichi il comportamento
 finale di tutti i ruoli, senza riaprire o ripetere G11.3–G11.5 già completati.
 
 **Task**
 - [x] Usare `MonthlyMobileCalendar` anche nell'area atleta sotto 768 px,
   sostituendo soltanto l'attuale vista mese mobile basata su FullCalendar.
-- [x] Conservare la scelta `Agenda / Mese` nell'area atleta, con `Agenda`
+- [x] Conservare la scelta `Agenda / Mese` nell'area atleta, con `Mese`
   inizialmente selezionata e l'agenda su più giornate ancora disponibile.
 - [x] Nell'agenda giornaliera del mese preservare squadra/e, conflitto,
   stato/deadline della presenza e risposta autorizzata. Riutilizzare
@@ -4802,16 +4806,16 @@ finale di tutti i ruoli, senza riaprire o ripetere G11.3–G11.5 già completati
   navigazione temporale fra ruoli, mantenendo filtri e azioni pertinenti a
   ciascun ruolo. Preservare tap sul giorno → agenda e tap sull'evento → dettaglio,
   con controlli presenza separati e senza pulsanti annidati.
-- [x] Conservare FullCalendar da 768 px e i default desktop attuali:
-  settimana per atleta/famiglia, mese per coach/admin.
+- [x] Conservare FullCalendar da 768 px e i default desktop attuali: mese per
+  atleta/famiglia, coach e admin.
 - [x] Preservare stati loading/error/offline/denied/empty/filtered-empty,
   deduplica multi-team e invalidazione del contesto al cambio subject.
 
 **Definition of Done**
 - lo stesso componente mensile mobile è utilizzato nei tre ruoli e nel
   contesto familiare, senza perdita delle informazioni specifiche dell'atleta;
-- Agenda resta il default mobile atleta e non viene sostituita dall'agenda
-  della sola giornata selezionata;
+- Mese resta il default mobile atleta e non viene sostituito dall'agenda della
+  sola giornata selezionata; Agenda continua a mostrare più giornate;
 - le risposte presenza restano disponibili solo quando autorizzate e i dati
   del subject precedente non restano visibili dopo il cambio profilo;
 - desktop, route, contratti autorizzativi e azioni gestionali restano coerenti
@@ -4823,7 +4827,7 @@ finale di tutti i ruoli, senza riaprire o ripetere G11.3–G11.5 già completati
 ```text
 /goal G11.5a
 Estendi MonthlyMobileCalendar alla sola vista Mese mobile atleta/famiglia.
-Conserva Agenda come default e preserva nell'agenda giornaliera squadra,
+Conserva Mese come default e preserva nell'agenda giornaliera squadra,
 conflitti, stato/deadline e risposta presenza autorizzata usando i controlli
 esistenti. Uniforma etichette, selezione vista e navigazione temporale tra ruoli,
 mantenendo filtri e azioni pertinenti. Lascia invariati i default desktop,
@@ -4846,6 +4850,10 @@ ripetere i goal già completati. Il gate complessivo resta G11.6.
   precedente `hidden` sul bottone era sovrascritto da `.cs-btn`) e centrato su
   desktop il `EventDetailModal`, mantenendo il bottom sheet mobile. Suite
   completa 62/220, build e `git diff --check` superati.
+- 15/09/2026: aggiornati i default di `AthleteCalendarManager` a Mese su mobile
+  (`MonthlyMobileCalendar`) e desktop (`FullCalendarWidget`), allineandoli al
+  calendario coach. Aggiornati il test componente e lo scenario E2E desktop;
+  verifiche eseguite: test mirato atleta calendario, typecheck e `git diff --check`.
 
 ---
 
@@ -4963,8 +4971,9 @@ La fase è superata solo se:
   aprire una giornata;
 - il calendario atleta/famiglia/coach/admin è usabile a 320 px senza overflow
   e mantiene capacità operative e default desktop;
-- Agenda resta il default mobile atleta/famiglia; la vista Mese condivisa
-  preserva contesto squadra, conflitti e presenze con i permessi del subject;
+- Mese è il default mobile atleta/famiglia; la vista Agenda condivisa resta
+  disponibile e la vista Mese preserva contesto squadra, conflitti e presenze
+  con i permessi del subject;
 - i filtri non ampliano mai i dati autorizzati;
 - i dati mensili non richiedono il caricamento indiscriminato dell'intero
   storico;
