@@ -847,19 +847,19 @@ button.cs-list-row{ font:inherit; }
   border-bottom: 0;
 }
 @media (max-width:767px){
-  /* The personal mobile dashboard keeps the navy protagonist as the dominant
-     surface; family retains the existing Panel presentation. */
-  .cs-athlete-dashboard[data-dashboard-context="personal"] #athlete-events.cs-athlete-dashboard__protagonist-panel{
+  /* Personal and delegated mobile dashboards share the same visual hierarchy;
+     family keeps only its contextual identity and permission differences. */
+  .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-events.cs-athlete-dashboard__protagonist-panel{
     padding: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: var(--cs-elevation-0);
   }
-  .cs-athlete-dashboard[data-dashboard-context="personal"] #athlete-events .cs-athlete-dashboard__featured-event{
+  .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-events .cs-athlete-dashboard__featured-event{
     margin-top: 0;
   }
-  .cs-athlete-dashboard[data-dashboard-context="personal"] #athlete-events .cs-athlete-dashboard__agenda-next{
+  .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-events .cs-athlete-dashboard__agenda-next{
     margin-top: 20px;
     padding: 20px;
     border: 1px solid var(--cs-border-canonical);
@@ -867,17 +867,17 @@ button.cs-list-row{ font:inherit; }
     background: var(--cs-surface);
     box-shadow: var(--cs-elevation-0);
   }
-  .cs-athlete-dashboard[data-dashboard-context="personal"] #athlete-events .cs-athlete-dashboard__agenda-next .cs-list-row{
+  .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-events .cs-athlete-dashboard__agenda-next .cs-list-row{
     padding-inline: 0;
   }
-  .cs-athlete-dashboard[data-dashboard-context="personal"] #athlete-messages.cs-athlete-dashboard__service-panel{
+  .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-messages.cs-athlete-dashboard__service-panel{
     padding: 20px;
     border: 1px solid var(--cs-border-canonical);
     border-radius: var(--cs-r-lg);
     background: var(--cs-surface);
     box-shadow: var(--cs-elevation-0);
   }
-  .cs-athlete-dashboard[data-dashboard-context="personal"] #athlete-messages .cs-athlete-dashboard__service-list .cs-list-row{
+  .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-messages .cs-athlete-dashboard__service-list .cs-list-row{
     padding-inline: 0;
   }
 }

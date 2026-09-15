@@ -6990,6 +6990,28 @@ questa modifica documentale; nessun goal avviato né impostazione del modello ca
   familiare/delegata restano invariati.
 - Verifiche: test dashboard mirato, typecheck e `git diff --check` superati.
 
+**Evidenze screenshot e stato genitore — 15/09/2026**
+
+- Gli screenshot allegati dall’utente a 400×905 vengono acquisiti come
+  evidenza visuale valida per il momento: dashboard atleta personale in light
+  e dark, card messaggi mobile, prossimi eventi, stati di assenza, selezione
+  profilo familiare e dashboard con profili atleta collegati.
+- I controlli aggiuntivi indicati nel gate (viewport 320/375/768/1440,
+  tastiera/focus, smoke test autenticati completi, verifica offline e ulteriori
+  prove cross-role) **non verranno eseguiti in questa fase**, salvo nuove
+  indicazioni. Restano quindi documentati come non verificati, non come falliti.
+- Gli errori `401 Unauthorized` visibili nella console degli screenshot sono
+  esclusi dalla valutazione: l’utente ha chiarito che dipendono dalla password
+  errata usata nel test.
+- Rilievo risolto il 15/09/2026: entrando come genitore e selezionando un
+  atleta, la dashboard delegata usa ora la stessa gerarchia mobile della vista
+  atleta (protagonista navy, agenda separata e servizi coerenti), mantenendo
+  l’etichetta “Area familiare”, il profilo selezionato e i permessi read-only.
+- File modificato: `src/app/globals.css`. Nessuna modifica a dati, API,
+  autorizzazioni o azioni di presenza.
+- Verifiche: `src/components/athlete/AthleteDashboard.test.tsx` (24 test),
+  `npx tsc --noEmit` e `git diff --check` superati.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
