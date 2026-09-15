@@ -265,7 +265,7 @@ Per un goal `[x]` aggiungere sempre:
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
 | G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Parziale il 15/09/2026: aggiunti migration/index e contratti Zod tipizzati con test; PK `season_profiles(profile_id, season_id)` e FK `season_profiles → seasons ON DELETE RESTRICT` preservati. Opzione 1 eseguita su locale; verifica staging completata e, su conferma esplicita, applicata la sola `20260915112357_season_rollover_invariants.sql`: history remota aggiornata, un solo indice equivalente `unique_active_season`, commento `is_active` verificato, vincoli idempotenti e RLS richiesti presenti. Resta non dimostrata l’applicabilità dell’intera catena da zero perché la baseline `20251007152643_master_migration_fixed.sql` fallisce nel database shadow con sintassi preesistente (`CREATE EXTENSION` senza terminatore prima del successivo `CREATE`). Advisor staging: warning preesistenti su due `SECURITY DEFINER` esposte e leaked-password protection. Nessuna altra migration o mutazione funzionale eseguita. |
-| G12.2 API bozza stagione 2026/2027 | [ ] | G12.1 | Creare la stagione target inattiva tramite Route Handler admin validato, senza copiare o attivare dati. |
+| G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
 | G12.3 Copia selettiva palestre e attività | [ ] | G12.2 | Copiare nella target soltanto le anagrafiche scelte, con nuovi ID e senza dipendenze operative. |
 | G12.4 Bozze e mappa squadre target | [ ] | G12.3 | Creare squadre 2026/2027 come bozze minime o mapparle a target esistenti, senza configurazioni stagionali. |
 | G12.5 Preview profili candidati | [ ] | G12.4 | Restituire candidati, ruoli stagionali, genitori collegati e team sorgente/destinazione senza mutazioni. |
@@ -7229,6 +7229,34 @@ identico; non-admin 403; errore DB visibile; zero mutazioni fuori `seasons`.
 manager pending/error/success, `npx tsc --noEmit`, suite mirata, build e diff
 check.
 
+**Registro esecuzione G12.2 — 15/09/2026:** aggiunto
+`src/app/api/admin/seasons/route.ts` come confine server per la creazione o il
+recupero idempotente della sola bozza `Stagione 2026/2027`, con periodo
+`2026-09-01` → `2027-06-30` e `is_active = false`. Il controllo
+`requireGlobalRole('admin')` precede la creazione dell'admin client. Il payload
+è validato server-side; date invertite, nome/periodo discordanti, target già
+attiva, sovrapposizioni e collisioni vengono rifiutati con errori espliciti.
+Un target inattivo già esistente viene restituito senza insert. L'endpoint non
+tocca `profiles`, account, relazioni, `season_profiles`, team o la stagione
+2025/2026.
+
+`SeasonsManager` usa ora il Route Handler per la creazione; il modal resta
+aperto durante pending/failure, mostra l'errore restituito e si chiude solo su
+successo. Non è stata eseguita alcuna mutazione su staging/produzione e non è
+stata introdotta alcuna migration o attivazione.
+
+File modificati: `src/app/api/admin/seasons/route.ts`,
+`src/app/api/admin/seasons/route.test.ts`,
+`src/components/admin/SeasonsManager.tsx`,
+`src/components/admin/SeasonsManager.test.tsx`,
+`src/components/admin/SeasonsModal.tsx` e questo piano.
+
+Verifiche eseguite: suite mirata Route Handler/manager — 2 suite, 11 test
+superati; `npx tsc --noEmit`; `npm run build`; `git diff --check`.
+La verifica runtime autenticata nel browser e una query DB post-creazione non
+sono state eseguite perché avrebbero richiesto una mutazione o credenziali
+operative; non vengono dichiarati esiti per queste verifiche.
+
 ## G12.3 — Copia selettiva di palestre e attività
 
 **Obiettivo:** preparare le anagrafiche riutilizzabili della 2026/2027 senza
@@ -7475,7 +7503,7 @@ assegnare l'intera fase in un singolo prompt. G12.9 richiede conferma umana per
 le mutazioni reali e non deve essere avviato come automazione non presidiata.
 
 ```text
-Esegui esclusivamente il goal G12.1 della sezione “Rollover stagione 2026/2027
+Esegui esclusivamente il goal G12.2 della sezione “Rollover stagione 2026/2027
 e selezione profili” in implementation_plan_redesign.md.
 Leggi AGENTS.md, re_design.md, il contratto completo della Fase 12 e il goal.
 Controlla stato Git, schema/migrazioni Supabase e prerequisiti; non rifare goal
@@ -7491,7 +7519,7 @@ produzione, salvo che il goal G12.9 e l'utente le abbiano autorizzate
 esplicitamente.
 ```
 
-Sostituire soltanto `G12.1` con l'ID successivo. Prima di ogni esecuzione,
+Sostituire soltanto `G12.2` con l'ID successivo. Prima di ogni esecuzione,
 risolvere eventuali note bloccanti del goal precedente nel loro ambito.
 
 **Registro pianificazione — 15/09/2026:** aggiunta la Fase 12 G12.1–G12.9 per

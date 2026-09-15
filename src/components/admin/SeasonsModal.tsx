@@ -27,7 +27,9 @@ interface SeasonsModalProps {
   season?: Season | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: Omit<Season, 'id'>) => void
+  onSubmit: (data: Omit<Season, 'id'>) => void | Promise<void>
+  isSubmitting?: boolean
+  error?: string | null
   trigger?: React.ReactNode
 }
 
@@ -36,6 +38,8 @@ export function SeasonsModal({
   open,
   onOpenChange,
   onSubmit,
+  isSubmitting = false,
+  error = null,
   trigger
 }: SeasonsModalProps) {
   const [formData, setFormData] = useState({
@@ -63,17 +67,16 @@ export function SeasonsModal({
     }
   }, [season, open])
 
+  const isEditing = !!season?.id
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSubmit({
+    void onSubmit({
       ...formData,
-      start_date: new Date(formData.start_date).toISOString(),
-      end_date: new Date(formData.end_date).toISOString()
+      start_date: isEditing ? new Date(formData.start_date).toISOString() : formData.start_date,
+      end_date: isEditing ? new Date(formData.end_date).toISOString() : formData.end_date
     })
-    onOpenChange(false)
   }
-
-  const isEditing = !!season?.id
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -149,7 +152,8 @@ export function SeasonsModal({
             >
               Annulla
             </Button>
-            <Button type="submit">
+            {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+            <Button type="submit" loading={isSubmitting}>
               {isEditing ? 'Aggiorna' : 'Crea'} Stagione
             </Button>
           </DialogFooter>

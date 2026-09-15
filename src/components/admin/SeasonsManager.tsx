@@ -23,6 +23,8 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
   const [loading, setLoading] = useState(true)
   const [editingSeason, setEditingSeason] = useState<Season | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const loadSeasons = useCallback(async () => {
@@ -40,14 +42,29 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
   }, [loadSeasons])
 
   const handleCreateSeason = async (seasonData: Omit<Season, 'id'>) => {
-    const { error } = await supabase
-      .from('seasons')
-      .insert([seasonData])
-
-    if (!error) {
+    setIsSubmitting(true)
+    setSubmitError(null)
+    try {
+      const response = await fetch('/api/admin/seasons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(seasonData),
+      })
+      const payload: unknown = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+          ? payload.error
+          : 'Impossibile creare la stagione'
+        setSubmitError(message)
+        return
+      }
       setModalOpen(false)
       setEditingSeason(null)
-      loadSeasons()
+      await loadSeasons()
+    } catch {
+      setSubmitError('Impossibile contattare il server. Riprova.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -121,6 +138,7 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
           <Button
             onClick={() => {
               setEditingSeason(null)
+              setSubmitError(null)
               setModalOpen(true)
             }}
           >
@@ -132,8 +150,14 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
       <SeasonsModal
         season={editingSeason}
         open={modalOpen}
-        onOpenChange={setModalOpen}
+        onOpenChange={(open) => {
+          if (!isSubmitting) {
+            setModalOpen(open)
+          }
+        }}
         onSubmit={handleSubmit}
+        isSubmitting={isSubmitting}
+        error={submitError}
       />
 
       <div className="cs-card cs-card--primary overflow-hidden">
