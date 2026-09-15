@@ -6965,6 +6965,21 @@ questa modifica documentale; nessun goal avviato né impostazione del modello ca
   disponibile in questo ambiente. Il gate visuale DA.7 resta aperto. Nessun
   deploy, push o modifica database eseguiti.
 
+**Follow-up screenshot deploy preview — 15/09/2026**
+
+- Gli screenshot forniti dall’utente a 400×905 mostrano correttamente entrambe
+  le varianti light/dark, il protagonista, l’agenda compatta, la bottom
+  navigation e la floating accessibility control; la console visibile non
+  riporta errori.
+- Sono stati rilevati due difetti reali del payload deployato: il wrapper
+  dell’assenza restava vuoto quando `requires_confirmation` era falso e la
+  partita campionato poteva duplicare il prossimo impegno perché la dashboard
+  API non selezionava `championship_matches.event_id`.
+- Correzioni applicate: render del controllo solo con conferma effettivamente
+  prevista e propagazione dell’`event_id` reale per la deduplicazione
+  conservativa. Verifiche dopo la correzione: dashboard mirata 24 test,
+  suite completa 73 suite/301 test, typecheck, build e diff check superati.
+
 # 22. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

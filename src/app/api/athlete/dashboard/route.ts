@@ -253,7 +253,7 @@ export async function GET(request: NextRequest) {
       const { data: nextMatch } = await dataClient
         .from('championship_matches')
         .select(`
-          id, match_day, match_date, start_time, location_text, status,
+          id, event_id, match_day, match_date, start_time, location_text, status,
           home_club_team:home_club_team_id ( id, name, code, is_home_club, team_id ),
           away_club_team:away_club_team_id ( id, name, code, is_home_club, team_id )
         `)
