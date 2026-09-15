@@ -268,7 +268,7 @@ Per un goal `[x]` aggiungere sempre:
 | G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
 | G12.3 Copia selettiva palestre e attività | [!] | G12.2 | Implementati preview admin e batch transazionale idempotente; resta da eseguire la verifica DB su fixture locale/staging autorizzata. |
 | G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione; G12.3 resta `[!]` per la sua verifica DB separata. |
-| G12.5 Preview profili candidati | [ ] | G12.4 | Restituire candidati, ruoli stagionali, genitori collegati e team sorgente/destinazione senza mutazioni. |
+| G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
 | G12.6 Esecuzione atomica iscrizioni | [ ] | G12.5 | Creare solo `season_profiles` e membership squadra scelte nella target, preservando integralmente la source. |
 | G12.7 Wizard admin selezione profili | [ ] | G12.6 | UI a passi con includi/escludi, stessa/altra squadra, riepilogo e conferma esplicita. |
 | G12.8 Isolamento runtime per stagione attiva | [ ] | G12.6 | Impedire letture miste tra stagione archiviata e attiva in atleta, famiglia, coach e admin. |
@@ -7476,6 +7476,33 @@ presente nella source non può essere iniettata via ID client.
 **Verifiche:** test servizio/route con atleta stessa squadra, cambio squadra,
 multi-team, collaboratore senza team, familiare collegato, già migrato, escluso
 e ID estraneo; privacy del payload, auth admin, typecheck e diff check.
+
+**Registro esecuzione G12.5 — 15/09/2026 — PASS:** aggiunti il servizio
+server `src/server/admin/season-rollover-profiles.ts` e il Route Handler
+read-only `GET /api/admin/season-profiles`. La preview legge esclusivamente
+`season_profiles` della source e deduplica per persona, separando atleti e
+collaboratori; conserva tutte le membership source multi-team con
+`jersey_number`/ruolo, deriva solo i target presenti nella mappa autorizzata
+G12.4 e riporta lo stato target già esistente senza proporre assegnazioni come
+persistite. I familiari compaiono soltanto come contesto per atleti, con
+relazione attiva e nomi dei permessi abilitati; non sono candidati stagionali.
+Il payload non include email, note personali, dati medici, credenziali o auth
+user ID. Warning e classificazione sono tipizzati; ID estranei non possono
+iniettare candidati perché la sorgente della lista è server-side.
+
+File modificati: `src/server/admin/season-rollover-profiles.ts`,
+`src/server/admin/season-rollover-profiles.test.ts`,
+`src/app/api/admin/season-profiles/route.ts`,
+`src/app/api/admin/season-profiles/route.test.ts` e questo piano.
+
+Verifiche eseguite: test servizio/Route Handler — 2 suite, 5 test superati;
+coperti multi-team, mapping mancante, collaboratore senza squadra, stato
+inattivo, familiare/permessi, stato target, privacy del payload, validazione ID
+e 403 non-admin; `npx tsc --noEmit`; `git diff --check`. Non eseguiti build,
+E2E, query DB runtime o advisor: non richiesti dal goal e non necessari per un
+endpoint read-only; non viene dichiarato alcun esito per tali verifiche.
+Nessuna migration, insert/update/delete, deploy, attivazione o accesso a
+staging/produzione eseguito. G12.6 e goal successivi non avviati.
 
 ## G12.6 — Esecuzione atomica delle iscrizioni selezionate
 
