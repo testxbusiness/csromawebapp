@@ -6203,7 +6203,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.6.R5 Agenda non ridondante | [x] | DA.6.R4 | Completato il 15/09/2026; righe compatte con data/ora relativa, tipo, squadre aggregate, luogo e affordance unica; titolo completo conservato nel dettaglio/accessibilità; test 0/1/3 eventi, multi-team, titolo lungo e apertura dettaglio superati |
 | DA.6.R6 Prossima partita sportiva | [x] | DA.6.R5 | Completato il 15/09/2026; riepilogo nascosto solo con legame esplicito evento-partita, nessun matching euristico; dati incompleti/amichevoli restano visibili |
 | DA.6.R7 Servizi secondari mobile | [x] | DA.6.R6 | Completato il 15/09/2026; massimo due preview messaggi su mobile con conteggio nel titolo e stato non duplicato, quota con composizione stabile/importo italiano e stato paid/urgenza preservati, membership con titolo “Le tue squadre” e nome/numero sulla stessa riga |
-| DA.6.R8 Identità atleta e floating action | [ ] | DA.6.R7 | Copy atleta, decorazione discreta e pulsante flottante senza sovrapposizioni |
+| DA.6.R8 Identità atleta e floating action | [x] | DA.6.R7 | Completato il 15/09/2026; navigazione atleta uniformata a “Oggi”, label home dell’header resa non amministrativa, indicatore di aggiornamento spostato in-flow con stato accessibile e decorazione campo molto discreta limitata alla scheda protagonista scura. Typecheck, 3 suite mirate/30 test e `git diff --check` superati; screenshot/browser test non eseguiti su richiesta, restano nel gate DA.6/DA.7. |
 | DA.7 Gate finale e handoff | [ ] | DA.6.R1–DA.6.R8 | Evidenze visive e funzionali, esito esplicito |
 
 ## Contratto comune ai sette goal
@@ -6851,6 +6851,27 @@ file, test e note reali.
   testi/comandi e nessuna nuova funzione introdotta.
 - Verifiche: viewport mobile, safe-area, tastiera, zoom 200%, reduced motion e
   tema chiaro/scuro.
+
+**Esito DA.6.R8 — 15/09/2026**
+
+- La voce atleta della sidebar usa “Oggi”; il bottom navigation era già coerente.
+- Il link del marchio usa un nome accessibile operativo (“Vai alla home”) senza
+  copy “Dashboard” amministrativo.
+- L’indicatore di aggiornamento della dashboard non è più flottante/fixed: è uno
+  stato in-flow con `role="status"`, `aria-live="polite"`, contrasto da token e
+  animazione disattivata con `prefers-reduced-motion`.
+- La scheda protagonista navy mantiene il contrasto esistente e riceve soltanto
+  una decorazione campo a bassa opacità, non interattiva e senza impatto sul
+  layout; il tema chiaro non riceve decorazioni aggiuntive.
+- File modificati: `src/components/navigation/RoleSidebar.tsx`,
+  `src/components/navigation/AppHeader.tsx`, `src/app/dashboard/page.tsx`,
+  `src/app/globals.css`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati atleta/header/bottom
+  navigation — 3 suite, 30 test; suite Jest completa — 73 suite, 299 test;
+  `npm run build`; `git diff --check`.
+- Screenshot, browser smoke, zoom reale 200% e verifica tastiera su viewport
+  multipli non eseguiti in questo ambiente; restano nel gate DA.6/DA.7. Nessuna
+  nuova funzione, route, autorizzazione o modifica dati introdotta.
 
 ## DA.7 — Gate finale e handoff
 

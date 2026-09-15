@@ -715,6 +715,7 @@ button.cs-list-row{ font:inherit; }
   .cs-athlete-dashboard__fee-row .cs-list-row__trailing{ margin-left: auto; }
 }
 .cs-athlete-dashboard__featured-event{
+  position: relative;
   margin: 4px 0;
   overflow: hidden;
   border: 1px solid var(--cs-navy);
@@ -723,7 +724,25 @@ button.cs-list-row{ font:inherit; }
   background: var(--cs-navy);
   color: #fff;
 }
+.cs-athlete-dashboard__featured-event::before{
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 42%;
+  pointer-events: none;
+  content: '';
+  opacity: .14;
+  background:
+    linear-gradient(90deg, transparent 49.5%, rgba(255,255,255,.8) 50%, transparent 50.5%),
+    linear-gradient(0deg, transparent 49.5%, rgba(255,255,255,.8) 50%, transparent 50.5%);
+  background-size: 100% 100%, 100% 100%;
+  border-left: 1px solid rgba(255,255,255,.55);
+  border-radius: 50% 0 0 50%;
+}
 .cs-athlete-dashboard__featured-event-row{
+  position: relative;
+  z-index: 1;
   align-items: flex-start;
   min-height: 0;
   padding: var(--cs-sp-5);
@@ -779,11 +798,40 @@ button.cs-list-row{ font:inherit; }
   color: #fff;
 }
 .cs-athlete-dashboard__featured-event > .cs-athlete-dashboard__featured-attendance{
+  position: relative;
+  z-index: 1;
   margin: 0 var(--cs-sp-5) var(--cs-sp-5);
   border-radius: var(--cs-r-md);
   background: var(--cs-surface);
   color: var(--cs-text);
   padding: var(--cs-sp-3);
+}
+.cs-dashboard-refresh-status{
+  display: flex;
+  align-items: center;
+  gap: var(--cs-sp-2);
+  width: fit-content;
+  margin: var(--cs-sp-3) auto 0;
+  padding: var(--cs-sp-2) var(--cs-sp-3);
+  border: var(--cs-border-width) solid var(--cs-border-canonical);
+  border-radius: var(--cs-r-pill);
+  background: var(--cs-surface);
+  color: var(--cs-text-secondary);
+  font-size: var(--cs-type-body-small-size);
+  font-weight: 600;
+}
+.cs-dashboard-refresh-status__indicator{
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: var(--cs-brand-red);
+  animation: cs-dashboard-refresh-pulse 1.2s ease-in-out infinite;
+}
+@keyframes cs-dashboard-refresh-pulse{
+  50%{ opacity: .35; }
+}
+@media (prefers-reduced-motion: reduce){
+  .cs-dashboard-refresh-status__indicator{ animation: none; }
 }
 .cs-athlete-dashboard__featured-attendance > [aria-label]{ margin-top: 0; }
 .cs-athlete-dashboard__agenda-next{

@@ -104,7 +104,7 @@ const coachMoreItems: NavItem[] = [
 ]
 
 const athleteItems: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LineChart },
+  { href: '/dashboard', label: 'Oggi', icon: LineChart },
   { href: '/athlete/campionati', label: 'Campionati', icon: Trophy },
   { href: '/athlete/calendar', label: 'Calendario', icon: CalendarClock },
   { href: '/athlete/messages', label: 'Messaggi', icon: Mail },
