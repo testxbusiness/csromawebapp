@@ -267,7 +267,7 @@ Per un goal `[x]` aggiungere sempre:
 | G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Parziale il 15/09/2026: aggiunti migration/index e contratti Zod tipizzati con test; PK `season_profiles(profile_id, season_id)` e FK `season_profiles → seasons ON DELETE RESTRICT` preservati. Opzione 1 eseguita su locale; verifica staging completata e, su conferma esplicita, applicata la sola `20260915112357_season_rollover_invariants.sql`: history remota aggiornata, un solo indice equivalente `unique_active_season`, commento `is_active` verificato, vincoli idempotenti e RLS richiesti presenti. Resta non dimostrata l’applicabilità dell’intera catena da zero perché la baseline `20251007152643_master_migration_fixed.sql` fallisce nel database shadow con sintassi preesistente (`CREATE EXTENSION` senza terminatore prima del successivo `CREATE`). Advisor staging: warning preesistenti su due `SECURITY DEFINER` esposte e leaked-password protection. Nessuna altra migration o mutazione funzionale eseguita. |
 | G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
 | G12.3 Copia selettiva palestre e attività | [!] | G12.2 | Implementati preview admin e batch transazionale idempotente; resta da eseguire la verifica DB su fixture locale/staging autorizzata. |
-| G12.4 Bozze e mappa squadre target | [ ] | G12.3 | Creare squadre 2026/2027 come bozze minime o mapparle a target esistenti, senza configurazioni stagionali. |
+| G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione; G12.3 resta `[!]` per la sua verifica DB separata. |
 | G12.5 Preview profili candidati | [ ] | G12.4 | Restituire candidati, ruoli stagionali, genitori collegati e team sorgente/destinazione senza mutazioni. |
 | G12.6 Esecuzione atomica iscrizioni | [ ] | G12.5 | Creare solo `season_profiles` e membership squadra scelte nella target, preservando integralmente la source. |
 | G12.7 Wizard admin selezione profili | [ ] | G12.6 | UI a passi con includi/escludi, stessa/altra squadra, riepilogo e conferma esplicita. |
@@ -7373,6 +7373,78 @@ orario, palestra, quota o staff viene ereditato implicitamente.
 **Verifiche:** test per tre scelte, cambio nome/attività, codice proposto e
 collisione, fusione, target cross-season, retry e non-admin; query DB di
 conteggio su fixture transazionale; typecheck, build e diff check.
+
+**Registro esecuzione G12.4 — 15/09/2026 — PASS:** aggiunti la
+migration generata con `supabase migration new`
+`supabase/migrations/20260915140047_season_rollover_teams.sql`, il servizio
+server `src/server/admin/season-rollover-teams.ts`, il Route Handler admin
+`src/app/api/admin/season-teams/route.ts` e i test associati. La migration
+aggiunge soltanto `teams.is_active` (default `true`), la mappa
+`source_team_id → target_team_id` con vincoli di stagione e la RPC
+transazionale `rollover_teams_batch`; la mappa consente fusioni, non riusa ID
+source e non tocca membership, staff, orari, palestre, quote, eventi,
+documenti, campionati o altri dati operativi. La RPC crea solo nome, codice,
+attività target e `is_active = true`, verifica source/target e collisioni del
+codice, supporta retry idempotenti e ha `EXECUTE` revocato a `PUBLIC`, `anon`
+e `authenticated`, con grant al solo `service_role`. L'endpoint esegue il
+controllo admin server-side prima del servizio privilegiato; preview e batch
+non espongono né duplicano profiles/account/relazioni e non introducono hard
+delete.
+
+File modificati: `supabase/migrations/20260915140047_season_rollover_teams.sql`,
+`src/server/admin/season-rollover-teams.ts`,
+`src/app/api/admin/season-teams/route.ts`,
+`src/app/api/admin/season-teams/route.test.ts` e questo piano.
+
+Verifiche eseguite: test G12.4 di Route Handler e servizio — 2 suite, 6 test
+superati; `npx tsc --noEmit`; `npm run build`; `git diff --check` superati. La migration
+è stata eseguita in due fixture PostgreSQL locali transazionali terminate con
+`ROLLBACK`: la prima ha verificato create/link/skip, due source verso lo stesso
+target, retry senza duplicati, collisione del codice e conteggi (`created=1`,
+`linked=2`, `skipped=1`); la seconda ha verificato il rifiuto del target
+cross-season. Il controllo read-only post-rollback ha confermato assenza della
+tabella, della RPC e delle righe fixture. La migration non è stata applicata
+persistentemente al database locale. `supabase migration list --local` e
+`supabase db push --local --dry-run` restano non eseguibili per l'errore
+preesistente `EPERM` sulla scrittura di `~/.supabase/telemetry.json.tmp`; non
+viene dichiarato un esito di advisor o di migration history CLI. È rimasto solo
+il warning preesistente di collation PostgreSQL locale. Nessun accesso o
+mutazione su staging/produzione, deploy, attivazione della stagione o goal
+successivo è stato eseguito. G12.5 resta non avviato.
+
+**Valutazione staging via plugin Supabase — 15/09/2026:** il progetto
+`csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`) è `ACTIVE_HEALTHY`; la history
+remota è allineata fino a `20260915123220_season_rollover_structures` e la
+la migration `20260915140047` era pending. Le query read-only hanno confermato che
+`season_rollover_team_maps` e `rollover_teams_batch` non esistevano ancora,
+mentre `teams.is_active` esiste già con default `true` e nessun team con valore
+NULL. Staging contiene una sola stagione attiva di test, nessuna
+`Stagione 2025/2026` o `Stagione 2026/2027`, 6 squadre, 7 membership e 7
+assegnazioni coach; la mappa strutture è vuota. Gli advisor security mostrano
+solo warning/info già presenti, inclusi le tabelle interne RLS senza policy, due
+funzioni `SECURITY DEFINER` legacy esposte e leaked-password protection.
+
+La migration è stata valutata safe per l'applicazione schema-only in staging:
+è additiva, non esegue insert/update/delete di dati applicativi e non può
+creare la stagione o copiare squadre. Il plugin non espone un dry-run DDL; non è
+stata applicata perché questa verifica non costituiva autorizzazione alla
+scrittura. Non eseguire il batch dopo l'applicazione: staging non contiene una
+fixture source/target valida.
+
+**Applicazione staging G12.4 — 15/09/2026:** su conferma esplicita
+dell’utente, la migration è stata applicata esclusivamente al progetto
+`csromawebapp-staging` tramite plugin Supabase. Il servizio ha registrato la
+versione remota `20260915141842_season_rollover_teams`. Verificati con query
+read-only la presenza di `season_rollover_team_maps` e
+`rollover_teams_batch(uuid,uuid,jsonb)`, i vincoli FK source/target con
+`ON DELETE RESTRICT` e l’ACL della RPC: `SECURITY DEFINER`, eseguibile solo da
+`postgres` e `service_role`; `anon` e `authenticated` non hanno `EXECUTE`.
+I conteggi restano 1 stagione (1 attiva), 6 squadre e 0 mappe; non sono state
+create stagioni, squadre, mappe o relazioni e non è stato eseguito alcun batch.
+Gli advisor post-migration riportano solo warning/info preesistenti e il nuovo
+rilievo informativo atteso per la tabella interna RLS senza policy; nessun
+warning riguarda la RPC come eseguibile da utenti autenticati. Produzione
+invariata.
 
 ## G12.5 — Preview read-only dei profili candidati
 
