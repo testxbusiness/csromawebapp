@@ -6201,7 +6201,7 @@ G2 e le successive modifiche attendance sono già completati e non vanno rifatti
 | DA.6.R3 Protagonista senza contenitore superfluo | [-] | DA.6.R2 | Implementazione completata il 14/09/2026; sul solo dashboard personale mobile rimosso il wrapper visivo del Panel, “Poi in agenda” resa sezione autonoma con gutter 16 px, padding 20 px e spazio 20 px; famiglia e desktop invariati. Gate screenshot/overflow ancora aperto per blocco browser |
 | DA.6.R4 Stato attendance compatto | [x] | DA.6.R3 | Completato il 14/09/2026; stato chiuso integrato con separatore discreto, RSVP e sole assenze distinti, azioni aperte preservate |
 | DA.6.R5 Agenda non ridondante | [ ] | DA.6.R4 | Righe compatte, squadra/tipo non ripetuti e dettaglio raggiungibile dall’intera riga |
-| DA.6.R6 Prossima partita sportiva | [ ] | DA.6.R5 | Card partita riconoscibile con luogo sintetico, casa/trasferta e dettagli preservati |
+| DA.6.R6 Prossima partita sportiva | [x] | DA.6.R5 | Completato il 15/09/2026; riepilogo nascosto solo con legame esplicito evento-partita, nessun matching euristico; dati incompleti/amichevoli restano visibili |
 | DA.6.R7 Servizi secondari mobile | [ ] | DA.6.R6 | Messaggi, quota e squadre compatti; importi e stati coerenti con le regole esistenti |
 | DA.6.R8 Identità atleta e floating action | [ ] | DA.6.R7 | Copy atleta, decorazione discreta e pulsante flottante senza sovrapposizioni |
 | DA.7 Gate finale e handoff | [ ] | DA.6.R1–DA.6.R8 | Evidenze visive e funzionali, esito esplicito |
@@ -6736,6 +6736,29 @@ file, test e note reali.
 - Acceptance: la partita è riconoscibile come sportiva ma non supera il primo
   impegno; filtro squadra e link al campionato restano invariati.
 - Verifiche: casa/trasferta, orario/località mancanti, filtro vuoto e dark mode.
+
+**Esito DA.6.R6 — 15/09/2026**
+
+- `AthleteDashboard` considera il primo evento già filtrato la fonte primaria:
+  il riepilogo campionato viene omesso soltanto quando il payload contiene un
+  `event_id` esplicito uguale all’evento protagonista.
+- La route dashboard attuale non seleziona `event_id` da `championship_matches`;
+  per il payload reale il fallback conservativo mantiene quindi il riepilogo
+  visibile, come richiesto quando la corrispondenza non è dimostrabile senza
+  modificare l’API.
+- Non sono stati aggiunti confronti per titolo, data, orario o squadre e non
+  sono state modificate API, database, callback, mutazioni, permessi o route.
+  In assenza del legame esplicito il riepilogo resta visibile, preservando
+  informazione per amichevoli, partite non collegate e dati incompleti.
+- Il dettaglio del primo evento, attendance, filtro squadra, `/athlete/campionati`
+  e il riuso nel profilo familiare/read-only restano invariati.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`,
+  `implementation_plan_redesign.md`.
+- Verifiche: `npx jest src/components/athlete/AthleteDashboard.test.tsx --runInBand`
+  — 14 test superati; `npx tsc --noEmit`; `npm run build`; `git diff --check`.
+  I test coprono primo evento partita, allenamento seguito da partita, partita
+  amichevole/non collegata, dati incompleti e consumer familiare/read-only.
 
 **Decisione pianificata — evitare la duplicazione tra evento e partita**
 

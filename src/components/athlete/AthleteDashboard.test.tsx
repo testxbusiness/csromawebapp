@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import AthleteDashboard, { getFeaturedEventState } from './AthleteDashboard'
+import AthleteDashboard, { getFeaturedEventState, shouldShowNextChampionshipMatchSummary } from './AthleteDashboard'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
 jest.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }))
@@ -162,5 +162,48 @@ describe('featured event state', () => {
 
     await waitFor(() => expect(screen.getByText(title)).toBeTruthy())
     expect(screen.getByRole('status', { name: 'Prossimo' })).toBeTruthy()
+  })
+})
+
+describe('next championship match summary visibility', () => {
+  const championshipMatch = { event_id: 'match-event' }
+
+  it('hides the summary only when an explicit event link proves duplication', () => {
+    expect(shouldShowNextChampionshipMatchSummary({ id: 'match-event', event_kind: 'match' }, championshipMatch)).toBe(false)
+  })
+
+  it('keeps the summary after a non-match first event', () => {
+    expect(shouldShowNextChampionshipMatchSummary({ id: 'training-event', event_kind: 'training' }, championshipMatch)).toBe(true)
+  })
+
+  it('keeps an unlinked championship match visible for a friendly or incomplete event payload', () => {
+    expect(shouldShowNextChampionshipMatchSummary({ id: 'friendly-event', event_kind: 'match' }, { event_id: null })).toBe(true)
+    expect(shouldShowNextChampionshipMatchSummary({ id: 'match-event', event_kind: 'match' }, {})).toBe(true)
+    expect(shouldShowNextChampionshipMatchSummary({ id: 'match-event', event_kind: 'match' }, null)).toBe(false)
+  })
+
+  it('keeps the family dashboard consumer on the same conservative rule', () => {
+    expect(shouldShowNextChampionshipMatchSummary(undefined, championshipMatch)).toBe(true)
+  })
+
+  it('applies the rule in the delegated dashboard without changing read-only access', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        activeSeason: null,
+        teamMemberships: [],
+        upcomingEvents: [{
+          id: 'match-event', title: 'Partita protagonista', event_kind: 'match',
+          start_time: '2026-09-20T18:00:00Z', end_time: '2026-09-20T20:00:00Z',
+        }],
+        nextChampionshipMatch: { event_id: 'match-event', match_date: '2026-09-20', start_time: '18:00' },
+        unreadMessages: [], feeInstallments: [], teams: [],
+      }),
+    }) as jest.Mock
+
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'child-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} delegatedView />)
+
+    await waitFor(() => expect(screen.getByText('Partita protagonista')).toBeTruthy())
+    expect(screen.queryByText('Prossima partita')).toBeNull()
   })
 })

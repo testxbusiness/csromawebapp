@@ -73,6 +73,8 @@ interface Event {
 
 interface ChampionshipMatch {
   id: string
+  /** Present only when the existing payload explicitly links this match to an event. */
+  event_id?: string | null
   match_day?: number | null
   match_date?: string | null
   start_time?: string | null
@@ -161,6 +163,20 @@ export function getFeaturedEventState(event: Pick<Event, 'start_time' | 'end_tim
   if (timestamp < start) return 'upcoming'
   if (timestamp < end) return 'in_progress'
   return 'ended'
+}
+
+/**
+ * Hide the championship summary only when the payload proves it is the same
+ * match as the featured event. Title/date/team comparisons are intentionally
+ * excluded so a friendly match cannot hide useful championship information.
+ */
+export function shouldShowNextChampionshipMatchSummary(
+  firstVisibleEvent: Pick<Event, 'id' | 'event_kind'> | undefined,
+  championshipMatch: Pick<ChampionshipMatch, 'event_id'> | null,
+): boolean {
+  if (!championshipMatch) return false
+  if (!firstVisibleEvent || firstVisibleEvent.event_kind !== 'match') return true
+  return championshipMatch.event_id !== firstVisibleEvent.id
 }
 
 function featuredEventStateLabel(state: FeaturedEventState) {
@@ -812,6 +828,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const visibleFees = feeInstallments.filter((fee) => selectedTeamMatches(fee.membership_fee.team.id ? [fee.membership_fee.team.id] : undefined))
   const visibleMemberships = teamMemberships.filter((membership) => selectedTeamMatches([membership.team.id]))
   const visibleMatch = nextChampionshipMatch && selectedTeamMatches(nextChampionshipMatch.team_ids) ? nextChampionshipMatch : null
+  const showNextChampionshipMatch = shouldShowNextChampionshipMatchSummary(visibleEvents[0], visibleMatch)
   const mostUrgentVisibleFee = selectMostUrgentFee(visibleFees)
 
   if (accessDenied || dashboardStatus === 'denied') return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
@@ -941,7 +958,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         </Panel>
       )}
 
-      {canViewSchedule && (
+      {canViewSchedule && showNextChampionshipMatch && (
         <Panel className="space-y-3">
           <SectionHeading title="Prossima partita" href="/athlete/campionati" />
           {!nextChampionshipMatch ? <FeedbackState variant="empty" title="Nessuna partita in programma" className="py-4" /> : !visibleMatch ? <FeedbackState variant="filtered-empty" title="Nessuna partita per questa squadra" className="py-4" /> : (
