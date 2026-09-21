@@ -59,7 +59,7 @@ export function useChampionshipCatalog({
       setTeams([])
       return
     }
-    if (mode === 'athlete') {
+    if (mode === 'athlete' || mode === 'coach') {
       setSeasons([])
       setActivities([])
       setTeams([])
@@ -149,6 +149,57 @@ export function useChampionshipCatalog({
       return
     }
 
+    if (mode === 'coach') {
+      try {
+        const response = await fetch('/api/coach/championships?view=catalog', { cache: 'no-store', signal: controller.signal })
+        const payload = await response.json().catch(() => null) as {
+          seasons?: Season[]
+          activities?: Activity[]
+          teams?: Team[]
+          championships?: any[]
+          error?: string
+        } | null
+        if (controller.signal.aborted) return
+        if (!response.ok) {
+          setStatus(responseErrorState(response.status))
+          return
+        }
+
+        const allowedTeamIds = coachTeamIds
+        const filtered = allowedTeamIds.size === 0
+          ? []
+          : (payload?.championships ?? []).flatMap((championship: any) => {
+            const visibleGroups = (championship.championship_groups ?? []).filter((group: any) =>
+              (group.championship_group_teams ?? []).some((groupTeam: any) => {
+                const clubTeam = firstRelation(groupTeam.championship_club_teams)
+                return Boolean(clubTeam?.team_id && allowedTeamIds.has(clubTeam.team_id))
+              }),
+            )
+            return visibleGroups.length > 0 ? [{ ...championship, championship_groups: visibleGroups }] : []
+          })
+
+        setSeasons(payload?.seasons ?? [])
+        setActivities(payload?.activities ?? [])
+        setTeams(payload?.teams ?? [])
+        setChampionships(filtered.map((championship: any) => ({
+          ...championship,
+          championship_groups: (championship.championship_groups ?? []).map((group: any) => ({
+            ...group,
+            championship_group_teams: (group.championship_group_teams ?? []).map((groupTeam: any) => ({
+              ...groupTeam,
+              championship_club_teams: firstRelation(groupTeam.championship_club_teams),
+            })),
+          })),
+        })) as Championship[])
+        setStatus('ready')
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        console.error('Errore caricamento campionati coach', error)
+        setStatus(requestErrorState(error))
+      }
+      return
+    }
+
     const { data, error } = await supabase
       .from('championships')
       .select(`
@@ -171,36 +222,7 @@ export function useChampionshipCatalog({
       return
     }
 
-    let filtered = data || []
-    const allowedTeamIds = coachTeamIds
-    if (mode === 'coach') {
-      if (allowedTeamIds.size === 0) {
-        filtered = []
-      } else {
-        filtered = (filtered as any[])
-          .map((championship) => {
-            const visibleGroups = (championship.championship_groups || [])
-              .map((group: any) => {
-                const visibleGroupTeams = (group.championship_group_teams || []).filter((groupTeam: any) => {
-                  const clubTeam = firstRelation(groupTeam.championship_club_teams)
-                  return clubTeam?.team_id && allowedTeamIds.has(clubTeam.team_id)
-                })
-
-                return visibleGroupTeams.length > 0
-                  ? { ...group, championship_group_teams: visibleGroupTeams }
-                  : null
-              })
-              .filter(Boolean)
-
-            return visibleGroups.length > 0
-              ? { ...championship, championship_groups: visibleGroups }
-              : null
-          })
-          .filter(Boolean)
-      }
-    }
-
-    const normalized = (filtered as any[]).map((championship) => ({
+    const normalized = (data || []).map((championship: any) => ({
       ...championship,
       championship_groups: (championship.championship_groups || []).map((group: any) => ({
         ...group,

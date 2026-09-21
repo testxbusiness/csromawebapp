@@ -111,7 +111,7 @@ export default function ChampionshipsManager() {
     standings,
     loading: groupLoading,
     reload: reloadGroupDetails,
-  } = useChampionshipGroupDetails(selectedGroupId)
+  } = useChampionshipGroupDetails(selectedGroupId, undefined, true, 'coach')
   const loading = catalogLoading || groupLoading
   const {
     changeStatus,
@@ -192,20 +192,17 @@ export default function ChampionshipsManager() {
   }, [account?.ownerProfileId, supabase])
 
   const loadClubTeams = useCallback(async (championshipId: string) => {
-    const { data, error } = await supabase
-      .from('championship_club_teams')
-      .select('id, championship_id, code, name, is_home_club, team_id, teams(id, name, code)')
-      .eq('championship_id', championshipId)
-      .order('name')
-
-    if (error) {
-      console.error('Errore caricamento squadre campionato', error)
+    const params = new URLSearchParams({ view: 'club-teams', championshipId })
+    const response = await fetch(`/api/coach/championships?${params.toString()}`, { cache: 'no-store' })
+    const payload = await response.json().catch(() => null) as { clubTeams?: ClubTeamOption[]; error?: string } | null
+    if (!response.ok) {
+      console.error('Errore caricamento squadre campionato', payload?.error)
       toast.error('Impossibile caricare le squadre del campionato')
       setClubTeams([])
       return
     }
-    setClubTeams(data || [])
-  }, [supabase])
+    setClubTeams(payload?.clubTeams ?? [])
+  }, [])
 
   const currentGroups = useMemo(() => {
     return championships.find((c) => c.id === selectedChampionshipId)?.championship_groups || []

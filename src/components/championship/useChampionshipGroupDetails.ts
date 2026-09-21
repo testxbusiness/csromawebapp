@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { requestErrorState, responseErrorState, type RequestState } from '@/lib/http/request-state'
 import { SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail } from '@/context/AccessibleProfileContext'
-import { firstRelation, type Match, type Standing } from './types'
+import { firstRelation, type ManagerMode, type Match, type Standing } from './types'
 
-export function useChampionshipGroupDetails(groupId: string | null, subjectProfileId?: string | null, enabled = true) {
+export function useChampionshipGroupDetails(groupId: string | null, subjectProfileId?: string | null, enabled = true, mode: ManagerMode = 'admin') {
   const supabase = useMemo(() => createClient(), [])
   const [matches, setMatches] = useState<Match[]>([])
   const [standings, setStandings] = useState<Standing[]>([])
@@ -45,10 +45,11 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
 
     setStatus('loading')
     try {
-      if (subjectProfileId !== undefined) {
+      if (subjectProfileId !== undefined || mode === 'coach') {
         const params = new URLSearchParams({ view: 'group', groupId })
         if (subjectProfileId) params.set('subjectProfileId', subjectProfileId)
-        const response = await fetch(`/api/athlete/championships?${params.toString()}`, { cache: 'no-store', signal: controller.signal })
+        const endpoint = mode === 'coach' ? '/api/coach/championships' : '/api/athlete/championships'
+        const response = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store', signal: controller.signal })
         const payload = await response.json().catch(() => null) as { matches?: any[]; standings?: Standing[]; error?: string } | null
         if (controller.signal.aborted || subjectRef.current !== subjectProfileId) return
         if (!response.ok) {
@@ -105,7 +106,7 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
     } finally {
       setStatus((current) => current === 'loading' ? 'error' : current)
     }
-  }, [enabled, groupId, subjectProfileId, supabase])
+  }, [enabled, groupId, mode, subjectProfileId, supabase])
 
   useEffect(() => {
     void reload()

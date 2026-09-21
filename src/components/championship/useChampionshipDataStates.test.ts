@@ -31,6 +31,38 @@ describe('championship data states', () => {
     await waitFor(() => expect(empty.result.current.status).toBe('error'))
   })
 
+  it('loads the coach catalog through the authenticated API', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ seasons: [], activities: [], teams: [], championships: [] }),
+    }) as jest.Mock
+
+    const catalog = renderHook(() => useChampionshipCatalog({ mode: 'coach', coachTeamIds: new Set(['team-id']) }))
+    await waitFor(() => expect(catalog.result.current.status).toBe('ready'))
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/coach/championships?view=catalog',
+      expect.objectContaining({ cache: 'no-store' }),
+    )
+  })
+
+  it('loads coach group details through the authenticated API', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ matches: [], standings: [] }),
+    }) as jest.Mock
+
+    const details = renderHook(() => useChampionshipGroupDetails('group-id', undefined, true, 'coach'))
+    await waitFor(() => expect(details.result.current.status).toBe('ready'))
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/coach/championships?view=group&groupId=group-id',
+      expect.objectContaining({ cache: 'no-store' }),
+    )
+  })
+
   it('exposes denied and offline group states with retry preserved', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
