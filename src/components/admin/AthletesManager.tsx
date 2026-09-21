@@ -19,6 +19,7 @@ interface AthleteWithDetails extends Athlete {
     name: string
     jersey_number?: string
     activity_id?: string
+    season_id?: string
   }>
 }
 
@@ -58,6 +59,10 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
     const value = searchParams.get('certificateStatus')
     return value === 'attention' || value === 'missing' || value === 'expired' || value === 'expiring' || value === 'valid' ? value : 'all'
   })
+  const teamsForSelectedSeason = useCallback(<T extends { season_id?: string }>(teamList: T[] | undefined) => {
+    const teams = teamList ?? []
+    return selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason)
+  }, [selectedSeason])
   const certificateStats = useMemo(() => {
     let withoutCertificate = 0
     let expiredCertificate = 0
@@ -149,7 +154,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
 
       // Filtro attività
       if (selectedActivity !== 'all') {
-        const hasActivity = athlete.teams?.some(team => {
+        const hasActivity = teamsForSelectedSeason(athlete.teams).some(team => {
           const teamActivity = activities.find(a => a.id === team.activity_id)
           return teamActivity?.name === selectedActivity
         })
@@ -158,9 +163,9 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
 
       // Filtro squadra
       if (selectedTeam === 'none') {
-        if (athlete.teams && athlete.teams.length > 0) return false
+        if (teamsForSelectedSeason(athlete.teams).length > 0) return false
       } else if (selectedTeam !== 'all') {
-        const hasTeam = athlete.teams?.some(team => team.id === selectedTeam)
+        const hasTeam = teamsForSelectedSeason(athlete.teams).some(team => team.id === selectedTeam)
         if (!hasTeam) return false
       }
 
@@ -180,7 +185,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
 
       return true
     })
-  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities, certificateFilter])
+  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities, certificateFilter, teamsForSelectedSeason])
 
   // Gestione selezione multipla
   const toggleAthleteSelection = (athleteId: string) => {
@@ -311,7 +316,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
   const openAthleteEdit = (athlete: AthleteWithDetails) => {
     const seasonId = selectedSeason !== 'all' ? selectedSeason : athlete.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || ''
     const seasonTeamIds = new Set(teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === seasonId)).map((team) => team.id))
-    const seasonTeams = (athlete.teams || []).filter((team) => seasonTeamIds.has(team.id))
+    const seasonTeams = teamsForSelectedSeason(athlete.teams).filter((team) => seasonTeamIds.has(team.id))
     setEditingAthlete({
       id: athlete.id,
       first_name: athlete.first_name,
@@ -459,7 +464,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
         <h4 className="font-semibold mb-2">Squadre</h4>
         {detailsAthlete.teams?.length ? (
           <div className="flex flex-wrap gap-2">
-            {detailsAthlete.teams.map(t => (
+            {teamsForSelectedSeason(detailsAthlete.teams).map(t => (
               <span key={t.id} className="cs-badge cs-badge--neutral">
                 {t.name}{t.jersey_number ? ` #${t.jersey_number}` : ''}
               </span>
@@ -636,12 +641,12 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
                   </td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-1">
-                      {athlete.teams?.map(team => (
+                      {teamsForSelectedSeason(athlete.teams).map(team => (
                         <span key={team.id} className="cs-badge cs-badge--neutral">
                           {team.name} {team.jersey_number && `#${team.jersey_number}`}
                         </span>
                       ))}
-                      {(!athlete.teams || athlete.teams.length === 0) && (<span className="text-secondary text-sm">Nessuna squadra</span>)}
+                      {teamsForSelectedSeason(athlete.teams).length === 0 && (<span className="text-secondary text-sm">Nessuna squadra</span>)}
                     </div>
                   </td>
                   <td className="p-4 text-sm">
@@ -699,7 +704,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
                     <div>
                       <strong>Squadre:</strong>
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {athlete.teams?.length ? athlete.teams.map(team => (
+                        {teamsForSelectedSeason(athlete.teams).length ? teamsForSelectedSeason(athlete.teams).map(team => (
                           <span key={team.id} className="cs-badge cs-badge--neutral">{team.name} {team.jersey_number && `#${team.jersey_number}`}</span>
                         )) : <span className="text-secondary">Nessuna squadra</span>}
                       </div>
