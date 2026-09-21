@@ -4,13 +4,10 @@ import { adminMessageCreateSchema, adminMessageUpdateSchema } from '@/lib/valida
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 import { notifyMessageRecipients } from '@/server/messages/push-notifications'
-
-const rolePriority = ['admin', 'coach', 'staff', 'athlete', 'family_member'] as const
-
-function resolveAccountRole(roles: string[] | undefined): string | null {
-  if (!roles?.length) return null
-  return rolePriority.find((role) => roles.includes(role)) ?? null
-}
+import {
+  assertMessageRecipientsInSeason,
+  resolveAdminMessageSeasonScope,
+} from '@/server/messages/admin-message-season'
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,7 +23,9 @@ export async function POST(request: NextRequest) {
       })))
       return NextResponse.json({ error: 'Dati messaggio non validi' }, { status: 400 })
     }
-    const { subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
+    const { season_id, subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
+    const seasonScope = await resolveAdminMessageSeasonScope(adminClient, season_id)
+    assertMessageRecipientsInSeason(seasonScope, selected_teams, selected_users)
 
     // Crea il messaggio
     const { data: message, error: messageError } = await adminClient
@@ -142,7 +141,9 @@ export async function PUT(request: NextRequest) {
       })))
       return NextResponse.json({ error: 'Dati aggiornamento messaggio non validi' }, { status: 400 })
     }
-    const { id, subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
+    const { id, season_id, subject, content, attachment_url, attachments, selected_teams, selected_users } = parsed.data
+    const seasonScope = await resolveAdminMessageSeasonScope(adminClient, season_id)
+    assertMessageRecipientsInSeason(seasonScope, selected_teams, selected_users)
 
     // Aggiorna il messaggio
     const { error: messageError } = await adminClient
@@ -259,13 +260,23 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
+    const searchParams = new URL(request.url).searchParams
+    const requestedSeasonId = searchParams.get('season_id')
+    const seasonScope = await resolveAdminMessageSeasonScope(adminClient, requestedSeasonId)
+    if (searchParams.get('view') === 'options') {
+      return NextResponse.json({
+        seasons: seasonScope.seasons,
+        selected_season_id: seasonScope.selectedSeasonId,
+        teams: seasonScope.teams,
+        users: seasonScope.users,
+      })
+    }
 
-    // Prima ottieni solo i messaggi base
     const { data: messagesData, error } = await adminClient
       .from('messages')
       .select('*')
@@ -275,21 +286,31 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    const [{ data: appAccounts }, { data: accountRoles }] = await Promise.all([
-      adminClient.from('app_accounts').select('owner_profile_id, auth_user_id'),
-      adminClient.from('account_roles').select('auth_user_id, role'),
-    ])
-    const authUserByProfile = new Map((appAccounts || []).map((account) => [account.owner_profile_id, account.auth_user_id]))
-    const rolesByAuthUser = new Map<string, string[]>()
-    for (const row of accountRoles || []) {
-      const roles = rolesByAuthUser.get(row.auth_user_id) || []
-      roles.push(row.role)
-      rolesByAuthUser.set(row.auth_user_id, roles)
-    }
+    const messageIds = (messagesData ?? []).map((message) => message.id)
+    const { data: recipients, error: recipientsError } = messageIds.length > 0
+      ? await adminClient
+          .from('message_recipients')
+          .select('id, message_id, is_read, read_at, team_id, profile_id')
+          .in('message_id', messageIds)
+      : { data: [], error: null }
+    if (recipientsError) return NextResponse.json({ error: recipientsError.message }, { status: 400 })
 
-    // Ora arricchisci con i dati correlati
+    const scopedRecipients = (recipients ?? []).filter((recipient) => (
+      Boolean(recipient.team_id && seasonScope.teamIds.has(recipient.team_id)) ||
+      Boolean(recipient.profile_id && seasonScope.profileIds.has(recipient.profile_id))
+    ))
+    const visibleMessageIds = new Set(scopedRecipients.map((recipient) => recipient.message_id))
+    const recipientsByMessage = new Map<string, typeof scopedRecipients>()
+    for (const recipient of scopedRecipients) {
+      const current = recipientsByMessage.get(recipient.message_id) ?? []
+      current.push(recipient)
+      recipientsByMessage.set(recipient.message_id, current)
+    }
+    const teamsById = new Map(seasonScope.teams.map((team) => [team.id, team]))
+    const usersById = new Map(seasonScope.recipientProfiles.map((user) => [user.id, user]))
+
     const enrichedMessages = await Promise.all(
-      (messagesData || []).map(async (message) => {
+      (messagesData || []).filter((message) => visibleMessageIds.has(message.id)).map(async (message) => {
         const enrichedMessage = { ...message }
 
         // Ottieni dati creatore
@@ -305,16 +326,11 @@ export async function GET() {
           }
         }
 
-        // Ottieni destinatari
-        const { data: recipients } = await adminClient
-          .from('message_recipients')
-          .select('id, is_read, read_at, team_id, profile_id')
-          .eq('message_id', message.id)
-
-        if (recipients && recipients.length > 0) {
+        const messageRecipients = recipientsByMessage.get(message.id) ?? []
+        if (messageRecipients.length > 0) {
           enrichedMessage.message_recipients = []
 
-          for (const recipient of recipients) {
+          for (const recipient of messageRecipients) {
             const recipientData: any = {
               id: recipient.id,
               is_read: recipient.is_read,
@@ -322,29 +338,18 @@ export async function GET() {
             }
 
             if (recipient.team_id) {
-              const { data: teamData } = await adminClient
-                .from('teams')
-                .select('id, name')
-                .eq('id', recipient.team_id)
-                .single()
-              
+              const teamData = teamsById.get(recipient.team_id)
               if (teamData) {
                 recipientData.teams = teamData
               }
             }
 
             if (recipient.profile_id) {
-              const { data: profileData } = await adminClient
-                .from('profiles')
-                .select('id, first_name, last_name, email')
-                .eq('id', recipient.profile_id)
-                .single()
-              
+              const profileData = usersById.get(recipient.profile_id)
               if (profileData) {
-                const authUserId = authUserByProfile.get(profileData.id)
                 recipientData.profiles = {
                   ...profileData,
-                  role: authUserId ? resolveAccountRole(rolesByAuthUser.get(authUserId)) : null,
+                  role: profileData.role,
                 }
               }
             }
@@ -381,7 +386,13 @@ export async function GET() {
       })
     )
 
-    return NextResponse.json({ messages: enrichedMessages })
+    return NextResponse.json({
+      messages: enrichedMessages,
+      seasons: seasonScope.seasons,
+      selected_season_id: seasonScope.selectedSeasonId,
+      teams: seasonScope.teams,
+      users: seasonScope.users,
+    })
 
   } catch (error) {
     console.error('Errore API lista messaggi:', error)

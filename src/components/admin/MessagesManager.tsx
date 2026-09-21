@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { EmptyState, LoadingState, toast } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MessageModal, { type Message as MessageForm } from '@/components/admin/MessageModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
@@ -58,6 +57,12 @@ interface User {
   role: string
 }
 
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 function formatRole(role: string | null | undefined) {
   if (role === 'admin') return 'admin'
   if (role === 'coach') return 'coach'
@@ -71,21 +76,24 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
   const [messages, setMessages] = useState<Message[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeason, setSelectedSeason] = useState('')
   const [loading, setLoading] = useState(true)
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const supabase = createClient()
 
   useEffect(() => {
-    loadMessages()
-    loadTeams()
-    loadUsers()
+    void loadMessages()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadMessages = async () => {
+  const loadMessages = async (seasonId?: string) => {
+    setLoading(true)
     try {
-      const response = await fetch('/api/admin/messages')
+      const params = new URLSearchParams()
+      if (seasonId) params.set('season_id', seasonId)
+      const query = params.size > 0 ? `?${params.toString()}` : ''
+      const response = await fetch(`/api/admin/messages${query}`, { cache: 'no-store' })
       const result = await response.json()
 
       if (!response.ok) {
@@ -96,40 +104,17 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
       }
 
       setMessages(result.messages || [])
+      setTeams(result.teams || [])
+      setUsers(result.users || [])
+      setSeasons(result.seasons || [])
+      setSelectedSeason(result.selected_season_id || seasonId || '')
       setLoading(false)
     } catch (error) {
       console.error('Errore caricamento messaggi:', error)
       setMessages([])
-      setLoading(false)
-    }
-  }
-
-  const loadTeams = async () => {
-    const { data } = await supabase
-      .from('teams')
-      .select('id, name, code')
-      .order('name')
-
-    setTeams(data || [])
-  }
-
-  const loadUsers = async () => {
-    try {
-      const response = await fetch('/api/admin/users')
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Impossibile caricare gli utenti')
-
-      const accountUsers = (result.users || []).map((user: any) => ({
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email,
-        role: user.roles?.[0] || user.role || 'staff',
-      }))
-      setUsers(accountUsers)
-    } catch (error) {
-      console.error('Errore caricamento utenti destinatari:', error)
+      setTeams([])
       setUsers([])
+      setLoading(false)
     }
   }
 
@@ -140,7 +125,7 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(messageData)
+        body: JSON.stringify({ ...messageData, season_id: selectedSeason })
       })
 
       const result = await response.json()
@@ -154,7 +139,7 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
       console.log('Messaggio creato con successo:', result.message)
       setShowModal(false)
       setEditingMessage(null)
-      loadMessages()
+      void loadMessages(selectedSeason)
 
     } catch (error) {
       console.error('Errore creazione messaggio:', error)
@@ -171,6 +156,7 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
         },
         body: JSON.stringify({
           id,
+          season_id: selectedSeason,
           ...messageData
         })
       })
@@ -186,7 +172,7 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
       console.log('Messaggio aggiornato con successo:', result.message)
       setShowModal(false)
       setEditingMessage(null)
-      loadMessages()
+      void loadMessages(selectedSeason)
 
     } catch (error) {
       console.error('Errore aggiornamento messaggio:', error)
@@ -210,7 +196,7 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
         }
 
         console.log('Messaggio eliminato con successo:', result.message)
-        loadMessages()
+        void loadMessages(selectedSeason)
 
       } catch (error) {
         console.error('Errore eliminazione messaggio:', error)
@@ -254,6 +240,32 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
           <button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">
             Nuovo Messaggio
           </button>
+        </div>
+      </div>
+
+      <div className="cs-card cs-card--primary p-4">
+        <div className="cs-field max-w-sm">
+          <label htmlFor="messages-season" className="cs-field__label">Stagione</label>
+          <select
+            id="messages-season"
+            className="cs-select"
+            value={selectedSeason}
+            onChange={(event) => {
+              const seasonId = event.target.value
+              setSelectedSeason(seasonId)
+              setEditingMessage(null)
+              setSelectedMessage(null)
+              setShowModal(false)
+              void loadMessages(seasonId)
+            }}
+          >
+            {seasons.map((season) => (
+              <option key={season.id} value={season.id}>
+                {season.name}{season.is_active ? ' (Attiva)' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="cs-field__help">Messaggi e destinatari sono mostrati per la stagione selezionata.</p>
         </div>
       </div>
 
@@ -389,8 +401,8 @@ export default function MessagesManager({ embedded = false }: { embedded?: boole
 
         {messages.length === 0 && (
           <EmptyState
-            title="Nessun messaggio creato"
-            description="Crea il tuo primo messaggio per iniziare a comunicare con squadre e utenti."
+            title="Nessun messaggio per questa stagione"
+            description="Crea un messaggio per le squadre e gli utenti della stagione selezionata."
             action={<button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo messaggio</button>}
           />
         )}

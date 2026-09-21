@@ -17,8 +17,8 @@ const messageFields = {
   selected_users: z.array(uuid).max(500).optional(),
 }
 
-export const adminMessageCreateSchema = z.object(messageFields).strict()
-export const adminMessageUpdateSchema = z.object({ id: uuid, ...messageFields }).strict()
+export const adminMessageCreateSchema = z.object({ season_id: uuid, ...messageFields }).strict()
+export const adminMessageUpdateSchema = z.object({ id: uuid, season_id: uuid, ...messageFields }).strict()
 
 export const coachMessageCreateSchema = z.object({
   subject: messageFields.subject,

@@ -64,6 +64,7 @@ export default function DocumentsManager({ embedded = false }: { embedded?: bool
   type User = { id: string; first_name: string; last_name: string; role: string }
   const [teams, setTeams] = useState<Team[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [messageSeasonId, setMessageSeasonId] = useState('')
   const [showMessageModal, setShowMessageModal] = useState(false)
   const [messageDraft, setMessageDraft] = useState<any | null>(null)
 
@@ -130,13 +131,22 @@ export default function DocumentsManager({ embedded = false }: { embedded?: bool
   }, [supabase])
 
   const bootstrapMessagingLookups = useCallback(async () => {
-    const [{ data: t }, { data: u }] = await Promise.all([
-      supabase.from('teams').select('id, name, code').order('name'),
-      supabase.from('profiles').select('id, first_name, last_name, role').order('first_name'),
-    ])
-    setTeams(t || [])
-    setUsers(u || [])
-  }, [supabase])
+    const response = await fetch('/api/admin/messages?view=options', { cache: 'no-store' })
+    const payload = await response.json().catch(() => null) as {
+      selected_season_id?: string
+      teams?: Team[]
+      users?: User[]
+    } | null
+    if (!response.ok) {
+      setTeams([])
+      setUsers([])
+      setMessageSeasonId('')
+      return
+    }
+    setTeams(payload?.teams ?? [])
+    setUsers(payload?.users ?? [])
+    setMessageSeasonId(payload?.selected_season_id ?? '')
+  }, [])
 
   useEffect(() => { void loadDocuments() }, [loadDocuments])
   useEffect(() => { void bootstrapMessagingLookups() }, [bootstrapMessagingLookups])
@@ -217,7 +227,7 @@ export default function DocumentsManager({ embedded = false }: { embedded?: bool
       const res = await fetch('/api/admin/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, season_id: messageSeasonId }),
       })
       const json = await res.json()
       if (!res.ok) { toast.error(json.error || 'Errore invio messaggio'); return }
@@ -235,7 +245,7 @@ export default function DocumentsManager({ embedded = false }: { embedded?: bool
       const res = await fetch('/api/admin/messages', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, ...payload }),
+        body: JSON.stringify({ id, ...payload, season_id: messageSeasonId }),
       })
       const json = await res.json()
       if (!res.ok) { toast.error(json.error || 'Errore aggiornamento messaggio'); return }

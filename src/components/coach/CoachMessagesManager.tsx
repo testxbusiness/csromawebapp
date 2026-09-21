@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Paperclip } from 'lucide-react'
 import { DeniedState, EmptyState, ErrorState, FeedbackState, ListRow, LoadingState, OfflineState, StatusBadge, toast } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import CoachMessageModal from '@/components/coach/CoachMessageModal'
@@ -93,11 +92,14 @@ export default function CoachMessagesManager() {
   const searchParams = useSearchParams()
   const deepLinkMessageId = searchParams.get('messageId')
   const { account } = useAuth()
-  const { selectedTeamId, setTeams: setContextTeams } = useTeamContext()
+  const { selectedTeamId, teams: contextTeams } = useTeamContext()
   const ownerProfileId = account?.ownerProfileId || null
-  const supabase = useMemo(() => createClient(), [])
   const [messages, setMessages] = useState<Message[]>([])
-  const [teams, setTeams] = useState<Team[]>([])
+  const teams = useMemo<Team[]>(() => contextTeams.map((team) => ({
+    id: team.id,
+    name: team.name,
+    code: team.code ?? '',
+  })), [contextTeams])
   const [loading, setLoading] = useState(true)
   const [loadState, setLoadState] = useState<LoadState>('ready')
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -111,34 +113,6 @@ export default function CoachMessagesManager() {
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
 
   const fetchControllerRef = useRef<AbortController | null>(null)
-
-  const loadTeams = useCallback(async () => {
-    if (!ownerProfileId) {
-      setTeams([])
-      return
-    }
-
-    const { data: assignments } = await supabase
-      .from('team_coaches')
-      .select('team_id')
-      .eq('coach_id', ownerProfileId)
-
-    const ids = [...new Set((assignments || []).map(row => row.team_id))]
-    if (ids.length === 0) {
-      setTeams([])
-      return
-    }
-
-    const { data } = await supabase
-      .from('teams')
-      .select('id, name, code')
-      .in('id', ids)
-
-    const list = (data || []) as Team[]
-
-    setTeams(list.sort((a, b) => a.name.localeCompare(b.name)))
-    setContextTeams(list)
-  }, [ownerProfileId, setContextTeams, supabase])
 
   const loadMessages = useCallback(async (signal?: AbortSignal) => {
     if (!ownerProfileId) {
@@ -179,15 +153,12 @@ export default function CoachMessagesManager() {
 
   useEffect(() => {
     if (!ownerProfileId) {
-      setTeams([])
       setMessages([])
       setLoading(false)
       fetchControllerRef.current?.abort()
       fetchControllerRef.current = null
       return
     }
-
-    loadTeams().catch(() => {})
 
     const controller = new AbortController()
     fetchControllerRef.current?.abort()
@@ -197,7 +168,7 @@ export default function CoachMessagesManager() {
     return () => {
       controller.abort()
     }
-  }, [ownerProfileId, loadTeams, loadMessages])
+  }, [ownerProfileId, loadMessages])
 
   useEffect(() => {
     if (!deepLinkMessageId || selectedMessage) return
