@@ -103,7 +103,11 @@ export default function CoachesManager({ embedded = false }: { embedded?: boolea
         `)
         .order('name')
 
-      setSeasons(seasonsData || [])
+      const loadedSeasons = seasonsData || []
+      setSeasons(loadedSeasons)
+      setSelectedSeason((current) => current === 'all'
+        ? loadedSeasons.find((season) => season.is_active)?.id || 'all'
+        : current)
       setActivities(activitiesData || [])
       setTeams(teamsData || [])
     } catch (error) {
