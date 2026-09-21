@@ -119,8 +119,8 @@ const getItemsForRole = (role: Role | undefined, selectedProfile: ReturnType<typ
     const navigation = resolveFamilyNavigation(selectedProfile)
     return navigation.items.map((item) => ({
       href: item.href,
-      label: item.key === 'dashboard' ? 'Area familiare' : item.label === 'Quote' ? 'Quote Associative' : item.label,
-      icon: item.key === 'dashboard' ? UsersRound : item.key === 'calendar' ? CalendarClock : item.key === 'championship' ? Trophy : item.key === 'messages' ? Mail : item.key === 'fees' ? Wallet2 : UserCog,
+      label: item.key === 'dashboard' ? 'Oggi' : item.label === 'Quote' ? 'Quote Associative' : item.label,
+      icon: item.key === 'dashboard' ? LineChart : item.key === 'calendar' ? CalendarClock : item.key === 'championship' ? Trophy : item.key === 'messages' ? Mail : item.key === 'fees' ? Wallet2 : UserCog,
     }))
   }
   return []
