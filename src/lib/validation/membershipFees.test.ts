@@ -1,6 +1,7 @@
 import { membershipFeeSchema } from './membershipFees'
 
 const validFee = {
+  season_id: '836a5fc4-9aec-42c3-acd8-c920da5e2be3',
   team_id: '736a5fc4-9aec-42c3-acd8-c920da5e2be3',
   name: 'Maschile',
   description: 'Quota maschile',

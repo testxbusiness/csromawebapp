@@ -12,6 +12,7 @@ const installment = z.object({
 }).strict()
 
 export const membershipFeeSchema = z.object({
+  season_id: uuid,
   team_id: uuid,
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).nullable().optional(),

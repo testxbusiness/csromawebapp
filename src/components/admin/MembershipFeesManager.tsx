@@ -22,6 +22,7 @@ interface MembershipFee {
   created_by?: string
   created_at?: string
   updated_at?: string
+  season_id?: string
 
   // Joined data
   teams?: {
@@ -59,6 +60,14 @@ interface Team {
   id: string
   name: string
   code: string
+  activity_id?: string
+  season_id?: string
+}
+
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
 }
 
 interface FeeInstallment {
@@ -79,6 +88,8 @@ interface FeeInstallment {
 export default function MembershipFeesManager({ embedded = false }: { embedded?: boolean }) {
   const [fees, setFees] = useState<MembershipFee[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeason, setSelectedSeason] = useState('all')
   const [tab, setTab] = useState<'fees'|'athletes'>('fees')
   const [loading, setLoading] = useState(true)
   const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
@@ -98,12 +109,18 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
   const [selectedInstallments, setSelectedInstallments] = useState<Set<string>>(new Set())
   const supabase = useMemo(() => createClient(), [])
 
+  const seasonTeams = useMemo(
+    () => selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason),
+    [selectedSeason, teams]
+  )
+
   useEffect(() => {
     // All'apertura, ricalcola stati e poi carica dati
     (async () => {
       await recalcInstallmentStatuses(true)
       await loadFees()
     })()
+    loadSeasons()
     loadTeams()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -112,7 +129,8 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
     setLoading(true)
     setLoadState('loading')
     try {
-      const res = await fetch('/api/admin/membership-fees', { method: 'GET' })
+      const query = selectedSeason === 'all' ? '' : `?season_id=${encodeURIComponent(selectedSeason)}`
+      const res = await fetch(`/api/admin/membership-fees${query}`, { method: 'GET' })
       const json = await res.json()
       if (!res.ok) {
         setFees([])
@@ -130,14 +148,38 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
     }
   }
 
+  const loadSeasons = async () => {
+    const { data } = await supabase
+      .from('seasons')
+      .select('id, name, is_active')
+      .order('start_date', { ascending: false })
+    const nextSeasons = data || []
+    setSeasons(nextSeasons)
+    const activeSeason = nextSeasons.find((season) => season.is_active)
+    if (activeSeason) setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
+  }
+
   const loadTeams = async () => {
     const { data } = await supabase
       .from('teams')
-      .select('id, name, code')
+      .select('id, name, code, activity_id')
       .order('name')
-
-    setTeams(data || [])
+    const activityIds = [...new Set((data || []).map((team) => team.activity_id).filter(Boolean))]
+    const { data: activities } = activityIds.length
+      ? await supabase.from('activities').select('id, season_id').in('id', activityIds)
+      : { data: [] as { id: string; season_id: string }[] }
+    const seasonByActivityId = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
+    setTeams((data || []).map((team) => ({ ...team, season_id: seasonByActivityId.get(team.activity_id) })))
   }
+
+  useEffect(() => {
+    if (selectedSeason !== 'all') {
+      setFilterTeamId('')
+      setFilterAthleteId('')
+    }
+    void loadFees()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeason])
 
   // Load athletes for team filter
   useEffect(() => {
@@ -167,6 +209,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
     if (filterStatus) params.set('status', filterStatus)
     if (filterFrom) params.set('from', filterFrom)
     if (filterTo) params.set('to', filterTo)
+    if (selectedSeason !== 'all') params.set('season_id', selectedSeason)
     try {
       const res = await fetch(`/api/admin/installments?${params.toString()}`)
       const json = await res.json()
@@ -196,6 +239,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
         },
         body: JSON.stringify({
           ...feeData,
+          season_id: selectedSeason,
           installments: feeData.installments
         })
       })
@@ -230,6 +274,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
         body: JSON.stringify({
           id,
           ...updateData,
+          season_id: editingFee?.season_id || selectedSeason,
           installments: feeData.installments
         })
       })
@@ -476,6 +521,10 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
           </button>
           <button
             onClick={() => {
+              if (selectedSeason === 'all') {
+                toast.error('Seleziona una stagione prima di creare una quota')
+                return
+              }
               setEditingFee(null)
               setShowModal(true)
             }}
@@ -487,6 +536,21 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
       </div>
 
       {/* Tabs */}
+      <div className="cs-card cs-card--primary p-4">
+        <label htmlFor="membership-fee-season" className="cs-field__label">Stagione</label>
+        <select
+          id="membership-fee-season"
+          value={selectedSeason}
+          onChange={(event) => setSelectedSeason(event.target.value)}
+          className="cs-select max-w-md"
+        >
+          <option value="all">Tutte le stagioni</option>
+          {seasons.map((season) => (
+            <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="flex gap-2">
         <button onClick={()=>setTab('fees')} className={`px-3 py-1 rounded ${tab==='fees'?'bg-blue-600 text-white':'bg-gray-100'}`}>Quote</button>
         <button onClick={()=>{setTab('athletes'); if (flatInstallments.length===0) loadFlatInstallments()}} className={`px-3 py-1 rounded ${tab==='athletes'?'bg-blue-600 text-white':'bg-gray-100'}`}>Atleti</button>
@@ -496,7 +560,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
   open={showModal}
   onClose={() => { setShowModal(false); setEditingFee(null) }}
   fee={editingFee}
-  teams={teams}
+  teams={seasonTeams}
   onCreate={handleCreateFee}
   onUpdate={handleUpdateFee}
 />
@@ -627,7 +691,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
               <label className="cs-field__label">Squadra</label>
               <select value={filterTeamId} onChange={(e)=>setFilterTeamId(e.target.value)} className="cs-select">
                 <option value="">Tutte</option>
-                {teams.map(t=> <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                {seasonTeams.map(t=> <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
               </select>
             </div>
             <div>
