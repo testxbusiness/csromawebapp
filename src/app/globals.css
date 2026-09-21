@@ -1163,6 +1163,10 @@ button.cs-list-row{ font:inherit; }
   box-shadow: var(--cs-modal-shadow);
   padding: clamp(var(--cs-sp-5), 3vw, var(--cs-sp-7));
   color: var(--cs-text);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   transform: translateY(8px) scale(.985);
   opacity: 0;
   transition: transform .22s cubic-bezier(.2,.7,.2,1), opacity .22s ease;
