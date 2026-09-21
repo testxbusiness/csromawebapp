@@ -10,6 +10,7 @@ import { BarChart3, CheckCircle2, RotateCcw } from 'lucide-react'
 
 interface Payment {
   id?: string
+  season_id?: string | null
   type: 'general_cost' | 'coach_payment' | 'person_payment'
   description: string
   amount: number
@@ -35,15 +36,19 @@ interface Payment {
     id: string
     name: string
     address: string
+    season_id?: string
   }
   activities?: {
     id: string
     name: string
+    season_id?: string
   }
   teams?: {
     id: string
     name: string
     code: string
+    activity_id?: string
+    season_id?: string
   }
   coaches?: {
     id: string
@@ -65,17 +70,27 @@ interface Gym {
   id: string
   name: string
   address: string
+  season_id?: string
 }
 
 interface Activity {
   id: string
   name: string
+  season_id?: string
 }
 
 interface Team {
   id: string
   name: string
   code: string
+  activity_id?: string
+  season_id?: string
+}
+
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
 }
 
 interface Coach {
@@ -93,6 +108,8 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeason, setSelectedSeason] = useState('all')
   const [payees, setPayees] = useState<Payee[]>([])
   const [loading, setLoading] = useState(true)
   const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
@@ -103,18 +120,24 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
-    loadPayments()
     loadGyms()
     loadActivities()
     loadTeams()
     loadPayees()
+    loadSeasons()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    void loadPayments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeason])
 
   const loadPayments = async () => {
     setLoading(true)
     setLoadState('loading')
     try {
-      const response = await fetch('/api/admin/payments')
+      const query = selectedSeason === 'all' ? '' : '?season_id=' + encodeURIComponent(selectedSeason)
+      const response = await fetch('/api/admin/payments' + query)
       if (!response.ok) {
         setPayments([])
         setLoadState(loadStateFromStatus(response.status))
@@ -132,10 +155,18 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
     }
   }
 
+  const loadSeasons = async () => {
+    const { data } = await supabase.from('seasons').select('id, name, is_active').order('start_date', { ascending: false })
+    const nextSeasons = data || []
+    setSeasons(nextSeasons)
+    const activeSeason = nextSeasons.find((season) => season.is_active)
+    if (activeSeason) setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
+  }
+
   const loadGyms = async () => {
     const { data } = await supabase
       .from('gyms')
-      .select('id, name, address')
+      .select('id, name, address, season_id')
       .order('name')
 
     setGyms(data || [])
@@ -144,7 +175,7 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
   const loadActivities = async () => {
     const { data } = await supabase
       .from('activities')
-      .select('id, name')
+      .select('id, name, season_id')
       .order('name')
 
     setActivities(data || [])
@@ -153,11 +184,19 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
   const loadTeams = async () => {
     const { data } = await supabase
       .from('teams')
-      .select('id, name, code')
+      .select('id, name, code, activity_id')
       .order('name')
-
-    setTeams(data || [])
+    const activityIds = [...new Set((data || []).map((team) => team.activity_id).filter(Boolean))]
+    const { data: activitiesData } = activityIds.length
+      ? await supabase.from('activities').select('id, season_id').in('id', activityIds)
+      : { data: [] as { id: string; season_id: string }[] }
+    const seasonByActivityId = new Map((activitiesData || []).map((activity) => [activity.id, activity.season_id]))
+    setTeams((data || []).map((team) => ({ ...team, season_id: seasonByActivityId.get(team.activity_id) })))
   }
+
+  const seasonScopedGyms = useMemo(() => selectedSeason === 'all' ? gyms : gyms.filter((gym) => gym.season_id === selectedSeason), [gyms, selectedSeason])
+  const seasonScopedActivities = useMemo(() => selectedSeason === 'all' ? activities : activities.filter((activity) => activity.season_id === selectedSeason), [activities, selectedSeason])
+  const seasonScopedTeams = useMemo(() => selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason), [selectedSeason, teams])
 
   const loadPayees = async () => {
     const response = await fetch('/api/admin/payment-payees')
@@ -224,8 +263,9 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
         // Create each payment individually via API
         for (const date of paymentDates) {
           const paymentToCreate = {
-            ...paymentData,
-            due_date: date,
+          ...paymentData,
+          season_id: selectedSeason === 'all' ? undefined : selectedSeason,
+          due_date: date,
             status: 'pending' as const
           }
           
@@ -252,7 +292,7 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(paymentData),
+          body: JSON.stringify({ ...paymentData, season_id: selectedSeason === 'all' ? undefined : selectedSeason }),
         })
 
         if (response.ok) {
@@ -275,7 +315,7 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ id, ...paymentData }),
+        body: JSON.stringify({ id, ...paymentData, season_id: selectedSeason === 'all' ? undefined : selectedSeason }),
       })
 
       if (response.ok) {
@@ -469,6 +509,13 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
       <div className="cs-card cs-card--primary p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
+            <label className="cs-field__label" htmlFor="payments-season">Stagione</label>
+            <select id="payments-season" value={selectedSeason} onChange={(event) => setSelectedSeason(event.target.value)} className="cs-select">
+              <option value="all">Tutte le stagioni</option>
+              {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="cs-field__label">Tipo Pagamento</label>
             <select
               value={filterType}
@@ -500,9 +547,9 @@ export default function PaymentsManager({ embedded = false }: { embedded?: boole
             open={showModal}
             onClose={() => { setShowModal(false); setEditingPayment(null) }}
             payment={editingPayment}
-            gyms={gyms}
-            activities={activities}
-            teams={teams}
+            gyms={seasonScopedGyms}
+            activities={seasonScopedActivities}
+            teams={seasonScopedTeams}
             payees={payees}
             onCreate={handleCreatePayment}
             onUpdate={handleUpdatePayment}

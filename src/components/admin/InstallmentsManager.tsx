@@ -70,6 +70,12 @@ interface PaginationState {
   total: number
 }
 
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 export default function InstallmentsManager() {
   const [installments, setInstallments] = useState<Installment[]>([])
   const [kpiData, setKpiData] = useState<KPIData>({
@@ -87,6 +93,8 @@ export default function InstallmentsManager() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [selectedAthlete, setSelectedAthlete] = useState<string | null>(null)
   const [showAthleteDetail, setShowAthleteDetail] = useState(false)
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeason, setSelectedSeason] = useState('all')
 
   const [filters, setFilters] = useState<FilterState>({
     teams: [],
@@ -105,10 +113,22 @@ export default function InstallmentsManager() {
 
   const supabase = createClient()
 
+  useEffect(() => {
+    const loadSeasons = async () => {
+      const { data } = await supabase.from('seasons').select('id, name, is_active').order('start_date', { ascending: false })
+      const nextSeasons = data || []
+      setSeasons(nextSeasons)
+      const activeSeason = nextSeasons.find((season) => season.is_active)
+      if (activeSeason) setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
+    }
+    void loadSeasons()
+  }, [supabase])
+
   // Load KPI data
   const loadKPIData = useCallback(async () => {
     try {
-      const response = await fetch('/api/admin/incassi/kpi')
+      const query = '?season_id=' + encodeURIComponent(selectedSeason)
+      const response = await fetch(`/api/admin/incassi/kpi${query}`)
       const result = await response.json()
 
       if (response.ok) {
@@ -117,7 +137,7 @@ export default function InstallmentsManager() {
     } catch (error) {
       console.error('Errore caricamento KPI:', error)
     }
-  }, [])
+  }, [selectedSeason])
 
   // Load installments with filters and pagination
   const loadInstallments = useCallback(async () => {
@@ -148,6 +168,7 @@ export default function InstallmentsManager() {
       if (filters.preset) {
         params.set('preset', filters.preset)
       }
+      params.set('season_id', selectedSeason)
 
       // Add pagination
       params.set('page', pagination.page.toString())
@@ -171,7 +192,7 @@ export default function InstallmentsManager() {
     } finally {
       setLoading(false)
     }
-  }, [filters, pagination.page, pagination.limit])
+  }, [filters, pagination.page, pagination.limit, selectedSeason])
 
   // Load data on mount and when filters change
   useEffect(() => {
@@ -194,6 +215,13 @@ export default function InstallmentsManager() {
   const handleFilterChange = (newFilters: Partial<FilterState>) => {
     setFilters(prev => ({ ...prev, ...newFilters }))
     setPagination(prev => ({ ...prev, page: 1 })) // Reset to first page
+  }
+
+  const handleSeasonChange = (seasonId: string) => {
+    setSelectedSeason(seasonId)
+    setFilters((prev) => ({ ...prev, teams: [], plans: [] }))
+    setPagination((prev) => ({ ...prev, page: 1 }))
+    setSelectedInstallments(new Set())
   }
 
   // Handle pagination
@@ -283,6 +311,9 @@ export default function InstallmentsManager() {
       <FilterBar
         filters={filters}
         onFilterChange={handleFilterChange}
+        seasons={seasons}
+        selectedSeason={selectedSeason}
+        onSeasonChange={handleSeasonChange}
         onClearFilters={() => setFilters({
           teams: [],
           plans: [],

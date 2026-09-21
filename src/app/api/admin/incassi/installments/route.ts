@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET(request: Request) {
   try {
@@ -16,9 +17,14 @@ export async function GET(request: Request) {
     const fromDate = searchParams.get('from')
     const toDate = searchParams.get('to')
     const search = searchParams.get('search') || ''
+    const requestedSeasonId = searchParams.get('season_id')
     const preset = searchParams.get('preset')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '50')
+
+    const seasonId = requestedSeasonId === 'all' ? null : requestedSeasonId || (await resolveActiveSeason(supabase))?.id || null
+    if (requestedSeasonId !== 'all' && !seasonId) return NextResponse.json({ error: 'Nessuna stagione disponibile' }, { status: 400 })
+    const seasonTeamIds = seasonId ? await resolveActiveSeasonTeamIds(supabase, seasonId) : []
 
     // Calculate date range based on preset
     let dateFrom = fromDate
@@ -57,12 +63,15 @@ export async function GET(request: Request) {
       .not('profile_id', 'is', null)
 
     // Apply filters
-    if (teams.length > 0) {
+    const requestedTeamIds = teams.length > 0
+      ? seasonId ? teams.filter((teamId) => seasonTeamIds.includes(teamId)) : teams
+      : seasonId ? seasonTeamIds : []
+    if (requestedTeamIds.length > 0) {
       // First get membership_fee IDs for the selected teams
       const { data: membershipFees } = await supabase
         .from('membership_fees')
         .select('id')
-        .in('team_id', teams)
+        .in('team_id', requestedTeamIds)
 
       if (membershipFees && membershipFees.length > 0) {
         const membershipFeeIds = membershipFees.map(mf => mf.id)
@@ -72,6 +81,8 @@ export async function GET(request: Request) {
         // Use a UUID that doesn't exist to ensure no results
         query = query.in('membership_fee_id', ['00000000-0000-0000-0000-000000000000'])
       }
+    } else {
+      query = query.in('membership_fee_id', ['00000000-0000-0000-0000-000000000000'])
     }
 
     if (plans.length > 0) {

@@ -4,13 +4,14 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
-    const activeSeason = await resolveActiveSeason(supabase)
-    if (!activeSeason) return NextResponse.json({ error: 'Nessuna stagione attiva trovata' }, { status: 400 })
-    const activeTeamIds = await resolveActiveSeasonTeamIds(supabase, activeSeason.id)
+    const requestedSeasonId = new URL(request.url).searchParams.get('season_id')
+    const seasonId = requestedSeasonId === 'all' ? null : requestedSeasonId || (await resolveActiveSeason(supabase))?.id || null
+    if (requestedSeasonId !== 'all' && !seasonId) return NextResponse.json({ error: 'Nessuna stagione disponibile' }, { status: 400 })
+    const activeTeamIds = seasonId ? await resolveActiveSeasonTeamIds(supabase, seasonId) : null
 
     // Get current date for status calculations
     const today = new Date()
@@ -18,7 +19,9 @@ export async function GET() {
     dueSoonDate.setDate(today.getDate() + 30) // 30 days from now
 
     // Get only installments assigned to athletes
-    const { data: fees, error: feesError } = activeTeamIds.length > 0
+    const { data: fees, error: feesError } = activeTeamIds === null
+      ? await supabase.from('membership_fees').select('id')
+      : activeTeamIds.length > 0
       ? await supabase.from('membership_fees').select('id').in('team_id', activeTeamIds)
       : { data: [], error: null }
     if (feesError) {

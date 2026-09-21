@@ -48,12 +48,42 @@ async function getPaymentPayeeType(
   return null
 }
 
-export async function GET() {
+async function paymentMatchesSeason(
+  adminClient: ReturnType<typeof createAdminClient>,
+  payload: { team_id?: string | null; activity_id?: string | null; gym_id?: string | null },
+  seasonId?: string | null,
+) {
+  if (!seasonId) return true
+  const seasons: string[] = []
+
+  if (payload.activity_id) {
+    const { data } = await adminClient.from('activities').select('season_id').eq('id', payload.activity_id).maybeSingle()
+    if (!data) return false
+    seasons.push(data.season_id)
+  }
+  if (payload.team_id) {
+    const { data: team } = await adminClient.from('teams').select('activity_id').eq('id', payload.team_id).maybeSingle()
+    if (!team) return false
+    const { data: activity } = await adminClient.from('activities').select('season_id').eq('id', team.activity_id).maybeSingle()
+    if (!activity) return false
+    seasons.push(activity.season_id)
+  }
+  if (payload.gym_id) {
+    const { data } = await adminClient.from('gyms').select('season_id').eq('id', payload.gym_id).maybeSingle()
+    if (!data) return false
+    seasons.push(data.season_id)
+  }
+
+  return seasons.every((value) => value === seasonId)
+}
+
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
     
+    const seasonId = new URL(request.url).searchParams.get('season_id')
     const { data, error } = await adminClient
       .from('payments')
       .select(`
@@ -93,7 +123,28 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(data || [])
+    let filteredData = data || []
+    if (seasonId) {
+      const teamIds = [...new Set(filteredData.map((payment) => payment.team_id).filter(Boolean))]
+      const activityIds = [...new Set(filteredData.map((payment) => payment.activity_id).filter(Boolean))]
+      const gymIds = [...new Set(filteredData.map((payment) => payment.gym_id).filter(Boolean))]
+      const [{ data: teams }, { data: activities }, { data: gyms }] = await Promise.all([
+        teamIds.length ? adminClient.from('teams').select('id, activity_id').in('id', teamIds) : Promise.resolve({ data: [] as { id: string; activity_id: string }[] }),
+        activityIds.length ? adminClient.from('activities').select('id, season_id').in('id', activityIds) : Promise.resolve({ data: [] as { id: string; season_id: string }[] }),
+        gymIds.length ? adminClient.from('gyms').select('id, season_id').in('id', gymIds) : Promise.resolve({ data: [] as { id: string; season_id: string }[] }),
+      ])
+      const activitySeasonById = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
+      const teamSeasonById = new Map((teams || []).map((team) => [team.id, activitySeasonById.get(team.activity_id)]))
+      const gymSeasonById = new Map((gyms || []).map((gym) => [gym.id, gym.season_id]))
+      filteredData = filteredData.filter((payment) => {
+        if (payment.team_id) return teamSeasonById.get(payment.team_id) === seasonId
+        if (payment.activity_id) return activitySeasonById.get(payment.activity_id) === seasonId
+        if (payment.gym_id) return gymSeasonById.get(payment.gym_id) === seasonId
+        return true
+      })
+    }
+
+    return NextResponse.json(filteredData)
   } catch (error) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
@@ -112,10 +163,13 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Dati pagamento non validi' }, { status: 400 })
     }
-    const paymentData = parsed.data
+    const { season_id: seasonId, ...paymentData } = parsed.data
     const supabase = await createClient()
     const account = await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
+    if (!(await paymentMatchesSeason(adminClient, paymentData, seasonId))) {
+      return NextResponse.json({ error: 'Il pagamento non appartiene alla stagione selezionata' }, { status: 400 })
+    }
 
     // Normalize payload to DB vocabulary and add auditing fields
     const normalized: any = {
@@ -174,10 +228,13 @@ export async function PATCH(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: 'Dati aggiornamento non validi' }, { status: 400 })
     }
-    const { id, ...rawUpdate } = parsed.data
+    const { id, season_id: seasonId, ...rawUpdate } = parsed.data
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
     const adminClient = await createAdminClient()
+    if (!(await paymentMatchesSeason(adminClient, rawUpdate, seasonId))) {
+      return NextResponse.json({ error: 'Il pagamento non appartiene alla stagione selezionata' }, { status: 400 })
+    }
 
     // Normalize incoming fields to satisfy DB constraints
     const updateData: any = { ...rawUpdate }
