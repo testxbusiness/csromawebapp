@@ -147,9 +147,15 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
 
   useEffect(() => {
     loadEvents(visibleRequest(new Date()))
-    loadTeams()
     loadSeasons()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!filterSeasonId) return
+    setGyms([])
+    setActivities([])
+    void loadTeams(filterSeasonId)
+  }, [filterSeasonId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -241,11 +247,12 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   }
 
   const loadSelectOptions = useCallback(async () => {
+    if (!filterSeasonId) return
     setLoadingSelects(true)
     try {
       const [{ data: gymsData }, { data: activitiesData }] = await Promise.all([
-        supabase.from('gyms').select('id, name, address, city').order('name'),
-        supabase.from('activities').select('id, name').order('name')
+        supabase.from('gyms').select('id, name, address, city').eq('season_id', filterSeasonId).order('name'),
+        supabase.from('activities').select('id, name').eq('season_id', filterSeasonId).order('name')
       ])
       setGyms(gymsData || [])
       setActivities(activitiesData || [])
@@ -254,19 +261,28 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     } finally {
       setLoadingSelects(false)
     }
-  }, [supabase])
+  }, [filterSeasonId, supabase])
 
   // Lazy load gyms/activities solo quando il modal si apre
   useEffect(() => {
-    if (showModal && gyms.length === 0 && activities.length === 0) {
+    if (showModal && filterSeasonId && gyms.length === 0 && activities.length === 0) {
       void loadSelectOptions()
     }
-  }, [activities.length, gyms.length, loadSelectOptions, showModal])
+  }, [activities.length, filterSeasonId, gyms.length, loadSelectOptions, showModal])
 
-  const loadTeams = async () => {
+  const loadTeams = async (seasonId: string) => {
+    setTeams([])
+    const { data: activitiesData, error: activitiesError } = await supabase
+      .from('activities')
+      .select('id')
+      .eq('season_id', seasonId)
+
+    if (activitiesError || !activitiesData || activitiesData.length === 0) return
+
     const { data } = await supabase
       .from('teams')
       .select('id, name, code')
+      .in('activity_id', activitiesData.map((activity) => activity.id))
       .order('name')
 
     setTeams(data || [])
