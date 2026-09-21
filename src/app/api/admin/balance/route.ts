@@ -4,6 +4,7 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 interface BalanceFilters {
+  seasonId?: string
   activityId?: string
   teamId?: string
   gymId?: string
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
     await requireGlobalRole(supabase, 'admin')
     const { searchParams } = new URL(request.url)
     const filters: BalanceFilters = {
+      seasonId: searchParams.get('seasonId') || undefined,
       activityId: searchParams.get('activityId') || undefined,
       teamId: searchParams.get('teamId') || undefined,
       gymId: searchParams.get('gymId') || undefined,
@@ -29,24 +31,39 @@ export async function GET(request: NextRequest) {
 
     const adminClient = await createAdminClient()
     
-    // Get current season
-    const { data: currentSeason } = await adminClient
+    const requestedSeasonId = filters.seasonId
+    const showAllSeasons = requestedSeasonId === 'all'
+    const { data: activeSeason } = await adminClient
       .from('seasons')
-      .select('id, name')
+      .select('id, name, start_date, end_date, is_active')
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
+    const selectedSeasonId = showAllSeasons ? null : requestedSeasonId || activeSeason?.id || null
+    if (!showAllSeasons && !selectedSeasonId) {
+      return NextResponse.json({ error: 'Nessuna stagione attiva trovata' }, { status: 400 })
+    }
+    let selectedSeason = showAllSeasons ? null : activeSeason
 
-    if (!currentSeason) {
-      return NextResponse.json({ 
-        error: 'Nessuna stagione attiva trovata' 
-      }, { status: 400 })
+    if (selectedSeasonId && selectedSeasonId !== activeSeason?.id) {
+      const { data: season, error: seasonError } = await adminClient
+        .from('seasons')
+        .select('id, name, start_date, end_date, is_active')
+        .eq('id', selectedSeasonId)
+        .maybeSingle()
+      if (seasonError || !season) {
+        return NextResponse.json({ error: 'Stagione non trovata' }, { status: 400 })
+      }
+      selectedSeason = season
     }
 
     // Get all activities for the current season first
-    const { data: seasonActivities, error: activitiesError } = await adminClient
+    let seasonActivitiesQuery = adminClient
       .from('activities')
       .select('id')
-      .eq('season_id', currentSeason.id)
+    if (!showAllSeasons) {
+      seasonActivitiesQuery = seasonActivitiesQuery.eq('season_id', selectedSeasonId as string)
+    }
+    const { data: seasonActivities, error: activitiesError } = await seasonActivitiesQuery
 
     if (activitiesError) {
       return NextResponse.json({ 
@@ -70,7 +87,10 @@ export async function GET(request: NextRequest) {
           activity_id
         )
       `)
-      .in('teams.activity_id', activityIds)
+
+    if (!showAllSeasons) {
+      feesQuery = feesQuery.in('teams.activity_id', activityIds.length ? activityIds : ['00000000-0000-0000-0000-000000000000'])
+    }
 
     let paymentsQuery = adminClient
       .from('payments')
@@ -93,7 +113,7 @@ export async function GET(request: NextRequest) {
     // Apply filters
     if (filters.activityId) {
       feesQuery = feesQuery.eq('teams.activity_id', filters.activityId)
-      paymentsQuery = paymentsQuery.eq('activity_id', filters.activityId)
+        paymentsQuery = paymentsQuery.eq('activity_id', filters.activityId)
     }
     
     if (filters.teamId) {
@@ -128,6 +148,33 @@ export async function GET(request: NextRequest) {
         error: 'Errore nel recupero dei dati',
         details: feesError?.message || paymentsError?.message
       }, { status: 500 })
+    }
+
+    let filteredPayments = payments || []
+    if (!showAllSeasons && selectedSeasonId) {
+      const paymentTeamIds = [...new Set(filteredPayments.map((payment) => payment.team_id).filter(Boolean))]
+      const paymentActivityIds = [...new Set(filteredPayments.map((payment) => payment.activity_id).filter(Boolean))]
+      const paymentGymIds = [...new Set(filteredPayments.map((payment) => payment.gym_id).filter(Boolean))]
+      const { data: paymentTeams } = paymentTeamIds.length
+        ? await adminClient.from('teams').select('id, activity_id').in('id', paymentTeamIds)
+        : { data: [] as { id: string; activity_id: string }[] }
+      const allPaymentActivityIds = [...new Set([
+        ...paymentActivityIds,
+        ...(paymentTeams || []).map((team) => team.activity_id),
+      ])]
+      const [{ data: paymentActivities }, { data: paymentGyms }] = await Promise.all([
+        allPaymentActivityIds.length ? adminClient.from('activities').select('id, season_id').in('id', allPaymentActivityIds) : Promise.resolve({ data: [] as { id: string; season_id: string }[] }),
+        paymentGymIds.length ? adminClient.from('gyms').select('id, season_id').in('id', paymentGymIds) : Promise.resolve({ data: [] as { id: string; season_id: string }[] }),
+      ])
+      const activitySeasonById = new Map((paymentActivities || []).map((activity) => [activity.id, activity.season_id]))
+      const teamSeasonById = new Map((paymentTeams || []).map((team) => [team.id, activitySeasonById.get(team.activity_id)]))
+      const gymSeasonById = new Map((paymentGyms || []).map((gym) => [gym.id, gym.season_id]))
+      filteredPayments = filteredPayments.filter((payment) => {
+        if (payment.team_id) return teamSeasonById.get(payment.team_id) === selectedSeasonId
+        if (payment.activity_id) return activitySeasonById.get(payment.activity_id) === selectedSeasonId
+        if (payment.gym_id) return gymSeasonById.get(payment.gym_id) === selectedSeasonId
+        return true
+      })
     }
 
     // Handle gym filtering for fees if needed
@@ -165,7 +212,6 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .in('membership_fees.teams.activity_id', activityIds)
 
     // Apply activity filter to installments
     if (filters.activityId) {
@@ -175,6 +221,10 @@ export async function GET(request: NextRequest) {
     // Apply team filter to installments
     if (filters.teamId) {
       installmentsQuery = installmentsQuery.eq('membership_fees.team_id', filters.teamId)
+    }
+
+    if (!showAllSeasons) {
+      installmentsQuery = installmentsQuery.in('membership_fees.teams.activity_id', activityIds.length ? activityIds : ['00000000-0000-0000-0000-000000000000'])
     }
 
     const { data: installments, error: installmentsError } = await installmentsQuery
@@ -209,7 +259,7 @@ export async function GET(request: NextRequest) {
       ?.filter(installment => installment.status === 'paid')
       ?.reduce((sum, installment) => sum + Number(installment.amount), 0) || 0
 
-    const actualExpenses = payments
+    const actualExpenses = filteredPayments
       ?.filter(payment => payment.status === 'paid')
       ?.reduce((sum, payment) => sum + Number(payment.amount), 0) || 0
 
@@ -223,7 +273,7 @@ export async function GET(request: NextRequest) {
       )
       ?.reduce((sum, installment) => sum + Number(installment.amount), 0) || 0
 
-    const forecastExpenses = payments
+    const forecastExpenses = filteredPayments
       ?.filter(payment => 
         payment.status !== 'paid' && 
         payment.due_date && 
@@ -240,7 +290,7 @@ export async function GET(request: NextRequest) {
       )
       ?.reduce((sum, installment) => sum + Number(installment.amount), 0) || 0
 
-    const outstandingExpenses = payments
+    const outstandingExpenses = filteredPayments
       ?.filter(payment => 
         payment.status !== 'paid' && 
         payment.due_date && 
@@ -249,7 +299,7 @@ export async function GET(request: NextRequest) {
       ?.reduce((sum, payment) => sum + Number(payment.amount), 0) || 0
 
     const balanceData = {
-      season: currentSeason,
+      season: selectedSeason,
       summary: {
         actual: {
           income: actualIncome,
@@ -275,7 +325,7 @@ export async function GET(request: NextRequest) {
       },
       details: {
         installments: installments || [],
-        payments: payments || []
+        payments: filteredPayments
       }
     }
 

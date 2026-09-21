@@ -30,7 +30,7 @@ interface BalanceData {
   season: {
     id: string
     name: string
-  }
+  } | null
   summary: BalanceSummary
   details: {
     installments: any[]
@@ -39,6 +39,7 @@ interface BalanceData {
 }
 
 interface FilterOptions {
+  seasons: Array<{ id: string; name: string; is_active: boolean }>
   activities: any[]
   teams: any[]
   gyms: any[]
@@ -49,12 +50,14 @@ export default function BalanceDashboard() {
   const [balanceData, setBalanceData] = useState<BalanceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [filterOptions, setFilterOptions] = useState<FilterOptions>({
+    seasons: [],
     activities: [],
     teams: [],
     gyms: [],
     coaches: []
   })
   const [filters, setFilters] = useState({
+    seasonId: '',
     activityId: '',
     teamId: '',
     gymId: '',
@@ -66,20 +69,27 @@ export default function BalanceDashboard() {
 
   const loadFilterOptions = useCallback(async () => {
     try {
-      const [activitiesRes, teamsRes, gymsRes, coachesResponse] = await Promise.all([
-        supabase.from('activities').select('id, name').order('name'),
-        supabase.from('teams').select('id, name, code').order('name'),
-        supabase.from('gyms').select('id, name').order('name'),
+      const [seasonsRes, activitiesRes, teamsRes, gymsRes, coachesResponse] = await Promise.all([
+        supabase.from('seasons').select('id, name, is_active').order('start_date', { ascending: false }),
+        supabase.from('activities').select('id, name, season_id').order('name'),
+        supabase.from('teams').select('id, name, code, activity_id').order('name'),
+        supabase.from('gyms').select('id, name, season_id').order('name'),
         fetch('/api/admin/coaches', { cache: 'no-store' })
       ])
       const coachesPayload = await coachesResponse.json().catch(() => null) as { coaches?: FilterOptions['coaches'] } | null
+      const seasons = seasonsRes.data || []
+      const activeSeason = seasons.find((season) => season.is_active)
 
       setFilterOptions({
+        seasons,
         activities: activitiesRes.data || [],
         teams: teamsRes.data || [],
         gyms: gymsRes.data || [],
         coaches: coachesResponse.ok ? coachesPayload?.coaches || [] : []
       })
+      if (activeSeason) {
+        setFilters((current) => current.seasonId ? current : { ...current, seasonId: activeSeason.id })
+      }
     } catch (error) {
       console.error('Error loading filter options:', error)
     }
@@ -118,8 +128,25 @@ export default function BalanceDashboard() {
   }, [loadBalanceData])
 
   const handleFilterChange = (key: string, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
+    setFilters(prev => {
+      if (key === 'seasonId') {
+        return { ...prev, seasonId: value, activityId: '', teamId: '', gymId: '' }
+      }
+      return { ...prev, [key]: value }
+    })
   }
+
+  const selectedSeason = filters.seasonId
+  const seasonActivities = selectedSeason === 'all'
+    ? filterOptions.activities
+    : filterOptions.activities.filter((activity) => activity.season_id === selectedSeason)
+  const seasonActivityIds = new Set(seasonActivities.map((activity) => activity.id))
+  const seasonTeams = selectedSeason === 'all'
+    ? filterOptions.teams
+    : filterOptions.teams.filter((team) => seasonActivityIds.has(team.activity_id))
+  const seasonGyms = selectedSeason === 'all'
+    ? filterOptions.gyms
+    : filterOptions.gyms.filter((gym) => gym.season_id === selectedSeason)
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('it-IT', {
@@ -157,6 +184,23 @@ export default function BalanceDashboard() {
         <h3 className="text-lg font-semibold mb-4">Filtri</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
+            <label className="cs-field__label">Stagione</label>
+            <select
+              value={filters.seasonId}
+              onChange={(e) => handleFilterChange('seasonId', e.target.value)}
+              className="cs-select"
+            >
+              <option value="">Seleziona stagione</option>
+              <option value="all">Tutte le stagioni</option>
+              {filterOptions.seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  {season.name}{season.is_active ? ' (Attiva)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="cs-field__label">Attività</label>
             <select
               value={filters.activityId}
@@ -164,7 +208,7 @@ export default function BalanceDashboard() {
               className="cs-select"
             >
               <option value="">Tutte le attività</option>
-              {filterOptions.activities.map((activity) => (
+              {seasonActivities.map((activity) => (
                 <option key={activity.id} value={activity.id}>
                   {activity.name}
                 </option>
@@ -180,7 +224,7 @@ export default function BalanceDashboard() {
               className="cs-select"
             >
               <option value="">Tutte le squadre</option>
-              {filterOptions.teams.map((team) => (
+              {seasonTeams.map((team) => (
                 <option key={team.id} value={team.id}>
                   {team.name} ({team.code})
                 </option>
@@ -196,7 +240,7 @@ export default function BalanceDashboard() {
               className="cs-select"
             >
               <option value="">Tutte le palestre</option>
-              {filterOptions.gyms.map((gym) => (
+              {seasonGyms.map((gym) => (
                 <option key={gym.id} value={gym.id}>
                   {gym.name}
                 </option>
@@ -246,6 +290,7 @@ export default function BalanceDashboard() {
         <div className="flex justify-end">
           <button
             onClick={() => setFilters({
+              seasonId: filterOptions.seasons.find((season) => season.is_active)?.id || 'all',
               activityId: '',
               teamId: '',
               gymId: '',
@@ -265,7 +310,7 @@ export default function BalanceDashboard() {
         <div className="cs-card cs-card--primary p-6">
           <div className="mb-6">
             <h2 className="text-2xl font-bold">
-              Bilancio - {balanceData.season.name}
+              Bilancio - {balanceData.season?.name || 'Tutte le stagioni'}
             </h2>
           </div>
 
