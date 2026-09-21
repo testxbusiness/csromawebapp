@@ -38,21 +38,24 @@ export default function CoachProfileManager() {
     if (!profile?.id) return
     setLoadError(false)
     setLoadState('ready')
-    const [coachResult, assignmentResult] = await Promise.all([
+    const [coachResult, assignmentResult, activeTeamsResponse] = await Promise.all([
       supabase.from('coach_profiles').select('level, specialization, started_on').eq('profile_id', profile.id).maybeSingle(),
       supabase.from('team_coaches').select('team_id, role, assigned_at, teams(id, name, code)').eq('coach_id', profile.id),
+      fetch('/api/coach/teams', { cache: 'no-store' }),
     ])
-    if (coachResult.error || assignmentResult.error) {
+    const activeTeamsPayload = await activeTeamsResponse.json().catch(() => null) as { teams?: Array<{ id: string }> } | null
+    if (coachResult.error || assignmentResult.error || !activeTeamsResponse.ok) {
       setLoadError(true)
       const error = coachResult.error ?? assignmentResult.error
       setLoadState(error?.code === '42501' ? 'denied' : loadStateFromError(error))
       return
     }
     setCoachDetails((coachResult.data as CoachDetails | null) ?? null)
+    const activeTeamIds = new Set((activeTeamsPayload?.teams ?? []).map((team) => team.id))
     setAssignments(((assignmentResult.data ?? []) as Array<{ team_id: string; role: string | null; assigned_at: string | null; teams?: { id: string; name: string; code: string } | Array<{ id: string; name: string; code: string }> | null }>)
       .flatMap((assignment) => {
         const team = Array.isArray(assignment.teams) ? assignment.teams[0] : assignment.teams
-        return team ? [{ ...team, role: assignment.role, assigned_at: assignment.assigned_at }] : []
+        return team && activeTeamIds.has(assignment.team_id) ? [{ ...team, role: assignment.role, assigned_at: assignment.assigned_at }] : []
       })
       .sort((a, b) => a.name.localeCompare(b.name)))
   }, [profile?.id, supabase])

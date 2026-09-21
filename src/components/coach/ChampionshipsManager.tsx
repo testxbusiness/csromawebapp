@@ -42,7 +42,7 @@ import { useTeamContext } from '@/context/TeamContext'
 export default function ChampionshipsManager() {
   let mode = 'coach' as ManagerMode
   const { account } = useAuth()
-  const { selectedTeamId } = useTeamContext()
+  const { selectedTeamId, teams: contextTeams } = useTeamContext()
   const supabase = useMemo(() => createClient(), [])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
@@ -173,23 +173,6 @@ export default function ChampionshipsManager() {
   useEffect(() => {
     computeNextMatch(matches)
   }, [matches, mode, coachTeamIds, athleteTeamIds]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadCoachTeams = useCallback(async () => {
-    try {
-      const ownerProfileId = account?.ownerProfileId
-      if (!ownerProfileId) return
-
-      const { data: tc } = await supabase
-        .from('team_coaches')
-        .select('team_id')
-        .eq('coach_id', ownerProfileId)
-      const ids = new Set<string>()
-      tc?.forEach((t: any) => t.team_id && ids.add(t.team_id))
-      setCoachTeamIds(ids)
-    } catch (err) {
-      console.error('Errore caricamento squadre coach', err)
-    }
-  }, [account?.ownerProfileId, supabase])
 
   const loadAthleteTeams = useCallback(async () => {
     try {
@@ -663,9 +646,9 @@ export default function ChampionshipsManager() {
   }, [currentGroups])
 
   useEffect(() => {
-    if (mode === 'coach') void loadCoachTeams()
+    if (mode === 'coach') setCoachTeamIds(new Set(contextTeams.map((team) => team.id)))
     else if (mode === 'athlete') void loadAthleteTeams()
-  }, [loadAthleteTeams, loadCoachTeams, mode])
+  }, [contextTeams, loadAthleteTeams, mode])
 
   useEffect(() => {
     if (selectedChampionshipId) void loadClubTeams(selectedChampionshipId)
@@ -861,6 +844,8 @@ export default function ChampionshipsManager() {
         </div>
       </Card>
 
+      {selectedChampionship ? (
+      <>
       <div className="grid gap-4 md:grid-cols-2 mt-4">
         <ChampionshipInfoPanel
           description="Stato del campionato e perimetro del girone selezionato."
@@ -1032,6 +1017,12 @@ export default function ChampionshipsManager() {
           <StandingsPanel rows={sortedStandings} />
         </div>
       </div>
+      </>
+      ) : (
+        <Card variant="primary">
+          <EmptyState title="Nessun campionato disponibile" description="Non risultano campionati collegati alle squadre della stagione attiva." />
+        </Card>
+      )}
 
       <ChampionshipConvocationModal
         open={convocationModalOpen}
