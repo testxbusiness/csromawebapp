@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
 // Funzioni helper per operazioni massive
 async function handleTeamAssignment(adminClient: any, coachIds: string[], parameters: any, dryRun: boolean) {
-  const { teamIds, role = 'assistant_coach' } = parameters
+  const { teamIds, role = 'assistant_coach', seasonId } = parameters
 
   if (!teamIds || !Array.isArray(teamIds) || teamIds.length === 0) {
     return NextResponse.json({ error: 'ID squadre mancanti o non validi' }, { status: 400 })
@@ -48,11 +48,20 @@ async function handleTeamAssignment(adminClient: any, coachIds: string[], parame
   // Verifica che tutte le squadre esistano
   const { data: teams, error: teamsError } = await adminClient
     .from('teams')
-    .select('id, name')
+    .select('id, name, activity_id')
     .in('id', teamIds)
 
   if (teamsError || !teams || teams.length !== teamIds.length) {
     return NextResponse.json({ error: 'Una o più squadre non trovate' }, { status: 404 })
+  }
+
+  const { data: activities } = await adminClient
+    .from('activities')
+    .select('id, season_id')
+    .in('id', teams.map((team: { activity_id: string }) => team.activity_id))
+  const seasonByActivityId = new Map((activities ?? []).map((activity: { id: string; season_id: string }) => [activity.id, activity.season_id]))
+  if (teams.some((team: { activity_id: string }) => seasonByActivityId.get(team.activity_id) !== seasonId)) {
+    return NextResponse.json({ error: 'Una o più squadre non appartengono alla stagione selezionata' }, { status: 400 })
   }
 
   const teamNames = teams.map((team: { name: string }) => team.name).join(', ')

@@ -63,6 +63,10 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
     const teams = teamList ?? []
     return selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason)
   }, [selectedSeason])
+  const selectableTeams = useMemo(() => {
+    if (selectedSeason === 'all') return teams
+    return teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === selectedSeason))
+  }, [activities, selectedSeason, teams])
   const certificateStats = useMemo(() => {
     let withoutCertificate = 0
     let expiredCertificate = 0
@@ -250,6 +254,10 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
   }
 
   const handleTeamAssignmentRequest = () => {
+    if (selectedSeason === 'all') {
+      toast.error('Seleziona una stagione prima di assegnare una squadra')
+      return
+    }
     setBulkOperation('assign_to_team')
     setShowTeamAssignmentModal(true)
     setShowBulkModal(false)
@@ -270,6 +278,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       const teamId = Array.isArray(data.teamIds) && data.teamIds.length > 0 ? data.teamIds[0] : ''
       handleBulkOperation(bulkOperation, {
         teamId,
+        seasonId: selectedSeason,
         jerseyNumber: data.jerseyNumber,
         membershipFeeId: data.membershipFeeId,
       })
@@ -547,7 +556,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
             >
               <option value="all">Tutte le squadre</option>
               <option value="none">Nessuna squadra</option>
-              {teams.map(team => (
+              {selectableTeams.map(team => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
@@ -768,6 +777,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
         }}
         onSubmit={handleTeamAssignmentConfirm}
         athleteIds={Array.from(selectedAthletes)}
+        teams={selectableTeams}
         loading={bulkLoading}
         userType="athletes"
       />

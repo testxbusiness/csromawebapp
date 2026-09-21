@@ -6,6 +6,7 @@ import { requireGlobalRole } from '@/server/auth/require-global-role'
 
 interface TeamAssignmentParameters {
   teamId: string
+  seasonId: string
   jerseyNumber?: string
   membershipFeeId?: string
 }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
 
 // Funzioni helper per operazioni massive
 async function handleTeamAssignment(adminClient: ReturnType<typeof createAdminClient>, athleteIds: string[], parameters: TeamAssignmentParameters, dryRun: boolean) {
-  const { teamId, jerseyNumber, membershipFeeId } = parameters
+  const { teamId, seasonId, jerseyNumber, membershipFeeId } = parameters
 
   if (!teamId) {
     return NextResponse.json({ error: 'ID squadra mancante' }, { status: 400 })
@@ -70,12 +71,21 @@ async function handleTeamAssignment(adminClient: ReturnType<typeof createAdminCl
   // Verifica che la squadra esista
   const { data: team, error: teamError } = await adminClient
     .from('teams')
-    .select('id, name')
+    .select('id, name, activity_id')
     .eq('id', teamId)
     .single()
 
   if (teamError || !team) {
     return NextResponse.json({ error: 'Squadra non trovata' }, { status: 404 })
+  }
+
+  const { data: activity } = await adminClient
+    .from('activities')
+    .select('season_id')
+    .eq('id', team.activity_id)
+    .maybeSingle()
+  if (!activity || activity.season_id !== seasonId) {
+    return NextResponse.json({ error: 'La squadra non appartiene alla stagione selezionata' }, { status: 400 })
   }
 
   // Verifica che il piano di pagamento esista (se specificato)

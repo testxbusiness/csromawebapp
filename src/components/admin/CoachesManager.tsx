@@ -52,6 +52,10 @@ export default function CoachesManager({ embedded = false }: { embedded?: boolea
     const teams = teamList ?? []
     return selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason)
   }, [selectedSeason])
+  const selectableTeams = useMemo(() => {
+    if (selectedSeason === 'all') return teams
+    return teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === selectedSeason))
+  }, [activities, selectedSeason, teams])
 
   const loadCoaches = useCallback(async () => {
     try {
@@ -211,6 +215,10 @@ export default function CoachesManager({ embedded = false }: { embedded?: boolea
   }
 
   const handleTeamAssignmentRequest = () => {
+    if (selectedSeason === 'all') {
+      toast.error('Seleziona una stagione prima di assegnare una squadra')
+      return
+    }
     setBulkOperation('assign_to_team')
     setShowTeamAssignmentModal(true)
     setShowBulkModal(false)
@@ -227,7 +235,7 @@ export default function CoachesManager({ embedded = false }: { embedded?: boolea
     membershipFeeId?: string
   }) => {
     if (bulkOperation === 'assign_to_team') {
-      handleBulkOperation(bulkOperation, data)
+      handleBulkOperation(bulkOperation, { ...data, seasonId: selectedSeason })
     }
     setShowTeamAssignmentModal(false)
     setBulkOperation(null)
@@ -349,7 +357,7 @@ export default function CoachesManager({ embedded = false }: { embedded?: boolea
               className="cs-select"
             >
               <option value="all">Tutte le squadre</option>
-              {teams.map(team => (
+              {selectableTeams.map(team => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
@@ -535,6 +543,7 @@ export default function CoachesManager({ embedded = false }: { embedded?: boolea
         }}
         onSubmit={handleTeamAssignmentConfirm}
         athleteIds={Array.from(selectedCoaches)}
+        teams={selectableTeams}
         loading={bulkLoading}
         userType="coaches"
       />
