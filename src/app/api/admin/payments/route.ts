@@ -128,9 +128,15 @@ export async function GET(request: NextRequest) {
       const teamIds = [...new Set(filteredData.map((payment) => payment.team_id).filter(Boolean))]
       const activityIds = [...new Set(filteredData.map((payment) => payment.activity_id).filter(Boolean))]
       const gymIds = [...new Set(filteredData.map((payment) => payment.gym_id).filter(Boolean))]
-      const [{ data: teams }, { data: activities }, { data: gyms }] = await Promise.all([
-        teamIds.length ? adminClient.from('teams').select('id, activity_id').in('id', teamIds) : Promise.resolve({ data: [] as { id: string; activity_id: string }[] }),
-        activityIds.length ? adminClient.from('activities').select('id, season_id').in('id', activityIds) : Promise.resolve({ data: [] as { id: string; season_id: string }[] }),
+      const { data: teams } = teamIds.length
+        ? await adminClient.from('teams').select('id, activity_id').in('id', teamIds)
+        : { data: [] as { id: string; activity_id: string }[] }
+      const allActivityIds = [...new Set([
+        ...activityIds,
+        ...(teams || []).map((team) => team.activity_id),
+      ])]
+      const [{ data: activities }, { data: gyms }] = await Promise.all([
+        allActivityIds.length ? adminClient.from('activities').select('id, season_id').in('id', allActivityIds) : Promise.resolve({ data: [] as { id: string; season_id: string }[] }),
         gymIds.length ? adminClient.from('gyms').select('id, season_id').in('id', gymIds) : Promise.resolve({ data: [] as { id: string; season_id: string }[] }),
       ])
       const activitySeasonById = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
