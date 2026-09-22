@@ -7211,6 +7211,50 @@ parziale esistente e il commento su `seasons.is_active`. La CLI ha riportato
 un warning non bloccante durante la cache pg-delta per un certificato locale
 assente; l'applicazione della migration è terminata con successo.
 
+**Bootstrap isolato — 22/09/2026 — SUPERATO:** il primo tentativo di replay
+della history ha confermato il difetto della baseline storica: la migration di
+hardening `20260723140557_local_rls_hardening.sql` fa riferimento a tabelle
+campionato non create a quel punto della history. La modifica esplorativa alla
+baseline non e' stata mantenuta. Per decisione esplicita e' stata adottata una
+baseline canonica schema-only, non una riscrittura silenziosa della history:
+`supabase/bootstrap/canonical-staging-schema.sql`. Il suo import e' riuscito
+due volte da database Docker disposable vuoto (`csroma-canonical-bootstrap`),
+inclusa una riesecuzione dal file locale; il controllo
+`supabase/bootstrap/verify-canonical-bootstrap.sql` ha confermato 46 tabelle
+pubbliche con RLS, 26 funzioni pubbliche, 29 private, RPC e mappe del rollover,
+indice unico parziale della stagione attiva e FK `season_profiles` con
+`ON DELETE RESTRICT`. Il dump dello schema reimportato differisce da staging
+solo per normalizzazione di `pg_dump` (una CHECK equivalente, revoke esplicito
+del privilegio schema `PUBLIC` e righe vuote), non per oggetti applicativi.
+Nessun database locale esistente, staging o produzione e' stato modificato.
+G12.1 resta `[!]` finche' non viene formalmente accettata questa baseline come
+metodo supportato di bootstrap e definito il processo di rigenerazione per ogni
+futura modifica schema.
+
+**Controlli baseline canonica — 22/09/2026:** `npx tsc --noEmit` e' passato.
+Sono passati anche 5 suite / 11 test mirati al rollover e alla stagione attiva
+(`seasonRollover`, rollover profili/team/batch e `active-season`). Gli advisor
+security Supabase sul progetto Docker isolato non hanno riportato issue. Il
+tentativo degli advisor tramite `--db-url` ha fallito per un limite di
+connessione della CLI; il controllo equivalente `--local` sul progetto isolato
+ha completato correttamente. Gli artefatti di bootstrap
+(`canonical-staging-schema.sql`, README e verifica SQL) restano locali e non
+versionati: contengono struttura, policy, grant e funzioni private di staging.
+Prima di condividerli con il team va definita una sede protetta e una procedura
+di rigenerazione con checksum.
+
+**Inventario history — 22/09/2026:** l'analisi dello schema staging rispetto
+alle DDL presenti nelle migration ha rilevato 15 tabelle di dominio non create
+dalla history versionata: `athlete_profiles`, `coach_profiles`,
+`team_coaches`, `team_training_schedules`, `event_attendances`,
+`document_recipients`, `message_attachments` e le otto relazioni campionato.
+La migration di hardening del 23/07/2026 presuppone già alcuni di tali oggetti,
+funzioni e view. Non sono state aggiunte guardie `IF EXISTS` indiscriminate:
+avrebbero potuto far passare il bootstrap lasciando un modello meno sicuro o
+diverso da staging. La chiusura di G12.1 richiede quindi una strategia
+autorizzata di baseline canonica/squash, ricostruita e comparata con staging,
+oppure il recupero delle migration storiche originali mancanti.
+
 ## G12.2 — API per creare la bozza 2026/2027
 
 **Obiettivo:** sostituire l'insert diretto dal browser con un confine server
