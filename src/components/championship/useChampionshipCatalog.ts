@@ -68,7 +68,7 @@ export function useChampionshipCatalog({
     const [{ data: seasonsData }, { data: activitiesData }, { data: teamsData }] = await Promise.all([
       supabase.from('seasons').select('id, name').order('start_date', { ascending: false }),
       supabase.from('activities').select('id, name, season_id').order('name'),
-      supabase.from('teams').select('id, name, code, coach_id').order('name'),
+      supabase.from('teams').select('id, name, code, activity_id, coach_id').order('name'),
     ])
 
     setSeasons((seasonsData || []) as Season[])
@@ -203,7 +203,7 @@ export function useChampionshipCatalog({
     const { data, error } = await supabase
       .from('championships')
       .select(`
-        id, name, status, sport, start_date, end_date,
+        id, name, season_id, status, sport, start_date, end_date,
         championship_groups (
           id, name, phase, sort_order,
           championship_group_teams (

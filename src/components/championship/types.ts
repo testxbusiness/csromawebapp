@@ -28,6 +28,7 @@ export type ChampionshipGroup = {
 
 export type Championship = {
   id: string
+  season_id?: string | null
   name: string
   status: string
   sport: string
@@ -119,7 +120,7 @@ export type Standing = {
 
 export type Season = { id: string; name: string }
 export type Activity = { id: string; name: string; season_id: string }
-export type Team = { id: string; name: string; code?: string | null }
+export type Team = { id: string; name: string; code?: string | null; activity_id?: string | null }
 export type ClubTeamOption = ClubTeam
 export type ManagerMode = 'admin' | 'coach' | 'athlete'
 

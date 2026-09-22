@@ -98,6 +98,14 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
     loading: catalogLoading,
     reload: reloadChampionships,
   } = useChampionshipCatalog({ mode, coachTeamIds, athleteTeamIds })
+  const selectedChampionship = championships.find((championship) => championship.id === selectedChampionshipId)
+  const selectedChampionshipTeams = useMemo(() => {
+    if (!selectedChampionship?.season_id) return []
+    const activityIds = new Set(activities
+      .filter((activity) => activity.season_id === selectedChampionship.season_id)
+      .map((activity) => activity.id))
+    return teams.filter((team) => Boolean(team.activity_id && activityIds.has(team.activity_id)))
+  }, [activities, selectedChampionship, teams])
   const {
     matches,
     standings,
@@ -113,7 +121,7 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
     savingResult: savingMatchResult,
     statusUpdating,
   } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails })
-  const { ensureClubTeam } = useImportedClubTeam({ championshipId: selectedChampionshipId, teams })
+  const { ensureClubTeam } = useImportedClubTeam({ championshipId: selectedChampionshipId, teams: selectedChampionshipTeams })
   const {
     convocation,
     convocationLoading,
@@ -533,7 +541,6 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
     }
   }
 
-  const selectedChampionship = championships.find((c) => c.id === selectedChampionshipId)
   const standingsWithNames = standings.map((s) => {
     const c = groupTeamMap.get(s.club_team_id)?.championship_club_teams
     return {
@@ -1217,7 +1224,7 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
       <ChampionshipCalendarImportModal open={showImportModal} onOpenChange={setShowImportModal} groups={currentGroups} groupId={importGroupId} onGroupChange={setImportGroupId} onFileChange={setImportFile} importing={importing} onImport={handleImportMatches} disabled={mode === 'athlete'} />
       <ChampionshipResultsImportModal open={showImportResultsModal} onOpenChange={setShowImportResultsModal} groups={currentGroups} groupId={importResultsGroupId} onGroupChange={setImportResultsGroupId} onFileChange={setImportResultsFile} importing={importingResults} onImport={handleImportResults} disabled={mode === 'athlete'} />
 
-      <ChampionshipGroupTeamsModal open={showTeamsModal} onOpenChange={setShowTeamsModal} clubTeams={clubTeams} teams={teams} selection={groupTeamsSelection} onSelectionChange={setGroupTeamsSelection} search={teamSearch} onSearchChange={setTeamSearch} newClubTeam={newClubTeam} onNewClubTeamChange={setNewClubTeam} saving={groupTeamsSaving} onAddClubTeam={handleAddClubTeam} onSave={handleSaveGroupTeams} />
+        <ChampionshipGroupTeamsModal open={showTeamsModal} onOpenChange={setShowTeamsModal} clubTeams={clubTeams} teams={selectedChampionshipTeams} selection={groupTeamsSelection} onSelectionChange={setGroupTeamsSelection} search={teamSearch} onSearchChange={setTeamSearch} newClubTeam={newClubTeam} onNewClubTeamChange={setNewClubTeam} saving={groupTeamsSaving} onAddClubTeam={handleAddClubTeam} onSave={handleSaveGroupTeams} />
     </div>
   )
 }

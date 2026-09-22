@@ -366,6 +366,7 @@ export default function DocumentsManager({ embedded = false }: { embedded?: bool
       {showBulkModal && selectedTemplate && (
         <BulkGenerateModal
           template={selectedTemplate}
+          teams={teams}
           onClose={() => { setShowBulkModal(false); setSelectedTemplate(null) }}
           onGenerated={async () => { setShowBulkModal(false); setSelectedTemplate(null) }}
           onPreview={(html) => setPreviewHtml(html)}

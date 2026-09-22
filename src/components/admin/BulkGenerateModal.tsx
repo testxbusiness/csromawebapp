@@ -16,11 +16,13 @@ type Member = {
 }
 
 type Team = { id: string; name: string; code?: string | null }
+const EMPTY_TEAMS: Team[] = []
 
 export default function BulkGenerateModal({
-  template, onClose, onGenerated, onPreview
+  template, teams: availableTeams = EMPTY_TEAMS, onClose, onGenerated, onPreview
 }:{
   template: DocumentTemplate
+  teams?: Team[]
   onClose: () => void
   onGenerated: () => Promise<void> | void
   onPreview?: (html: string) => void
@@ -51,8 +53,7 @@ export default function BulkGenerateModal({
     setLoading(true)
     try {
       if (template.target_type === 'team') {
-        const { data: t } = await supabase.from('teams').select('id, name, code').order('name')
-        setTeams(t || [])
+        setTeams(availableTeams)
       } else {
         const { data: u } = await supabase.from('profiles').select('id, first_name, last_name, email').order('last_name')
         setUsers((u || []).map(x => ({ ...x, selected: false })))
@@ -60,7 +61,7 @@ export default function BulkGenerateModal({
     } finally {
       setLoading(false)
     }
-  }, [supabase, template.target_type])
+  }, [availableTeams, supabase, template.target_type])
 
   useEffect(() => { void bootstrap() }, [bootstrap, template.id])
 
