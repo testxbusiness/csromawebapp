@@ -268,8 +268,8 @@ Per un goal `[x]` aggiungere sempre:
 | G10.7 Documentazione finale | [ ] | G10.6 | |
 | G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Parziale il 15/09/2026: aggiunti migration/index e contratti Zod tipizzati con test; PK `season_profiles(profile_id, season_id)` e FK `season_profiles → seasons ON DELETE RESTRICT` preservati. Opzione 1 eseguita su locale; verifica staging completata e, su conferma esplicita, applicata la sola `20260915112357_season_rollover_invariants.sql`: history remota aggiornata, un solo indice equivalente `unique_active_season`, commento `is_active` verificato, vincoli idempotenti e RLS richiesti presenti. Resta non dimostrata l’applicabilità dell’intera catena da zero perché la baseline `20251007152643_master_migration_fixed.sql` fallisce nel database shadow con sintassi preesistente (`CREATE EXTENSION` senza terminatore prima del successivo `CREATE`). Advisor staging: warning preesistenti su due `SECURITY DEFINER` esposte e leaked-password protection. Nessuna altra migration o mutazione funzionale eseguita. |
 | G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
-| G12.3 Copia selettiva palestre e attività | [!] | G12.2 | Implementati preview admin e batch transazionale idempotente; resta da eseguire la verifica DB su fixture locale/staging autorizzata. |
-| G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione; G12.3 resta `[!]` per la sua verifica DB separata. |
+| G12.3 Copia selettiva palestre e attività | [x] | G12.2 | Completato il 22/09/2026: fixture DB locale e staging hanno verificato copy/link/skip, campi ammessi, conteggi pre/post, retry idempotente, collisione atomica e cleanup senza residui. |
+| G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione in questo goal. |
 | G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
 | G12.6 Esecuzione atomica iscrizioni | [x] | G12.5 | Completato il 15/09/2026; batch server-side su RPC PostgreSQL transazionale e idempotente: crea/aggiorna solo `season_profiles` target per gli inclusi e le membership target selezionate, senza mutare la source o creare iscrizioni familiari. Audit append-only con batch key e conteggi autorevoli; validati profilo source, stagione/ruolo/team target e rollback completo. Test applicativi 2 suite/5 test, fixture DB transazionale locale, advisor security locale, typecheck e diff check superati. Nessuna mutazione staging/produzione, deploy o attivazione. Remediation 17/09/2026: migration locale `20260917094156_season_rollover_skip_excluded_profiles.sql` applicata allo staging con versione remota `20260917094411`; i profili esclusi vengono saltati prima della validazione `profile_type`, così righe legacy nulle non bloccano il batch. |
 | G12.7 Wizard admin selezione profili | [x] | G12.6 | Completato il 15/09/2026: wizard responsive a sei passi in `/admin/seasons` con scelte esplicite strutture/squadre, profili opt-in con ricerca e filtri, mapping univoco proposto, assegnazioni multi-team con ruolo/maglia modificabili, riepilogo inclusi/esclusi/senza squadra e conferma esplicita. Usa esclusivamente le route admin server-side già autorizzate e il batch G12.6; nessuna attivazione o mutazione della 2025/2026. Verifiche mirate 7/7, typecheck, build e diff check superati. Non eseguite E2E/manuali su viewport 320/390/768/1440, focus trap reale o browser con sessione admin; non eseguite mutazioni/query DB, staging o produzione. |
@@ -7388,6 +7388,41 @@ policy (intenzionale, tabella interna non esposta) e gli stessi warning
 preesistenti su tre tabelle audit, due funzioni `SECURITY DEFINER` già esposte
 e leaked-password protection. Nessun advisor relativo alla nuova RPC come
 eseguibile da utenti autenticati. Produzione invariata.
+
+**Fixture transazionale locale — 22/09/2026 — COMPLETATA:** sul database
+Docker isolato `csroma-canonical-bootstrap` e' stata eseguita una fixture entro
+un'unica transazione poi annullata con `ROLLBACK`. Tre palestre e tre attivita'
+source, una palestra e una attivita' target preesistenti hanno verificato le
+tre scelte: `copy` ha creato nuovi record target mantenendo esclusivamente i
+campi ammessi, `link` ha creato mapping espliciti e `skip` non ha creato
+record. La prima esecuzione e il retry hanno restituito rispettivamente
+`copied=1`, `linked=1`, `skipped=1` per entrambe le tipologie; i conteggi
+persistiti nella transazione erano source 3/3, target 2/2 e quattro mapping.
+Una collisione di mapping target ha sollevato `unique_violation` e non ha
+alterato conteggi o mapping, dimostrando l'atomicita' del batch. La query dopo
+`ROLLBACK` ha confermato zero righe fixture residue. Sono passati i test
+Route Handler/wizard 2 suite, 8 test, `npx tsc --noEmit`, `npm run build` e
+`git diff --check`.
+
+**Evidenza staging — 22/09/2026 — PRIMA DELL'AUTORIZZAZIONE:** nessuna fixture source /
+target e' stata creata su staging, perche' sarebbe una mutazione persistente
+che richiede autorizzazione esplicita. La query read-only via CLI e' terminata
+senza errore ma la versione installata non ha restituito il result set, quindi
+non viene usata come prova di conteggi. Restano valide le verifiche staging del
+15/09 su migration, schema e ACL; per chiudere G12.3 serve una fixture staging
+dedicata oppure l'autorizzazione a eseguire il batch su una coppia di stagioni
+reali idonea, seguita da conteggi pre/post e cleanup concordato.
+
+**Fixture staging — 22/09/2026 — COMPLETATA:** su autorizzazione esplicita e
+senza creare un terzo progetto Supabase, e' stata eseguita sullo staging
+esistente una fixture con due stagioni inattive e record isolati da UUID e nomi
+dedicati. Il batch ha verificato copy/link/skip per tre palestre e tre attivita'
+source, mantenendo i soli campi consentiti; le asserzioni SQL hanno confermato
+i conteggi 3/3 source, 2/2 target e quattro mapping, il retry senza duplicati
+e il rollback atomico della collisione di mapping. Il cleanup ha cancellato
+mapping, strutture e stagioni della fixture; una seconda query read-only ha
+confermato zero residui e gli ACL invariati della RPC (solo `service_role`, non
+`anon`/`authenticated`). Produzione non toccata.
 
 ## G12.4 — Bozze e mappa squadre target
 
