@@ -273,7 +273,7 @@ Per un goal `[x]` aggiungere sempre:
 | G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
 | G12.6 Esecuzione atomica iscrizioni | [x] | G12.5 | Completato il 15/09/2026; batch server-side su RPC PostgreSQL transazionale e idempotente: crea/aggiorna solo `season_profiles` target per gli inclusi e le membership target selezionate, senza mutare la source o creare iscrizioni familiari. Audit append-only con batch key e conteggi autorevoli; validati profilo source, stagione/ruolo/team target e rollback completo. Test applicativi 2 suite/5 test, fixture DB transazionale locale, advisor security locale, typecheck e diff check superati. Nessuna mutazione staging/produzione, deploy o attivazione. Remediation 17/09/2026: migration locale `20260917094156_season_rollover_skip_excluded_profiles.sql` applicata allo staging con versione remota `20260917094411`; i profili esclusi vengono saltati prima della validazione `profile_type`, così righe legacy nulle non bloccano il batch. |
 | G12.7 Wizard admin selezione profili | [x] | G12.6 | Completato il 15/09/2026: wizard responsive a sei passi in `/admin/seasons` con scelte esplicite strutture/squadre, profili opt-in con ricerca e filtri, mapping univoco proposto, assegnazioni multi-team con ruolo/maglia modificabili, riepilogo inclusi/esclusi/senza squadra e conferma esplicita. Usa esclusivamente le route admin server-side già autorizzate e il batch G12.6; nessuna attivazione o mutazione della 2025/2026. Verifiche mirate 7/7, typecheck, build e diff check superati. Non eseguite E2E/manuali su viewport 320/390/768/1440, focus trap reale o browser con sessione admin; non eseguite mutazioni/query DB, staging o produzione. |
-| G12.8 Isolamento runtime per stagione attiva | [x] | G12.6 | Completato il 15/09/2026; introdotto resolver server-side unico per zero/una/multiple stagioni attive e filtrate autorizzazioni e letture operative atleta/famiglia/coach per attività, squadre e membership della stagione attiva; storico admin non alterato. Typecheck, 13 suite/43 test mirati, build e diff check superati. Nessun accesso o mutazione DB runtime, staging/produzione, deploy o attivazione. |
+| G12.8 Isolamento runtime per stagione attiva | [x] | G12.6 | Completato il 15/09/2026; introdotto resolver server-side unico per zero/una/multiple stagioni attive e filtrate autorizzazioni e letture operative atleta/famiglia/coach per attività, squadre e membership della stagione attiva; storico admin non alterato. Evidenze runtime aggiunte il 22/09/2026: test dedicati famiglia/KPI, query staging aggregata e verifica coach multi-squadra. Typecheck, build e diff check superati; nessuna mutazione staging/produzione, deploy o attivazione. |
 | G12.8a Isolamento squadre nei selettori e nelle assegnazioni | [x] | G12.8 | Completato il 22/09/2026: audit dei cataloghi admin concluso. Assegnazioni, quote, incassi, pagamenti, messaggi e calendario erano già stagionali; Gestione squadre ora parte dall’attiva con storico esplicito, documenti usa il catalogo attivo autorizzato e campionati limita le squadre alla stagione del campionato selezionato. Typecheck, test mirati, build e diff check superati. |
 | G12.8b Quote associative per stagione | [x] | G12.8a | Completato il 21/09/2026: `/admin/membership-fees` ora seleziona di default la stagione attiva, filtra piani, squadre nei form e rate nella tab Atleti; lo storico resta disponibile con “Tutte le stagioni”. Aggiunto `season_id` al contratto Zod e validazione server-side della relazione `team → activity → season` in creazione/modifica quota; esteso il filtro a `/api/admin/installments`. Typecheck, test `membershipFees` 2/2, suite completa 83/85 suite e 338/341 test, build e diff check superati. I 3 test falliti sono preesistenti e non correlati (`AthleteDashboard` e mutazioni campionato coach). Nessuna mutazione staging/produzione. Screenshot di riferimento: pagina Quote associative con squadre `AMA`, `U17`, `U14` mentre la stagione attiva usa i target `*-2627`. |
 | G12.8c Pagamenti e incassi per stagione | [x] | G12.8b | Completato il 21/09/2026: `/admin/incassi` usa la stagione attiva come default, consente lo storico esplicito e allinea KPI, rate, piani e squadre tramite `team → activity → season`; `/admin/payments` usa lo stesso contesto e filtra i pagamenti collegati a squadra/attività/palestra, mantenendo visibili come condivisi i costi generali privi di collegamento. Aggiunta validazione server-side per creazione/modifica pagamenti e filtro coach coerente nel form. Remediation 21/09/2026: corretto il filtro dei pagamenti con sola `team_id`, risolvendo correttamente `team → activity → season` (`fc838eb`); prima della correzione le stagioni singole restituivano zero pagamenti mentre “Tutte le stagioni” ne mostrava 13. Typecheck, build e diff check superati. Nessuna mutazione staging/produzione. |
@@ -7785,17 +7785,47 @@ disponibilità presenze, campionati, route atleta, coach, calendario admin e
 context — 13 suite, 43 test superati; `npm run build`; `git diff --check`. Il test del resolver copre zero
 stagioni attive e doppia stagione attiva.
 
-Non eseguite: test dedicato della route profili familiari e KPI admin, query
-catalogo/fixture Supabase, verifica con dati reali di incluso/escluso e coach
-multi-team, E2E/manuali di cambio stagione, race reale nel browser e test storico
-admin dedicato. Non vengono dichiarati esiti per
-queste verifiche. Nessuna migration, insert/update/delete, hard delete,
+Alla verifica del 15/09 non erano ancora eseguiti test dedicato della route
+profili familiari e KPI admin, query catalogo/fixture Supabase, verifica con
+dati reali di incluso/escluso e coach multi-team, E2E/manuali di cambio
+stagione, race reale nel browser e test storico admin dedicato. Gli esiti
+aggiunti il 22/09 sono registrati nell'appendice successiva. Nessuna migration, insert/update/delete, hard delete,
 modifica di profiles/account/relazioni, accesso o mutazione staging/produzione,
 deploy o attivazione eseguiti. Il controllo repository-only delle migrazioni ha
 confermato la presenza degli invarianti e delle migration G12.1/G12.3/G12.4/
 G12.6; `supabase migration list --local` non è eseguibile in questo ambiente
 per `EPERM` sulla telemetria in `~/.supabase/telemetry.json.tmp`, quindi non si
 attribuisce alcun esito alla migration history runtime. G12.9 non avviato.
+
+### G12.8 — Evidenze runtime staging — 22/09/2026
+
+Completate le evidenze che non richiedono una mutazione di rollout. Aggiunti i
+test dedicati della route `GET /api/me/accessible-profiles` e di
+`GET /api/admin/incassi/kpi`: il primo restituisce solo i soggetti familiari
+con `season_profiles.status = active` nella stagione attiva e conserva la lista
+vuota esplicita per il familiare senza soggetti inclusi; il secondo calcola i
+KPI predefiniti soltanto dalle quote collegate alle squadre della stagione
+attiva. Insieme ai test esistenti del resolver stagione e dei pagamenti coach,
+le 4 suite / 7 test sono superate.
+
+La query in sola lettura su staging ha confermato una sola stagione attiva
+(`Stagione 2026/2027`), una stagione storica, 1 attività e 4 squadre attive,
+6 iscrizioni stagionali attive e 3 membership di squadra correnti. Il catalogo
+di incassi attivo non contiene ancora quote/rate atleta, quindi i KPI sono
+correttamente vuoti e non mescolano dati storici. Sono presenti 2 coach con
+più squadre attive (massimo 2 squadre per coach), coprendo il caso multi-team.
+Tra 5 relazioni familiari valide, 4 puntano a un soggetto iscritto nella
+stagione attiva e 1 viene esclusa dal contesto operativo: riscontro coerente
+con il filtro della route. Il codice admin conserva lo storico tramite
+`season_id=all` e selettori espliciti, verificati staticamente su incassi e
+gestione squadre.
+
+Verifiche: `npm test -- --runInBand` sulle 4 suite indicate; `npx tsc --noEmit`;
+`npm run build`; `git diff --check`. La query staging ha restituito esclusivamente
+conteggi aggregati e non ha mutato dati. Non eseguito il solo smoke manuale UI
+autenticato di selezione/cambio stagione, perché richiede una sessione admin e
+un eventuale cambio della stagione attiva rientra nel gate mutativo G12.9;
+nessun esito è attribuito a tale passaggio.
 
 ### G12.8a — Audit cataloghi squadra admin — 22/09/2026
 
