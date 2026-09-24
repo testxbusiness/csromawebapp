@@ -37,5 +37,6 @@ export function getRolloverTeamCodeSuffix(target: Pick<RolloverSeason, 'start_da
 
 export function getProposedRolloverTeamCode(sourceCode: string, target: Pick<RolloverSeason, 'start_date' | 'end_date'>): string {
   const suffix = getRolloverTeamCodeSuffix(target)
-  return suffix ? `${sourceCode}-${suffix}`.slice(0, 50) : sourceCode.slice(0, 50)
+  const baseCode = sourceCode.trim().replace(/(?:-\d{4})+$/, '')
+  return suffix ? `${baseCode}-${suffix}`.slice(0, 50) : baseCode.slice(0, 50)
 }

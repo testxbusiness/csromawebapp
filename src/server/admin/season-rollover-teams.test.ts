@@ -43,7 +43,7 @@ describe('season rollover team service', () => {
         if (table === 'teams') {
           teamsCall += 1
           return query(teamsCall === 1
-            ? [{ id: sourceTeamId, name: 'U16 Roma', code: 'U16', activity_id: sourceActivityId, is_active: true }]
+            ? [{ id: sourceTeamId, name: 'U16 Roma', code: 'U16-2627', activity_id: sourceActivityId, is_active: true }]
             : [{ id: targetTeamId, name: 'U16 Roma', code: 'U16-2728', activity_id: targetActivityId, is_active: true }])
         }
         if (table === 'season_rollover_structure_maps') return query([{ source_id: sourceActivityId, target_id: targetActivityId }])

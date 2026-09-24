@@ -8025,6 +8025,15 @@ dei mock della precedente regressione dettagli campionato, senza variazioni
 runtime. Nessun accesso mutativo, copy, batch, deploy, attivazione o modifica
 su staging/produzione.
 
+**Remediation suffisso codice squadra — 24/09/2026:** lo smoke visuale del
+wizard 2026/2027 → 2027/2028 ha mostrato che il codice proposto concatenava il
+suffisso della source gia' stagionalizzato (`U17-2627-2728`). Il generatore ora
+rimuove uno o piu' suffissi terminali `-NNNN` prima di applicare quello derivato
+dalla target, quindi propone `U17-2728`, `AMA-2728` e `U15-2728`. Test mirati
+su helper, servizio squadre e wizard 3 suite/9 test, `npx tsc --noEmit`, ESLint,
+`npm run build` e `git diff --check` superati. Nessuna mutazione staging o
+produzione; la bozza 2027/2028 resta invariata.
+
 ## G12.9 — Dry-run, esecuzione 2026/2027, attivazione e gate
 
 **Obiettivo:** eseguire il passaggio reale solo con evidenze, backup e conferma

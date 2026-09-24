@@ -18,7 +18,8 @@ describe('season rollover context', () => {
     expect(context.defaultTarget?.id).toBe(firstTarget.id)
   })
 
-  it('derives a team code suffix from the selected target dates', () => {
-    expect(getProposedRolloverTeamCode('U16', firstTarget)).toBe('U16-2728')
+  it('replaces an existing season suffix with the one derived from the target dates', () => {
+    expect(getProposedRolloverTeamCode('U16-2627', firstTarget)).toBe('U16-2728')
+    expect(getProposedRolloverTeamCode('AMA-2627-2728', firstTarget)).toBe('AMA-2728')
   })
 })
