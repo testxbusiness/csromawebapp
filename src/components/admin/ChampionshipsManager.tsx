@@ -46,6 +46,7 @@ interface ChampionshipsManagerProps {
 export default function ChampionshipsManager({ mode = 'admin', embedded = false }: ChampionshipsManagerProps) {
   const supabase = useMemo(() => createClient(), [])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string>('')
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [savingResult, setSavingResult] = useState(false)
   const [resultInput, setResultInput] = useState<string>('')
@@ -97,7 +98,7 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
     teams,
     loading: catalogLoading,
     reload: reloadChampionships,
-  } = useChampionshipCatalog({ mode, coachTeamIds, athleteTeamIds })
+  } = useChampionshipCatalog({ mode, coachTeamIds, athleteTeamIds, adminSeasonId: mode === 'admin' ? selectedSeasonId || null : null })
   const selectedChampionship = championships.find((championship) => championship.id === selectedChampionshipId)
   const selectedChampionshipTeams = useMemo(() => {
     if (!selectedChampionship?.season_id) return []
@@ -106,6 +107,9 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
       .map((activity) => activity.id))
     return teams.filter((team) => Boolean(team.activity_id && activityIds.has(team.activity_id)))
   }, [activities, selectedChampionship, teams])
+  const createSeasonActivities = useMemo(() => (
+    activities.filter((activity) => activity.season_id === createForm.season_id)
+  ), [activities, createForm.season_id])
   const {
     matches,
     standings,
@@ -137,10 +141,17 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
   const { deleteCalendar: persistDeleteCalendar, deleting } = useChampionshipCalendarDeletion()
 
   useEffect(() => {
-    if (seasons[0] && !createForm.season_id) {
-      setCreateForm((prev) => ({ ...prev, season_id: seasons[0].id }))
+    if (mode !== 'admin') return
+    const activeSeasonId = seasons.find((season) => season.is_active)?.id || ''
+    if (activeSeasonId && !selectedSeasonId) {
+      setSelectedSeasonId(activeSeasonId)
     }
-  }, [createForm.season_id, seasons])
+  }, [mode, seasons, selectedSeasonId])
+
+  useEffect(() => {
+    if (mode !== 'admin' || !selectedSeasonId) return
+    setCreateForm((prev) => prev.season_id ? prev : { ...prev, season_id: selectedSeasonId })
+  }, [mode, selectedSeasonId])
 
   // Allinea importGroupId al girone selezionato di default
   useEffect(() => {
@@ -774,6 +785,24 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
             <CardTitle className="text-lg sm:text-xl">Campionati</CardTitle>
             <CardMeta>Console amministrativa per struttura campionato, calendari, risultati e sincronizzazione.</CardMeta>
           </div> : null}
+          {mode === 'admin' ? (
+            <div className="max-w-md space-y-2">
+              <label className="cs-field__label" htmlFor="admin-championship-season">Stagione</label>
+              <Select
+                id="admin-championship-season"
+                value={selectedSeasonId}
+                onChange={(event) => {
+                  setSelectedSeasonId(event.target.value)
+                  setSelectedChampionshipId(null)
+                  setSelectedGroupId(null)
+                }}
+              >
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
           <ChampionshipToolbar
             championshipSelect={(
               <Select
@@ -857,7 +886,10 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
                     <Button size="icon" variant="danger" title="Elimina tutto il campionato" aria-label="Elimina tutto il campionato" onClick={() => handleDeleteCalendar('championship')} disabled={!selectedChampionshipId || deleting !== null}>
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </Button>
-                    <Button size="icon" title="Crea campionato" aria-label="Crea campionato" onClick={() => setShowCreateModal(true)}>
+                    <Button size="icon" title="Crea campionato" aria-label="Crea campionato" onClick={() => {
+                      setCreateForm((prev) => ({ ...prev, season_id: selectedSeasonId, activity_id: '' }))
+                      setShowCreateModal(true)
+                    }}>
                       <Trophy className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </>
@@ -1127,7 +1159,7 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
                 <label className="cs-label">Stagione *</label>
                 <Select
                   value={createForm.season_id}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, season_id: e.target.value }))}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, season_id: e.target.value, activity_id: '' }))}
                 >
                   {seasons.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
@@ -1141,7 +1173,7 @@ export default function ChampionshipsManager({ mode = 'admin', embedded = false 
                   onChange={(e) => setCreateForm((prev) => ({ ...prev, activity_id: e.target.value }))}
                 >
                   <option value="">Nessuna</option>
-                  {activities.map((a) => (
+                  {createSeasonActivities.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </Select>

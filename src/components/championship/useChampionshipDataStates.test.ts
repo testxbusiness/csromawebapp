@@ -1,8 +1,21 @@
 import { renderHook, waitFor } from '@testing-library/react'
+import { createClient } from '@/lib/supabase/client'
 import { useChampionshipCatalog } from './useChampionshipCatalog'
 import { useChampionshipGroupDetails } from './useChampionshipGroupDetails'
 
 jest.mock('@/lib/supabase/client', () => ({ createClient: jest.fn(() => ({})) }))
+
+const createClientMock = createClient as jest.MockedFunction<typeof createClient>
+
+function query(data: unknown) {
+  const builder = { select: jest.fn(), order: jest.fn(), eq: jest.fn(), limit: jest.fn(), then: jest.fn() }
+  builder.select.mockReturnValue(builder)
+  builder.order.mockReturnValue(builder)
+  builder.eq.mockReturnValue(builder)
+  builder.limit.mockReturnValue(builder)
+  builder.then.mockImplementation((resolve: (value: { data: unknown; error: null }) => unknown) => Promise.resolve(resolve({ data, error: null })))
+  return builder
+}
 
 describe('championship data states', () => {
   const originalFetch = global.fetch
@@ -10,6 +23,48 @@ describe('championship data states', () => {
   afterEach(() => {
     global.fetch = originalFetch
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true })
+    createClientMock.mockReset()
+  })
+
+  it('scopes the admin catalog to the single active season by default', async () => {
+    const seasons = query([{ id: 'season-active', name: '2026/2027', is_active: true }])
+    const activities = query([])
+    const teams = query([])
+    const championships = query([])
+    createClientMock.mockReturnValue({
+      from: jest.fn((table: string) => ({
+        seasons,
+        activities,
+        teams,
+        championships,
+      })[table]),
+    } as ReturnType<typeof createClient>)
+
+    const catalog = renderHook(() => useChampionshipCatalog({ mode: 'admin' }))
+
+    await waitFor(() => expect(catalog.result.current.status).toBe('ready'))
+    expect(championships.eq).toHaveBeenCalledWith('season_id', 'season-active')
+  })
+
+  it('allows the admin to load historical championships only for the explicitly selected season', async () => {
+    const seasons = query([{ id: 'season-active', name: '2026/2027', is_active: true }])
+    const activities = query([])
+    const teams = query([])
+    const championships = query([])
+    createClientMock.mockReturnValue({
+      from: jest.fn((table: string) => ({
+        seasons,
+        activities,
+        teams,
+        championships,
+      })[table]),
+    } as ReturnType<typeof createClient>)
+
+    const catalog = renderHook(() => useChampionshipCatalog({ mode: 'admin', adminSeasonId: 'season-history' }))
+
+    await waitFor(() => expect(catalog.result.current.status).toBe('ready'))
+    expect(championships.eq).toHaveBeenCalledWith('season_id', 'season-history')
+    expect(seasons.eq).not.toHaveBeenCalledWith('is_active', true)
   })
 
   it('keeps a valid empty catalog distinct from a server error', async () => {

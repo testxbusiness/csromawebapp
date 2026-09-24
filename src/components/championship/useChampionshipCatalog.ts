@@ -18,6 +18,7 @@ type UseChampionshipCatalogOptions = {
   coachTeamIds?: Set<string>
   athleteTeamIds?: Set<string>
   subjectProfileId?: string | null
+  adminSeasonId?: string | null
   enabled?: boolean
 }
 
@@ -27,6 +28,7 @@ export function useChampionshipCatalog({
   mode,
   coachTeamIds = EMPTY_TEAM_IDS,
   subjectProfileId = null,
+  adminSeasonId = null,
   enabled = true,
 }: UseChampionshipCatalogOptions) {
   const supabase = useMemo(() => createClient(), [])
@@ -66,7 +68,7 @@ export function useChampionshipCatalog({
       return
     }
     const [{ data: seasonsData }, { data: activitiesData }, { data: teamsData }] = await Promise.all([
-      supabase.from('seasons').select('id, name').order('start_date', { ascending: false }),
+      supabase.from('seasons').select('id, name, is_active').order('start_date', { ascending: false }),
       supabase.from('activities').select('id, name, season_id').order('name'),
       supabase.from('teams').select('id, name, code, activity_id, coach_id').order('name'),
     ])
@@ -200,6 +202,21 @@ export function useChampionshipCatalog({
       return
     }
 
+    let selectedAdminSeasonId = adminSeasonId
+    if (!selectedAdminSeasonId) {
+      const { data: activeSeasons, error: activeSeasonError } = await supabase
+        .from('seasons')
+        .select('id')
+        .eq('is_active', true)
+        .limit(2)
+      if (activeSeasonError || !activeSeasons || activeSeasons.length !== 1) {
+        setChampionships([])
+        setStatus('error')
+        return
+      }
+      selectedAdminSeasonId = activeSeasons[0].id
+    }
+
     const { data, error } = await supabase
       .from('championships')
       .select(`
@@ -212,6 +229,7 @@ export function useChampionshipCatalog({
           )
         )
       `)
+      .eq('season_id', selectedAdminSeasonId)
       .order('created_at', { ascending: false })
       .order('sort_order', { referencedTable: 'championship_groups', ascending: true })
 
@@ -235,7 +253,7 @@ export function useChampionshipCatalog({
 
     setChampionships(normalized)
     setStatus('ready')
-  }, [coachTeamIds, enabled, mode, subjectProfileId, supabase])
+  }, [adminSeasonId, coachTeamIds, enabled, mode, subjectProfileId, supabase])
 
   useEffect(() => {
     void loadSelectData()

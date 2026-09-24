@@ -118,7 +118,7 @@ export type Standing = {
   team_name?: string | null
 }
 
-export type Season = { id: string; name: string }
+export type Season = { id: string; name: string; is_active?: boolean }
 export type Activity = { id: string; name: string; season_id: string }
 export type Team = { id: string; name: string; code?: string | null; activity_id?: string | null }
 export type ClubTeamOption = ClubTeam
