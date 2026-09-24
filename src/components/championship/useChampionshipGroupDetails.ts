@@ -36,6 +36,8 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
     subjectRef.current = subjectProfileId
     requestRef.current?.abort()
     const controller = new AbortController()
+    requestRef.current = controller
+    const isCurrentRequest = () => requestRef.current === controller && !controller.signal.aborted
     if (!groupId) {
       setMatches([])
       setStandings([])
@@ -51,7 +53,7 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
         const endpoint = mode === 'coach' ? '/api/coach/championships' : '/api/athlete/championships'
         const response = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store', signal: controller.signal })
         const payload = await response.json().catch(() => null) as { matches?: any[]; standings?: Standing[]; error?: string } | null
-        if (controller.signal.aborted || subjectRef.current !== subjectProfileId) return
+        if (!isCurrentRequest() || subjectRef.current !== subjectProfileId) return
         if (!response.ok) {
           setStatus(responseErrorState(response.status))
           return
@@ -81,8 +83,11 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
           .order('match_date', { ascending: true }),
         fetch(`/api/championships/standings?group_id=${encodeURIComponent(groupId)}`, {
           cache: 'no-store',
+          signal: controller.signal,
         }),
       ])
+
+      if (!isCurrentRequest()) return
 
       if (matchesError) throw matchesError
 
@@ -91,6 +96,7 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
         return
       }
       const standingsPayload = await standingsResponse.json() as { standings?: Standing[] }
+      if (!isCurrentRequest()) return
 
       setMatches((matchesData || []).map((match: any) => ({
         ...match,
@@ -100,11 +106,13 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
       setStandings(standingsPayload.standings ?? [])
       setStatus('ready')
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
+      if (!isCurrentRequest() || error instanceof DOMException && error.name === 'AbortError') return
       console.error('Errore caricamento dettagli girone', error)
       setStatus(requestErrorState(error))
     } finally {
-      setStatus((current) => current === 'loading' ? 'error' : current)
+      if (isCurrentRequest()) {
+        setStatus((current) => current === 'loading' ? 'error' : current)
+      }
     }
   }, [enabled, groupId, mode, subjectProfileId, supabase])
 

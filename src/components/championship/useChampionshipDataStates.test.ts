@@ -118,6 +118,29 @@ describe('championship data states', () => {
     )
   })
 
+  it('clears group details and ignores a stale response when the selected group is reset', async () => {
+    let resolveResponse: ((response: { ok: boolean; status: number; json: () => Promise<{ matches: Array<{ id: string }>; standings: [] }> }) => void) | null = null
+    global.fetch = jest.fn().mockImplementation(() => new Promise((resolve) => {
+      resolveResponse = resolve
+    })) as jest.Mock
+
+    const details = renderHook(
+      ({ groupId }: { groupId: string | null }) => useChampionshipGroupDetails(groupId, undefined, true, 'coach'),
+      { initialProps: { groupId: 'group-history' } },
+    )
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+
+    details.rerender({ groupId: null })
+    await waitFor(() => expect(details.result.current.matches).toEqual([]))
+
+    resolveResponse?.({
+      ok: true,
+      status: 200,
+      json: async () => ({ matches: [{ id: 'stale-match' }], standings: [] }),
+    })
+    await waitFor(() => expect(details.result.current.matches).toEqual([]))
+  })
+
   it('exposes denied and offline group states with retry preserved', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,

@@ -7941,6 +7941,16 @@ le relative attivita'. Verifiche: test catalogo 6/6, ESLint sui file modificati,
 `npm run build` e `git diff --check` superati. Nessuna mutazione database,
 deploy o attivazione.
 
+**Remediation dettagli campionato obsoleti — 24/09/2026:** passando dalla
+stagione storica a quella attiva senza campionati, il catalogo veniva svuotato
+ma una risposta asincrona del girone storico poteva ancora popolare prossima
+partita, elenco partite e classifica. `useChampionshipGroupDetails` ora
+memorizza e annulla la richiesta corrente, passa il segnale anche alla richiesta
+classifica e ignora ogni risposta non piu' corrente. Aggiunto il test di
+regressione sul reset del girone con risposta storica tardiva. Verifiche: test
+catalogo/dettagli 7/7, ESLint sui file modificati, `npm run build` e `git diff
+--check` superati. Nessuna mutazione database, deploy o attivazione.
+
 ### G12.8a — Audit cataloghi squadra admin — 22/09/2026
 
 L'audit ha classificato i cataloghi squadra operativi di atleti, collaboratori,
