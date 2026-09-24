@@ -266,7 +266,7 @@ Per un goal `[x]` aggiungere sempre:
 | G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
-| G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Baseline canonica schema-only adottata come metodo locale supportato il 24/09/2026: due replay Docker da schema applicativo vuoto e invarianti verificati. La history storica resta volutamente invariata perché incompleta. Rimangono da autorizzare/applicare su staging la remediation versionata delle due RPC `SECURITY DEFINER`, rigenerare poi lo snapshot protetto e decidere la protezione password compromesse; nessuna mutazione staging/produzione è stata eseguita il 24/09. |
+| G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Baseline canonica schema-only adottata come metodo locale supportato il 24/09/2026; due replay Docker aggiornati da schema applicativo vuoto e invarianti verificati. History migration locale/staging riconciliata e remediation RPC applicata/verificata su staging. Resta solo la decisione amministrativa sulla protezione password compromesse; nessuna mutazione produzione eseguita. |
 | G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
 | G12.3 Copia selettiva palestre e attività | [x] | G12.2 | Completato il 22/09/2026: fixture DB locale e staging hanno verificato copy/link/skip, campi ammessi, conteggi pre/post, retry idempotente, collisione atomica e cleanup senza residui. |
 | G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione in questo goal. |
@@ -7294,9 +7294,31 @@ a staging/produzione e lo snapshot non e' stato rigenerato; resta inoltre una
 decisione amministrativa separata sull’abilitazione della protezione password
 compromesse nel pannello Supabase.
 
+**Applicazione staging e rigenerazione — 24/09/2026:** prima del deploy è
+stata riconciliata la history locale con i quattro timestamp già assegnati a
+staging (`20260915123220`, `20260915141842`, `20260915153331`,
+`20260917094411`): sole rinomine Git, senza modifiche SQL né history remota.
+Il nuovo dry-run ha proposto esclusivamente
+`20260924070909_g12_1_security_definer_hardening.sql`; la migration è stata
+applicata a staging con successo. Il warning successivo della cache locale
+`pg-delta` per un certificato assente non ha impedito l’applicazione, confermata
+dalla history remota allineata.
+
+Gli advisor security post-deploy segnalano ora soltanto `Leaked Password
+Protection Disabled`: nessuna delle due RPC `SECURITY DEFINER` è più eseguibile
+da `authenticated`. Lo snapshot `public,private` schema-only è stato
+rigenerato direttamente da staging senza `INSERT` o `COPY`, con checksum
+SHA-256 `628b781bb2352d42c90cc8e29c5d1da92263819ab9901c18c8e5999d22a3303e`.
+I due replay consecutivi sul Docker canonico con lo snapshot aggiornato hanno
+entrambi superato la verifica (46 tabelle pubbliche/RLS, 26 funzioni pubbliche,
+29 private, indice e FK richiesti); il catalogo locale conferma inoltre
+`check_gym_schedule_conflicts` `SECURITY INVOKER` e nessun grant
+`authenticated` su `refresh_championship_standings`.
+
 Verifiche 24/09: 5 suite / 11 test rollover-stagione, `npx tsc --noEmit` e
-`git diff --check` superati. G12.1 resta `[!]` fino alla scelta e applicazione
-autorizzata delle due azioni esterne sopra indicate.
+`git diff --check` superati. G12.1 resta `[!]` unicamente fino alla decisione
+amministrativa sull’abilitazione della protezione password compromesse; non è
+stata eseguita alcuna mutazione produzione.
 
 ## G12.2 — API per creare la bozza 2026/2027
 
