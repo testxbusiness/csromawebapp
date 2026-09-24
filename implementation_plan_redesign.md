@@ -266,7 +266,7 @@ Per un goal `[x]` aggiungere sempre:
 | G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
-| G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Parziale il 15/09/2026: aggiunti migration/index e contratti Zod tipizzati con test; PK `season_profiles(profile_id, season_id)` e FK `season_profiles → seasons ON DELETE RESTRICT` preservati. Opzione 1 eseguita su locale; verifica staging completata e, su conferma esplicita, applicata la sola `20260915112357_season_rollover_invariants.sql`: history remota aggiornata, un solo indice equivalente `unique_active_season`, commento `is_active` verificato, vincoli idempotenti e RLS richiesti presenti. Resta non dimostrata l’applicabilità dell’intera catena da zero perché la baseline `20251007152643_master_migration_fixed.sql` fallisce nel database shadow con sintassi preesistente (`CREATE EXTENSION` senza terminatore prima del successivo `CREATE`). Advisor staging: warning preesistenti su due `SECURITY DEFINER` esposte e leaked-password protection. Nessuna altra migration o mutazione funzionale eseguita. |
+| G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Baseline canonica schema-only adottata come metodo locale supportato il 24/09/2026: due replay Docker da schema applicativo vuoto e invarianti verificati. La history storica resta volutamente invariata perché incompleta. Rimangono da autorizzare/applicare su staging la remediation versionata delle due RPC `SECURITY DEFINER`, rigenerare poi lo snapshot protetto e decidere la protezione password compromesse; nessuna mutazione staging/produzione è stata eseguita il 24/09. |
 | G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
 | G12.3 Copia selettiva palestre e attività | [x] | G12.2 | Completato il 22/09/2026: fixture DB locale e staging hanno verificato copy/link/skip, campi ammessi, conteggi pre/post, retry idempotente, collisione atomica e cleanup senza residui. |
 | G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione in questo goal. |
@@ -7254,6 +7254,49 @@ avrebbero potuto far passare il bootstrap lasciando un modello meno sicuro o
 diverso da staging. La chiusura di G12.1 richiede quindi una strategia
 autorizzata di baseline canonica/squash, ricostruita e comparata con staging,
 oppure il recupero delle migration storiche originali mancanti.
+
+**Decisione baseline canonica — 24/09/2026:** scelta esplicitamente la
+baseline schema-only locale come metodo supportato. La migration storica
+`20251007152643_master_migration_fixed.sql` non viene riscritta: oltre ai
+terminatori SQL mancanti, la history non crea 15 tabelle richieste dai
+successivi hardening, quindi una modifica puntuale sarebbe incompleta e
+altererebbe una migration già presente nella storia remota.
+
+Il database Docker isolato `csroma-canonical-bootstrap` (porta locale 54522)
+è stato riportato due volte allo schema applicativo vuoto (`public` e
+`private`), importando ogni volta
+`supabase/bootstrap/canonical-staging-schema.sql` e poi
+`verify-canonical-bootstrap.sql`. Entrambi i replay sono riusciti: 46 tabelle
+pubbliche con RLS, 26 funzioni pubbliche, 29 private, mappe/RPC rollover,
+indice parziale unico della stagione attiva e FK `season_profiles → seasons`
+con `ON DELETE RESTRICT`. Lo snapshot resta fuori da Git perché include
+policy, grant e funzioni private; checksum SHA-256 registrato:
+`f2cbc205a94aa4c1c622670e7a8a70fbd889d814d84e6823e4a0153fcd235e10`.
+Per ogni futura modifica schema: applicare prima la migration nell’ambiente
+autorizzato, rigenerare lo snapshot nella sede protetta, aggiornare checksum e
+ripetere i due replay Docker; non usare lo snapshot con `db push`, staging o
+produzione.
+
+**Warning security — 24/09/2026:** advisor staging in sola lettura ha
+confermato due RPC `SECURITY DEFINER` eseguibili da `authenticated` e la
+protezione password compromesse disattivata. `check_gym_schedule_conflicts`
+e' una lettura che non richiede privilegi elevati: preparata la migration
+locale `20260924070909_g12_1_security_definer_hardening.sql` che la rende
+`SECURITY INVOKER`, conservando il grant a `authenticated`/`service_role` e
+quindi applicando RLS. `refresh_championship_standings` e' solo funzione
+trigger: la stessa migration revoca l'esecuzione a `PUBLIC`, `anon` e
+`authenticated`, mantenendola al solo `service_role`. Applicata e verificata
+esclusivamente sul Docker canonico: catalogo finale senza `SECURITY DEFINER`
+per la prima funzione e senza grant `authenticated` per la seconda. L’advisor
+CLI via `--db-url` non si connette al Docker, quindi questa parte e' validata
+dal catalogo PostgreSQL, non dall’advisor. La migration non e' stata applicata
+a staging/produzione e lo snapshot non e' stato rigenerato; resta inoltre una
+decisione amministrativa separata sull’abilitazione della protezione password
+compromesse nel pannello Supabase.
+
+Verifiche 24/09: 5 suite / 11 test rollover-stagione, `npx tsc --noEmit` e
+`git diff --check` superati. G12.1 resta `[!]` fino alla scelta e applicazione
+autorizzata delle due azioni esterne sopra indicate.
 
 ## G12.2 — API per creare la bozza 2026/2027
 
