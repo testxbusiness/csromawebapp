@@ -2,11 +2,13 @@ import 'server-only'
 
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getProposedRolloverTeamCode } from '@/lib/seasons/rollover'
 
 const id = z.string().uuid()
 const teamRow = z.object({ id, name: z.string(), code: z.string(), activity_id: id, is_active: z.boolean() }).strict()
 const activityRow = z.object({ id, name: z.string(), season_id: id }).strict()
 const activityMapRow = z.object({ source_id: id, target_id: id }).strict()
+const seasonRow = z.object({ id, start_date: z.string(), end_date: z.string(), is_active: z.boolean() }).strict()
 
 const choiceUnion = z.discriminatedUnion('choice', [
   z.object({ sourceId: id, choice: z.literal('create'), name: z.string().trim().min(1).max(255), code: z.string().trim().min(1).max(50), activityId: id }).strict(),
@@ -30,8 +32,8 @@ export async function getTeamPreview(sourceSeasonId: string, targetSeasonId: str
   const target = id.parse(targetSeasonId)
   const admin = createAdminClient()
   const [{ data: sourceSeason, error: sourceSeasonError }, { data: targetSeason, error: targetSeasonError }, { data: sourceActivities, error: sourceActivitiesError }, { data: targetActivities, error: targetActivitiesError }] = await Promise.all([
-    admin.from('seasons').select('id,is_active').eq('id', source).maybeSingle(),
-    admin.from('seasons').select('id,is_active').eq('id', target).maybeSingle(),
+    admin.from('seasons').select('id,start_date,end_date,is_active').eq('id', source).maybeSingle(),
+    admin.from('seasons').select('id,start_date,end_date,is_active').eq('id', target).maybeSingle(),
     admin.from('activities').select('id,name,season_id').eq('season_id', source),
     admin.from('activities').select('id,name,season_id').eq('season_id', target),
   ])
@@ -46,7 +48,9 @@ export async function getTeamPreview(sourceSeasonId: string, targetSeasonId: str
   ])
   const error = sourceTeamsError ?? targetTeamsError ?? activityMapsError ?? teamMapsError
   if (error) throw new Error('Impossibile leggere la preview delle squadre')
-  if (!sourceSeason || !targetSeason || source === target || targetSeason.is_active) throw new Error('Source o target non validi')
+  const parsedSourceSeason = seasonRow.safeParse(sourceSeason)
+  const parsedTargetSeason = seasonRow.safeParse(targetSeason)
+  if (!parsedSourceSeason.success || !parsedTargetSeason.success || source === target || !parsedSourceSeason.data.is_active || parsedTargetSeason.data.is_active || parsedTargetSeason.data.start_date <= parsedSourceSeason.data.end_date) throw new Error('Source o target non validi')
   const sourceTeamRows = z.array(teamRow).parse(sourceTeams ?? [])
   const sourceActivityRows = z.array(activityRow).parse(sourceActivities ?? [])
   const targetTeamRows = z.array(teamRow).parse(targetTeams ?? [])
@@ -66,7 +70,7 @@ export async function getTeamPreview(sourceSeasonId: string, targetSeasonId: str
         mappedActivity: targetActivityId ? targetActivityById.get(targetActivityId) ?? null : null,
         targetMatches: targetTeamRows.filter((candidate) => candidate.name.trim().toLocaleLowerCase() === team.name.trim().toLocaleLowerCase()),
         mappedTargetId: teamMapRows.find((row) => row.source_team_id === team.id)?.target_team_id ?? null,
-        proposedCode: `${team.code}-2627`.slice(0, 50),
+        proposedCode: getProposedRolloverTeamCode(team.code, parsedTargetSeason.data),
       }
     }),
     targetTeams: targetTeamRows.map((team) => ({ ...team, activity: targetActivityById.get(team.activity_id) ?? null })),

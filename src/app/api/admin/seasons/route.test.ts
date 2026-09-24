@@ -22,6 +22,13 @@ const targetPayload = {
   is_active: false,
 }
 
+const futureTargetPayload = {
+  name: 'Stagione 2027/2028',
+  start_date: '2027-09-01',
+  end_date: '2028-06-30',
+  is_active: false,
+}
+
 const targetSeason = {
   id: '11111111-1111-4111-8111-111111111111',
   ...targetPayload,
@@ -55,7 +62,6 @@ describe('POST /api/admin/seasons', () => {
 
   it.each([
     [{ ...targetPayload, is_active: true }, 'active target'],
-    [{ ...targetPayload, name: 'Stagione diversa' }, 'discordant name'],
     [{ ...targetPayload, start_date: '2027-06-30', end_date: '2026-09-01' }, 'inverted dates'],
   ])('rejects %s before database writes', async (payload) => {
     const response = await POST(request(payload))
@@ -76,6 +82,21 @@ describe('POST /api/admin/seasons', () => {
     expect(response.status).toBe(201)
     expect(response.body).toEqual({ season: targetSeason, created: true })
     expect(insert).toHaveBeenCalledWith(targetPayload)
+  })
+
+  it('creates a future inactive draft without a hard-coded name or period', async () => {
+    const futureTarget = { ...targetSeason, ...futureTargetPayload }
+    const select = jest.fn().mockResolvedValue({ data: [], error: null })
+    const single = jest.fn().mockResolvedValue({ data: futureTarget, error: null })
+    const insertSelect = jest.fn().mockReturnValue({ single })
+    const insert = jest.fn().mockReturnValue({ select: insertSelect })
+    createAdminClientMock.mockReturnValue({ from: jest.fn().mockReturnValue({ select, insert }) } as unknown as ReturnType<typeof createAdminClient>)
+
+    const response = await POST(request(futureTargetPayload))
+
+    expect(response.status).toBe(201)
+    expect(response.body).toEqual({ season: futureTarget, created: true })
+    expect(insert).toHaveBeenCalledWith(futureTargetPayload)
   })
 
   it('returns the existing inactive target without inserting on retry', async () => {

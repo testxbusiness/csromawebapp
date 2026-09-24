@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState, LoadingState } from '@/components/ui'
 import { BarChart3 } from 'lucide-react'
 import SeasonRolloverWizard from './SeasonRolloverWizard'
+import { getRolloverSeasonContext } from '@/lib/seasons/rollover'
 
 interface Season {
   id?: string
@@ -28,6 +29,9 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [rolloverOpen, setRolloverOpen] = useState(false)
   const supabase = useMemo(() => createClient(), [])
+  const rolloverContext = useMemo(() => getRolloverSeasonContext(
+    seasons.filter((season): season is Season & { id: string } => Boolean(season.id)),
+  ), [seasons])
 
   const loadSeasons = useCallback(async () => {
     const { data } = await supabase
@@ -154,9 +158,9 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
           >
             Nuova Stagione
           </Button>
-          {seasons.some((season) => season.name === 'Stagione 2025/2026') && seasons.some((season) => season.name === 'Stagione 2026/2027') && (
+          {rolloverContext.source && rolloverContext.defaultTarget && (
             <Button variant="outline" onClick={() => setRolloverOpen(true)}>
-              Avvia rollover 2026/2027
+              Avvia rollover verso {rolloverContext.defaultTarget.name}
             </Button>
           )}
         </div>

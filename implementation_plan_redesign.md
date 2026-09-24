@@ -280,7 +280,8 @@ Per un goal `[x]` aggiungere sempre:
 | G12.8d Bilancio per stagione | [x] | G12.8c | Completato il 21/09/2026: `/admin/balance` usa la stagione attiva come default, consente lo storico esplicito e allinea entrate da rate e uscite collegate a squadra/attività/palestra; i costi generali privi di collegamento restano condivisi. Le liste dei filtri rispettano la stagione selezionata; le date restano filtri opzionali sui movimenti. Typecheck, build e diff check superati; nessuna mutazione staging/produzione. |
 | G12.8e Messaggi e destinatari per stagione | [x] | G12.8d | Completato il 21/09/2026 senza aggiungere `season_id` a `messages`: `/admin/messages` usa un unico selettore stagione, predefinito sull’attiva, e limita elenco, squadre e account destinatari alla stagione scelta; i familiari autorizzati sono inclusi tramite relazione attiva con un atleta iscritto. Creazione e modifica validano lato server tutti i destinatari contro lo stesso perimetro; anche l’invio di un documento come messaggio usa automaticamente la stagione attiva. Il coach usa soltanto `/api/coach/teams` e non ripropone assegnazioni storiche. Atleti e familiari non ricevono nuovi filtri: continuano a vedere implicitamente la stagione attiva per mantenere semplice la UX. Limite accettato del modello indiretto: un messaggio diretto a un profilo presente in più stagioni compare nello storico di ciascuna, mentre i messaggi di squadra restano univoci tramite `team → activity → season`. Test mirati 9/9, typecheck, build con variabili Supabase placeholder e diff check superati. Nessuna migration o mutazione dati. |
 | G12.8f Cataloghi modal eventi admin per stagione | [x] | G12.8e | Completato il 21/09/2026; `/admin/calendar` ora ricarica squadre, attività e palestre in base alla stagione selezionata, con default sulla stagione attiva e pulizia immediata delle opzioni precedenti durante il cambio filtro. Il modal di creazione/modifica non propone più squadre della stagione storica; lo storico del calendario resta consultabile selezionando esplicitamente la stagione. Coach invariato perché già usa il catalogo autorizzato della stagione attiva. Test API/calendario 8/8, typecheck, build e diff check superati. |
-| G12.9 Dry-run, esecuzione 2026/2027 e gate | [ ] | G12.1–G12.8e | Backup/evidenze, esecuzione autorizzata, attivazione atomica, conteggi post-run e verifica assenza di perdita dati. |
+| G12.8g Rollover stagionale riutilizzabile | [x] | G12.7,G12.8 | Completato il 24/09/2026: source attiva e target inattiva futura sono risolti dal catalogo, target selezionabile, etichette/date dinamiche, creazione bozza generica e suffisso squadra derivato dalla target. Regressioni 2026/2027 → 2027/2028, typecheck, test mirati, lint, build e diff check superati; nessuna mutazione ambienti. |
+| G12.9 Dry-run, esecuzione 2026/2027 e gate | [ ] | G12.1–G12.8g | Backup/evidenze, esecuzione autorizzata, attivazione atomica, conteggi post-run e verifica assenza di perdita dati. |
 
 ---
 
@@ -7971,6 +7972,58 @@ File modificati: `TeamsManager`, `BulkGenerateModal`, `DocumentsManager`, route
 e test documenti, catalogo/tipi campionati, manager campionati e questo piano.
 Verifiche: 3 suite/9 test mirati, `npx tsc --noEmit`, `npm run build` e
 `git diff --check` superati. Nessun dato staging o produzione e' stato mutato.
+
+## G12.8g — Rollover stagionale riutilizzabile
+
+**Obiettivo:** rendere il workflow riutilizzabile dopo il primo passaggio,
+per esempio da 2026/2027 a 2027/2028, senza dipendenze hard-coded dalla coppia
+iniziale 2025/2026 → 2026/2027.
+
+**Task singolo:**
+
+- Derivare la source dalla sola stagione attiva e proporre come target la bozza
+  inattiva futura piu' vicina; quando sono disponibili piu' bozze future,
+  permettere all'admin di selezionare esplicitamente il target prima di iniziare
+  il wizard.
+- Sostituire nelle UI, nei messaggi di conferma e nei prerequisiti tutte le
+  etichette statiche con nome e periodo reali di source e target.
+- Rendere generica la creazione di una bozza inattiva: validare dati, ordine
+  delle date, idempotenza e sovrapposizioni, senza vincolare nome o periodo al
+  solo 2026/2027.
+- Derivare il suffisso proposto del codice squadra dagli anni della target
+  (ad esempio `-2728` per una target 2027/2028), mantenendo i limiti e le
+  collisioni gia' controllati dalla procedura transazionale.
+- Conservare i contratti delle route/RPC basati sugli ID, l'autorizzazione
+  server-side, l'inattivita' del target e il divieto di attivazione nel wizard.
+  Non eseguire copy, batch, attivazioni o altre mutazioni su staging/produzione.
+
+**Acceptance:** con una source attiva 2026/2027 e una bozza inattiva
+2027/2028, il wizard usa soltanto quei due ID in tutte le chiamate, mostra le
+relative etichette/date, propone codici squadra `*-2728` e non espone il
+precedente 2025/2026 come contesto operativo. Il passaggio 2025/2026 →
+2026/2027 resta compatibile.
+
+**Verifiche:** regressioni del wizard e del manager stagioni sulla coppia
+2026/2027 → 2027/2028, test route di creazione bozza e servizio squadre,
+`npx tsc --noEmit`, test Jest mirati, `npm run build` e `git diff --check`.
+
+**Registro esecuzione — 24/09/2026 — PASS:** aggiunto il resolver condiviso
+`src/lib/seasons/rollover.ts`. Il manager propone il rollover soltanto quando
+esiste una sola source attiva e una bozza futura inattiva, scegliendo di default
+la piu' vicina; il wizard permette di scegliere un'altra bozza futura prima di
+iniziare e propaga esclusivamente gli ID selezionati a tutte le route esistenti.
+Titoli, prerequisiti, conferme e testi di riepilogo derivano ora dai nomi e
+dalle date reali. `POST /api/admin/seasons` accetta una bozza generica inattiva
+con le stesse garanzie di ordine date, idempotenza e non sovrapposizione; non
+vincola piu' il payload a 2026/2027. Il servizio squadre ricava il suffisso dal
+periodo target (`-2728` per 2027/2028) e convalida che la source sia attiva e
+la target sia futura e inattiva. Aggiunte regressioni sul contesto stagionale,
+sul manager, sul wizard con target selezionato e sulle route/servizi; 6 suite,
+28 test passati, `npx tsc --noEmit`, ESLint, `npm run build` e `git diff
+--check` superati. Durante il typecheck e' stata anche corretta la tipizzazione
+dei mock della precedente regressione dettagli campionato, senza variazioni
+runtime. Nessun accesso mutativo, copy, batch, deploy, attivazione o modifica
+su staging/produzione.
 
 ## G12.9 — Dry-run, esecuzione 2026/2027, attivazione e gate
 

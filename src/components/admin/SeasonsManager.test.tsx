@@ -16,8 +16,8 @@ jest.mock('./SeasonsModal', () => ({
 const createClientMock = createClient as jest.MockedFunction<typeof createClient>
 const season = { id: 'season-1', name: 'Stagione 2025/2026', start_date: '2025-09-01', end_date: '2026-06-30', is_active: true }
 
-function setup() {
-  const order = jest.fn().mockResolvedValue({ data: [season], error: null })
+function setup(seasonRows = [season]) {
+  const order = jest.fn().mockResolvedValue({ data: seasonRows, error: null })
   const select = jest.fn().mockReturnValue({ order })
   createClientMock.mockReturnValue({ from: jest.fn().mockReturnValue({ select }) } as unknown as ReturnType<typeof createClient>)
   return { order }
@@ -61,5 +61,18 @@ describe('SeasonsManager creation flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Nuova Stagione' }))
     fireEvent.click(screen.getByRole('button', { name: 'submit-season' }))
     await waitFor(() => expect(screen.queryByRole('button', { name: 'submit-season' })).not.toBeInTheDocument())
+  })
+
+  it('offers the rollover for the nearest future inactive draft', async () => {
+    setup([
+      { id: 'season-2526', name: 'Stagione 2025/2026', start_date: '2025-09-01', end_date: '2026-06-30', is_active: false },
+      season,
+      { id: 'season-2728', name: 'Stagione 2027/2028', start_date: '2027-09-01', end_date: '2028-06-30', is_active: false },
+      { id: 'season-2829', name: 'Stagione 2028/2029', start_date: '2028-09-01', end_date: '2029-06-30', is_active: false },
+    ])
+
+    render(<SeasonsManager embedded />)
+
+    expect(await screen.findByRole('button', { name: 'Avvia rollover verso Stagione 2027/2028' })).toBeInTheDocument()
   })
 })

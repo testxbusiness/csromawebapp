@@ -27,9 +27,15 @@ describe('season rollover team service', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     let teamsCall = 0
+    let seasonsCall = 0
     ;(createAdminClient as jest.Mock).mockReturnValue({
       from: (table: string) => {
-        if (table === 'seasons') return query({ id: sourceSeasonId, is_active: false })
+        if (table === 'seasons') {
+          seasonsCall += 1
+          return query(seasonsCall === 1
+            ? { id: sourceSeasonId, start_date: '2026-09-01', end_date: '2027-06-30', is_active: true }
+            : { id: targetSeasonId, start_date: '2027-09-01', end_date: '2028-06-30', is_active: false })
+        }
         if (table === 'activities') return query([
           { id: sourceActivityId, name: 'U16', season_id: sourceSeasonId },
           { id: targetActivityId, name: 'U16 target', season_id: targetSeasonId },
@@ -38,7 +44,7 @@ describe('season rollover team service', () => {
           teamsCall += 1
           return query(teamsCall === 1
             ? [{ id: sourceTeamId, name: 'U16 Roma', code: 'U16', activity_id: sourceActivityId, is_active: true }]
-            : [{ id: targetTeamId, name: 'U16 Roma', code: 'U16-2627', activity_id: targetActivityId, is_active: true }])
+            : [{ id: targetTeamId, name: 'U16 Roma', code: 'U16-2728', activity_id: targetActivityId, is_active: true }])
         }
         if (table === 'season_rollover_structure_maps') return query([{ source_id: sourceActivityId, target_id: targetActivityId }])
         return query([])
@@ -46,11 +52,11 @@ describe('season rollover team service', () => {
     })
   })
 
-  it('derives the proposed target activity and code from the approved mapping', async () => {
+  it('derives the proposed target activity and code from the approved mapping and target dates', async () => {
     const preview = await getTeamPreview(sourceSeasonId, targetSeasonId)
     expect(preview.teams[0]).toMatchObject({
       mappedActivity: { id: targetActivityId },
-      proposedCode: 'U16-2627',
+      proposedCode: 'U16-2728',
       targetMatches: [{ id: targetTeamId }],
     })
   })
