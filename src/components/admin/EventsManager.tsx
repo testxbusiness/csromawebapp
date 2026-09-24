@@ -117,6 +117,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const teamDropdownRef = useRef<HTMLDivElement | null>(null)
   const eventKindDropdownRef = useRef<HTMLDivElement | null>(null)
   const requestedVisibleRangeRef = useRef<string | null>(null)
+  const eventsRequestAbortRef = useRef<AbortController | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const selectedTeamsLabel = (() => {
@@ -170,6 +171,10 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     loadSeasons()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => () => {
+    eventsRequestAbortRef.current?.abort()
+  }, [])
+
   useEffect(() => {
     if (!filterSeasonId) return
     setGyms([])
@@ -208,6 +213,11 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     visible?: boolean
     seasonId?: string
   }) => {
+    eventsRequestAbortRef.current?.abort()
+    const controller = new AbortController()
+    eventsRequestAbortRef.current = controller
+    const isCurrentRequest = () => eventsRequestAbortRef.current === controller
+
     setLoading(true)
     try {
       const selectedTeamIds = overrides?.teamIds ?? filterTeams
@@ -227,16 +237,20 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       }
       params.set('limit', overrides?.visible ? '500' : '5000')
       const qs = params.toString()
-      const response = await fetch(`/api/admin/events${qs ? `?${qs}` : ''}`)
+      const response = await fetch(`/api/admin/events${qs ? `?${qs}` : ''}`, { signal: controller.signal })
       const result = await response.json()
 
       if (!response.ok) {
-        console.error('Errore caricamento eventi:', result.error)
+        if (!isCurrentRequest()) return
+        // During logout the session is deliberately revoked before the route
+        // change unmounts this component. A 401 from an in-flight refresh is
+        // expected and must not be reported as an application error.
+        if (response.status !== 401) console.error('Errore caricamento eventi:', result.error)
         setEvents([])
-        setLoading(false)
-        setInitialLoading(false)
         return
       }
+
+      if (!isCurrentRequest()) return
 
       // Assicurati che i dati correlati siano sempre oggetti validi
       let eventsWithSafeData = (result.events || []).map((event: Event) => ({
@@ -256,13 +270,15 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
 
       setEvents(eventsWithSafeData)
       setSelectedEventIds([])
-      setLoading(false)
-      setInitialLoading(false)
     } catch (error) {
+      if (controller.signal.aborted || !isCurrentRequest()) return
       console.error('Errore caricamento eventi:', error)
       setEvents([])
-      setLoading(false)
-      setInitialLoading(false)
+    } finally {
+      if (isCurrentRequest()) {
+        setLoading(false)
+        setInitialLoading(false)
+      }
     }
   }
 

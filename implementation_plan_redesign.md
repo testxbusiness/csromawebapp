@@ -7923,6 +7923,14 @@ e `git diff --check` superati. Nessun deploy o mutazione staging/produzione in
 questa remediation; dopo il deploy resta da ripetere il brevissimo smoke admin
 su “Tutte le stagioni” degli incassi e sulla griglia 2025/2026.
 
+**Remediation logout — 24/09/2026:** lo smoke successivo ha rilevato richieste
+`GET /api/admin/events` ancora in volo dopo la revoca sessione, correttamente
+risposte `401` ma stampate ripetutamente nella console. `EventsManager` ora
+annulla la richiesta precedente e quella al dismount, ignora risposte obsolete
+e non segnala come errore applicativo il `401` previsto durante logout; gli
+altri errori restano registrati. ESLint sul componente, `npm run build` e
+`git diff --check` superati. Nessuna mutazione database o deploy.
+
 ### G12.8a — Audit cataloghi squadra admin — 22/09/2026
 
 L'audit ha classificato i cataloghi squadra operativi di atleti, collaboratori,
