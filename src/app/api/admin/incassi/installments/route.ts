@@ -24,7 +24,10 @@ export async function GET(request: Request) {
 
     const seasonId = requestedSeasonId === 'all' ? null : requestedSeasonId || (await resolveActiveSeason(supabase))?.id || null
     if (requestedSeasonId !== 'all' && !seasonId) return NextResponse.json({ error: 'Nessuna stagione disponibile' }, { status: 400 })
-    const seasonTeamIds = seasonId ? await resolveActiveSeasonTeamIds(supabase, seasonId) : []
+    // `null` means the explicit "Tutte le stagioni" view, not a season with
+    // no teams. Keep those two cases distinct so the aggregate can query every
+    // membership fee instead of being reduced to an empty team list.
+    const seasonTeamIds = seasonId ? await resolveActiveSeasonTeamIds(supabase, seasonId) : null
 
     // Calculate date range based on preset
     let dateFrom = fromDate
@@ -64,9 +67,11 @@ export async function GET(request: Request) {
 
     // Apply filters
     const requestedTeamIds = teams.length > 0
-      ? seasonId ? teams.filter((teamId) => seasonTeamIds.includes(teamId)) : teams
-      : seasonId ? seasonTeamIds : []
-    if (requestedTeamIds.length > 0) {
+      ? seasonTeamIds ? teams.filter((teamId) => seasonTeamIds.includes(teamId)) : teams
+      : seasonTeamIds
+    if (requestedTeamIds === null) {
+      // Explicit aggregate: leave the base query unscoped by team.
+    } else if (requestedTeamIds.length > 0) {
       // First get membership_fee IDs for the selected teams
       const { data: membershipFees } = await supabase
         .from('membership_fees')

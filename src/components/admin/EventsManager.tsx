@@ -76,6 +76,7 @@ interface Team {
 interface Season {
   id: string
   name: string
+  start_date: string
   is_active: boolean
 }
 
@@ -145,6 +146,25 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     }
   }
 
+  const handleSeasonChange = (seasonId: string) => {
+    const season = seasons.find((item) => item.id === seasonId)
+    const nextDate = season ? new Date(`${season.start_date}T12:00:00`) : currentDate
+
+    setFilterSeasonId(seasonId)
+    setFilterTeams([])
+    setCurrentDate(nextDate)
+    requestedVisibleRangeRef.current = null
+
+    const range = visibleMonthRange(nextDate)
+    void loadEvents({
+      teamIds: [],
+      from: filterFrom || range.from,
+      to: filterTo ? `${filterTo}T23:59:59.999` : range.to,
+      visible: true,
+      seasonId,
+    })
+  }
+
   useEffect(() => {
     loadEvents(visibleRequest(new Date()))
     loadSeasons()
@@ -203,7 +223,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       if (selectedTo) params.set('to', new Date(selectedTo).toISOString())
       if (overrides?.visible) {
         params.set('visible', '1')
-        requestedVisibleRangeRef.current = [selectedTeamIds.join(','), selectedEventKinds.join(','), selectedFrom, selectedTo].join('|')
+        requestedVisibleRangeRef.current = [selectedSeasonId, selectedTeamIds.join(','), selectedEventKinds.join(','), selectedFrom, selectedTo].join('|')
       }
       params.set('limit', overrides?.visible ? '500' : '5000')
       const qs = params.toString()
@@ -291,7 +311,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const loadSeasons = async () => {
     const { data } = await supabase
       .from('seasons')
-      .select('id, name, is_active')
+      .select('id, name, start_date, is_active')
       .order('start_date', { ascending: false })
     const nextSeasons = data || []
     setSeasons(nextSeasons)
@@ -523,8 +543,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           <div>
             <label htmlFor="admin-calendar-season" className="cs-field__label">Stagione</label>
             <select id="admin-calendar-season" className="cs-input w-full min-h-[44px]" value={filterSeasonId} onChange={(event) => {
-              setFilterSeasonId(event.target.value)
-              setFilterTeams([])
+              handleSeasonChange(event.target.value)
             }}>
               {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
             </select>
@@ -677,14 +696,15 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
               : loadEvents({ visible: false })} className="cs-btn cs-btn--primary">Applica filtri</button>
             <button
               onClick={() => {
+                const activeSeasonId = seasons.find((season) => season.is_active)?.id || ''
                 setFilterTeams([])
-                setFilterSeasonId(seasons.find((season) => season.is_active)?.id || '')
+                setFilterSeasonId(activeSeasonId)
                 setFilterEventKinds([])
                 setFilterFrom('')
                 setFilterTo('')
                 loadEvents(viewMode === 'calendar'
-                  ? { teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true }
-                  : { teamIds: [], eventKinds: [], from: '', to: '', visible: false })
+                  ? { teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true, seasonId: activeSeasonId }
+                  : { teamIds: [], eventKinds: [], from: '', to: '', visible: false, seasonId: activeSeasonId })
               }}
               className="cs-btn cs-btn--ghost"
             >
@@ -724,8 +744,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           <div>
             <label htmlFor="admin-calendar-season-mobile" className="cs-field__label">Stagione</label>
             <select id="admin-calendar-season-mobile" className="cs-input mt-1 w-full" value={filterSeasonId} onChange={(event) => {
-              setFilterSeasonId(event.target.value)
-              setFilterTeams([])
+              handleSeasonChange(event.target.value)
             }}>
               {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
             </select>
@@ -811,7 +830,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           onVisibleRangeChange={(start, end) => {
             const from = filterFrom || start.toISOString()
             const to = filterTo ? `${filterTo}T23:59:59.999` : end.toISOString()
-            const requestKey = [filterTeams.join(','), filterEventKinds.join(','), from, to].join('|')
+            const requestKey = [filterSeasonId, filterTeams.join(','), filterEventKinds.join(','), from, to].join('|')
             if (requestedVisibleRangeRef.current === requestKey) return
             requestedVisibleRangeRef.current = requestKey
             void loadEvents({

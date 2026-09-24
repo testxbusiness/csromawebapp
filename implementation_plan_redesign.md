@@ -266,14 +266,14 @@ Per un goal `[x]` aggiungere sempre:
 | G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
 | G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
 | G10.7 Documentazione finale | [ ] | G10.6 | |
-| G12.1 Contratto rollover e invarianti DB | [!] | G9.5,G9.6 | Baseline canonica schema-only adottata come metodo locale supportato il 24/09/2026; due replay Docker aggiornati da schema applicativo vuoto e invarianti verificati. History migration locale/staging riconciliata e remediation RPC applicata/verificata su staging. Resta solo la decisione amministrativa sulla protezione password compromesse; nessuna mutazione produzione eseguita. |
+| G12.1 Contratto rollover e invarianti DB | [x] | G9.5,G9.6 | Completato il 24/09/2026: baseline canonica schema-only adottata come metodo locale supportato con due replay Docker verificati; history migration locale/staging riconciliata e remediation RPC applicata/verificata su staging. Protezione password compromesse consapevolmente non disponibile sul piano Supabase gratuito e accettata come limite di piattaforma; nessuna mutazione produzione eseguita. |
 | G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
 | G12.3 Copia selettiva palestre e attività | [x] | G12.2 | Completato il 22/09/2026: fixture DB locale e staging hanno verificato copy/link/skip, campi ammessi, conteggi pre/post, retry idempotente, collisione atomica e cleanup senza residui. |
 | G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione in questo goal. |
 | G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
 | G12.6 Esecuzione atomica iscrizioni | [x] | G12.5 | Completato il 15/09/2026; batch server-side su RPC PostgreSQL transazionale e idempotente: crea/aggiorna solo `season_profiles` target per gli inclusi e le membership target selezionate, senza mutare la source o creare iscrizioni familiari. Audit append-only con batch key e conteggi autorevoli; validati profilo source, stagione/ruolo/team target e rollback completo. Test applicativi 2 suite/5 test, fixture DB transazionale locale, advisor security locale, typecheck e diff check superati. Nessuna mutazione staging/produzione, deploy o attivazione. Remediation 17/09/2026: migration locale `20260917094156_season_rollover_skip_excluded_profiles.sql` applicata allo staging con versione remota `20260917094411`; i profili esclusi vengono saltati prima della validazione `profile_type`, così righe legacy nulle non bloccano il batch. |
 | G12.7 Wizard admin selezione profili | [x] | G12.6 | Completato il 15/09/2026: wizard responsive a sei passi in `/admin/seasons` con scelte esplicite strutture/squadre, profili opt-in con ricerca e filtri, mapping univoco proposto, assegnazioni multi-team con ruolo/maglia modificabili, riepilogo inclusi/esclusi/senza squadra e conferma esplicita. Usa esclusivamente le route admin server-side già autorizzate e il batch G12.6; nessuna attivazione o mutazione della 2025/2026. Verifiche mirate 7/7, typecheck, build e diff check superati. Non eseguite E2E/manuali su viewport 320/390/768/1440, focus trap reale o browser con sessione admin; non eseguite mutazioni/query DB, staging o produzione. |
-| G12.8 Isolamento runtime per stagione attiva | [x] | G12.6 | Completato il 15/09/2026; introdotto resolver server-side unico per zero/una/multiple stagioni attive e filtrate autorizzazioni e letture operative atleta/famiglia/coach per attività, squadre e membership della stagione attiva; storico admin non alterato. Evidenze runtime aggiunte il 22/09/2026: test dedicati famiglia/KPI, query staging aggregata e verifica coach multi-squadra. Typecheck, build e diff check superati; nessuna mutazione staging/produzione, deploy o attivazione. |
+| G12.8 Isolamento runtime per stagione attiva | [x] | G12.6 | Completato il 15/09/2026; introdotto resolver server-side unico per zero/una/multiple stagioni attive e filtrate autorizzazioni e letture operative atleta/famiglia/coach per attività, squadre e membership della stagione attiva; storico admin non alterato. Evidenze runtime aggiunte il 22/09/2026: test dedicati famiglia/KPI, query staging aggregata e verifica coach multi-squadra. Smoke autenticato e remediation storico admin 24/09/2026: corretti l'aggregato incassi “Tutte le stagioni” e il caricamento/navigazione della griglia calendario storica; test route 6/6, lint e build superati. Nessuna mutazione staging/produzione, deploy o attivazione. |
 | G12.8a Isolamento squadre nei selettori e nelle assegnazioni | [x] | G12.8 | Completato il 22/09/2026: audit dei cataloghi admin concluso. Assegnazioni, quote, incassi, pagamenti, messaggi e calendario erano già stagionali; Gestione squadre ora parte dall’attiva con storico esplicito, documenti usa il catalogo attivo autorizzato e campionati limita le squadre alla stagione del campionato selezionato. Typecheck, test mirati, build e diff check superati. |
 | G12.8b Quote associative per stagione | [x] | G12.8a | Completato il 21/09/2026: `/admin/membership-fees` ora seleziona di default la stagione attiva, filtra piani, squadre nei form e rate nella tab Atleti; lo storico resta disponibile con “Tutte le stagioni”. Aggiunto `season_id` al contratto Zod e validazione server-side della relazione `team → activity → season` in creazione/modifica quota; esteso il filtro a `/api/admin/installments`. Typecheck, test `membershipFees` 2/2, suite completa 83/85 suite e 338/341 test, build e diff check superati. I 3 test falliti sono preesistenti e non correlati (`AthleteDashboard` e mutazioni campionato coach). Nessuna mutazione staging/produzione. Screenshot di riferimento: pagina Quote associative con squadre `AMA`, `U17`, `U14` mentre la stagione attiva usa i target `*-2627`. |
 | G12.8c Pagamenti e incassi per stagione | [x] | G12.8b | Completato il 21/09/2026: `/admin/incassi` usa la stagione attiva come default, consente lo storico esplicito e allinea KPI, rate, piani e squadre tramite `team → activity → season`; `/admin/payments` usa lo stesso contesto e filtra i pagamenti collegati a squadra/attività/palestra, mantenendo visibili come condivisi i costi generali privi di collegamento. Aggiunta validazione server-side per creazione/modifica pagamenti e filtro coach coerente nel form. Remediation 21/09/2026: corretto il filtro dei pagamenti con sola `team_id`, risolvendo correttamente `team → activity → season` (`fc838eb`); prima della correzione le stagioni singole restituivano zero pagamenti mentre “Tutte le stagioni” ne mostrava 13. Typecheck, build e diff check superati. Nessuna mutazione staging/produzione. |
@@ -7315,10 +7315,13 @@ entrambi superato la verifica (46 tabelle pubbliche/RLS, 26 funzioni pubbliche,
 `check_gym_schedule_conflicts` `SECURITY INVOKER` e nessun grant
 `authenticated` su `refresh_championship_standings`.
 
-Verifiche 24/09: 5 suite / 11 test rollover-stagione, `npx tsc --noEmit` e
-`git diff --check` superati. G12.1 resta `[!]` unicamente fino alla decisione
-amministrativa sull’abilitazione della protezione password compromesse; non è
-stata eseguita alcuna mutazione produzione.
+**Decisione leaked password protection — 24/09/2026:** non abilitabile sul
+piano Supabase gratuito in uso; il proprietario ha scelto consapevolmente di
+lasciarla disabilitata. Il warning e' quindi classificato come limite di
+piattaforma accettato, da rivalutare in caso di passaggio a piano Pro o
+superiore. Verifiche 24/09: 5 suite / 11 test rollover-stagione,
+`npx tsc --noEmit` e `git diff --check` superati. Con questa decisione G12.1
+e' `[x]`; non è stata eseguita alcuna mutazione produzione.
 
 ## G12.2 — API per creare la bozza 2026/2027
 
@@ -7891,6 +7894,34 @@ conteggi aggregati e non ha mutato dati. Non eseguito il solo smoke manuale UI
 autenticato di selezione/cambio stagione, perché richiede una sessione admin e
 un eventuale cambio della stagione attiva rientra nel gate mutativo G12.9;
 nessun esito è attribuito a tale passaggio.
+
+### G12.8 — Smoke autenticato e remediation storico admin — 24/09/2026
+
+Lo smoke autenticato ha confermato che atleta, familiare e coach non recuperano
+un contesto 2025/2026 dopo refresh o ritorno in focus. Il familiare vede solo
+gli atleti inclusi; senza alcun atleta incluso resta autenticato con lo stato
+vuoto esplicito “Nessun profilo collegato”. Il coach multi-squadra vede entrambe
+le squadre 2026/2027 e nessuna non rinnovata. Per messaggi admin/coach, i
+messaggi di squadra restano stagionali; la comparsa in entrambe le viste di un
+messaggio diretto a un profilo presente in entrambe le stagioni e' il limite
+gia' accettato del modello indiretto, non una perdita di isolamento.
+
+Lo smoke ha inoltre individuato due difetti amministrativi, entrambi corretti
+localmente: `season_id=all` di `/admin/incassi` trasformava l'aggregato in una
+lista squadre vuota e quindi non mostrava rate; `/admin/calendar` non
+posizionava ne' ricaricava in modo esplicito la finestra della stagione storica
+selezionata. La route incassi ora distingue l'aggregato da una stagione senza
+squadre. Il calendario ancora il mese alla data iniziale della stagione, invia
+esplicitamente `season_id` nella richiesta di cambio e include la stagione
+nella chiave di deduplicazione del range; il reset passa esplicitamente alla
+stagione attiva.
+
+Verifiche della remediation: query locale read-only su snapshot canonico (151
+eventi 2025/2026 con tutti gli intervalli `start_date`/`end_date` valorizzati),
+test route admin eventi e rate 6/6, ESLint sui file modificati, `npm run build`
+e `git diff --check` superati. Nessun deploy o mutazione staging/produzione in
+questa remediation; dopo il deploy resta da ripetere il brevissimo smoke admin
+su “Tutte le stagioni” degli incassi e sulla griglia 2025/2026.
 
 ### G12.8a — Audit cataloghi squadra admin — 22/09/2026
 

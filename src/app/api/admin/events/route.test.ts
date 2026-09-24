@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 import { GET } from './route'
 
 jest.mock('@/server/seasons/active-season', () => ({
@@ -22,6 +23,8 @@ jest.mock('next/server', () => ({
 const createAdminClientMock = createAdminClient as jest.MockedFunction<typeof createAdminClient>
 const createClientMock = createClient as jest.MockedFunction<typeof createClient>
 const requireGlobalRoleMock = requireGlobalRole as jest.MockedFunction<typeof requireGlobalRole>
+const resolveActiveSeasonMock = resolveActiveSeason as jest.MockedFunction<typeof resolveActiveSeason>
+const resolveActiveSeasonTeamIdsMock = resolveActiveSeasonTeamIds as jest.MockedFunction<typeof resolveActiveSeasonTeamIds>
 
 function emptyEventsQuery() {
   const query: {
@@ -58,6 +61,9 @@ describe('GET /api/admin/events visible range contract', () => {
     createClientMock.mockResolvedValue({} as Awaited<ReturnType<typeof createClient>>)
     requireGlobalRoleMock.mockResolvedValue({} as Awaited<ReturnType<typeof requireGlobalRole>>)
     createAdminClientMock.mockReset()
+    resolveActiveSeasonMock.mockClear()
+    resolveActiveSeasonTeamIdsMock.mockReset()
+    resolveActiveSeasonTeamIdsMock.mockResolvedValue(['team-a'])
   })
 
   it.each([
@@ -89,5 +95,21 @@ describe('GET /api/admin/events visible range contract', () => {
     expect(query.gte).toHaveBeenCalledWith('end_date', '2026-09-01T00:00:00.000Z')
     expect(query.range).toHaveBeenCalledWith(0, 499)
     expect((response as unknown as { body: { limit: number } }).body.limit).toBe(500)
+  })
+
+  it('uses the explicitly selected historical season for a calendar range', async () => {
+    const query = emptyEventsQuery()
+    query.data = [{ event_id: 'event-history' }]
+    createAdminClientMock.mockReturnValue({
+      from: jest.fn().mockReturnValue(query),
+    } as unknown as ReturnType<typeof createAdminClient>)
+
+    const response = await GET({
+      url: 'http://localhost/api/admin/events?season_id=season-history&from=2025-10-01T00:00:00.000Z&to=2025-10-31T23:59:59.999Z&visible=1',
+    } as unknown as NextRequest)
+
+    expect(response.status).toBe(200)
+    expect(resolveActiveSeasonMock).not.toHaveBeenCalled()
+    expect(resolveActiveSeasonTeamIdsMock).toHaveBeenCalledWith(expect.anything(), 'season-history')
   })
 })
