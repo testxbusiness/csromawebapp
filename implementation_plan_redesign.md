@@ -280,8 +280,8 @@ Per un goal `[x]` aggiungere sempre:
 | G12.8d Bilancio per stagione | [x] | G12.8c | Completato il 21/09/2026: `/admin/balance` usa la stagione attiva come default, consente lo storico esplicito e allinea entrate da rate e uscite collegate a squadra/attività/palestra; i costi generali privi di collegamento restano condivisi. Le liste dei filtri rispettano la stagione selezionata; le date restano filtri opzionali sui movimenti. Typecheck, build e diff check superati; nessuna mutazione staging/produzione. |
 | G12.8e Messaggi e destinatari per stagione | [x] | G12.8d | Completato il 21/09/2026 senza aggiungere `season_id` a `messages`: `/admin/messages` usa un unico selettore stagione, predefinito sull’attiva, e limita elenco, squadre e account destinatari alla stagione scelta; i familiari autorizzati sono inclusi tramite relazione attiva con un atleta iscritto. Creazione e modifica validano lato server tutti i destinatari contro lo stesso perimetro; anche l’invio di un documento come messaggio usa automaticamente la stagione attiva. Il coach usa soltanto `/api/coach/teams` e non ripropone assegnazioni storiche. Atleti e familiari non ricevono nuovi filtri: continuano a vedere implicitamente la stagione attiva per mantenere semplice la UX. Limite accettato del modello indiretto: un messaggio diretto a un profilo presente in più stagioni compare nello storico di ciascuna, mentre i messaggi di squadra restano univoci tramite `team → activity → season`. Test mirati 9/9, typecheck, build con variabili Supabase placeholder e diff check superati. Nessuna migration o mutazione dati. |
 | G12.8f Cataloghi modal eventi admin per stagione | [x] | G12.8e | Completato il 21/09/2026; `/admin/calendar` ora ricarica squadre, attività e palestre in base alla stagione selezionata, con default sulla stagione attiva e pulizia immediata delle opzioni precedenti durante il cambio filtro. Il modal di creazione/modifica non propone più squadre della stagione storica; lo storico del calendario resta consultabile selezionando esplicitamente la stagione. Coach invariato perché già usa il catalogo autorizzato della stagione attiva. Test API/calendario 8/8, typecheck, build e diff check superati. |
-| G12.8g Rollover stagionale riutilizzabile | [x] | G12.7,G12.8 | Completato il 24/09/2026: source attiva e target inattiva futura sono risolti dal catalogo, target selezionabile, etichette/date dinamiche, creazione bozza generica e suffisso squadra derivato dalla target. Regressioni 2026/2027 → 2027/2028, typecheck, test mirati, lint, build e diff check superati; nessuna mutazione ambienti. |
-| G12.9 Dry-run, esecuzione 2026/2027 e gate | [ ] | G12.1–G12.8g | Backup/evidenze, esecuzione autorizzata, attivazione atomica, conteggi post-run e verifica assenza di perdita dati. |
+| G12.8g Rollover stagionale riutilizzabile | [x] | G12.7,G12.8 | Completato il 24/09/2026: source attiva e target inattiva futura sono risolti dal catalogo, target selezionabile, etichette/date dinamiche, creazione bozza generica e suffisso squadra derivato dalla target. Regressioni 2026/2027 → 2027/2028, typecheck, test mirati, lint, build e diff check superati. Verifica staging successiva: eliminata con cleanup transazionale la sola bozza test `2027/2028` (1 palestra, 1 attività, 3 squadre, 2 mapping strutture e 3 mapping squadre), dopo controlli con zero dati operativi, profili o audit; `2025/2026` è rimasta inattiva e `2026/2027` attiva. |
+| G12.9 Dry-run, esecuzione 2026/2027 e gate | [-] | G12.1–G12.8g | Backup ed evidenze DB completati; migration produzione applicata e verificata. Rollover, attivazione e gate finale restano da eseguire separatamente. |
 
 ---
 
@@ -8070,6 +8070,93 @@ locale se l'esecuzione reale era parte dell'incarico.
 suite Jest completa, `npm run build`, `git diff --check`, E2E admin/atleta/
 famiglia/coach e smoke manuale del wizard. Registrare ambiente e limiti senza
 salvare credenziali o dati personali.
+
+### Preparazione G12.9 — attivazione atomica locale — 28/09/2026
+
+Aggiunta la migration `20260928092236_season_activation_atomic.sql`. La RPC
+`activate_season_atomically` blocca source e target in ordine stabile, richiede
+source attiva, target inattiva e temporalmente successiva, archivia la source e
+attiva la target nella medesima transazione. Usa una chiave di attivazione
+idempotente e registra soltanto attore, source, target e timestamp in audit
+append-only. L'esecuzione resta riservata al `service_role`; la nuova route admin
+autorizza l'account prima di invocarla. Rimossi i pulsanti client che eseguivano
+due aggiornamenti separati delle stagioni: l'attivazione verrà esposta solo dal
+gate finale con riepilogo e conferma separata.
+
+Verifiche locali: migration applicata soltanto al Docker canonico; fixture
+transazionale con rollback superata per attivazione, replay idempotente, chiave
+riusata, source inattiva e target non successiva. Controllato il catalogo: RPC
+`SECURITY DEFINER` eseguibile solo da `service_role`; zero righe fixture residue.
+Superati i 3 test Jest mirati (9 test), `npx tsc --noEmit`, `npm run build` e
+`git diff --check`. Nessun accesso o mutazione staging/produzione, nessuna
+creazione di stagioni reali e nessuna attivazione. G12.9 resta aperto.
+
+### Preflight G12.9 — staging e produzione — 28/09/2026
+
+Controlli esclusivamente read-only completati sui progetti attesi:
+`csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`) e `csromawebapp`
+(`qyiholnatsrvpoqoplje`), entrambi `ACTIVE_HEALTHY`. Staging ha history
+allineata fino a `20260924070909`; il suo dry-run propone soltanto
+`20260928092236_season_activation_atomic.sql`. L'unico warning advisor e'
+la protezione password compromesse disattivata, limite gia' noto.
+
+Produzione mantiene una sola stagione attiva `2025/2026`, senza target
+`2026/2027`, con 45 iscrizioni stagionali attive. La fotografia aggregata
+della source e': 2 palestre, 2 attivita', 3 squadre, 67 membership, 4
+assegnazioni coach, 93 eventi e 9 quote. Nessuna RPC rollover o attivazione
+atomica e' presente. Gli advisor produzione segnalano inoltre le due RPC
+`SECURITY DEFINER` che la migration `20260924070909` corregge e la protezione
+password compromesse disattivata.
+
+Il preflight produzione e' stato completato dopo il reset della password DB:
+il dry-run si autentica correttamente al pooler. La password non e' registrata
+in questo piano. Una directory di rilascio isolata esclude le quattro migration
+locali di luglio gia' inglobate nella baseline remota
+(`20260723140557`, `20260723152000`, `20260725162041`, `20260729170829`),
+senza usare `--include-all`. Il dry-run propone esattamente 14 migration,
+da `20260910133219_r1_training_rsvp_data_contract.sql` a
+`20260928092236_season_activation_atomic.sql`, incluse le 12 di settembre
+preesistenti, l'hardening `20260924070909` e l'attivazione atomica. Nessuna
+migration e' stata applicata e nessun dato e' stato modificato.
+
+### Backup G12.9 — produzione — 28/09/2026
+
+Creato un dump logico locale di produzione, cifrato e ignorato da Git, con tre
+artefatti separati per ruoli, schema e dati. Ciascun artefatto usa AES-256-CBC
+con salt e PBKDF2 (600000 iterazioni); la chiave di recovery locale e tutti gli
+artefatti hanno permessi `0600`. Il manifest conserva checksum SHA-256,
+progetto di origine e procedura di recovery, senza credenziali o contenuto dei
+dati. La decrittazione di tutti e tre i file, il confronto delle dimensioni e i
+controlli SQL su schema e dati sono riusciti; non sono rimasti dump in chiaro
+nelle directory temporanee. Il backup e la chiave sono nella directory locale
+`backups/g12-9-production-2026-09-28T17-25-21-220Z/`.
+
+Credenziali locali separate: `.env.local` usa `SUPABASE_DB_PASSWORD` per
+produzione e `SUPABASE_DB_PASSWORD_STAGING` per staging. Il dry-run finale,
+ripetuto dopo la separazione, conferma le stesse 14 migration candidate.
+
+### Applicazione DB G12.9 — produzione — 28/09/2026
+
+Applicate dal candidato isolato, senza `--include-all`, le 14 migration da
+`20260910133219` a `20260928092236`. I `NOTICE` del database indicano oggetti
+preesistenti gestiti in modo idempotente; il warning CLI successivo riguarda
+solo la cache del catalogo locale e non l'applicazione SQL, confermata come
+completata. La history remota registra tutte e 14 le versioni attese.
+
+Post-check read-only: una sola stagione (`2025/2026`) resta attiva, non esiste
+`2026/2027`, l'audit dell'attivazione e' vuoto e i conteggi invarianti sono
+45 iscrizioni stagionali attive, 2 palestre, 2 attivita', 3 squadre, 67
+membership, 4 assegnazioni coach, 93 eventi associati ad attivita' e 9 quote.
+La RPC atomica esiste, ha RLS sull'audit e solo `service_role` puo' eseguirla.
+`check_gym_schedule_conflicts` resta chiamabile da `authenticated` per il
+client admin, ma e' ora `SECURITY INVOKER` con search path fisso; la funzione
+trigger `refresh_championship_standings` e' `SECURITY DEFINER` ma eseguibile
+solo dal service role. L'advisor security segnala soltanto la protezione delle
+password compromesse disabilitata, limite gia' noto.
+
+Nessun rollover, creazione o attivazione di stagione, merge o deploy del codice
+e' stato eseguito. Il prossimo gate e' la promozione controllata del codice
+`redesign` su `main` e il deploy, con rollback del codice predisposto.
 
 ## Prompt da assegnare a Luna Medio
 

@@ -100,24 +100,6 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
     }
   }
 
-  const handleSetActiveSeason = async (id: string) => {
-    // First deactivate all seasons
-    await supabase
-      .from('seasons')
-      .update({ is_active: false })
-      .neq('id', id)
-
-    // Then activate the selected season
-    const { error } = await supabase
-      .from('seasons')
-      .update({ is_active: true })
-      .eq('id', id)
-
-    if (!error) {
-      loadSeasons()
-    }
-  }
-
   if (loading) {
     return <LoadingState label="Caricamento stagioni..." />
   }
@@ -211,11 +193,6 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
                   )}
                 </td>
                 <td className="cs-table__actions">
-                  {!season.is_active && (
-                    <button onClick={() => handleSetActiveSeason(season.id!)} className="cs-btn cs-btn--primary cs-btn--sm">
-                      Attiva
-                    </button>
-                  )}
                   <button
                     onClick={() => { setEditingSeason(season); setModalOpen(true) }}
                     className="cs-btn cs-btn--outline cs-btn--sm"
@@ -243,9 +220,6 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
                 <span className={`cs-badge ${season.is_active ? 'cs-badge--success' : 'cs-badge--neutral'}`}>{season.is_active ? 'Attiva' : 'Inattiva'}</span>
               </div>
               <div className="mt-3 flex gap-2">
-                {!season.is_active && (
-                  <button onClick={() => handleSetActiveSeason(season.id!)} className="cs-btn cs-btn--primary cs-btn--sm flex-1">Attiva</button>
-                )}
                 <button onClick={() => { setEditingSeason(season); setModalOpen(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
                 <button onClick={() => handleDeleteSeason(season.id!)} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
               </div>
