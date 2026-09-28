@@ -1,12 +1,14 @@
 /* CSRoma PWA + Push service worker. Keep this file dependency-free. */
 
-const PRECACHE = 'csroma-precache-v3'
+const PRECACHE = 'csroma-precache-v4'
 const STATIC_CACHE = 'csroma-static-v2'
 const IMAGE_CACHE = 'csroma-images-v1'
 const PRECACHE_URLS = [
   '/offline.html',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icons/icon-192-v2.png',
+  '/icons/icon-512-v2.png',
+  '/icons/icon-maskable-512-v2.png',
+  '/icons/apple-touch-icon-180-v2.png',
   '/images/new_csroma_logo_no_bg.svg',
   '/images/new_csroma_logo_no_bg.png',
 ]
@@ -139,8 +141,8 @@ self.addEventListener('push', (event) => {
     const data = event.data ? event.data.json() : {}
     const title = typeof data.title === 'string' ? data.title : 'CSRoma'
     const body = typeof data.body === 'string' ? data.body : ''
-    const icon = typeof data.icon === 'string' ? data.icon : '/icons/icon-192.png'
-    const badge = typeof data.badge === 'string' ? data.badge : '/icons/icon-192.png'
+    const icon = typeof data.icon === 'string' ? data.icon : '/icons/icon-192-v2.png'
+    const badge = typeof data.badge === 'string' ? data.badge : '/icons/icon-192-v2.png'
     const url = safeNotificationUrl(data.url)
     event.waitUntil(self.registration.showNotification(title, { body, icon, badge, data: { url } }))
   } catch {

@@ -13,12 +13,12 @@ test.describe('PWA foundation', () => {
     expect(manifest.scope).toBe('/')
     expect(manifest.display).toBe('standalone')
     expect(manifest.icons).toEqual(expect.arrayContaining([
-      expect.objectContaining({ src: '/icons/icon-192.png', sizes: '192x192' }),
-      expect.objectContaining({ src: '/icons/icon-512.png', sizes: '512x512' }),
-      expect.objectContaining({ src: '/icons/icon-maskable-512.png', sizes: '512x512', purpose: 'maskable' }),
+      expect.objectContaining({ src: '/icons/icon-192-v2.png', sizes: '192x192' }),
+      expect.objectContaining({ src: '/icons/icon-512-v2.png', sizes: '512x512' }),
+      expect.objectContaining({ src: '/icons/icon-maskable-512-v2.png', sizes: '512x512', purpose: 'maskable' }),
     ]))
 
-    for (const asset of ['/icons/icon-192.png', '/icons/icon-512.png', '/icons/icon-maskable-512.png', '/icons/apple-touch-icon-180.png']) {
+    for (const asset of ['/icons/icon-192-v2.png', '/icons/icon-512-v2.png', '/icons/icon-maskable-512-v2.png', '/icons/apple-touch-icon-180-v2.png']) {
       const assetResponse = await request.get(asset)
       expect(assetResponse.ok()).toBeTruthy()
       expect(assetResponse.headers()['content-type']).toContain('image/png')
@@ -27,6 +27,9 @@ test.describe('PWA foundation', () => {
     const serviceWorkerResponse = await request.get('/sw.js')
     expect(serviceWorkerResponse.ok()).toBeTruthy()
     expect(serviceWorkerResponse.headers()['content-type']).toContain('javascript')
+    const serviceWorkerSource = await serviceWorkerResponse.text()
+    expect(serviceWorkerSource).toContain("const PRECACHE = 'csroma-precache-v4'")
+    expect(serviceWorkerSource).toContain('/icons/icon-192-v2.png')
   })
 
   test('registers the worker and serves the offline fallback for navigation', async ({ page, context }) => {

@@ -8156,15 +8156,27 @@ password compromesse disabilitata, limite gia' noto.
 
 Nessun rollover, creazione o attivazione di stagione e' stato eseguito.
 
-### PR rilascio codice G12.9 — 28/09/2026
+### Rilascio codice G12.9 — produzione — 28/09/2026
 
-Creato il commit `3ed5496` su `redesign` con migration, RPC atomica, route
-admin, test e runbook. Test mirati: 3 suite/9 test; `npx tsc --noEmit`,
-`npm run build` e `git diff --check` superati. Aperta la PR
+Il commit `3ed5496` su `redesign` contiene migration, RPC atomica, route admin,
+test e runbook. Test mirati: 3 suite/9 test; `npx tsc --noEmit`, `npm run build`
+e `git diff --check` superati. La
 [#2 — Release redesign e attivazione stagione atomica](https://github.com/testxbusiness/csromawebapp/pull/2)
-verso `main`. La PR non e' stata ancora mergiata e non e' stato effettuato
-alcun deploy. Il prossimo gate e' il tag dell'attuale `main`, seguito dal merge
-controllato, build del merge commit e deploy con rollback sul tag predisposto.
+e' stata mergiata su `main` nel commit `b472baa`; Vercel Production ha concluso
+il deploy con stato `Ready`. Il tag `production-pre-redesign-20260928` punta al
+precedente commit produzione `ae2bb36` e costituisce il rollback codice.
+
+### Hotfix icone PWA — 28/09/2026
+
+Le icone PWA esistenti usavano URL stabili con cache `immutable`, quindi i
+dispositivi potevano conservare la precedente icona di Home. Aggiunti asset PNG
+versionati `v2` con il logo corrente; manifest, metadata Apple, offline shell,
+service worker, notifiche e test PWA puntano ai nuovi URL. Il precache e' stato
+portato a `csroma-precache-v4`, così un worker aggiornato elimina il cache
+precedente. Test PWA/push 2 suite/7 test e `npx tsc --noEmit` superati; build
+Next completata. Sugli iPhone già installati l'icona di Home può richiedere una
+rimozione e una nuova installazione, limite di iOS; le nuove installazioni
+usano l'icona aggiornata.
 
 ## Prompt da assegnare a Luna Medio
 

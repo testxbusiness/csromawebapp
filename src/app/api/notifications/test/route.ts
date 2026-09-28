@@ -16,8 +16,8 @@ export async function POST(req: NextRequest) {
       title: payload?.title || 'Notifica di test',
       body: payload?.body || 'Le push sono attive su questo dispositivo',
       url: payload?.url || '/dashboard',
-      icon: payload?.icon || '/icons/icon-192.png',
-      badge: payload?.badge || '/icons/icon-192.png',
+      icon: payload?.icon || '/icons/icon-192-v2.png',
+      badge: payload?.badge || '/icons/icon-192-v2.png',
     })
     if (result.skipped) {
       return NextResponse.json({ success: false, error: result.reason }, { status: 503 })
