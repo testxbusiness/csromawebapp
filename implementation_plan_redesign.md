@@ -8154,9 +8154,17 @@ trigger `refresh_championship_standings` e' `SECURITY DEFINER` ma eseguibile
 solo dal service role. L'advisor security segnala soltanto la protezione delle
 password compromesse disabilitata, limite gia' noto.
 
-Nessun rollover, creazione o attivazione di stagione, merge o deploy del codice
-e' stato eseguito. Il prossimo gate e' la promozione controllata del codice
-`redesign` su `main` e il deploy, con rollback del codice predisposto.
+Nessun rollover, creazione o attivazione di stagione e' stato eseguito.
+
+### PR rilascio codice G12.9 — 28/09/2026
+
+Creato il commit `3ed5496` su `redesign` con migration, RPC atomica, route
+admin, test e runbook. Test mirati: 3 suite/9 test; `npx tsc --noEmit`,
+`npm run build` e `git diff --check` superati. Aperta la PR
+[#2 — Release redesign e attivazione stagione atomica](https://github.com/testxbusiness/csromawebapp/pull/2)
+verso `main`. La PR non e' stata ancora mergiata e non e' stato effettuato
+alcun deploy. Il prossimo gate e' il tag dell'attuale `main`, seguito dal merge
+controllato, build del merge commit e deploy con rollback sul tag predisposto.
 
 ## Prompt da assegnare a Luna Medio
 
