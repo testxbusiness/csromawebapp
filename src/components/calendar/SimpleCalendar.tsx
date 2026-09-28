@@ -55,19 +55,6 @@ export default function SimpleCalendar({
     return `${y}-${m}-${day}`
   }
 
-  const getTextColorForBg = (hex?: string) => {
-    const h = (hex || '#2563eb').replace('#', '')
-    const bigint = parseInt(
-      h.length === 3 ? h.split('').map((c) => c + c).join('') : h,
-      16
-    )
-    const r = (bigint >> 16) & 255
-    const g = (bigint >> 8) & 255
-    const b = bigint & 255
-    const L = 0.299 * r + 0.587 * g + 0.114 * b
-    return L > 140 ? '#111827' : '#ffffff'
-  }
-
   // ===== Inizio/fine periodo
   const start = useMemo(() => {
     if (view === 'week') return startOfWeek(currentDate)
@@ -254,8 +241,8 @@ export default function SimpleCalendar({
                 {/* Events */}
                 <div className="space-y-1">
                   {visible.map((ev) => {
-                    const bg = ev.color || '#2563eb'
-                    const fg = getTextColorForBg(ev.color)
+                    const bg = ev.color || 'var(--cs-surface-subdued)'
+                    const fg = ev.color ? '#ffffff' : 'var(--cs-ink)'
                     return (
                       <button
                         key={ev.id}
@@ -298,7 +285,7 @@ export default function SimpleCalendar({
           onEventClick={onEventClick}
           timezone={timezone}
           onSelectSlot={onSelectSlot}
-          getTextColorForBg={getTextColorForBg}
+          getEventTextColor={(color) => color ? '#ffffff' : 'var(--cs-ink)'}
         />
       )}
     </div>
@@ -312,14 +299,14 @@ function WeekTimeGrid({
   onEventClick,
   timezone,
   onSelectSlot,
-  getTextColorForBg,
+  getEventTextColor,
 }: {
   weekDays: Date[]
   events: CalEvent[]
   onEventClick?: (id: string) => void
   timezone: string
   onSelectSlot?: (start: Date, end: Date) => void
-  getTextColorForBg: (hex?: string) => string
+  getEventTextColor: (color?: string) => string
 }) {
   // fascia oraria visibile
   const startHour = 8
@@ -509,8 +496,8 @@ function WeekTimeGrid({
 
             {/* Eventi posizionati */}
             {todays.map((ev) => {
-              const bg = ev.color || '#2563eb'
-              const fg = getTextColorForBg(bg)
+              const bg = ev.color || 'var(--cs-surface-subdued)'
+              const fg = getEventTextColor(ev.color)
 
               return (
                 <button

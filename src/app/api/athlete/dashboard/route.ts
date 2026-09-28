@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
+import { buildUnreadMessages, resolveMatchPerspective } from '@/lib/athlete/dashboard-contract'
+import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,28 +13,22 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
     const canViewMessages = subject.permissions.receive_messages
     const canViewPayments = subject.permissions.view_payments
+    const canViewSchedule = subject.permissions.view_schedule
     if (!athleteProfileId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Execute all queries in parallel
-    const [seasonRes, memberRes, feeRes] = await Promise.all([
-      // 1. Get active season
-      dataClient
-        .from('seasons')
-        .select('*')
-        .eq('is_active', true)
-        .single(),
-
-      // 2. Get team memberships
+    const [memberRes, feeRes] = await Promise.all([
       dataClient
         .from('team_members')
         .select('id, team_id, jersey_number')
-        .eq('profile_id', athleteProfileId),
+        .eq('profile_id', athleteProfileId)
+        .in('team_id', activeTeamIds),
 
-      // 3. Get fee installments
       canViewPayments
         ? dataClient
             .from('fee_installments')
@@ -44,7 +40,6 @@ export async function GET(request: NextRequest) {
         : Promise.resolve({ data: [] })
     ])
 
-    const seasons = seasonRes.data
     const memberships = memberRes.data
     const feeInstallments = feeRes.data
 
@@ -85,6 +80,22 @@ export async function GET(request: NextRequest) {
     }
 
     const messageIds = [...new Set(msgRecipients.map((recipient: any) => recipient.messages?.id).filter(Boolean))]
+    // The recipient rows above are already scoped by the subject-aware client.
+    // Use the admin client only for this display-only profile lookup: profile
+    // RLS can hide a message creator even when the subject may read the message.
+    const creatorIds = [...new Set(
+      msgRecipients
+        .map((recipient: any) => recipient.messages?.created_by)
+        .filter(Boolean)
+    )]
+    const { data: creatorProfiles, error: creatorProfilesError } = canViewMessages && creatorIds.length > 0
+      ? await createAdminClient()
+          .from('profiles')
+          .select('id, first_name, last_name')
+          .in('id', creatorIds)
+      : { data: [], error: null }
+    if (creatorProfilesError) console.error('Error loading dashboard message creators:', creatorProfilesError)
+    const creatorProfilesMap = new Map((creatorProfiles || []).map((creator: any) => [creator.id, creator]))
     const { data: readRows } = canViewMessages && messageIds.length > 0
       ? await dataClient
           .from('message_reads')
@@ -94,23 +105,28 @@ export async function GET(request: NextRequest) {
           .in('message_id', messageIds)
       : { data: [] }
     const readMessageIds = new Set((readRows || []).map((row: any) => row.message_id))
+    const normalizedMessageRecipients = (msgRecipients || [])
+      .filter((recipient: any) => recipient.messages)
+      .map((recipient: any) => ({
+        team_id: recipient.team_id,
+        message: {
+          ...recipient.messages,
+          created_by_profile: creatorProfilesMap.has(recipient.messages.created_by)
+            ? creatorProfilesMap.get(recipient.messages.created_by)
+            : recipient.messages.created_by_profile || null,
+        },
+      }))
 
     if (teamIds.length === 0) {
+      const directUnreadMessages = buildUnreadMessages(normalizedMessageRecipients, readMessageIds, new Map())
       return NextResponse.json({
         teamMemberships: [],
         upcomingEvents: [],
-        unreadMessages: (msgRecipients || [])
-          .filter(r => r.messages && !readMessageIds.has(r.messages.id))
-          .map((r: any) => ({
-            id: r.messages.id,
-            subject: r.messages.subject,
-            content: r.messages.content,
-            created_at: r.messages.created_at,
-            is_read: false
-          }))
-          .slice(0, 5),
+        unreadMessages: directUnreadMessages.slice(0, 5),
+        unreadMessageCount: directUnreadMessages.length,
         feeInstallments: [],
-        activeSeason: seasons
+        activeSeason: subject.activeSeason ?? null,
+        teams: [],
       })
     }
 
@@ -126,18 +142,21 @@ export async function GET(request: NextRequest) {
         .select('id, name, code, activity_id')
         .in('id', teamIds),
 
-      dataClient
-        .from('event_teams')
-        .select('event_id, created_at')
-        .in('team_id', teamIds)
-        .order('created_at', { ascending: false })
-        .limit(500),
+      canViewSchedule
+        ? dataClient
+            .from('event_teams')
+            .select('event_id, team_id, created_at')
+            .in('team_id', teamIds)
+            .order('created_at', { ascending: false })
+            .limit(500)
+        : Promise.resolve({ data: [], error: null }),
 
       feeInstallments && feeInstallments.length > 0
         ? dataClient
             .from('membership_fees')
             .select('id, team_id, name')
             .in('id', (feeInstallments || []).map(f => f.membership_fee_id).filter(Boolean))
+            .in('team_id', activeTeamIds)
         : Promise.resolve({ data: [] }),
 
       dataClient
@@ -157,7 +176,7 @@ export async function GET(request: NextRequest) {
           const batch = eventIds.slice(i, i + 100)
         const { data: events } = await dataClient
           .from('events')
-          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
+          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
           .in('id', batch)
           .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
           .order('start_date', { ascending: true })
@@ -167,7 +186,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events } = await dataClient
         .from('events')
-        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, confirmation_deadline')
+        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
         .in('id', eventIds)
         .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
         .order('start_date', { ascending: true })
@@ -193,11 +212,32 @@ export async function GET(request: NextRequest) {
       allEvents.length > 0
         ? dataClient
             .from('event_attendances')
-            .select('event_id, status, responded_at')
+            .select('event_id, status, responded_at, is_early_absence')
             .eq('profile_id', athleteProfileId)
             .in('event_id', allEvents.map((event) => event.id))
         : Promise.resolve({ data: [] }),
     ])
+
+    const attendanceAvailability = canViewSchedule
+      ? await resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds, new Date(), activeTeamIds)
+      : null
+    if (attendanceAvailability?.nextEvent && !allEvents.some((event) => event.id === attendanceAvailability.nextEvent?.id)) {
+      const nextEvent = attendanceAvailability.nextEvent
+      allEvents.push({
+        id: nextEvent.id,
+        title: nextEvent.title || 'Allenamento',
+        start_time: nextEvent.start_time,
+        end_time: nextEvent.end_time,
+        location: nextEvent.location || null,
+        gym_id: null,
+        description: nextEvent.description || null,
+        event_kind: nextEvent.event_kind || 'training',
+        requires_confirmation: nextEvent.requires_confirmation,
+        attendance_mode: nextEvent.attendance_mode,
+        confirmation_deadline: nextEvent.confirmation_deadline || null,
+        generated_from_schedule_id: nextEvent.generated_from_schedule_id || null,
+      })
+    }
 
     let nextChampionshipMatch = null
     const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
@@ -206,7 +246,7 @@ export async function GET(request: NextRequest) {
       const { data: nextMatch } = await dataClient
         .from('championship_matches')
         .select(`
-          id, match_day, match_date, start_time, location_text, status,
+          id, event_id, match_day, match_date, start_time, location_text, status,
           home_club_team:home_club_team_id ( id, name, code, is_home_club, team_id ),
           away_club_team:away_club_team_id ( id, name, code, is_home_club, team_id )
         `)
@@ -226,6 +266,35 @@ export async function GET(request: NextRequest) {
     const membershipFeesMap = new Map((membershipFees || []).map(f => [f.id, f]))
     const gymsMap = new Map((gyms || []).map((gym) => [gym.id, gym]))
     const attendanceMap = new Map((attendanceRows || []).map((attendance) => [attendance.event_id, attendance]))
+    if (attendanceAvailability) {
+      for (const [eventId, response] of attendanceAvailability.attendanceByEventId) {
+        if (!attendanceMap.has(eventId)) attendanceMap.set(eventId, response)
+      }
+    }
+    const dashboardTeams = (teams || []).map((team) => ({
+      id: team.id,
+      name: team.name,
+      code: team.code,
+      activity: {
+        id: team.activity_id,
+        name: activitiesMap.get(team.activity_id)?.name || 'N/A',
+      },
+    }))
+    const dashboardTeamsMap = new Map(dashboardTeams.map((team) => [team.id, team]))
+    const teamsByEventId = new Map<string, typeof dashboardTeams>()
+    for (const link of eventTeamLinks || []) {
+      const team = dashboardTeamsMap.get(link.team_id)
+      if (!team) continue
+      const eventTeams = teamsByEventId.get(link.event_id) || []
+      if (!eventTeams.some((item) => item.id === team.id)) eventTeams.push(team)
+      teamsByEventId.set(link.event_id, eventTeams)
+    }
+    if (attendanceAvailability?.nextEvent) {
+      const nextTeams = attendanceAvailability.nextEvent.team_ids
+        .map((teamId) => dashboardTeamsMap.get(teamId))
+        .filter((team): team is (typeof dashboardTeams)[number] => Boolean(team))
+      teamsByEventId.set(attendanceAvailability.nextEvent.id, nextTeams)
+    }
 
     const enrichedEvents = allEvents.map((event) => {
       const gym = event.gym_id ? gymsMap.get(event.gym_id) : null
@@ -235,8 +304,12 @@ export async function GET(request: NextRequest) {
         // A registered gym takes precedence over the free-text location.
         location: gymLocation || event.location || null,
         requires_confirmation: Boolean(event.requires_confirmation),
+        attendance_mode: event.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
         confirmation_deadline: event.confirmation_deadline || null,
         my_attendance: attendanceMap.get(event.id) || null,
+        attendance_availability: attendanceAvailability?.availabilityByEventId.get(event.id) ?? null,
+        teams: teamsByEventId.get(event.id) || [],
+        team_ids: (teamsByEventId.get(event.id) || []).map((team) => team.id),
       }
     })
 
@@ -251,7 +324,9 @@ export async function GET(request: NextRequest) {
             id: team.id,
             name: team.name,
             code: team.code,
+            team_id: team.id,
             activity: {
+              id: team.activity_id,
               name: activitiesMap.get(team.activity_id)?.name || 'N/A'
             }
           }
@@ -267,41 +342,76 @@ export async function GET(request: NextRequest) {
         return {
           ...f,
           membership_fee: {
+            id: fee.id,
             name: fee.name,
             team: {
-              name: feeTeam?.name || 'N/A'
+              id: feeTeam?.id || fee.team_id,
+              name: feeTeam?.name || 'N/A',
+              code: feeTeam?.code || 'N/A',
+              activity: feeTeam?.activity_id
+                ? { id: feeTeam.activity_id, name: activitiesMap.get(feeTeam.activity_id)?.name || 'N/A' }
+                : null
             }
           }
         }
       })
       .filter(Boolean)
 
-    const unreadMessages = Array.from(
-      (msgRecipients || [])
-        .filter(r => r.messages && !readMessageIds.has(r.messages.id))
-        .reduce((messages: Map<string, any>, recipient: any) => {
-          if (!messages.has(recipient.messages.id)) {
-            messages.set(recipient.messages.id, {
-              id: recipient.messages.id,
-              subject: recipient.messages.subject,
-              content: recipient.messages.content,
-              created_at: recipient.messages.created_at,
-              is_read: false,
-              created_by_profile: recipient.messages.created_by_profile || null
-            })
-          }
-          return messages
-        }, new Map<string, any>())
-        .values()
-    ).slice(0, 5)
+    const deduplicatedUnreadMessages = buildUnreadMessages(
+      normalizedMessageRecipients,
+      readMessageIds,
+      dashboardTeamsMap,
+    )
+
+    const unreadMessages = deduplicatedUnreadMessages.slice(0, 5)
+
+    const normalizedNextChampionshipMatch = nextChampionshipMatch
+      ? {
+          ...nextChampionshipMatch,
+          home_club_team: Array.isArray(nextChampionshipMatch.home_club_team)
+            ? nextChampionshipMatch.home_club_team[0] || null
+            : nextChampionshipMatch.home_club_team,
+          away_club_team: Array.isArray(nextChampionshipMatch.away_club_team)
+            ? nextChampionshipMatch.away_club_team[0] || null
+            : nextChampionshipMatch.away_club_team,
+        }
+      : null
+
+    const enrichedNextChampionshipMatch = normalizedNextChampionshipMatch
+      ? {
+          ...normalizedNextChampionshipMatch,
+          ...resolveMatchPerspective(normalizedNextChampionshipMatch, dashboardTeamsMap),
+          teams: Array.from(
+            [normalizedNextChampionshipMatch.home_club_team, normalizedNextChampionshipMatch.away_club_team]
+              .filter((clubTeam: any) => clubTeam?.team_id)
+              .reduce((entries: Array<[string, any]>, clubTeam: any) => {
+                const team = dashboardTeamsMap.get(clubTeam.team_id)
+                if (team) entries.push([clubTeam.team_id, team])
+                return entries
+              }, [])
+              .reduce((unique: Map<string, any>, [id, team]) => unique.set(id, team), new Map<string, any>())
+              .values()
+          ),
+          team_ids: Array.from(new Set(
+            [normalizedNextChampionshipMatch.home_club_team, normalizedNextChampionshipMatch.away_club_team]
+              .map((clubTeam: any) => clubTeam?.team_id)
+              .filter(Boolean)
+          )),
+        }
+      : null
 
     return NextResponse.json({
       teamMemberships: enrichedMemberships,
       upcomingEvents: enrichedEvents.slice(0, 10),
-      nextChampionshipMatch,
+      nextChampionshipMatch: enrichedNextChampionshipMatch,
       unreadMessages,
+      unreadMessageCount: deduplicatedUnreadMessages.length,
       feeInstallments: enrichedFees,
-      activeSeason: seasons
+      activeSeason: subject.activeSeason ?? null,
+      teams: dashboardTeams,
+      attendance_availability: attendanceAvailability
+        ? attendanceAvailability.availabilityByEventId.get(attendanceAvailability.nextEvent?.id || '') ?? null
+        : null,
     })
 
   } catch (error) {

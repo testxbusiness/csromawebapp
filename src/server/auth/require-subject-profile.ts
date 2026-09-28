@@ -7,6 +7,7 @@ import {
   type AccountContext,
   requireAccountContext,
 } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export type SubjectPermission =
   | 'view_schedule'
@@ -18,6 +19,16 @@ export type SubjectPermission =
   | 'receive_messages'
 
 export type SubjectPermissions = Record<SubjectPermission, boolean>
+
+export type SubjectAthleteContext = {
+  account: AccountContext
+  profileId: string
+  dataClient: SupabaseClient
+  delegated: boolean
+  permissions: SubjectPermissions
+  activeSeason?: { id: string; name: string; start_date: string; end_date: string; is_active: true }
+  activeTeamIds?: string[]
+}
 
 type RelationshipPermissionRow = {
   source_profile_id: string
@@ -121,7 +132,7 @@ export async function requireSubjectAthleteContext(
   supabase: SupabaseClient,
   requestedProfileId: string | null,
   permission?: SubjectPermission
-) {
+): Promise<SubjectAthleteContext> {
   const account = await requireAccountContext(supabase)
   const subject = await resolveSubjectProfile(supabase, account, requestedProfileId, permission)
 
@@ -135,10 +146,15 @@ export async function requireSubjectAthleteContext(
     .select('profile_id')
     .eq('profile_id', subject.profileId)
     .maybeSingle()
+  const activeSeason = await resolveActiveSeason(subject.dataClient)
+  if (!activeSeason) {
+    throw new AccountContextError('Nessuna stagione attiva configurata', 403)
+  }
   const { data: seasonMembership } = await subject.dataClient
     .from('season_profiles')
     .select('profile_id')
     .eq('profile_id', subject.profileId)
+    .eq('season_id', activeSeason.id)
     .eq('status', 'active')
     .limit(1)
     .maybeSingle()
@@ -153,5 +169,7 @@ export async function requireSubjectAthleteContext(
     dataClient: subject.dataClient,
     delegated: subject.delegated,
     permissions: subject.permissions,
+    activeSeason,
+    activeTeamIds: await resolveActiveSeasonTeamIds(subject.dataClient, activeSeason.id),
   }
 }

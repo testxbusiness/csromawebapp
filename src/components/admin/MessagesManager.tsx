@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { EmptyState, LoadingState, toast } from '@/components/ui'
-import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MessageModal, { type Message as MessageForm } from '@/components/admin/MessageModal'
 import MessageDetailModal from '@/components/shared/MessageDetailModal'
 import MessageReadReport from '@/components/admin/MessageReadReport'
+import { BarChart3, CircleUserRound, Trophy } from 'lucide-react'
 
 interface Message {
   id?: string
@@ -57,6 +57,12 @@ interface User {
   role: string
 }
 
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 function formatRole(role: string | null | undefined) {
   if (role === 'admin') return 'admin'
   if (role === 'coach') return 'coach'
@@ -66,25 +72,28 @@ function formatRole(role: string | null | undefined) {
   return 'nessun ruolo'
 }
 
-export default function MessagesManager() {
+export default function MessagesManager({ embedded = false }: { embedded?: boolean }) {
   const [messages, setMessages] = useState<Message[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeason, setSelectedSeason] = useState('')
   const [loading, setLoading] = useState(true)
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [showModal, setShowModal] = useState(false)
-  const supabase = createClient()
 
   useEffect(() => {
-    loadMessages()
-    loadTeams()
-    loadUsers()
+    void loadMessages()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadMessages = async () => {
+  const loadMessages = async (seasonId?: string) => {
+    setLoading(true)
     try {
-      const response = await fetch('/api/admin/messages')
+      const params = new URLSearchParams()
+      if (seasonId) params.set('season_id', seasonId)
+      const query = params.size > 0 ? `?${params.toString()}` : ''
+      const response = await fetch(`/api/admin/messages${query}`, { cache: 'no-store' })
       const result = await response.json()
 
       if (!response.ok) {
@@ -95,40 +104,17 @@ export default function MessagesManager() {
       }
 
       setMessages(result.messages || [])
+      setTeams(result.teams || [])
+      setUsers(result.users || [])
+      setSeasons(result.seasons || [])
+      setSelectedSeason(result.selected_season_id || seasonId || '')
       setLoading(false)
     } catch (error) {
       console.error('Errore caricamento messaggi:', error)
       setMessages([])
-      setLoading(false)
-    }
-  }
-
-  const loadTeams = async () => {
-    const { data } = await supabase
-      .from('teams')
-      .select('id, name, code')
-      .order('name')
-
-    setTeams(data || [])
-  }
-
-  const loadUsers = async () => {
-    try {
-      const response = await fetch('/api/admin/users')
-      const result = await response.json()
-      if (!response.ok) throw new Error(result.error || 'Impossibile caricare gli utenti')
-
-      const accountUsers = (result.users || []).map((user: any) => ({
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email,
-        role: user.roles?.[0] || user.role || 'staff',
-      }))
-      setUsers(accountUsers)
-    } catch (error) {
-      console.error('Errore caricamento utenti destinatari:', error)
+      setTeams([])
       setUsers([])
+      setLoading(false)
     }
   }
 
@@ -139,7 +125,7 @@ export default function MessagesManager() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(messageData)
+        body: JSON.stringify({ ...messageData, season_id: selectedSeason })
       })
 
       const result = await response.json()
@@ -153,7 +139,7 @@ export default function MessagesManager() {
       console.log('Messaggio creato con successo:', result.message)
       setShowModal(false)
       setEditingMessage(null)
-      loadMessages()
+      void loadMessages(selectedSeason)
 
     } catch (error) {
       console.error('Errore creazione messaggio:', error)
@@ -170,6 +156,7 @@ export default function MessagesManager() {
         },
         body: JSON.stringify({
           id,
+          season_id: selectedSeason,
           ...messageData
         })
       })
@@ -185,7 +172,7 @@ export default function MessagesManager() {
       console.log('Messaggio aggiornato con successo:', result.message)
       setShowModal(false)
       setEditingMessage(null)
-      loadMessages()
+      void loadMessages(selectedSeason)
 
     } catch (error) {
       console.error('Errore aggiornamento messaggio:', error)
@@ -209,7 +196,7 @@ export default function MessagesManager() {
         }
 
         console.log('Messaggio eliminato con successo:', result.message)
-        loadMessages()
+        void loadMessages(selectedSeason)
 
       } catch (error) {
         console.error('Errore eliminazione messaggio:', error)
@@ -244,15 +231,41 @@ export default function MessagesManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Messaggi</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Messaggi</h2>}
         <div className="flex gap-3">
           <button onClick={exportMessagesToExcel} className="cs-btn cs-btn--outline">
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">
             Nuovo Messaggio
           </button>
+        </div>
+      </div>
+
+      <div className="cs-card cs-card--primary p-4">
+        <div className="cs-field max-w-sm">
+          <label htmlFor="messages-season" className="cs-field__label">Stagione</label>
+          <select
+            id="messages-season"
+            className="cs-select"
+            value={selectedSeason}
+            onChange={(event) => {
+              const seasonId = event.target.value
+              setSelectedSeason(seasonId)
+              setEditingMessage(null)
+              setSelectedMessage(null)
+              setShowModal(false)
+              void loadMessages(seasonId)
+            }}
+          >
+            {seasons.map((season) => (
+              <option key={season.id} value={season.id}>
+                {season.name}{season.is_active ? ' (Attiva)' : ''}
+              </option>
+            ))}
+          </select>
+          <p className="cs-field__help">Messaggi e destinatari sono mostrati per la stagione selezionata.</p>
         </div>
       </div>
 
@@ -297,7 +310,7 @@ export default function MessagesManager() {
           </thead>
           <tbody>
             {messages.map((message) => (
-              <tr key={message.id} className="cursor-pointer" onClick={() => setSelectedMessage(message)}>
+              <tr key={message.id}>
                 <td>
                   <div>
                     <div className="font-medium">{message.subject}</div>
@@ -326,7 +339,7 @@ export default function MessagesManager() {
                       <div className="flex flex-wrap gap-1">
                         {message.message_recipients.map((mr) => (
                           <span key={mr.id} className="cs-badge cs-badge--neutral">
-                            {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name} (${formatRole(mr.profiles?.role)})`}
+                            {mr.teams ? <><Trophy className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.teams.name}</> : <><CircleUserRound className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.profiles?.first_name} {mr.profiles?.last_name} ({formatRole(mr.profiles?.role)})</>}
                           </span>
                         ))}
                       </div>
@@ -336,6 +349,7 @@ export default function MessagesManager() {
                   </div>
                 </td>
                 <td className="cs-table__actions" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => setSelectedMessage(message)} className="cs-btn cs-btn--ghost cs-btn--sm">Dettagli</button>
                   <button onClick={() => { setEditingMessage(message); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
                   <button onClick={() => handleDeleteMessage(message.id!)} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
                 </td>
@@ -349,7 +363,7 @@ export default function MessagesManager() {
         }
         <div className="md:hidden p-4 space-y-3">
           {messages.map((message) => (
-            <div key={message.id} className="cs-card" onClick={() => setSelectedMessage(message)}>
+            <article key={message.id} className="cs-card">
               <div className="font-semibold">{message.subject}</div>
               <div className="text-sm text-secondary line-clamp-3">{message.content}</div>
               {(message as any).attachments && (message as any).attachments.length > 0 && (
@@ -367,7 +381,7 @@ export default function MessagesManager() {
                     {message.message_recipients && message.message_recipients.length > 0 ? (
                       message.message_recipients.map((mr) => (
                         <span key={mr.id} className="cs-badge cs-badge--neutral">
-                          {mr.teams ? `🏀 ${mr.teams.name}` : `👤 ${mr.profiles?.first_name} ${mr.profiles?.last_name} (${formatRole(mr.profiles?.role)})`}
+                          {mr.teams ? <><Trophy className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.teams.name}</> : <><CircleUserRound className="mr-1 inline h-4 w-4" aria-hidden="true" />{mr.profiles?.first_name} {mr.profiles?.last_name} ({formatRole(mr.profiles?.role)})</>}
                         </span>
                       ))
                     ) : (
@@ -377,17 +391,18 @@ export default function MessagesManager() {
                 </div>
               </div>
               <div className="mt-3 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                <button type="button" onClick={() => setSelectedMessage(message)} className="cs-btn cs-btn--ghost cs-btn--sm flex-1">Dettagli</button>
                 <button onClick={() => { setEditingMessage(message); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
                 <button onClick={() => handleDeleteMessage(message.id!)} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
               </div>
-            </div>
+            </article>
           ))}
         </div>
 
         {messages.length === 0 && (
           <EmptyState
-            title="Nessun messaggio creato"
-            description="Crea il tuo primo messaggio per iniziare a comunicare con squadre e utenti."
+            title="Nessun messaggio per questa stagione"
+            description="Crea un messaggio per le squadre e gli utenti della stagione selezionata."
             action={<button onClick={() => { setEditingMessage(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea il tuo primo messaggio</button>}
           />
         )}

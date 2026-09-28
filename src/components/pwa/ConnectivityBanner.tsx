@@ -2,18 +2,19 @@
 
 type ConnectivityBannerProps = {
   offline: boolean
+  onlineNotice?: boolean
 }
 
-export function ConnectivityBanner({ offline }: ConnectivityBannerProps) {
-  if (!offline) return null
+export function ConnectivityBanner({ offline, onlineNotice = false }: ConnectivityBannerProps) {
+  if (!offline && !onlineNotice) return null
 
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[200] border-b border-[color:var(--cs-warning)] bg-[color:var(--cs-warm)] px-4 py-2 text-center text-sm font-semibold text-slate-950 shadow-sm"
+      className={offline ? 'cs-connectivity-banner cs-connectivity-banner--offline' : 'cs-connectivity-banner cs-connectivity-banner--online'}
       role="status"
       aria-live="polite"
     >
-      Sei offline. Le modifiche saranno disponibili quando torna la connessione.
+      {offline ? 'Sei offline. Alcuni contenuti potrebbero non essere aggiornati e le modifiche non sono disponibili.' : 'Connessione ripristinata.'}
     </div>
   )
 }

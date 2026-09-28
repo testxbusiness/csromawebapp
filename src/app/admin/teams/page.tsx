@@ -1,13 +1,12 @@
 'use client'
 
 import TeamsManager from '@/components/admin/TeamsManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function TeamsPage() {
   return (
-    <>
-      <PageHeader title="Gestione Squadre" subtitle="Amministrazione CSRoma" />
-      <TeamsManager />
-    </>
+    <AdminManagementPage title="Squadre" context="Sport" description="Organizza le squadre, le attività e gli allenatori.">
+      <TeamsManager embedded />
+    </AdminManagementPage>
   )
 }

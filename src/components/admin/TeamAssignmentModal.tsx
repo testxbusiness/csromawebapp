@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { AlertTriangle, X } from 'lucide-react'
 
 interface Team {
   id: string
@@ -34,6 +35,7 @@ interface TeamAssignmentModalProps {
     membershipFeeId?: string
   }) => void
   athleteIds: string[]
+  teams: Team[]
   loading?: boolean
   userType?: 'athletes' | 'coaches'
 }
@@ -44,9 +46,9 @@ export default function TeamAssignmentModal({
   onSubmit,
   athleteIds,
   loading = false,
-  userType = 'athletes'
+  userType = 'athletes',
+  teams
 }: TeamAssignmentModalProps) {
-  const [teams, setTeams] = useState<Team[]>([])
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set())
   const [jerseyNumber, setJerseyNumber] = useState<string>('')
   const [membershipFees, setMembershipFees] = useState<MembershipFee[]>([])
@@ -64,25 +66,6 @@ export default function TeamAssignmentModal({
       setSelectedMembershipFeeId('')
     }
   }, [selectedTeamIds, userType])
-
-  const loadTeams = useCallback(async () => {
-    try {
-      const { data } = await supabase
-        .from('teams')
-        .select('id, name, code, activity_id')
-        .order('name')
-
-      setTeams(data || [])
-    } catch (error) {
-      console.error('Errore caricamento squadre:', error)
-    }
-  }, [supabase])
-
-  useEffect(() => {
-    if (isOpen) {
-      void loadTeams()
-    }
-  }, [isOpen, loadTeams])
 
   const loadMembershipFees = async (teamId: string) => {
     setLoadingFees(true)
@@ -144,7 +127,7 @@ export default function TeamAssignmentModal({
   return (
     <div className="fixed inset-0 cs-overlay" aria-hidden="false">
       <div className="cs-modal cs-modal--sm" data-state="open">
-        <button className="cs-modal__close" onClick={handleClose} aria-label="Chiudi">✕</button>
+        <button className="cs-modal__close" onClick={handleClose} aria-label="Chiudi"><X className="h-4 w-4" aria-hidden="true" /></button>
         <div className="">
           <h2 className="cs-modal__title mb-2">
             Assegna {athleteIds.length} {userType === 'athletes' ? 'atlet' : 'collaborator'}{athleteIds.length > 1 ? 'i' : 'o'} {userType === 'coaches' ? 'alle squadre' : 'alla squadra'}
@@ -157,7 +140,9 @@ export default function TeamAssignmentModal({
                 {userType === 'coaches' ? 'Seleziona una o più squadre *' : 'Squadra *'}
               </label>
               <div className="max-h-60 overflow-y-auto cs-card p-2">
-                {teams.map(team => (
+                {teams.length === 0 ? (
+                  <p className="text-secondary p-2 text-sm">Nessuna squadra disponibile per la stagione selezionata.</p>
+                ) : teams.map(team => (
                   <label key={team.id} className="flex items-center space-x-3 p-2 cursor-pointer">
                     <input
                       type={userType === 'coaches' ? 'checkbox' : 'radio'}
@@ -212,7 +197,7 @@ export default function TeamAssignmentModal({
                 </label>
                 {selectedTeamIds.size > 1 ? (
                   <div className="cs-alert cs-alert--warning text-sm">
-                    ⚠️ Per assegnare un piano di pagamento, seleziona una sola squadra
+                    <AlertTriangle className="mr-1 inline h-4 w-4 align-text-bottom" aria-hidden="true" /> Per assegnare un piano di pagamento, seleziona una sola squadra
                   </div>
                 ) : loadingFees ? (
                   <div className="text-sm text-secondary">Caricamento piani disponibili...</div>

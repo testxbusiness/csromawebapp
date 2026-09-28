@@ -1,18 +1,23 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useNextStep } from 'nextstepjs'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
-import MessageDetailModal from '@/components/shared/MessageDetailModal'
+import MessageDetailModal, { type MessageReadState } from '@/components/shared/MessageDetailModal'
 import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
-import UpcomingEventsPanel from '@/components/shared/UpcomingEventsPanel'
-import LatestMessagesPanel from '@/components/shared/LatestMessagesPanel'
-import { EmptyState, LoadingState } from '@/components/ui'
-import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import { EventKindBadge, FeedbackState, ListRow, LoadingState, Panel, StatusBadge } from '@/components/ui'
+import AttendanceControl from './AttendanceControl'
+import { MessagePreviewRow } from './MessagePreviewRow'
+import { MembershipRow } from './MembershipRow'
+import { feeStatusLabel, selectMostUrgentFee } from '@/lib/athlete/fee-preview'
+import { hasDashboardData, isDashboardDataCurrent, type DashboardStatus } from '@/lib/athlete/dashboard-state'
+import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import { useTeamContext } from '@/context/TeamContext'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { useAuth } from '@/hooks/useAuth'
+import type { AttendanceAvailabilityContract } from '@/types/attendance'
 
 interface User {
   id: string
@@ -58,18 +63,28 @@ interface Event {
   event_kind?: 'training' | 'match' | 'meeting' | 'other'
   gym_id?: string | null
   requires_confirmation?: boolean
+  attendance_mode?: 'rsvp' | 'absence_only'
   confirmation_deadline?: string | null
-  my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null } | null
+  my_attendance?: { status?: 'going' | 'maybe' | 'declined'; responded_at?: string | null; is_early_absence?: boolean } | null
+  teams?: Array<{ id: string; name: string; code: string }>
+  team_ids?: string[]
+  attendance_availability?: AttendanceAvailabilityContract | null
 }
 
 interface ChampionshipMatch {
   id: string
+  /** Present only when the existing payload explicitly links this match to an event. */
+  event_id?: string | null
   match_day?: number | null
   match_date?: string | null
   start_time?: string | null
   location_text?: string | null
-  home_club_team?: { id: string; name: string } | null
-  away_club_team?: { id: string; name: string } | null
+  home_club_team?: { id: string; name: string; code?: string; team_id?: string } | null
+  away_club_team?: { id: string; name: string; code?: string; team_id?: string } | null
+  team?: { id: string; name: string; code?: string } | null
+  opponent?: { id: string; name: string; code?: string } | null
+  is_home?: boolean
+  team_ids?: string[]
 }
 
 interface Message {
@@ -78,7 +93,10 @@ interface Message {
   content: string
   created_at: string
   is_read: boolean
+  read_state?: MessageReadState
   created_by_profile?: { first_name?: string | null; last_name?: string | null }
+  teams?: Array<{ id: string; name: string; code?: string }>
+  team_ids?: string[]
 }
 
 interface FeeInstallment {
@@ -89,8 +107,12 @@ interface FeeInstallment {
   status: 'not_due' | 'due_soon' | 'overdue' | 'paid' | 'partially_paid'
   membership_fee: {
     name: string
+    description?: string | null
     team: {
+      id?: string
       name: string
+      code?: string
+      activity?: { name: string } | null
     }
   }
 }
@@ -105,16 +127,101 @@ function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
   return Array.isArray(value) ? value[0] : value ?? undefined
 }
 
+function SectionHeading({ title, href }: { title: string; href?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h3 className="text-base font-semibold text-[color:var(--cs-text)]">{title}</h3>
+      {href && <Link href={href} className="cs-btn cs-btn--ghost cs-btn--sm">Vedi tutti</Link>}
+    </div>
+  )
+}
+
+function formatEventTime(value: string) {
+  return new Date(value).toLocaleTimeString('it-IT', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatEventDate(value: string) {
+  return new Date(value).toLocaleDateString('it-IT', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function formatFeeAmount(value: number | null | undefined): string {
+  return value == null ? '—' : new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(value)
+}
+
+export function formatAgendaDateTime(value: string, now = new Date()) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Data non disponibile'
+
+  const dateOnly = (item: Date) => new Date(item.getFullYear(), item.getMonth(), item.getDate()).getTime()
+  const dayDelta = Math.round((dateOnly(date) - dateOnly(now)) / 86_400_000)
+  const dayLabel = dayDelta === 0
+    ? 'Oggi'
+    : dayDelta === 1
+      ? 'Domani'
+      : date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  return `${dayLabel} · ${date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+export type FeaturedEventState = 'upcoming' | 'in_progress' | 'ended' | 'unknown'
+
+/** Classifies the event selected by the existing dashboard contract. */
+export function getFeaturedEventState(event: Pick<Event, 'start_time' | 'end_time'>, now = new Date()): FeaturedEventState {
+  const start = new Date(event.start_time).getTime()
+  const end = new Date(event.end_time).getTime()
+  const timestamp = now.getTime()
+
+  if (![start, end, timestamp].every(Number.isFinite) || start >= end) return 'unknown'
+  if (timestamp < start) return 'upcoming'
+  if (timestamp < end) return 'in_progress'
+  return 'ended'
+}
+
+/**
+ * Hide the championship summary only when the payload proves it is the same
+ * match as the featured event. Title/date/team comparisons are intentionally
+ * excluded so a friendly match cannot hide useful championship information.
+ */
+export function shouldShowNextChampionshipMatchSummary(
+  firstVisibleEvent: Pick<Event, 'id' | 'event_kind'> | undefined,
+  championshipMatch: Pick<ChampionshipMatch, 'event_id'> | null,
+): boolean {
+  if (!championshipMatch) return false
+  if (!firstVisibleEvent || firstVisibleEvent.event_kind !== 'match') return true
+  return championshipMatch.event_id !== firstVisibleEvent.id
+}
+
+function featuredEventStateLabel(state: FeaturedEventState) {
+  switch (state) {
+    case 'upcoming': return 'Prossimo'
+    case 'in_progress': return 'In corso'
+    case 'ended': return 'Terminato'
+    default: return 'Stato non disponibile'
+  }
+}
+
 export default function AthleteDashboard({ user, profile, delegatedView = false }: AthleteDashboardProps) {
-  const { startNextStep } = useNextStep()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
+  const { selectedTeamId: activeTeamId, setTeams, resetTeam } = useTeamContext()
   const { role: accountRole, loading: authLoading, profileLoading } = useAuth()
   const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
+  const [unreadMessageCount, setUnreadMessageCount] = useState<number | null>(null)
   const [feeInstallments, setFeeInstallments] = useState<FeeInstallment[]>([])
   const [nextChampionshipMatch, setNextChampionshipMatch] = useState<ChampionshipMatch | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [dashboardStatus, setDashboardStatus] = useState<DashboardStatus>('loading')
+  const [dashboardError, setDashboardError] = useState<string | null>(null)
+  const [dataSubjectKey, setDataSubjectKey] = useState<string | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
   const [activeSeason, setActiveSeason] = useState<any>(null)
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
@@ -124,55 +231,164 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const [accessDenied, setAccessDenied] = useState(false)
   const supabase = useMemo(() => createClient(), [])
   const dashboardRequestRef = useRef<AbortController | null>(null)
+  const attendanceRequestRef = useRef<AbortController | null>(null)
+  const lastSubjectKeyRef = useRef<string | null>(null)
+  const hasLoadedDashboardRef = useRef(false)
+  const subjectKey = selectedProfileId ?? profile?.id ?? null
+
+  useEffect(() => {
+    const handleSubjectChange = (event: globalThis.Event) => {
+      const nextSubject = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? profile?.id ?? null
+      lastSubjectKeyRef.current = nextSubject
+      dashboardRequestRef.current?.abort()
+      attendanceRequestRef.current?.abort()
+      hasLoadedDashboardRef.current = false
+      setDataSubjectKey(null)
+      setActiveSeason(null)
+      setTeamMemberships([])
+      setUpcomingEvents([])
+      setUnreadMessages([])
+      setUnreadMessageCount(null)
+      setFeeInstallments([])
+      setNextChampionshipMatch(null)
+      setSelectedEvent(null)
+      setSelectedMessage(null)
+      setMessageDetail(null)
+      setTeamDetailData(null)
+      setSelectedTeamId(null)
+      setDashboardError(null)
+      setAccessDenied(false)
+      setDashboardStatus('loading')
+    }
+    window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+    return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+  }, [profile?.id])
+
+  const persistEventAttendance = async (eventId: string, status: 'going' | 'maybe' | 'declined') => {
+    const requestSubjectKey = subjectKey
+    const controller = new AbortController()
+    attendanceRequestRef.current?.abort()
+    attendanceRequestRef.current = controller
+
+    try {
+      const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: eventId, status }),
+        signal: controller.signal,
+      })
+      const result = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
+
+      if (controller.signal.aborted || lastSubjectKeyRef.current !== requestSubjectKey) return
+
+      const respondedAt = new Date().toISOString()
+      setSelectedEvent((current) => current?.id === eventId ? {
+        ...current,
+        my_attendance: { status, responded_at: respondedAt },
+      } : current)
+      setUpcomingEvents((current) => current.map((event) => event.id === eventId
+        ? { ...event, my_attendance: { status, responded_at: respondedAt } }
+        : event
+      ))
+      void loadAthleteData()
+    } catch (error) {
+      if (controller.signal.aborted) return
+      throw error
+    } finally {
+      if (attendanceRequestRef.current === controller) attendanceRequestRef.current = null
+    }
+  }
 
   const saveEventAttendance = async (status: 'going' | 'maybe' | 'declined') => {
     if (!selectedEvent) return
-    const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_id: selectedEvent.id, status }),
-    })
-    const result = await response.json().catch(() => null)
-    if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
+    await persistEventAttendance(selectedEvent.id, status)
+  }
 
-    setSelectedEvent((current) => current ? {
-      ...current,
-      my_attendance: { status, responded_at: new Date().toISOString() },
-    } : current)
-    setUpcomingEvents((current) => current.map((event) => event.id === selectedEvent.id
-      ? { ...event, my_attendance: { status, responded_at: new Date().toISOString() } }
-      : event
-    ))
+  const mutateEarlyAbsence = async (eventId: string, revoke = false, note?: string) => {
+    if (!navigator.onLine) throw new Error('Sei offline: l’assenza non può essere salvata')
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/early-absence', selectedProfileId), { method: revoke ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ event_ids: [eventId], ...(revoke ? {} : { note }) }) })
+    const result = await response.json().catch(() => null) as { error?: string } | null
+    if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
+    if (lastSubjectKeyRef.current !== subjectKey) return
+    const updateEvent = (event: Event): Event => {
+      if (event.id !== eventId) return event
+      const availability = event.attendance_availability
+      if (!availability) return event
+      const isNext = availability.next_event?.id === eventId
+      return {
+        ...event,
+        my_attendance: revoke
+          ? null
+          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+        attendance_availability: {
+          ...availability,
+          can_respond_now: revoke ? isNext : false,
+          can_report_early_absence: !revoke,
+          can_revoke_early_absence: revoke,
+          actions: {
+            respond: revoke ? isNext : false,
+            report_early_absence: !revoke,
+            revoke_early_absence: revoke,
+          },
+          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
+        },
+      }
+    }
+    setSelectedEvent((current) => current ? updateEvent(current) : current)
+    setUpcomingEvents((current) => current.map(updateEvent))
+    void loadAthleteData()
   }
 
   // Enrich selected message on open
   useEffect(() => {
+    const controller = new AbortController()
     const loadDetail = async () => {
       if (!selectedMessage) { return }
       try {
-        const res = await fetch(appendSubjectProfile(`/api/athlete/messages?view=full&id=${selectedMessage.id}`, selectedProfileId))
+        const requestSubjectKey = subjectKey
+        const res = await fetch(appendSubjectProfile(`/api/athlete/messages?view=full&id=${selectedMessage.id}`, selectedProfileId), { signal: controller.signal })
         const json = await res.json()
-        if (res.ok && json.messages && json.messages.length) {
+        if (!controller.signal.aborted && lastSubjectKeyRef.current === requestSubjectKey && res.ok && json.messages && json.messages.length) {
           setMessageDetail(json.messages[0])
         }
-      } catch {}
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) return
+      }
     }
-    loadDetail()
-  }, [selectedMessage, selectedProfileId])
+    void loadDetail()
+    return () => controller.abort()
+  }, [selectedMessage, selectedProfileId, subjectKey])
 
-  const lastLoadTimeRef = useRef<number>(0)
+  const nextRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadAthleteData = useCallback(async () => {
     if (!user?.id || !profile?.id || !accountRole) {
       dashboardRequestRef.current?.abort()
-      setLoading(false)
+      setDashboardStatus('loading')
       return
     }
 
     if (authLoading || profileLoading) {
-      setLoading(true)
+      setDashboardStatus('loading')
       return
     }
+
+    const subjectChanged = lastSubjectKeyRef.current !== subjectKey
+    if (subjectChanged) {
+      lastSubjectKeyRef.current = subjectKey
+      hasLoadedDashboardRef.current = false
+      setDataSubjectKey(null)
+      setActiveSeason(null)
+      setTeamMemberships([])
+      setUpcomingEvents([])
+      setNextChampionshipMatch(null)
+      setUnreadMessages([])
+      setUnreadMessageCount(null)
+      setFeeInstallments([])
+      resetTeam()
+    }
+
     const delegatedPermissions = selectedProfile?.relationship.permissions
     const canAccessDelegatedDashboard = Boolean(
       delegatedPermissions?.view_schedule ||
@@ -181,10 +397,17 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     )
     if (accountRole === 'family_member' && (!selectedProfile || !canAccessDelegatedDashboard)) {
       setAccessDenied(true)
-      setLoading(false)
+      setDashboardStatus('denied')
       return
     }
-    setLoading(true)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOffline(true)
+      setDashboardStatus('offline')
+      return
+    }
+
+    setDashboardStatus(hasLoadedDashboardRef.current && !subjectChanged ? 'refreshing' : 'loading')
+    setDashboardError(null)
     setAccessDenied(false)
     dashboardRequestRef.current?.abort()
     const controller = new AbortController()
@@ -197,28 +420,48 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       if (!response.ok) {
         if (response.status === 403) {
           setAccessDenied(true)
+          setDashboardStatus('denied')
           return
         }
-        if (response.status === 401) return
-        console.error('Error loading athlete dashboard:', response.statusText)
+        if (response.status === 401) {
+          setDashboardError('La sessione non è più valida. Accedi di nuovo per continuare.')
+        } else {
+          setDashboardError('Non è stato possibile caricare i dati della dashboard.')
+          console.error('Error loading athlete dashboard:', response.statusText)
+        }
+        setDashboardStatus('error')
         return
       }
 
       const result = await response.json()
+      if (controller.signal.aborted || lastSubjectKeyRef.current !== subjectKey) return
       setActiveSeason(result.activeSeason)
       setTeamMemberships(result.teamMemberships || [])
       setUpcomingEvents(result.upcomingEvents || [])
       setNextChampionshipMatch(result.nextChampionshipMatch || null)
       setUnreadMessages(result.unreadMessages || [])
+      setUnreadMessageCount(typeof result.unreadMessageCount === 'number' ? result.unreadMessageCount : null)
       setFeeInstallments(result.feeInstallments || [])
-      lastLoadTimeRef.current = Date.now()
+      setTeams((result.teams || []).map((team: { id: string; name: string; code?: string; activity?: { name?: string } | null }) => ({
+        id: team.id,
+        name: team.name,
+        code: team.code,
+        activity: team.activity?.name ?? null,
+      })))
+      setDataSubjectKey(subjectKey)
+      hasLoadedDashboardRef.current = true
+      setIsOffline(false)
+      setDashboardStatus('success')
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('Error loading athlete data:', e)
+      setDashboardError('Controlla la connessione e riprova.')
+      setDashboardStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error')
+      setIsOffline(typeof navigator !== 'undefined' && !navigator.onLine)
     } finally {
-      if (!controller.signal.aborted) setLoading(false)
+      if (controller.signal.aborted) return
     }
-  }, [accountRole, authLoading, profile?.id, profileLoading, selectedProfile, selectedProfileId, user?.id])
+  }, [accountRole, authLoading, profile?.id, profileLoading, resetTeam, selectedProfile, selectedProfileId, setTeams, subjectKey, user?.id])
 
   useEffect(() => {
     return () => {
@@ -226,6 +469,8 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     }
   }, [])
 
+  /* Legacy per-widget loaders were superseded by /api/athlete/dashboard. */
+  /*
   const loadActiveSeason = useCallback(async () => {
     const { data } = await supabase
       .from('seasons')
@@ -419,6 +664,8 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     if (data) setFeeInstallments(data as unknown as FeeInstallment[])
   }, [profile.id, supabase])
 
+  */
+
   const loadTeamDetail = useCallback(async (teamId: string) => {
     try {
       // 1. Team basic info
@@ -511,50 +758,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     }
   }, [supabase])
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'bg-green-100 text-green-800'
-      case 'overdue':
-        return 'bg-red-100 text-red-800'
-      case 'due_soon':
-        return 'bg-yellow-100 text-yellow-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return '✅ Pagata'
-      case 'overdue':
-        return '❌ Scaduta'
-      case 'due_soon':
-        return '⚠️ In Scadenza'
-      case 'not_due':
-        return '⏳ Non Scaduta'
-      default:
-        return status
-    }
-  }
-
-  const getMedicalCertificateStatus = (expiryDate?: string | null) => {
-    if (!expiryDate) return { text: 'Non specificato', color: 'bg-gray-100 text-gray-800' }
-    
-    const expiry = new Date(expiryDate)
-    const today = new Date()
-    const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    
-    if (daysUntilExpiry < 0) {
-      return { text: '❌ Scaduto', color: 'bg-red-100 text-red-800' }
-    } else if (daysUntilExpiry <= 30) {
-      return { text: '⚠️ In Scadenza', color: 'bg-yellow-100 text-yellow-800' }
-    } else {
-      return { text: '✅ Valido', color: 'bg-green-100 text-green-800' }
-    }
-  }
-
   // Effects that depend on dashboard callbacks are declared after them so the
   // callbacks are initialized before React evaluates their dependency arrays.
   useEffect(() => {
@@ -569,36 +772,59 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     void loadAthleteData()
   }, [loadAthleteData])
 
-  // Ricarica intelligente quando la tab torna visibile (solo se necessario)
   useEffect(() => {
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const onOffline = () => {
+      setIsOffline(true)
+      setDashboardStatus('offline')
+    }
+    const onOnline = () => {
+      setIsOffline(false)
+      void loadAthleteData()
+    }
+    window.addEventListener('offline', onOffline)
+    window.addEventListener('online', onOnline)
+    return () => {
+      window.removeEventListener('offline', onOffline)
+      window.removeEventListener('online', onOnline)
+    }
+  }, [loadAthleteData])
 
+  // Ricarica quando la tab torna visibile; il server resta la fonte dell'evento attivo.
+  useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
-      if (debounceTimer) clearTimeout(debounceTimer)
-
-      debounceTimer = setTimeout(() => {
-        const now = Date.now()
-        const timeSinceLastLoad = now - lastLoadTimeRef.current
-        if (timeSinceLastLoad > 120000) {
-          void loadAthleteData()
-          lastLoadTimeRef.current = now
-        }
-      }, 1000)
+      void loadAthleteData()
     }
 
     window.addEventListener('visibilitychange', onVisible)
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer)
       window.removeEventListener('visibilitychange', onVisible)
     }
   }, [loadAthleteData])
 
+  useEffect(() => {
+    if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+    const nextAt = upcomingEvents
+      .map((event) => event.attendance_availability?.next_recalculation_at)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((value) => Number.isFinite(value) && value > Date.now())
+      .sort((a, b) => a - b)[0]
+    if (!nextAt) return
+    nextRefreshTimerRef.current = setTimeout(() => void loadAthleteData(), Math.max(0, nextAt - Date.now() + 25))
+    return () => {
+      if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+      nextRefreshTimerRef.current = null
+    }
+  }, [loadAthleteData, upcomingEvents])
+
   const isDelegatedProfile = (accountRole === 'family_member' || delegatedView) && Boolean(selectedProfileId)
+  const isFamilyDashboard = delegatedView || isDelegatedProfile
   const permissions = isDelegatedProfile ? selectedProfile?.relationship.permissions : null
   const canViewSchedule = !isDelegatedProfile || permissions?.view_schedule === true
   const canReceiveMessages = !isDelegatedProfile || permissions?.receive_messages === true
   const canViewPayments = !isDelegatedProfile || permissions?.view_payments === true
+  const mostUrgentFee = selectMostUrgentFee(feeInstallments)
 
   useEffect(() => {
     if (!canViewSchedule) {
@@ -611,225 +837,241 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     }
   }, [canReceiveMessages, canViewSchedule])
 
-  if (loading) {
-    return <LoadingState label="Caricamento dashboard..." />
+  const dashboardHasData = hasDashboardData({
+    activeSeason,
+    teamCount: teamMemberships.length,
+    eventCount: upcomingEvents.length,
+    messageCount: unreadMessages.length,
+    feeCount: feeInstallments.length,
+    hasNextMatch: Boolean(nextChampionshipMatch),
+  })
+  const subjectDataIsCurrent = isDashboardDataCurrent(dataSubjectKey, subjectKey)
+  const selectedTeamMatches = (teamIds?: string[]) => !activeTeamId || Boolean(teamIds?.includes(activeTeamId))
+  const visibleEvents = upcomingEvents.filter((event) => selectedTeamMatches(event.team_ids || event.teams?.map((team) => team.id)))
+  const visibleMessages = unreadMessages.filter((message) => selectedTeamMatches(message.team_ids || message.teams?.map((team) => team.id)))
+  const visibleFees = feeInstallments.filter((fee) => selectedTeamMatches(fee.membership_fee.team.id ? [fee.membership_fee.team.id] : undefined))
+  const visibleMemberships = teamMemberships.filter((membership) => selectedTeamMatches([membership.team.id]))
+  const visibleMatch = nextChampionshipMatch && selectedTeamMatches(nextChampionshipMatch.team_ids) ? nextChampionshipMatch : null
+  const showNextChampionshipMatch = shouldShowNextChampionshipMatchSummary(visibleEvents[0], visibleMatch)
+  const mostUrgentVisibleFee = selectMostUrgentFee(visibleFees)
+    ?? (visibleFees.length > 0 && visibleFees.every((fee) => fee.status === 'paid') ? visibleFees[0] : undefined)
+  const messageTitleCount = activeTeamId ? visibleMessages.length : unreadMessageCount ?? unreadMessages.length
+
+  if (accessDenied || dashboardStatus === 'denied') return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
+  if (dashboardStatus === 'offline' && !dashboardHasData) {
+    return <FeedbackState
+      variant="offline"
+      title="Dashboard non disponibile offline"
+      description="Riconnettiti a internet per caricare i dati della dashboard."
+      className="mx-auto max-w-2xl px-5 py-12 text-center"
+      action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void loadAthleteData()}>Riprova</button>}
+    />
   }
-  if (accessDenied) return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
+  if (!subjectDataIsCurrent || dashboardStatus === 'loading') {
+    return <LoadingState label="Un attimo, si scende in campo…" />
+  }
+  if (dashboardStatus === 'error') {
+    return <FeedbackState
+      variant="error"
+      title="Dashboard non disponibile"
+      description={dashboardError || 'Non è stato possibile caricare i dati. Riprova tra poco.'}
+      className="mx-auto max-w-2xl px-5 py-12 text-center"
+      action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void loadAthleteData()}>Riprova</button>}
+    />
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div
-        className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900 text-white"
-        style={{ backgroundImage: "url('/images/banner.jpg')", backgroundSize: 'cover', backgroundPosition: 'center' }}
-      >
-        <div className="absolute inset-0 bg-slate-900/70"></div>
-        <div className="relative p-6 md:p-8">
-          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div
+      className="cs-athlete-dashboard mx-auto space-y-5"
+      data-dashboard-context={isFamilyDashboard ? 'family' : 'personal'}
+    >
+      {dashboardStatus === 'refreshing' && <FeedbackState variant="refreshing" description="Stai visualizzando i dati già caricati mentre controlliamo gli aggiornamenti." />}
+      {isOffline && <FeedbackState
+        variant="offline"
+        title={dashboardHasData ? 'Connessione assente' : 'Dashboard non disponibile offline'}
+        description={dashboardHasData ? 'Stai visualizzando gli ultimi dati caricati per questo profilo.' : 'Riconnettiti a internet per caricare i dati della dashboard.'}
+        className="px-4 py-3"
+      />}
+      <header className="cs-athlete-dashboard__intro space-y-1 border-b border-[color:var(--cs-border)] pb-4">
+        {isFamilyDashboard ? <p className="cs-eyebrow">Area familiare</p> : null}
+        <h2 id="athlete-welcome" className="text-2xl font-semibold text-[color:var(--cs-text)]">
+          Oggi, {profile.first_name}
+        </h2>
+        {isFamilyDashboard ? <p className="text-sm text-secondary">Stai visualizzando {profile.first_name} {profile.last_name}</p> : null}
+        {activeSeason?.name && <p className="text-sm text-secondary">{activeSeason.name}</p>}
+      </header>
+
+      <div className="cs-athlete-dashboard__layout">
+      <div className="cs-athlete-dashboard__sport">
+      {canViewSchedule && (
+        <Panel id="athlete-events" className="cs-athlete-dashboard__protagonist-panel space-y-3">
+          <SectionHeading title="Prossimo impegno" href="/athlete/calendar" />
+          {upcomingEvents.length === 0 ? <FeedbackState variant="empty" title="Nessun impegno programmato" className="py-4" /> : visibleEvents.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun impegno per questa squadra" className="py-4" /> : (
             <div>
-              <h2 id="athlete-welcome" className="text-2xl md:text-3xl font-semibold">
-                Bentornato, {profile.first_name} {profile.last_name}
-              </h2>
-              {activeSeason && (
-                <p className="text-sm text-slate-200 mt-1">
-                  {activeSeason.name}
-                </p>
-              )}
-            </div>
-            <button
-              id="athlete-start-tour"
-              className="cs-btn cs-btn--ghost w-full sm:w-auto"
-              onClick={() => startNextStep('athlete')}
-            >
-              Guida
-            </button>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-            <div className="lg:col-span-2 space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="cs-card cs-card--primary">
-                  <div className="cs-card__meta">Squadre</div>
-                  <div className="text-2xl font-extrabold" style={{color:'var(--cs-accent)'}}>{teamMemberships.length}</div>
-                </div>
-                {canViewSchedule && (
-                  <div className="cs-card cs-card--primary">
-                    <div className="cs-card__meta">Prossimi Eventi</div>
-                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-success)'}}>{upcomingEvents.length}</div>
-                  </div>
-                )}
-                {canReceiveMessages && (
-                  <div className="cs-card cs-card--primary">
-                    <div className="cs-card__meta">Ultimi Messaggi</div>
-                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-warning)'}}>{unreadMessages.length}</div>
-                  </div>
-                )}
-                {canViewPayments && (
-                  <div className="cs-card cs-card--primary">
-                    <div className="cs-card__meta">Rate Attive</div>
-                    <div className="text-2xl font-extrabold" style={{color:'var(--cs-primary)'}}>{feeInstallments.length}</div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {canViewSchedule && <div className="cs-card cs-card--primary p-4 flex flex-col justify-between text-slate-900">
-              <div className="text-sm font-bold uppercase text-[color:var(--cs-danger)]">Prossima partita</div>
-              {!nextChampionshipMatch && (
-                <div className="text-sm text-slate-500 mt-2">NON CI SONO PARTITE IN PROGRAMMA</div>
-              )}
-              {nextChampionshipMatch && (
-                <div className="mt-3 space-y-2">
-                  <div className="text-lg font-semibold">
-                    {nextChampionshipMatch.match_date
-                      ? new Date(nextChampionshipMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' })
-                      : '—'}
-                    {nextChampionshipMatch.start_time ? ` · ${nextChampionshipMatch.start_time.slice(0, 5)}` : ''}
-                  </div>
-                  <div className="font-medium">
-                    {nextChampionshipMatch.home_club_team?.name || '—'} vs {nextChampionshipMatch.away_club_team?.name || '—'}
-                  </div>
-                  <div className="text-sm text-slate-600">
-                    {nextChampionshipMatch.location_text || 'Luogo da definire'}
-                    {nextChampionshipMatch.match_day ? ` · Giornata ${nextChampionshipMatch.match_day}` : ''}
-                  </div>
-                </div>
-              )}
-            </div>}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Team Memberships */}
-        <div className="cs-card cs-card--primary">
-          <h3 id="athlete-teams" className="font-semibold mb-4">Le Tue Squadre</h3>
-          {teamMemberships.length === 0 ? (
-            <p className="text-secondary text-sm">Non sei iscritto a nessuna squadra</p>
-          ) : (
-            <div className="cs-list">
-              {teamMemberships.map((membership) => {
-                const certStatus = getMedicalCertificateStatus(membership.medical_certificate_expiry)
+              {(() => {
+                const event = visibleEvents[0]
+                const eventState = getFeaturedEventState(event)
                 return (
-                  <div
-                    key={membership.id}
-                    className={`cs-list-item transition-shadow ${isDelegatedProfile ? '' : 'cursor-pointer hover:shadow-md'}`}
-                    onClick={isDelegatedProfile ? undefined : () => setSelectedTeamId(membership.team.id)}
-                    title={isDelegatedProfile ? 'I dettagli della squadra non sono disponibili per questo profilo' : undefined}
-                  >
-                    <div className="mb-2 flex w-full items-start justify-between">
-                      <div>
-                        <div className="font-medium">{membership.team.name}</div>
-                        <div className="text-sm text-secondary">Attività: {membership.team.activity?.name}</div>
-                        {isDelegatedProfile && (
-                          <div className="mt-1 text-xs text-secondary">
-                            Dettagli squadra non disponibili per questo profilo
-                          </div>
-                        )}
+                  <div className="cs-athlete-dashboard__featured-event">
+                    <ListRow
+                      interactive
+                      onClick={() => setSelectedEvent(event)}
+                      className="cs-athlete-dashboard__featured-event-row"
+                      trailing={<span className="cs-athlete-dashboard__featured-event-detail text-xs">Dettagli</span>}
+                    >
+                      <span className="flex flex-wrap items-center gap-2">
+                        <EventKindBadge kind={event.event_kind} className="cs-event-kind--solid" />
+                        <span className="cs-athlete-dashboard__featured-event-time tabular-nums">{formatEventTime(event.start_time)}</span>
+                        <span aria-label={featuredEventStateLabel(eventState)} className={`cs-athlete-dashboard__featured-event-state cs-athlete-dashboard__featured-event-state--${eventState}`} role="status">
+                          {featuredEventStateLabel(eventState)}
+                        </span>
+                      </span>
+                      <span className="mt-2 block text-xl font-semibold leading-7">{event.title}</span>
+                      <span className="cs-athlete-dashboard__featured-event-date mt-1 block text-sm">{formatEventDate(event.start_time)}</span>
+                      {event.location ? <span className="mt-1 block text-sm">{event.location}</span> : null}
+                      {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
+                      {event.my_attendance?.is_early_absence && <span className="mt-2 block text-sm font-medium text-[color:var(--cs-text)]" role="status">Assenza segnalata</span>}
+                    </ListRow>
+                    {(!isDelegatedProfile || permissions?.confirm_attendance === true) && event.requires_confirmation && (
+                      <div className="cs-athlete-dashboard__featured-attendance">
+                        <AttendanceControl
+                          requiresConfirmation={Boolean(event.requires_confirmation)}
+                          eventKind={event.event_kind}
+                          attendanceMode={event.attendance_mode}
+                          confirmationDeadline={event.confirmation_deadline}
+                          initialStatus={event.my_attendance?.status || null}
+                          canRespond
+                          onChange={(status) => persistEventAttendance(event.id, status)}
+                          availability={event.attendance_availability}
+                          eventContext={{ teams: event.teams?.map((team) => team.name) ?? [], start: event.start_time, end: event.end_time }}
+                          initialEarlyAbsence={event.my_attendance?.is_early_absence === true}
+                          onEarlyAbsence={(note) => mutateEarlyAbsence(event.id, false, note)}
+                          onRevokeEarlyAbsence={() => mutateEarlyAbsence(event.id, true)}
+                        />
                       </div>
-                    </div>
-                    
-                    <div className="grid w-full grid-cols-1 gap-3 text-sm sm:grid-cols-2 sm:gap-4">
-                      {membership.jersey_number && (
-                        <div>
-                          <span className="text-secondary">Maglia:</span>
-                          <span className="ml-1 font-medium">#{membership.jersey_number}</span>
-                        </div>
-                      )}
-                      {membership.membership_number && (
-                        <div>
-                          <span className="text-secondary">Tessera:</span>
-                          <span className="ml-1 font-medium">{membership.membership_number}</span>
-                        </div>
-                      )}
-                      {membership.medical_certificate_expiry && (
-                        <div className="col-span-2 flex items-center flex-wrap gap-2">
-                          <div>
-                            <span className="text-secondary">Certificato scade:</span>
-                            <span className="ml-1 font-medium">
-                              {new Date(membership.medical_certificate_expiry).toLocaleDateString('it-IT')}
-                            </span>
-                          </div>
-                          <span className={`text-xs px-2 py-1 rounded ${certStatus.color}`}>
-                            {certStatus.text}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 )
-              })}
+              })()}
+              {visibleEvents.length > 1 && (
+                <section className="cs-athlete-dashboard__agenda-next mt-5" aria-label="Poi in agenda">
+                  <SectionHeading title="Poi in agenda" />
+                  <div>
+                    {visibleEvents.slice(1, 3).map((event) => (
+                      <ListRow
+                        key={event.id}
+                        interactive
+                        onClick={() => setSelectedEvent(event)}
+                        aria-label={`Apri dettaglio: ${event.title}`}
+                        trailing={<span className="text-xs font-semibold text-secondary">Apri dettagli</span>}
+                      >
+                        <span className="flex min-w-0 flex-col gap-1">
+                          <span className="text-sm font-semibold tabular-nums text-[color:var(--cs-text)]">
+                            {formatAgendaDateTime(event.start_time)}
+                          </span>
+                          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                            <EventKindBadge kind={event.event_kind} />
+                            {event.teams && event.teams.length > 0 && (
+                              <span className="min-w-0 truncate text-[color:var(--cs-text-secondary)]">
+                                {event.teams.map((team) => team.name).join(' · ')}
+                              </span>
+                            )}
+                          </span>
+                          {event.location ? (
+                            <span className="truncate text-sm text-[color:var(--cs-text-secondary)]">{event.location}</span>
+                          ) : null}
+                          <span className="sr-only">{event.title}</span>
+                        </span>
+                      </ListRow>
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           )}
-        </div>
+        </Panel>
+      )}
 
-        {/* Unread Messages clean */}
-        {canReceiveMessages && <LatestMessagesPanel
-          anchorId="athlete-messages"
-          items={unreadMessages.slice(0,3).map(m => ({
-            id: m.id,
-            subject: m.subject,
-            preview: m.content,
-            created_at: m.created_at ? new Date(m.created_at) : undefined,
-            from: (m as any).from || (m.created_by_profile ? `${m.created_by_profile.first_name || ''} ${m.created_by_profile.last_name || ''}`.trim() : undefined),
-          }))}
-          viewAllHref="/athlete/messages"
-          onDetail={(id)=>{ const m = unreadMessages.find(x=>x.id===id); if (m) setSelectedMessage(m as any) }}
-          showSenderText={false}
-        />}
+      {canViewSchedule && showNextChampionshipMatch && (
+        <Panel className="space-y-3">
+          <SectionHeading title="Prossima partita" href="/athlete/campionati" />
+          {!nextChampionshipMatch ? <FeedbackState variant="empty" title="Nessuna partita in programma" className="py-4" /> : !visibleMatch ? <FeedbackState variant="filtered-empty" title="Nessuna partita per questa squadra" className="py-4" /> : (
+            <ListRow className="cs-athlete-dashboard__match-row" leading={<span className="text-xs font-semibold tabular-nums">{visibleMatch.match_date ? new Date(visibleMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}</span>}>
+              <span className="cs-athlete-dashboard__matchup flex flex-wrap items-center gap-2 font-semibold">
+                {visibleMatch.team?.name || (visibleMatch.is_home ? visibleMatch.home_club_team?.name : visibleMatch.away_club_team?.name) || 'Squadra'}
+                <span aria-hidden="true">—</span>
+                {visibleMatch.opponent?.name || (visibleMatch.is_home ? visibleMatch.away_club_team?.name : visibleMatch.home_club_team?.name) || 'Avversario da definire'}
+              </span>
+              <span className="cs-athlete-dashboard__match-meta mt-2 block text-sm text-secondary">
+                {visibleMatch.start_time ? visibleMatch.start_time.slice(0, 5) : 'Orario da definire'}
+                {visibleMatch.location_text ? ` · ${visibleMatch.location_text}` : ''}
+                {visibleMatch.match_day ? ` · Giornata ${visibleMatch.match_day}` : ''}
+              </span>
+              {visibleMatch.is_home !== undefined && <span className="mt-2 block"><StatusBadge status="neutral" label={visibleMatch.is_home ? 'Casa' : 'Trasferta'} /></span>}
+            </ListRow>
+          )}
+        </Panel>
+      )}
 
-        {/* Fee Installments */}
-        {canViewPayments && <div className="cs-card cs-card--primary">
-          <h3 id="athlete-fees" className="font-semibold mb-4">Quote Associative</h3>
-          {feeInstallments.length === 0 ? (
-            <EmptyState title="Nessuna quota associativa" />
-          ) : (
-            <div className="cs-list">
-              {feeInstallments.slice(0, 3).map((installment) => (
-                <div key={installment.id} className="cs-list-item">
-                  <div className="min-w-0 text-sm">
-                    <div className="font-medium">
-                      {installment.membership_fee.name} - Rata {installment.installment_number}
-                    </div>
-                    <div className="text-secondary">
-                      {installment.membership_fee.team.name}
-                    </div>
-                    <div className="text-secondary">
-                      Scadenza: {new Date(installment.due_date).toLocaleDateString('it-IT')}
-                    </div>
-                  </div>
-                  <div className="w-full text-left sm:w-auto sm:text-right">
-                    <div className="font-medium">€{installment.amount}</div>
-                    <span className={`cs-badge ${
-                      installment.status==='paid' ? 'cs-badge--success' :
-                      installment.status==='overdue' ? 'cs-badge--danger' :
-                      installment.status==='due_soon' ? 'cs-badge--warning' :
-                      'cs-badge--neutral'
-                    }`}>{getStatusText(installment.status)}</span>
-                  </div>
+      </div>
+
+      <div className="cs-athlete-dashboard__services">
+      {canReceiveMessages && (
+        <Panel id="athlete-messages" className="cs-athlete-dashboard__service-panel space-y-3">
+          <SectionHeading title={`Messaggi non letti (${messageTitleCount})`} href="/athlete/messages" />
+          {unreadMessages.length === 0 ? <FeedbackState variant="empty" title="Nessun messaggio non letto" className="py-4" /> : visibleMessages.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessun messaggio per questa squadra" className="py-4" /> : (
+            <div className="cs-athlete-dashboard__service-list divide-y divide-[color:var(--cs-border)]">
+              {visibleMessages.slice(0, 3).map((message, index) => (
+                <div key={message.id} className={index === 2 ? 'cs-athlete-dashboard__message-preview--third' : undefined}>
+                  <MessagePreviewRow message={message} showReadState={false} onOpen={() => setSelectedMessage(message)} />
                 </div>
               ))}
             </div>
           )}
-        </div>}
-      </div>
+        </Panel>
+      )}
 
-      {canViewSchedule && <UpcomingEventsPanel
-        anchorId="athlete-events"
-        items={upcomingEvents.map(ev => ({
-          id: ev.id,
-          title: ev.title,
-          start: new Date(ev.start_time),
-          end: new Date(ev.end_time),
-          location: ev.location || null,
-          kind: ev.event_kind ? ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[(ev as any).event_kind] : null,
-          subtitle: ev.description || null,
-          requiresConfirmation: Boolean(ev.requires_confirmation),
-          attendanceStatus: ev.my_attendance?.status || null,
-        }))}
-        viewAllHref="/athlete/calendar"
-        onDetail={(id) => { const e = upcomingEvents.find(x=>x.id===id); if (e) setSelectedEvent(e as any) }}
-      />}
+      {canViewPayments && (
+        <Panel id="athlete-fees" className="cs-athlete-dashboard__service-panel space-y-3">
+          <SectionHeading title="Prossima quota" href="/athlete/fees" />
+          {feeInstallments.length === 0 ? <FeedbackState variant="empty" title="Nessuna quota associativa" className="py-4" /> : visibleFees.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessuna quota per questa squadra" className="py-4" /> : !mostUrgentVisibleFee ? <FeedbackState variant="empty" title="Tutte le rate risultano pagate" className="py-4" /> : (
+            <ListRow className="cs-athlete-dashboard__fee-row" trailing={(
+              <span className="cs-athlete-dashboard__fee-summary">
+                <span className="tabular-nums font-semibold">{formatFeeAmount(mostUrgentVisibleFee.amount)}</span>
+                <StatusBadge status={mostUrgentVisibleFee.status === 'overdue' ? 'danger' : mostUrgentVisibleFee.status === 'due_soon' || mostUrgentVisibleFee.status === 'partially_paid' ? 'warning' : mostUrgentVisibleFee.status === 'paid' ? 'success' : 'neutral'} label={feeStatusLabel(mostUrgentVisibleFee.status)} />
+              </span>
+            )}>
+              <span className="block font-medium" title={mostUrgentVisibleFee.membership_fee.description || undefined}>
+                {mostUrgentVisibleFee.membership_fee.name} · Rata {mostUrgentVisibleFee.installment_number}
+              </span>
+              <span className="mt-1 block text-sm text-secondary">
+                {mostUrgentVisibleFee.membership_fee.team.name}
+                {mostUrgentVisibleFee.membership_fee.team.activity?.name ? ` · ${mostUrgentVisibleFee.membership_fee.team.activity.name}` : ''}
+                {mostUrgentVisibleFee.membership_fee.team.code ? ` · ${mostUrgentVisibleFee.membership_fee.team.code}` : ''}
+                {' · Scadenza '}{new Date(mostUrgentVisibleFee.due_date).toLocaleDateString('it-IT')}
+              </span>
+            </ListRow>
+          )}
+        </Panel>
+      )}
+
+      <Panel id="athlete-teams" className="cs-athlete-dashboard__service-panel space-y-3">
+        <SectionHeading title="Le tue squadre" />
+        {teamMemberships.length === 0 ? <FeedbackState variant="empty" title="Non sei iscritto a nessuna squadra" className="py-4" /> : visibleMemberships.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessuna membership per questa squadra" className="py-4" /> : (
+          <div className="cs-athlete-dashboard__service-list divide-y divide-[color:var(--cs-border)]">
+            {visibleMemberships.map((membership) => (
+              <MembershipRow
+                key={membership.id}
+                membership={membership}
+                readOnly={isDelegatedProfile}
+                onOpen={() => setSelectedTeamId(membership.team.id)}
+              />
+            ))}
+          </div>
+        )}
+      </Panel>
+      </div>
+      </div>
       {/* Modals dettagli */}
       {selectedEvent && (
         <EventDetailModal
@@ -843,10 +1085,16 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
             location: selectedEvent.location || undefined,
             description: selectedEvent.description || undefined,
             requires_confirmation: selectedEvent.requires_confirmation,
+            attendance_mode: selectedEvent.attendance_mode,
             confirmation_deadline: selectedEvent.confirmation_deadline,
             my_attendance: selectedEvent.my_attendance,
+            attendance_availability: selectedEvent.attendance_availability,
+            teams: selectedEvent.teams,
           }}
           onAttendanceChange={selectedEvent.requires_confirmation ? saveEventAttendance : undefined}
+          onEarlyAbsence={(note) => mutateEarlyAbsence(selectedEvent.id, false, note)}
+          onRevokeEarlyAbsence={() => mutateEarlyAbsence(selectedEvent.id, true)}
+          canRespond={Boolean(!isDelegatedProfile || permissions?.confirm_attendance)}
         />
       )}
       {selectedMessage && (
@@ -856,13 +1104,15 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           messageId={selectedMessage.id}
           subjectProfileId={selectedProfileId}
           markAsRead
+          readState={selectedMessage.read_state ?? { is_read: selectedMessage.is_read, read_at: null }}
+          onReadStateChange={(state) => setUnreadMessages((current) => current.map((message) => message.id === selectedMessage.id ? { ...message, is_read: state.is_read, read_state: state } : message))}
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,
             created_at: messageDetail?.created_at || selectedMessage.created_at,
             created_by_profile: messageDetail?.created_by_profile || (selectedMessage as any).created_by_profile || null,
             message_recipients: (messageDetail?.message_recipients as any) || (selectedMessage as any).message_recipients || [],
-            attachments: (messageDetail?.attachments || (selectedMessage as any).attachments || []).map((a:any)=>({ file_name: a.file_name, download_url: a.download_url }))
+            attachments: (messageDetail?.attachments || (selectedMessage as any).attachments || []).map((a:any)=>({ id: a.id, file_name: a.file_name, download_url: a.download_url }))
           }}
         />
       )}

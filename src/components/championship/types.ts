@@ -28,11 +28,15 @@ export type ChampionshipGroup = {
 
 export type Championship = {
   id: string
+  season_id?: string | null
   name: string
   status: string
   sport: string
   start_date?: string | null
   end_date?: string | null
+  team_ids?: string[]
+  /** Club-team labels already scoped by the server-side athlete resolver. */
+  clubTeams?: ClubTeam[]
   championship_groups?: ChampionshipGroup[]
 }
 
@@ -80,6 +84,16 @@ export type Convocation = {
   championship_club_teams?: ClubTeam
 }
 
+export function isProfileConvoked(
+  convocation: Convocation | null,
+  profileId: string | null | undefined,
+): boolean {
+  if (!convocation || !profileId) return false
+  return Boolean(convocation.championship_match_convocation_members?.some((member) =>
+    member.profile_id === profileId || member.team_members?.profile_id === profileId,
+  ))
+}
+
 export type TeamMember = {
   id: string
   profile_id: string
@@ -100,11 +114,13 @@ export type Standing = {
   class_points: number
   set_ratio: number | null
   point_ratio: number | null
+  /** Server-enriched label for teams in the selected group. */
+  team_name?: string | null
 }
 
-export type Season = { id: string; name: string }
+export type Season = { id: string; name: string; is_active?: boolean }
 export type Activity = { id: string; name: string; season_id: string }
-export type Team = { id: string; name: string; code?: string | null }
+export type Team = { id: string; name: string; code?: string | null; activity_id?: string | null }
 export type ClubTeamOption = ClubTeam
 export type ManagerMode = 'admin' | 'coach' | 'athlete'
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason } from '@/server/seasons/active-season'
 
 type RelationshipRow = {
   id: string
@@ -38,6 +39,7 @@ export async function GET() {
     const account = await requireAccountContext(supabase)
     const adminClient = createAdminClient()
     const today = new Date()
+    const activeSeason = await resolveActiveSeason(adminClient)
 
     const [{ data: relationships, error: relationshipsError }, { data: profiles, error: profilesError }, { data: overrides, error: overridesError }] = await Promise.all([
       adminClient.from('profile_relationships').select('*').eq('source_profile_id', account.ownerProfileId).eq('status', 'active').lte('valid_from', today.toISOString().slice(0, 10)).or(`valid_until.is.null,valid_until.gte.${today.toISOString().slice(0, 10)}`),
@@ -50,9 +52,24 @@ export async function GET() {
       return NextResponse.json({ error: 'Impossibile caricare i profili accessibili' }, { status: 500 })
     }
 
+    const relatedProfileIds = (relationships ?? []).map((relationship) => relationship.target_profile_id)
+    const { data: activeMemberships, error: activeMembershipsError } = activeSeason && relatedProfileIds.length > 0
+      ? await adminClient
+        .from('season_profiles')
+        .select('profile_id')
+        .eq('season_id', activeSeason.id)
+        .eq('status', 'active')
+        .in('profile_id', relatedProfileIds)
+      : { data: [], error: null }
+    if (activeMembershipsError) {
+      console.error('Errore caricamento iscrizioni stagionali accessibili:', activeMembershipsError)
+      return NextResponse.json({ error: 'Impossibile caricare i profili accessibili' }, { status: 500 })
+    }
+    const activeProfileIds = new Set((activeMemberships ?? []).map((membership) => membership.profile_id))
     const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]))
     const overrideByProfile = new Map((overrides ?? []).map((override) => [override.profile_id, override.treat_as_minor]))
     const accessible = (relationships as RelationshipRow[] ?? []).filter((relationship) => {
+      if (!activeProfileIds.has(relationship.target_profile_id)) return false
       if (relationship.relationship_type === 'delegate' && relationship.verified_at) return true
       const profile = profileById.get(relationship.target_profile_id)
       const targetIsMinor = overrideByProfile.has(relationship.target_profile_id)

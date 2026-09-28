@@ -34,12 +34,16 @@ type AccessibleProfileContextValue = {
   activeArea: 'personal' | 'family'
   setActiveArea: (area: 'personal' | 'family') => void
   loading: boolean
+  profilesLoaded?: boolean
   error: string | null
   refresh: () => Promise<void>
 }
 
 const AccessibleProfileContext = createContext<AccessibleProfileContextValue | null>(null)
 const STORAGE_KEY = 'csroma_active_subject_profile_id'
+const AREA_STORAGE_KEY = 'csroma_active_area'
+export const SUBJECT_CONTEXT_CHANGED_EVENT = 'csroma:subject-context-changed'
+export type SubjectContextChangedDetail = { subjectProfileId: string | null }
 
 export function appendSubjectProfile(url: string, profileId: string | null) {
   if (!profileId) return url
@@ -51,7 +55,10 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const { account, user, loading: authLoading } = useAuth()
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [selectedProfileId, setSelectedProfileIdState] = useState<string | null>(null)
-  const [activeArea, setActiveArea] = useState<'personal' | 'family'>('personal')
+  const [activeArea, setActiveAreaState] = useState<'personal' | 'family'>(() => {
+    if (typeof window === 'undefined') return 'personal'
+    return window.localStorage.getItem(AREA_STORAGE_KEY) === 'family' ? 'family' : 'personal'
+  })
   const [loading, setLoading] = useState(false)
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -70,7 +77,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     if (!user) {
       setProfiles([])
       setSelectedProfileIdState(null)
-      setActiveArea('personal')
+      setActiveAreaState('personal')
       setProfilesLoaded(true)
       return
     }
@@ -120,20 +127,54 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     if (!stillAccessible) window.localStorage.removeItem(STORAGE_KEY)
   }, [profiles, profilesLoaded])
 
+  useEffect(() => {
+    // A single subject can be opened directly only after the family area has
+    // been selected. Dual-role accounts therefore remain in their personal
+    // area until the user explicitly switches to family.
+    if (!profilesLoaded || activeArea !== 'family' || selectedProfileId || profiles.length !== 1) return
+    const profileId = profiles[0].profile.id
+    setSelectedProfileIdState(profileId)
+    if (typeof window !== 'undefined') window.localStorage.setItem(STORAGE_KEY, profileId)
+  }, [activeArea, profiles, profilesLoaded, selectedProfileId])
+
   const isFamilyOnlyAccount = Boolean(account?.roles.includes('family_member') && !account?.roles.includes('athlete'))
 
   useEffect(() => {
     if (!account?.authUserId) return
-    setActiveArea(isFamilyOnlyAccount ? 'family' : 'personal')
+    if (isFamilyOnlyAccount) {
+      setActiveAreaState('family')
+      if (typeof window !== 'undefined') window.localStorage.setItem(AREA_STORAGE_KEY, 'family')
+    }
   }, [account?.authUserId, isFamilyOnlyAccount])
+
+  useEffect(() => {
+    // The stored area can belong to a previous login. Once access has been
+    // checked successfully, an account without family access must use its own
+    // area; otherwise athlete pages apply the delegated permission guards.
+    if (authLoading || !account || !profilesLoaded || loading || error) return
+    if (account.roles.includes('family_member') || profiles.length > 0) return
+    setActiveAreaState('personal')
+    if (typeof window !== 'undefined') window.localStorage.setItem(AREA_STORAGE_KEY, 'personal')
+  }, [account, authLoading, error, loading, profiles.length, profilesLoaded])
+
+  const setActiveArea = useCallback((area: 'personal' | 'family') => {
+    setActiveAreaState(area)
+    if (typeof window !== 'undefined') window.localStorage.setItem(AREA_STORAGE_KEY, area)
+  }, [])
 
   const setSelectedProfileId = useCallback((profileId: string | null) => {
     if (profileId && !profiles.some((entry) => entry.profile.id === profileId)) return
+    if (profileId === selectedProfileId) return
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent<SubjectContextChangedDetail>(SUBJECT_CONTEXT_CHANGED_EVENT, {
+        detail: { subjectProfileId: profileId },
+      }))
+    }
     setSelectedProfileIdState(profileId)
     if (typeof window === 'undefined') return
     if (profileId) window.localStorage.setItem(STORAGE_KEY, profileId)
     else window.localStorage.removeItem(STORAGE_KEY)
-  }, [profiles])
+  }, [profiles, selectedProfileId])
 
   const selectedProfile = useMemo(
     () => profiles.find((entry) => entry.profile.id === selectedProfileId) ?? null,
@@ -148,9 +189,10 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     activeArea,
     setActiveArea,
     loading,
+    profilesLoaded,
     error,
     refresh,
-  }), [activeArea, error, loading, profiles, refresh, selectedProfile, selectedProfileId, setSelectedProfileId])
+  }), [activeArea, error, loading, profiles, profilesLoaded, refresh, selectedProfile, selectedProfileId, setActiveArea, setSelectedProfileId])
 
   return <AccessibleProfileContext.Provider value={value}>{children}</AccessibleProfileContext.Provider>
 }

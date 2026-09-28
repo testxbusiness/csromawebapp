@@ -11,7 +11,7 @@ interface DeleteCalendarInput {
   onSuccess?: (scope: CalendarScope) => void | Promise<void>
 }
 
-export function useChampionshipCalendarDeletion() {
+export function useChampionshipCalendarDeletion({ coachAuthorized = false }: { coachAuthorized?: boolean } = {}) {
   const supabase = useMemo(() => createClient(), [])
   const [deleting, setDeleting] = useState<CalendarScope | null>(null)
 
@@ -23,6 +23,13 @@ export function useChampionshipCalendarDeletion() {
 
     setDeleting(scope)
     try {
+      if (coachAuthorized) {
+        const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete_calendar', scope, group_ids: groupIds, championship_id: championshipId }) })
+        if (!response.ok) throw new Error('Impossibile eliminare il calendario')
+        toast.success('Calendario eliminato')
+        await onSuccess?.(scope)
+        return
+      }
       const { data: matches, error: matchesError } = await supabase
         .from('championship_matches')
         .select('id, event_id')
@@ -65,7 +72,7 @@ export function useChampionshipCalendarDeletion() {
     } finally {
       setDeleting(null)
     }
-  }, [supabase])
+  }, [coachAuthorized, supabase])
 
   return { deleteCalendar, deleting }
 }

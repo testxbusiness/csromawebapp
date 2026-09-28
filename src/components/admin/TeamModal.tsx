@@ -12,7 +12,6 @@ import { createClient } from '@/lib/supabase/client'
 import TrainingScheduleInput from './TrainingScheduleInput'
 import {
   TrainingSchedule,
-  generateTrainingEventsFromSchedules,
   checkGymScheduleConflicts,
   GymConflict
 } from '@/lib/utils/trainingScheduleEvents'
@@ -23,6 +22,7 @@ type Team = {
   code: string
   activity_id: string
   coach_id?: string
+  training_rsvp_enabled?: boolean
 }
 
 type Activity = {
@@ -52,7 +52,7 @@ type Props = {
   activities: Activity[]
   coaches: Coach[]
   gyms: Gym[]
-  onCreate: (data: Omit<Team, 'id'>) => Promise<void> | void
+  onCreate: (data: Omit<Team, 'id'>) => Promise<string> | string
   onUpdate: (id: string, data: Partial<Team>) => Promise<void> | void
   onGenerateCode: (teamName: string, activityName: string) => string
 }
@@ -72,11 +72,14 @@ export default function TeamModal({
   const [saving, setSaving] = React.useState(false)
   const [loadingSchedules, setLoadingSchedules] = React.useState(false)
   const [trainingSchedules, setTrainingSchedules] = React.useState<TrainingSchedule[]>([])
+  const [savedTeamId, setSavedTeamId] = React.useState<string | null>(null)
+  const [feedback, setFeedback] = React.useState<{ tone: 'success' | 'warning' | 'error'; message: string } | null>(null)
   const [form, setForm] = React.useState<Team>({
     name: team?.name ?? '',
     code: team?.code ?? '',
     activity_id: team?.activity_id ?? '',
     coach_id: team?.coach_id ?? '',
+    training_rsvp_enabled: team?.training_rsvp_enabled ?? false,
   })
 
   const loadTrainingSchedules = React.useCallback(async (teamId: string) => {
@@ -86,6 +89,7 @@ export default function TeamModal({
         .from('team_training_schedules')
         .select('*')
         .eq('team_id', teamId)
+        .eq('is_active', true)
         .order('day_of_week, start_time')
 
       if (!error && data) {
@@ -104,14 +108,17 @@ export default function TeamModal({
       code: team?.code ?? '',
       activity_id: team?.activity_id ?? '',
       coach_id: team?.coach_id ?? '',
+      training_rsvp_enabled: team?.training_rsvp_enabled ?? false,
     })
+    setSavedTeamId(team?.id ?? null)
+    setFeedback(null)
 
     if (team?.id) {
       void loadTrainingSchedules(team.id)
     } else {
       setTrainingSchedules([])
     }
-  }, [loadTrainingSchedules, team])
+  }, [loadTrainingSchedules, open, team])
 
   const handleGenerate = () => {
     const a = activities.find(x => x.id === form.activity_id)
@@ -136,31 +143,27 @@ export default function TeamModal({
   }
 
   const saveTrainingSchedules = async (teamId: string) => {
-    // 1. Cancella tutti gli schedules esistenti per questo team
-    await supabase
-      .from('team_training_schedules')
-      .delete()
-      .eq('team_id', teamId)
-
-    // 2. Inserisci i nuovi (se ce ne sono)
-    if (trainingSchedules.length > 0) {
-      const toInsert = trainingSchedules.map(s => ({
+    const response = await fetch('/api/admin/training-schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         team_id: teamId,
-        day_of_week: s.day_of_week,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        gym_id: s.gym_id,
-        is_active: s.is_active ?? true,
-      }))
-
-      const { error } = await supabase
-        .from('team_training_schedules')
-        .insert(toInsert)
-
-      if (error) {
-        throw new Error('Errore salvataggio orari: ' + error.message)
-      }
+        schedules: trainingSchedules.map((schedule) => ({ ...schedule, team_id: teamId })),
+      }),
+    })
+    const result = await response.json().catch(() => null) as {
+      success?: boolean
+      eventsCreated?: number
+      eventsUpdated?: number
+      eventsPreserved?: number
+      warnings?: Array<{ message: string }>
+      error?: string
+    } | null
+    if (!response.ok || result?.success === false) {
+      const warning = result?.warnings?.map((item) => item.message).join(' ')
+      throw new Error([result?.error ?? 'Errore salvataggio orari', warning].filter(Boolean).join(' '))
     }
+    return result ?? {}
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -169,78 +172,42 @@ export default function TeamModal({
     setSaving(true)
     try {
       let teamId: string
+      const teamData = {
+        name: form.name,
+        code: form.code.toUpperCase(),
+        activity_id: form.activity_id,
+        coach_id: form.coach_id || undefined,
+        training_rsvp_enabled: form.training_rsvp_enabled ?? false,
+      }
 
-      if (team?.id) {
+      if (team?.id || savedTeamId) {
         // Modifica team esistente
-        teamId = team.id
-        await onUpdate(teamId, {
-          name: form.name,
-          code: form.code.toUpperCase(),
-          activity_id: form.activity_id,
-          coach_id: form.coach_id || undefined,
-        })
+        teamId = team?.id ?? savedTeamId as string
+        await onUpdate(teamId, teamData)
       } else {
-        // Crea nuovo team - dobbiamo ottenere l'id
-        // Nota: onCreate deve essere modificato per ritornare l'id
-        // Per ora, creiamo direttamente qui per avere l'id
-        const { data: newTeam, error: createError } = await supabase
-          .from('teams')
-          .insert([{
-            name: form.name,
-            code: form.code.toUpperCase(),
-            activity_id: form.activity_id,
-          }])
-          .select('id')
-          .single()
-
-        if (createError || !newTeam) {
-          throw new Error('Errore creazione squadra')
-        }
-
-        teamId = newTeam.id
-
-        // Assegna coach se presente
-        if (form.coach_id) {
-          await supabase.from('team_coaches').insert({
-            team_id: teamId,
-            coach_id: form.coach_id,
-            role: 'head_coach',
-            assigned_at: new Date().toISOString().slice(0, 10)
-          })
-        }
-
-        // Chiama onCreate per il refresh (può essere vuoto o solo per UI)
-        await onCreate({
-          name: form.name,
-          code: form.code.toUpperCase(),
-          activity_id: form.activity_id,
-          coach_id: form.coach_id || undefined,
-        })
+        // La creazione avviene una sola volta nel manager; il callback restituisce l'ID.
+        teamId = await onCreate(teamData)
+        setSavedTeamId(teamId)
       }
 
       // Salva orari allenamento
-      await saveTrainingSchedules(teamId)
+      const report = await saveTrainingSchedules(teamId)
 
-      // Genera eventi ricorrenti automaticamente
-      const activeSchedules = trainingSchedules.filter(s => s.is_active !== false)
-      if (activeSchedules.length > 0) {
-        const result = await generateTrainingEventsFromSchedules(
-          teamId,
-          activeSchedules,
-          supabase
-        )
-
-        if (!result.success) {
-          console.error('Errore generazione eventi:', result.error)
-          // Non bloccare il salvataggio, ma avvisare l'utente
-          alert(`Squadra salvata, ma errore nella generazione degli eventi: ${result.error}`)
-        }
+      if ((report.warnings?.length ?? 0) > 0) {
+        setFeedback({
+          tone: 'warning',
+          message: `Squadra salvata. Eventi creati: ${report.eventsCreated ?? 0}; aggiornati: ${report.eventsUpdated ?? 0}; conservati: ${report.eventsPreserved ?? 0}. ${report.warnings?.map((item) => item.message).join(' ')}`,
+        })
+        return
       }
 
       onClose()
     } catch (error) {
       console.error('Errore salvataggio squadra:', error)
-      alert('Errore durante il salvataggio della squadra')
+      setFeedback({
+        tone: 'error',
+        message: error instanceof Error ? error.message : 'Errore durante il salvataggio della squadra',
+      })
     } finally {
       setSaving(false)
     }
@@ -249,7 +216,7 @@ export default function TeamModal({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
       {/* centrato, coerente con il DS */}
-      <DialogContent className="cs-modal--centered cs-modal--md">
+      <DialogContent className="cs-modal--centered cs-modal--md cs-modal--form">
         <DialogHeader>
           <DialogTitle>{team ? 'Modifica Squadra' : 'Nuova Squadra'}</DialogTitle>
           <DialogDescription className="sr-only">Inserisci o modifica i dati della squadra.</DialogDescription>
@@ -257,8 +224,9 @@ export default function TeamModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="cs-field__label">Nome Squadra *</label>
+            <label htmlFor="team-name" className="cs-field__label">Nome Squadra *</label>
             <input
+              id="team-name"
               type="text"
               className="cs-input"
               required
@@ -269,8 +237,9 @@ export default function TeamModal({
           </div>
 
           <div>
-            <label className="cs-field__label">Attività *</label>
+            <label htmlFor="team-activity" className="cs-field__label">Attività *</label>
             <select
+              id="team-activity"
               required
               className="cs-select"
               value={form.activity_id}
@@ -286,9 +255,10 @@ export default function TeamModal({
           </div>
 
           <div>
-            <label className="cs-field__label">Codice Squadra *</label>
+            <label htmlFor="team-code" className="cs-field__label">Codice Squadra *</label>
             <div className="flex gap-2">
               <input
+                id="team-code"
                 type="text"
                 required
                 className="cs-input flex-1"
@@ -313,8 +283,9 @@ export default function TeamModal({
           </div>
 
           <div>
-            <label className="cs-field__label">Allenatore</label>
+            <label htmlFor="team-coach" className="cs-field__label">Allenatore</label>
             <select
+              id="team-coach"
               className="cs-select"
               value={form.coach_id ?? ''}
               onChange={(e) => setForm({ ...form, coach_id: e.target.value })}
@@ -347,7 +318,32 @@ export default function TeamModal({
                 onCheckConflicts={handleCheckConflicts}
               />
             )}
+
+            <label className="mt-4 flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-[color:var(--cs-border)] p-3">
+              <input
+                id="team-rsvp-enabled"
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-[color:var(--cs-brand-red)]"
+                checked={form.training_rsvp_enabled ?? false}
+                onChange={(e) => setForm({ ...form, training_rsvp_enabled: e.target.checked })}
+              />
+              <span>
+                <span className="block text-sm font-medium">Abilita segnalazione assenze agli allenamenti</span>
+                <span className="mt-1 block text-xs text-secondary">
+                  Gli atleti potranno comunicare e revocare un’assenza fino all’inizio dell’allenamento.
+                </span>
+              </span>
+            </label>
           </div>
+
+          {feedback && (
+            <div
+              role={feedback.tone === 'error' ? 'alert' : 'status'}
+              className={`rounded-lg border p-3 text-sm ${feedback.tone === 'error' ? 'border-red-300 bg-red-50 text-red-900' : feedback.tone === 'warning' ? 'border-amber-300 bg-amber-50 text-amber-950' : 'border-green-300 bg-green-50 text-green-900'}`}
+            >
+              {feedback.message}
+            </div>
+          )}
 
           <div className="cs-modal__footer">
             <button type="button" className="cs-btn cs-btn--ghost" onClick={onClose}>

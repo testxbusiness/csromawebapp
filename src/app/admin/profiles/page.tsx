@@ -1,11 +1,10 @@
 import PeopleManager from '@/components/admin/PeopleManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function ProfilesPage() {
   return (
-    <>
-      <PageHeader title="Persone" subtitle="Anagrafica e ciclo di vita degli accessi" />
-      <PeopleManager />
-    </>
+    <AdminManagementPage title="Anagrafica" context="Persone" description="Gestisci persone, relazioni e ciclo di vita degli accessi.">
+      <PeopleManager embedded />
+    </AdminManagementPage>
   )
 }

@@ -54,6 +54,7 @@ export default function CoachMessageModal({
   })
   const [files, setFiles] = React.useState<{ file_path: string; file_name: string; mime_type?: string; file_size?: number }[]>([])
   const [uploading, setUploading] = React.useState(false)
+  const [confirmingRecipients, setConfirmingRecipients] = React.useState(false)
 
   React.useEffect(() => {
     setFormData({
@@ -63,9 +64,12 @@ export default function CoachMessageModal({
       selected_teams:
         message?.message_recipients
           ?.filter((mr) => mr.teams)
-          .map((mr) => mr.teams!.id) || [],
+        .map((mr) => mr.teams!.id) || [],
     })
+    setConfirmingRecipients(false)
   }, [message, open])
+
+  const selectedTeams = teams.filter((team) => formData.selected_teams.includes(team.id))
 
   const toggleTeam = (teamId: string) => {
     setFormData((prev) => ({
@@ -78,6 +82,10 @@ export default function CoachMessageModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (!confirmingRecipients) {
+      setConfirmingRecipients(true)
+      return
+    }
     onSubmit({ ...formData, selected_teams: formData.selected_teams, attachment_url: formData.attachment_url || undefined, attachments: files } as any)
   }
 
@@ -176,6 +184,16 @@ export default function CoachMessageModal({
                   <p className="text-xs text-secondary">Nessuna squadra disponibile</p>
                 )}
               </div>
+              <div className="mt-3 rounded-md border border-[var(--cs-border-canonical)] bg-[var(--cs-surface-subtle)] p-3" aria-live="polite">
+                <div className="text-sm font-semibold">Destinatari finali: {selectedTeams.length} {selectedTeams.length === 1 ? 'squadra' : 'squadre'}</div>
+                {selectedTeams.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {selectedTeams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">🏀 {team.name}</span>)}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-xs text-secondary">Nessuna squadra selezionata: il messaggio non avrà destinatari di squadra.</p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -184,7 +202,7 @@ export default function CoachMessageModal({
               <button type="button" className="cs-btn cs-btn--ghost">Annulla</button>
             </DialogClose>
             <button type="submit" disabled={loading} className="cs-btn cs-btn--primary">
-              {message ? 'Aggiorna' : 'Crea'} Messaggio
+              {confirmingRecipients ? (message ? 'Conferma aggiornamento' : 'Conferma invio') : (message ? 'Aggiorna' : 'Crea')} Messaggio
             </button>
           </DialogFooter>
         </form>

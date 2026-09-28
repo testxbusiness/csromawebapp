@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import GymModal from '@/components/admin/GymModal'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { BarChart3 } from 'lucide-react'
 
 interface Gym {
   id?: string
@@ -27,7 +28,7 @@ interface Season {
   is_active: boolean
 }
 
-export default function GymsManager() {
+export default function GymsManager({ embedded = false }: { embedded?: boolean }) {
   const [gyms, setGyms] = useState<Gym[]>([])
   const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
@@ -145,10 +146,10 @@ export default function GymsManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Palestre</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Palestre</h2>}
         <div className="flex gap-3">
           <button onClick={exportGymsToExcel} className="cs-btn cs-btn--outline">
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button

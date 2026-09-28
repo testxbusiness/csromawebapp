@@ -2,16 +2,30 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ConnectivityBanner } from './ConnectivityBanner'
-import { registerServiceWorker } from '@/lib/pwa/service-worker-registration'
+import { checkForServiceWorkerUpdate, fetchAppVersion, registerServiceWorker } from '@/lib/pwa/service-worker-registration'
+
+const APP_VERSION_STORAGE_KEY = 'csroma_pwa_app_version'
 
 export default function PwaBootstrap() {
   const [offline, setOffline] = useState(false)
+  const [onlineNotice, setOnlineNotice] = useState(false)
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const updateApplied = useRef(false)
+  const connectivityInitialized = useRef(false)
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
 
   useEffect(() => {
-    const updateConnectivity = () => setOffline(!navigator.onLine)
+    let onlineNoticeTimer: ReturnType<typeof setTimeout> | undefined
+    const updateConnectivity = () => {
+      const isOffline = !navigator.onLine
+      setOffline(isOffline)
+      if (!isOffline && connectivityInitialized.current) {
+        setOnlineNotice(true)
+        if (onlineNoticeTimer) clearTimeout(onlineNoticeTimer)
+        onlineNoticeTimer = setTimeout(() => setOnlineNotice(false), 2400)
+      }
+      connectivityInitialized.current = true
+    }
     updateConnectivity()
 
     window.addEventListener('online', updateConnectivity)
@@ -21,6 +35,33 @@ export default function PwaBootstrap() {
     let updateListener: (() => void) | null = null
     let installingWorker: ServiceWorker | null = null
     let installingStateListener: (() => void) | null = null
+    let showUpdate = () => {}
+
+    const checkDeploymentVersion = () => {
+      if (navigator.onLine === false) return
+      void fetchAppVersion().then((version) => {
+        if (!version) return
+        const previousVersion = window.localStorage.getItem(APP_VERSION_STORAGE_KEY)
+        if (!previousVersion) {
+          window.localStorage.setItem(APP_VERSION_STORAGE_KEY, version)
+          return
+        }
+        if (previousVersion === version) return
+        window.localStorage.setItem(APP_VERSION_STORAGE_KEY, version)
+        setUpdateAvailable(true)
+      })
+    }
+
+    const checkForUpdate = () => {
+      if (!registration) return
+      void checkForServiceWorkerUpdate(registration).then(showUpdate)
+    }
+
+    const handlePageActivity = () => {
+      if (document.visibilityState === 'hidden') return
+      checkForUpdate()
+      checkDeploymentVersion()
+    }
 
     const handleControllerChange = () => {
       if (!updateApplied.current) return
@@ -32,7 +73,7 @@ export default function PwaBootstrap() {
       registrationRef.current = nextRegistration
       if (!registration) return
 
-      const showUpdate = () => {
+      showUpdate = () => {
         if (navigator.serviceWorker.controller && registration?.waiting) {
           setUpdateAvailable(true)
         }
@@ -51,13 +92,19 @@ export default function PwaBootstrap() {
       registration.addEventListener('updatefound', watchInstallingWorker)
       watchInstallingWorker()
       showUpdate()
+      checkForUpdate()
+      checkDeploymentVersion()
     })
 
     navigator.serviceWorker?.addEventListener('controllerchange', handleControllerChange)
+    document.addEventListener('visibilitychange', handlePageActivity)
+    window.addEventListener('focus', handlePageActivity)
+    const deploymentPoll = window.setInterval(checkDeploymentVersion, 60_000)
 
     return () => {
       window.removeEventListener('online', updateConnectivity)
       window.removeEventListener('offline', updateConnectivity)
+      if (onlineNoticeTimer) clearTimeout(onlineNoticeTimer)
       if (registration && updateListener) {
         registration.removeEventListener('updatefound', updateListener)
       }
@@ -66,30 +113,40 @@ export default function PwaBootstrap() {
       }
       registrationRef.current = null
       navigator.serviceWorker?.removeEventListener('controllerchange', handleControllerChange)
+      document.removeEventListener('visibilitychange', handlePageActivity)
+      window.removeEventListener('focus', handlePageActivity)
+      window.clearInterval(deploymentPoll)
     }
   }, [])
 
-  const applyUpdate = () => {
-    const waitingWorker = registrationRef.current?.waiting
-    if (!waitingWorker) return
+  const applyUpdate = async () => {
     updateApplied.current = true
     setUpdateAvailable(false)
-    waitingWorker.postMessage({ type: 'SKIP_WAITING' })
+    const registration = await checkForServiceWorkerUpdate(registrationRef.current)
+    const waitingWorker = registration?.waiting ?? registrationRef.current?.waiting
+    if (waitingWorker) {
+      waitingWorker.postMessage({ type: 'SKIP_WAITING' })
+      return
+    }
+    // A deployment can change React/CSS assets without changing sw.js. In
+    // that case there is no waiting worker, so reload directly to fetch them.
+    window.location.reload()
   }
 
   return (
     <>
-      <ConnectivityBanner offline={offline} />
+      <ConnectivityBanner offline={offline} onlineNotice={onlineNotice} />
       {updateAvailable && (
         <div
-          className="fixed inset-x-4 bottom-4 z-[190] mx-auto flex max-w-lg items-center justify-between gap-4 rounded-xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] p-4 text-sm shadow-lg"
+          className="cs-update-banner"
           role="status"
           aria-live="polite"
         >
           <span className="text-[color:var(--cs-text)]">È disponibile una nuova versione.</span>
-          <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={applyUpdate}>
-            Aggiorna
-          </button>
+          <div className="cs-update-banner__actions">
+            <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm" onClick={() => setUpdateAvailable(false)}>Più tardi</button>
+            <button type="button" className="cs-btn cs-btn--primary cs-btn--sm" onClick={applyUpdate}>Aggiorna ora</button>
+          </div>
         </div>
       )}
     </>

@@ -14,12 +14,17 @@ interface FilterBarProps {
   }
   onFilterChange: (filters: any) => void
   onClearFilters: () => void
+  seasons: Array<{ id: string; name: string; is_active: boolean }>
+  selectedSeason: string
+  onSeasonChange: (seasonId: string) => void
 }
 
 interface Team {
   id: string
   name: string
   code: string
+  activity_id?: string
+  season_id?: string
 }
 
 interface MembershipFee {
@@ -28,7 +33,7 @@ interface MembershipFee {
   team_id: string
 }
 
-export default function FilterBar({ filters, onFilterChange, onClearFilters }: FilterBarProps) {
+export default function FilterBar({ filters, onFilterChange, onClearFilters, seasons, selectedSeason, onSeasonChange }: FilterBarProps) {
   const [teams, setTeams] = useState<Team[]>([])
   const [plans, setPlans] = useState<MembershipFee[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -38,11 +43,19 @@ export default function FilterBar({ filters, onFilterChange, onClearFilters }: F
   // Load teams and plans
   useEffect(() => {
     const loadData = async () => {
-      // Load teams
+      // Load teams and resolve their season through the activity.
       const { data: teamsData } = await supabase
         .from('teams')
-        .select('id, name, code')
+        .select('id, name, code, activity_id')
         .order('name')
+
+      const activityIds = [...new Set((teamsData || []).map((team) => team.activity_id).filter(Boolean))]
+      const { data: activities } = activityIds.length
+        ? await supabase.from('activities').select('id, season_id').in('id', activityIds)
+        : { data: [] as { id: string; season_id: string }[] }
+      const seasonByActivityId = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
+      const resolvedTeams = (teamsData || []).map((team) => ({ ...team, season_id: seasonByActivityId.get(team.activity_id) }))
+        .filter((team) => selectedSeason === 'all' || team.season_id === selectedSeason)
 
       // Load membership fees
       const { data: plansData } = await supabase
@@ -50,12 +63,13 @@ export default function FilterBar({ filters, onFilterChange, onClearFilters }: F
         .select('id, name, team_id')
         .order('name')
 
-      setTeams(teamsData || [])
-      setPlans(plansData || [])
+      const teamIds = new Set(resolvedTeams.map((team) => team.id))
+      setTeams(resolvedTeams)
+      setPlans((plansData || []).filter((plan) => selectedSeason === 'all' || teamIds.has(plan.team_id)))
     }
 
     loadData()
-  }, [supabase])
+  }, [selectedSeason, supabase])
 
   const statusOptions = [
     { value: 'not_due', label: 'Non Scadute', color: 'bg-blue-100 text-blue-800' },
@@ -141,6 +155,13 @@ export default function FilterBar({ filters, onFilterChange, onClearFilters }: F
     <div className="cs-card p-4">
       {/* Quick Filters */}
       <div className="space-y-4">
+        <div>
+          <label className="cs-field__label" htmlFor="incassi-season">Stagione</label>
+          <select id="incassi-season" value={selectedSeason} onChange={(event) => onSeasonChange(event.target.value)} className="cs-select">
+            <option value="all">Tutte le stagioni</option>
+            {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+          </select>
+        </div>
         {/* Search */}
         <div>
           <label className="cs-field__label">

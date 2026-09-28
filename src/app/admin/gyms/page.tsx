@@ -1,13 +1,12 @@
 'use client'
 
 import GymsManager from '@/components/admin/GymsManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function GymsPage() {
   return (
-    <>
-      <PageHeader title="Gestione Palestre" subtitle="Amministrazione CSRoma" />
-      <GymsManager />
-    </>
+    <AdminManagementPage title="Palestre" context="Sport" description="Gestisci gli impianti disponibili per le attività.">
+      <GymsManager embedded />
+    </AdminManagementPage>
   )
 }

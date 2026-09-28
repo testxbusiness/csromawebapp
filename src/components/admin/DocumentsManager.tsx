@@ -27,7 +27,7 @@ export interface DocumentTemplate {
   description?: string | null
 }
 
-export default function DocumentsManager() {
+export default function DocumentsManager({ embedded = false }: { embedded?: boolean }) {
   const supabase = useMemo(() => createClient(), [])
 
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
@@ -64,6 +64,7 @@ export default function DocumentsManager() {
   type User = { id: string; first_name: string; last_name: string; role: string }
   const [teams, setTeams] = useState<Team[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [messageSeasonId, setMessageSeasonId] = useState('')
   const [showMessageModal, setShowMessageModal] = useState(false)
   const [messageDraft, setMessageDraft] = useState<any | null>(null)
 
@@ -130,13 +131,22 @@ export default function DocumentsManager() {
   }, [supabase])
 
   const bootstrapMessagingLookups = useCallback(async () => {
-    const [{ data: t }, { data: u }] = await Promise.all([
-      supabase.from('teams').select('id, name, code').order('name'),
-      supabase.from('profiles').select('id, first_name, last_name, role').order('first_name'),
-    ])
-    setTeams(t || [])
-    setUsers(u || [])
-  }, [supabase])
+    const response = await fetch('/api/admin/messages?view=options', { cache: 'no-store' })
+    const payload = await response.json().catch(() => null) as {
+      selected_season_id?: string
+      teams?: Team[]
+      users?: User[]
+    } | null
+    if (!response.ok) {
+      setTeams([])
+      setUsers([])
+      setMessageSeasonId('')
+      return
+    }
+    setTeams(payload?.teams ?? [])
+    setUsers(payload?.users ?? [])
+    setMessageSeasonId(payload?.selected_season_id ?? '')
+  }, [])
 
   useEffect(() => { void loadDocuments() }, [loadDocuments])
   useEffect(() => { void bootstrapMessagingLookups() }, [bootstrapMessagingLookups])
@@ -217,7 +227,7 @@ export default function DocumentsManager() {
       const res = await fetch('/api/admin/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, season_id: messageSeasonId }),
       })
       const json = await res.json()
       if (!res.ok) { toast.error(json.error || 'Errore invio messaggio'); return }
@@ -235,7 +245,7 @@ export default function DocumentsManager() {
       const res = await fetch('/api/admin/messages', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, ...payload }),
+        body: JSON.stringify({ id, ...payload, season_id: messageSeasonId }),
       })
       const json = await res.json()
       if (!res.ok) { toast.error(json.error || 'Errore aggiornamento messaggio'); return }
@@ -253,8 +263,8 @@ export default function DocumentsManager() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Documenti & Template</h2>
-          <p className="text-secondary">Crea template e genera documenti dinamici (es. Convocazioni).</p>
+          {!embedded && <h2 className="text-xl font-semibold">Documenti & Template</h2>}
+          {!embedded && <p className="text-secondary">Crea template e genera documenti dinamici (es. Convocazioni).</p>}
         </div>
         <div className="flex gap-2">
           <button className="cs-btn cs-btn--primary" onClick={onCreateTemplate}>Nuovo template</button>
@@ -356,6 +366,7 @@ export default function DocumentsManager() {
       {showBulkModal && selectedTemplate && (
         <BulkGenerateModal
           template={selectedTemplate}
+          teams={teams}
           onClose={() => { setShowBulkModal(false); setSelectedTemplate(null) }}
           onGenerated={async () => { setShowBulkModal(false); setSelectedTemplate(null) }}
           onPreview={(html) => setPreviewHtml(html)}

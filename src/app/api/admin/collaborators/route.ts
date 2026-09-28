@@ -33,12 +33,13 @@ export async function GET() {
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
-    const [{ data: profiles, error: profilesError }, { data: coachProfiles, error: coachError }, { data: seasonProfiles, error: seasonError }, { data: teamCoaches }, { data: teams }, { data: accounts }, { data: roles }] = await Promise.all([
+    const [{ data: profiles, error: profilesError }, { data: coachProfiles, error: coachError }, { data: seasonProfiles, error: seasonError }, { data: teamCoaches }, { data: teams }, { data: activities }, { data: accounts }, { data: roles }] = await Promise.all([
       adminClient.from('profiles').select('id, email, first_name, last_name, phone, birth_date, created_at, updated_at').order('created_at', { ascending: false }),
       adminClient.from('coach_profiles').select('profile_id, level, specialization, started_on'),
       adminClient.from('season_profiles').select('profile_id, season_id, profile_type'),
       adminClient.from('team_coaches').select('coach_id, team_id, role, assigned_at'),
       adminClient.from('teams').select('id, name, code, activity_id'),
+      adminClient.from('activities').select('id, season_id'),
       adminClient.from('app_accounts').select('auth_user_id, owner_profile_id, status'),
       adminClient.from('account_roles').select('auth_user_id, role'),
     ])
@@ -57,6 +58,7 @@ export async function GET() {
     const accountRolesByProfile = new Map<string, string[]>()
     for (const account of accounts || []) accountRolesByProfile.set(account.owner_profile_id, rolesByAuth.get(account.auth_user_id) || [])
     const teamById = new Map((teams || []).map((team) => [team.id, team]))
+    const seasonByActivityId = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
 
     const collaborators = (profiles || []).filter((profile) => {
       const account = accountByProfile.get(profile.id)
@@ -73,6 +75,7 @@ export async function GET() {
         role: assignment.role,
         assigned_at: assignment.assigned_at,
         activity_id: teamById.get(assignment.team_id)?.activity_id,
+        season_id: seasonByActivityId.get(teamById.get(assignment.team_id)?.activity_id ?? ''),
       }))
       const types = typesByProfile.get(profile.id) || new Set<string>()
       const accountRoles = accountRolesByProfile.get(profile.id) || []

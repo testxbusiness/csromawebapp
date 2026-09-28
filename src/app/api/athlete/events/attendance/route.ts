@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { athleteAttendanceSchema } from '@/lib/validation/events'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
+import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,19 +22,56 @@ export async function POST(req: NextRequest) {
     const parsed = athleteAttendanceSchema.safeParse(attendanceBody)
     if (!parsed.success) return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
     const { event_id, status, note } = parsed.data
+    const now = new Date()
+    const availability = await resolveAttendanceAvailability(
+      subject.dataClient,
+      athleteProfileId,
+      subject.permissions,
+      [event_id],
+      now,
+      subject.activeTeamIds ?? [],
+    )
+    const event = availability.events.find((candidate) => candidate.id === event_id)
+    if (!event) return NextResponse.json({ error: 'Evento non trovato o non accessibile' }, { status: 404 })
 
-    const { error } = await subject.dataClient
-      .from('event_attendances')
-      .upsert({
-        event_id,
-        profile_id: athleteProfileId,
-        status,
-        note: note || null,
-        responded_by_auth_user_id: subject.account.authUserId,
-        response_source: subject.delegated ? 'parent' : 'self',
-      }, { onConflict: 'event_id,profile_id' })
+    const capability = availability.availabilityByEventId.get(event_id)
+    if (event.attendance_mode === 'absence_only') {
+      return NextResponse.json({ error: 'Per questo evento puoi soltanto segnalare un’assenza' }, { status: 409 })
+    }
+    if (event.generated_from_schedule_id && event.requires_confirmation === true && !capability?.actions.respond) {
+      const errorByReason = {
+        not_required: 'Questo evento non richiede una risposta',
+        not_authorized: 'Non autorizzato a rispondere per questo profilo',
+        event_started: 'L’evento è già iniziato',
+        not_next_event: 'È disponibile prima un altro evento per la risposta',
+        deadline_passed: 'La deadline per questo evento è superata',
+        already_responded: 'Hai già risposto a questo evento',
+        already_early_absence: 'Per questo evento è già stata segnalata un’assenza',
+      } as const
+      const message = capability?.closure_reason
+        ? errorByReason[capability.closure_reason]
+        : 'Questo evento non è disponibile per una risposta'
+      return NextResponse.json({ error: message }, { status: 409 })
+    }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    // Il client autenticato/delegato serve solo a risolvere il contesto e R4.
+    // La scrittura passa dal RPC service-only, che ricontrolla tempo e ordine
+    // nella stessa transazione: l'admin client non è usato come prova RLS.
+    const { error } = await createAdminClient().rpc('record_athlete_attendance', {
+      p_event_id: event_id,
+      p_profile_id: athleteProfileId,
+      p_status: status,
+      p_note: note || null,
+      p_actor_auth_user_id: subject.account.authUserId,
+      p_response_source: subject.delegated ? 'parent' : 'self',
+    })
+
+    if (error) {
+      if (error.code === 'P0001' || error.code === '23514') {
+        return NextResponse.json({ error: 'L’evento non è più disponibile per una risposta' }, { status: 409 })
+      }
+      return NextResponse.json({ error: 'Impossibile salvare la risposta' }, { status: 500 })
+    }
     return NextResponse.json({ success: true })
   } catch (e) {
     if (e instanceof AccountContextError) {

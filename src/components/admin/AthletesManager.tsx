@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
 import type { Athlete, AthleteCreateData, Team, Activity, Season } from './athleteTypes'
@@ -10,6 +11,7 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import AthleteCreateModal from './AthleteCreateModal'
 import AthleteImportModal from './AthleteImportModal'
 import CollaboratorAccountActions from './CollaboratorAccountActions'
+import { getCertificateStatus, type CertificateStatus } from '@/lib/admin/certificate-status'
 
 interface AthleteWithDetails extends Athlete {
   teams: Array<{
@@ -17,10 +19,11 @@ interface AthleteWithDetails extends Athlete {
     name: string
     jersey_number?: string
     activity_id?: string
+    season_id?: string
   }>
 }
 
-export default function AthletesManager() {
+export default function AthletesManager({ embedded = false }: { embedded?: boolean }) {
   const [athletes, setAthletes] = useState<AthleteWithDetails[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
@@ -51,21 +54,35 @@ export default function AthletesManager() {
   const [selectedActivity, setSelectedActivity] = useState<string>('all')
   const [selectedTeam, setSelectedTeam] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const searchParams = useSearchParams()
+  const [certificateFilter, setCertificateFilter] = useState<'all' | 'attention' | CertificateStatus>(() => {
+    const value = searchParams.get('certificateStatus')
+    return value === 'attention' || value === 'missing' || value === 'expired' || value === 'expiring' || value === 'valid' ? value : 'all'
+  })
+  const teamsForSelectedSeason = useCallback(<T extends { season_id?: string }>(teamList: T[] | undefined) => {
+    const teams = teamList ?? []
+    return selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason)
+  }, [selectedSeason])
+  const selectableTeams = useMemo(() => {
+    if (selectedSeason === 'all') return teams
+    return teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === selectedSeason))
+  }, [activities, selectedSeason, teams])
   const certificateStats = useMemo(() => {
     let withoutCertificate = 0
     let expiredCertificate = 0
+    let expiringCertificate = 0
     const now = Date.now()
     athletes.forEach((athlete) => {
-      if (!athlete.medical_certificate_expiry) {
+      const status = getCertificateStatus(athlete.medical_certificate_expiry, new Date(now))
+      if (status === 'missing') {
         withoutCertificate += 1
-      } else {
-        const expiryTime = new Date(athlete.medical_certificate_expiry).getTime()
-        if (!Number.isNaN(expiryTime) && expiryTime < now) {
-          expiredCertificate += 1
-        }
+      } else if (status === 'expired') {
+        expiredCertificate += 1
+      } else if (status === 'expiring') {
+        expiringCertificate += 1
       }
     })
-    return { withoutCertificate, expiredCertificate }
+    return { withoutCertificate, expiredCertificate, expiringCertificate }
   }, [athletes])
 
   const loadAthletes = useCallback(async () => {
@@ -141,7 +158,7 @@ export default function AthletesManager() {
 
       // Filtro attività
       if (selectedActivity !== 'all') {
-        const hasActivity = athlete.teams?.some(team => {
+        const hasActivity = teamsForSelectedSeason(athlete.teams).some(team => {
           const teamActivity = activities.find(a => a.id === team.activity_id)
           return teamActivity?.name === selectedActivity
         })
@@ -150,9 +167,9 @@ export default function AthletesManager() {
 
       // Filtro squadra
       if (selectedTeam === 'none') {
-        if (athlete.teams && athlete.teams.length > 0) return false
+        if (teamsForSelectedSeason(athlete.teams).length > 0) return false
       } else if (selectedTeam !== 'all') {
-        const hasTeam = athlete.teams?.some(team => team.id === selectedTeam)
+        const hasTeam = teamsForSelectedSeason(athlete.teams).some(team => team.id === selectedTeam)
         if (!hasTeam) return false
       }
 
@@ -166,9 +183,13 @@ export default function AthletesManager() {
         if (!matchesName && !matchesEmail && !matchesMembership) return false
       }
 
+      const certificateStatus = getCertificateStatus(athlete.medical_certificate_expiry)
+      if (certificateFilter === 'attention' && certificateStatus === 'valid') return false
+      if (certificateFilter !== 'all' && certificateFilter !== 'attention' && certificateStatus !== certificateFilter) return false
+
       return true
     })
-  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities])
+  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities, certificateFilter, teamsForSelectedSeason])
 
   // Gestione selezione multipla
   const toggleAthleteSelection = (athleteId: string) => {
@@ -233,6 +254,10 @@ export default function AthletesManager() {
   }
 
   const handleTeamAssignmentRequest = () => {
+    if (selectedSeason === 'all') {
+      toast.error('Seleziona una stagione prima di assegnare una squadra')
+      return
+    }
     setBulkOperation('assign_to_team')
     setShowTeamAssignmentModal(true)
     setShowBulkModal(false)
@@ -253,6 +278,7 @@ export default function AthletesManager() {
       const teamId = Array.isArray(data.teamIds) && data.teamIds.length > 0 ? data.teamIds[0] : ''
       handleBulkOperation(bulkOperation, {
         teamId,
+        seasonId: selectedSeason,
         jerseyNumber: data.jerseyNumber,
         membershipFeeId: data.membershipFeeId,
       })
@@ -299,7 +325,7 @@ export default function AthletesManager() {
   const openAthleteEdit = (athlete: AthleteWithDetails) => {
     const seasonId = selectedSeason !== 'all' ? selectedSeason : athlete.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || ''
     const seasonTeamIds = new Set(teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === seasonId)).map((team) => team.id))
-    const seasonTeams = (athlete.teams || []).filter((team) => seasonTeamIds.has(team.id))
+    const seasonTeams = teamsForSelectedSeason(athlete.teams).filter((team) => seasonTeamIds.has(team.id))
     setEditingAthlete({
       id: athlete.id,
       first_name: athlete.first_name,
@@ -365,7 +391,7 @@ export default function AthletesManager() {
       <section className="cs-card cs-card--primary p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Atleti</h1>
+            {!embedded && <h1 className="text-2xl font-bold">Atleti</h1>}
             <p className="text-secondary mt-2">
               {filteredAthletes.length} atleti trovati • {selectedAthletes.size} selezionati
             </p>
@@ -447,7 +473,7 @@ export default function AthletesManager() {
         <h4 className="font-semibold mb-2">Squadre</h4>
         {detailsAthlete.teams?.length ? (
           <div className="flex flex-wrap gap-2">
-            {detailsAthlete.teams.map(t => (
+            {teamsForSelectedSeason(detailsAthlete.teams).map(t => (
               <span key={t.id} className="cs-badge cs-badge--neutral">
                 {t.name}{t.jersey_number ? ` #${t.jersey_number}` : ''}
               </span>
@@ -463,7 +489,7 @@ export default function AthletesManager() {
 
       {/* Filtri di contesto */}
       <section className="cs-card cs-card--primary p-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="cs-card cs-card--primary bg-[color:var(--cs-primary)]/5 border border-[color:var(--cs-primary)]/30">
             <p className="text-sm text-[color:var(--cs-primary)] font-semibold uppercase tracking-wide">Certificato Scaduto</p>
             <p className="text-3xl font-bold mt-2">{certificateStats.expiredCertificate}</p>
@@ -475,6 +501,11 @@ export default function AthletesManager() {
             <p className="text-secondary text-xs mt-1">Atleti senza data di scadenza inserita</p>
           </div>
           <div className="cs-card">
+            <p className="text-sm text-secondary font-semibold uppercase tracking-wide">In scadenza entro 30 giorni</p>
+            <p className="text-3xl font-bold mt-2">{certificateStats.expiringCertificate}</p>
+            <p className="text-secondary text-xs mt-1">Atleti da ricontattare o aggiornare</p>
+          </div>
+          <div className="cs-card">
             <p className="text-sm text-secondary font-semibold uppercase tracking-wide">Totale Atleti</p>
             <p className="text-3xl font-bold mt-2">{athletes.length}</p>
             <p className="text-secondary text-xs mt-1">Conteggio globale del database</p>
@@ -483,7 +514,7 @@ export default function AthletesManager() {
       </section>
 
       <section className="cs-card cs-card--primary p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="cs-field__label">Stagione</label>
             <select
@@ -525,11 +556,27 @@ export default function AthletesManager() {
             >
               <option value="all">Tutte le squadre</option>
               <option value="none">Nessuna squadra</option>
-              {teams.map(team => (
+              {selectableTeams.map(team => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="cs-field__label">Stato certificato</label>
+            <select
+              value={certificateFilter}
+              onChange={(e) => setCertificateFilter(e.target.value as 'all' | 'attention' | CertificateStatus)}
+              className="cs-select"
+            >
+              <option value="all">Tutti</option>
+              <option value="attention">Da verificare</option>
+              <option value="expired">Scaduti</option>
+              <option value="missing">Mancanti</option>
+              <option value="expiring">In scadenza entro 30 giorni</option>
+              <option value="valid">Regolari</option>
             </select>
           </div>
 
@@ -603,12 +650,12 @@ export default function AthletesManager() {
                   </td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-1">
-                      {athlete.teams?.map(team => (
+                      {teamsForSelectedSeason(athlete.teams).map(team => (
                         <span key={team.id} className="cs-badge cs-badge--neutral">
                           {team.name} {team.jersey_number && `#${team.jersey_number}`}
                         </span>
                       ))}
-                      {(!athlete.teams || athlete.teams.length === 0) && (<span className="text-secondary text-sm">Nessuna squadra</span>)}
+                      {teamsForSelectedSeason(athlete.teams).length === 0 && (<span className="text-secondary text-sm">Nessuna squadra</span>)}
                     </div>
                   </td>
                   <td className="p-4 text-sm">
@@ -666,7 +713,7 @@ export default function AthletesManager() {
                     <div>
                       <strong>Squadre:</strong>
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {athlete.teams?.length ? athlete.teams.map(team => (
+                        {teamsForSelectedSeason(athlete.teams).length ? teamsForSelectedSeason(athlete.teams).map(team => (
                           <span key={team.id} className="cs-badge cs-badge--neutral">{team.name} {team.jersey_number && `#${team.jersey_number}`}</span>
                         )) : <span className="text-secondary">Nessuna squadra</span>}
                       </div>
@@ -730,6 +777,7 @@ export default function AthletesManager() {
         }}
         onSubmit={handleTeamAssignmentConfirm}
         athleteIds={Array.from(selectedAthletes)}
+        teams={selectableTeams}
         loading={bulkLoading}
         userType="athletes"
       />

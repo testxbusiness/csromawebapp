@@ -16,9 +16,13 @@ function isStandaloneDisplayMode(): boolean {
 export default function InstallPwaButton() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isIosInstallHint, setIsIosInstallHint] = useState(false)
+  const [isStandalone, setIsStandalone] = useState(false)
+  const [installError, setInstallError] = useState(false)
 
   useEffect(() => {
-    if (isStandaloneDisplayMode()) return
+    const standalone = isStandaloneDisplayMode()
+    setIsStandalone(standalone)
+    if (standalone) return
 
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent)
     setIsIosInstallHint(isIos)
@@ -31,6 +35,7 @@ export default function InstallPwaButton() {
     const handleAppInstalled = () => {
       setInstallPrompt(null)
       setIsIosInstallHint(false)
+      setIsStandalone(true)
     }
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt)
@@ -42,7 +47,7 @@ export default function InstallPwaButton() {
     }
   }, [])
 
-  if (!installPrompt && !isIosInstallHint) return null
+  if (isStandalone || (!installPrompt && !isIosInstallHint && !installError)) return null
 
   if (isIosInstallHint && !installPrompt) {
     return (
@@ -54,14 +59,22 @@ export default function InstallPwaButton() {
 
   const handleInstall = async () => {
     if (!installPrompt) return
-    await installPrompt.prompt()
-    await installPrompt.userChoice
-    setInstallPrompt(null)
+    setInstallError(false)
+    try {
+      await installPrompt.prompt()
+      await installPrompt.userChoice
+      setInstallPrompt(null)
+    } catch {
+      setInstallError(true)
+    }
   }
 
   return (
-    <button type="button" className="cs-btn cs-btn--outline" onClick={handleInstall}>
-      Installa app
-    </button>
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" className="cs-btn cs-btn--outline min-h-11" onClick={handleInstall}>
+        Installa app
+      </button>
+      {installError ? <span role="alert" className="text-sm text-secondary">Installazione non disponibile in questo momento.</span> : null}
+    </div>
   )
 }

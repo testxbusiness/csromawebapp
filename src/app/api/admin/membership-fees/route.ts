@@ -4,6 +4,13 @@ import { membershipActionSchema, membershipFeeSchema, membershipFeeUpdateSchema 
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 
+async function teamBelongsToSeason(adminClient: ReturnType<typeof createAdminClient>, teamId: string, seasonId: string) {
+  const { data: team } = await adminClient.from('teams').select('activity_id').eq('id', teamId).maybeSingle()
+  if (!team) return false
+  const { data: activity } = await adminClient.from('activities').select('season_id').eq('id', team.activity_id).maybeSingle()
+  return activity?.season_id === seasonId
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -11,7 +18,10 @@ export async function POST(request: NextRequest) {
     const adminClient = createAdminClient()
     const parsed = membershipFeeSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Dati quota associativa non validi' }, { status: 400 })
-    const { team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
+    const { season_id, team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
+    if (!(await teamBelongsToSeason(adminClient, team_id, season_id))) {
+      return NextResponse.json({ error: 'La squadra non appartiene alla stagione selezionata' }, { status: 400 })
+    }
 
     // Calcola importo totale
     const total_amount = (Number(enrollment_fee) || 0) +
@@ -84,12 +94,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
     
+    const seasonId = new URL(request.url).searchParams.get('season_id')
+
     // Prima ottieni solo le quote base
     const { data: feesData, error } = await adminClient
       .from('membership_fees')
@@ -100,21 +112,42 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
+    let feesForSeason = feesData || []
+    if (seasonId) {
+      const teamIds = [...new Set(feesForSeason.map((fee) => fee.team_id))]
+      const { data: teams } = teamIds.length
+        ? await adminClient.from('teams').select('id, activity_id').in('id', teamIds)
+        : { data: [] as { id: string; activity_id: string }[] }
+      const activityIds = [...new Set((teams || []).map((team) => team.activity_id))]
+      const { data: activities } = activityIds.length
+        ? await adminClient.from('activities').select('id, season_id').in('id', activityIds)
+        : { data: [] as { id: string; season_id: string }[] }
+      const seasonByActivityId = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
+      const seasonByTeamId = new Map((teams || []).map((team) => [team.id, seasonByActivityId.get(team.activity_id)]))
+      feesForSeason = feesForSeason.filter((fee) => seasonByTeamId.get(fee.team_id) === seasonId)
+    }
+
     // Ora arricchisci con i dati correlati
     const enrichedFees = await Promise.all(
-      (feesData || []).map(async (fee) => {
+      feesForSeason.map(async (fee) => {
         const enrichedFee = { ...fee }
 
         // Ottieni dati squadra
         if (fee.team_id) {
           const { data: teamData } = await adminClient
             .from('teams')
-            .select('id, name, code')
+            .select('id, name, code, activity_id')
             .eq('id', fee.team_id)
             .single()
           
           if (teamData) {
             enrichedFee.teams = teamData
+            const { data: activityData } = await adminClient
+              .from('activities')
+              .select('season_id')
+              .eq('id', teamData.activity_id)
+              .maybeSingle()
+            enrichedFee.season_id = activityData?.season_id
           }
         }
 
@@ -193,7 +226,10 @@ export async function PUT(request: NextRequest) {
     const adminClient = createAdminClient()
     const parsed = membershipFeeUpdateSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Dati aggiornamento quota non validi' }, { status: 400 })
-    const { id, team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
+    const { id, season_id, team_id, name, description, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count, installments } = parsed.data
+    if (!(await teamBelongsToSeason(adminClient, team_id, season_id))) {
+      return NextResponse.json({ error: 'La squadra non appartiene alla stagione selezionata' }, { status: 400 })
+    }
 
     // Calcola importo totale
     const total_amount = (Number(enrollment_fee) || 0) +

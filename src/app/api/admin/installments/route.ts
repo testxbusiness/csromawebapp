@@ -3,7 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 
-// GET /api/admin/installments?team_id=&profile_id=&status=&from=&to=&limit=&offset=
+// GET /api/admin/installments?season_id=&team_id=&profile_id=&status=&from=&to=&limit=&offset=
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
 
     const teamId = searchParams.get('team_id') || undefined
+    const seasonId = searchParams.get('season_id') || undefined
     const profileId = searchParams.get('profile_id') || undefined
     const status = searchParams.get('status') || undefined // not_due|due_soon|overdue|paid|all
     const from = searchParams.get('from') || undefined // due_date >= from (YYYY-MM-DD)
@@ -34,16 +35,26 @@ export async function GET(request: NextRequest) {
 
     let rows = baseRows || []
 
-    // Step 2: filter by team if requested (via membership_fees)
+    // Step 2: filter by team/season if requested (via membership_fees -> teams -> activities)
     let feeMap = new Map<string, any>()
-    if (teamId) {
+    if (teamId || seasonId) {
       const feeIds = Array.from(new Set(rows.map(r => r.membership_fee_id)))
       if (feeIds.length === 0) return NextResponse.json({ items: [], total: 0 })
       const { data: fees } = await admin
         .from('membership_fees')
         .select('id, name, team_id')
         .in('id', feeIds)
-      const allowed = new Set((fees || []).filter(f => f.team_id === teamId).map(f => f.id))
+      const feeTeamIds = [...new Set((fees || []).map((fee) => fee.team_id))]
+      const { data: teams } = feeTeamIds.length
+        ? await admin.from('teams').select('id, activity_id').in('id', feeTeamIds)
+        : { data: [] as { id: string; activity_id: string }[] }
+      const activityIds = [...new Set((teams || []).map((team) => team.activity_id))]
+      const { data: activities } = activityIds.length
+        ? await admin.from('activities').select('id, season_id').in('id', activityIds)
+        : { data: [] as { id: string; season_id: string }[] }
+      const seasonByActivityId = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
+      const seasonByTeamId = new Map((teams || []).map((team) => [team.id, seasonByActivityId.get(team.activity_id)]))
+      const allowed = new Set((fees || []).filter((fee) => (!teamId || fee.team_id === teamId) && (!seasonId || seasonByTeamId.get(fee.team_id) === seasonId)).map(f => f.id))
       rows = rows.filter(r => allowed.has(r.membership_fee_id))
       feeMap = new Map((fees || []).map(f => [f.id, f]))
     }

@@ -67,7 +67,7 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat('it-IT').format(new Date(`${value}T00:00:00`))
 }
 
-export default function PeopleManager() {
+export default function PeopleManager({ embedded = false }: { embedded?: boolean }) {
   const [people, setPeople] = useState<Person[]>([])
   const [search, setSearch] = useState('')
   const [accountFilter, setAccountFilter] = useState<AccountFilter>('all')
@@ -161,14 +161,18 @@ export default function PeopleManager() {
   }
 
   return (
-    <section className="space-y-5" aria-labelledby="people-section-title">
+    <section
+      className="space-y-5"
+      aria-labelledby={embedded ? undefined : 'people-section-title'}
+      aria-label={embedded ? 'Anagrafica persone' : undefined}
+    >
       <div className="cs-card cs-card--primary p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 id="people-section-title" className="text-lg font-semibold text-[color:var(--cs-text)]">Anagrafica persone</h2>
-            <p className="mt-1 max-w-2xl text-sm text-[color:var(--cs-text-secondary)]">
+            {!embedded && <h2 id="people-section-title" className="text-lg font-semibold text-[color:var(--cs-text)]">Anagrafica persone</h2>}
+            {!embedded && <p className="mt-1 max-w-2xl text-sm text-[color:var(--cs-text-secondary)]">
             Consulta l’anagrafica delle persone. Gli account atleta, coach e staff vengono creati nelle sezioni dedicate; da qui puoi creare un account familiare/tutore.
-            </p>
+            </p>}
           </div>
           <Button type="button" onClick={() => setDialogOpen(true)}>
             <UserPlus className="mr-2 h-4 w-4" aria-hidden="true" />

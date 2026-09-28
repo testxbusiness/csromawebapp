@@ -5,6 +5,7 @@ import { LoadingState, toast } from '@/components/ui'
 import { createRecoveryClient } from '@/lib/supabase/client'
 import { exportUsers } from '@/lib/utils/excelExport'
 import type { User } from './userTypes'
+import { Users } from 'lucide-react'
 
 interface AccountUser extends User {
   id: string
@@ -15,7 +16,7 @@ interface AccountUser extends User {
   must_change_password?: boolean
 }
 
-export default function UsersManager() {
+export default function UsersManager({ embedded = false }: { embedded?: boolean }) {
   const [users, setUsers] = useState<AccountUser[]>([])
   const [loading, setLoading] = useState(true)
   const recoveryClient = createRecoveryClient()
@@ -216,15 +217,15 @@ export default function UsersManager() {
       <section className="cs-card cs-card--primary p-6">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="max-w-2xl space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">
+            {!embedded && <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">
               Identità, Account e Governance
-            </p>
-            <h2 className="text-3xl font-semibold">
+            </p>}
+            {!embedded && <h2 className="text-3xl font-semibold">
               Gestione Centralizzata degli Account
-            </h2>
-            <p className="text-sm text-secondary">
+            </h2>}
+            {!embedded && <p className="text-sm text-secondary">
               Gestisci identità, ruoli e stato degli account del sistema. Per operazioni specifiche su atleti e collaboratori, utilizza le sezioni dedicate.
-            </p>
+            </p>}
             <div className="flex flex-wrap gap-2 text-xs">
               <span className="cs-badge cs-badge--neutral">Totale: {userStats.total}</span>
               <span className="cs-badge cs-badge--success">Attivi: {userStats.active}</span>
@@ -481,7 +482,7 @@ function EmptyState({ hasUsers }: { hasUsers: boolean }) {
   return (
     <div className="px-6 py-12 text-center text-sm text-secondary">
       <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-[color:var(--cs-outline)]/35 text-3xl">
-        👥
+        <Users className="h-5 w-5" aria-hidden="true" />
       </div>
       <h3 className="mt-4 text-lg font-semibold">
         {hasUsers ? 'Nessun account corrisponde ai filtri' : 'Nessun account ancora registrato'}

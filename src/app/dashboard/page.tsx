@@ -61,10 +61,10 @@ export default function DashboardPage() {
   const showFamilyArea = displayRole === 'family_member' || (hasFamilyAccess && activeArea === 'family')
 
   return (
-    <div className="space-y-8 relative">
+    <div className="space-y-8">
       {isRefreshing && (
-        <div className="fixed top-20 right-4 z-50 bg-[color:var(--cs-primary)] text-white px-3 py-1.5 rounded-full text-xs shadow-lg flex items-center gap-2">
-          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+        <div className="cs-dashboard-refresh-status" role="status" aria-live="polite">
+          <span className="cs-dashboard-refresh-status__indicator" aria-hidden="true" />
           Aggiornamento...
         </div>
       )}

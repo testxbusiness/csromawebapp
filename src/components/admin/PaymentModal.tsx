@@ -102,7 +102,11 @@ export default function PaymentModal({
 
         if (error) throw error
         const list = (data?.map((r: any) => r.teams).filter(Boolean) ?? []) as Team[]
-        setCoachTeams(list)
+        // The parent already scopes the selectable teams to the current season.
+        // Apply the same scope to the coach-specific list so an old-season team
+        // cannot re-enter the payment form through this secondary query.
+        const allowedTeamIds = new Set(teams.map((team) => team.id))
+        setCoachTeams(list.filter((team) => allowedTeamIds.has(team.id)))
       } catch {
         setCoachTeams([])
       }
@@ -113,7 +117,7 @@ export default function PaymentModal({
     } else {
       setCoachTeams([])
     }
-  }, [form.type, form.coach_id, supabase])
+  }, [form.type, form.coach_id, supabase, teams])
 
   const handleNumber = (field: keyof Payment, value: string) =>
     setForm((p) => ({ ...p, [field]: parseFloat(value) || 0 } as Payment))

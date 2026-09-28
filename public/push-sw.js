@@ -8,15 +8,26 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
+function safeNotificationUrl(value) {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return '/dashboard'
+  try {
+    const parsed = new URL(value, self.location.origin)
+    if (parsed.origin !== self.location.origin || !['http:', 'https:'].includes(parsed.protocol)) return '/dashboard'
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return '/dashboard'
+  }
+}
+
 self.addEventListener('push', (event) => {
   try {
     const data = event.data ? event.data.json() : {}
     const title = data.title || 'CSRoma'
     const options = {
       body: data.body || '',
-      icon: data.icon || '/images/logo_CSRoma.png',
-      badge: data.badge || '/favicon.ico',
-      data: { url: data.url || '/' },
+      icon: data.icon || '/icons/icon-192.png',
+      badge: data.badge || '/icons/icon-192.png',
+      data: { url: safeNotificationUrl(data.url) },
     }
     event.waitUntil(self.registration.showNotification(title, options))
   } catch {
@@ -26,7 +37,7 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const targetUrl = event.notification?.data?.url || '/'
+  const targetUrl = safeNotificationUrl(event.notification?.data?.url)
   event.waitUntil((async () => {
     const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
     for (const c of clientsList) {

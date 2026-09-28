@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
+import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
+    const activeTeamIds = subject.activeTeamIds ?? []
     if (!athleteProfileId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Verify membership to any team of event
@@ -28,11 +30,15 @@ export async function GET(request: NextRequest) {
       .select('team_id')
       .in('team_id', teamIds)
       .eq('profile_id', athleteProfileId)
+      .in('team_id', activeTeamIds)
     if (!member || member.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Only expose team context that was authorized for this subject. An event
+    // may also be linked to teams where the subject is not a member.
+    const authorizedTeamIds = [...new Set(member.map((row) => row.team_id))]
 
     const { data: ev } = await dataClient
       .from('events')
-      .select('*')
+      .select('*, generated_from_schedule_id')
       .eq('id', id)
       .maybeSingle()
     if (!ev) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -43,8 +49,8 @@ export async function GET(request: NextRequest) {
       gym = data
     }
     let teams: any[] = []
-    if (teamIds.length) {
-      const { data } = await dataClient.from('teams').select('id, name, code').in('id', teamIds)
+    if (authorizedTeamIds.length) {
+      const { data } = await dataClient.from('teams').select('id, name, code').in('id', authorizedTeamIds)
       teams = data || []
     }
     let creator: any = null
@@ -56,10 +62,19 @@ export async function GET(request: NextRequest) {
     // Current user's attendance (if any)
     const { data: myAtt } = await dataClient
       .from('event_attendances')
-      .select('status, responded_at')
+      .select('status, responded_at, is_early_absence')
       .eq('event_id', id)
       .eq('profile_id', athleteProfileId)
       .maybeSingle()
+
+    const attendanceAvailability = await resolveAttendanceAvailability(
+      dataClient,
+      athleteProfileId,
+      subject.permissions,
+      [id],
+      new Date(),
+      activeTeamIds,
+    )
 
     return NextResponse.json({
       id: ev.id,
@@ -72,6 +87,7 @@ export async function GET(request: NextRequest) {
       requires_confirmation: ev.requires_confirmation,
       confirmation_deadline: ev.confirmation_deadline,
       my_attendance: myAtt || null,
+      attendance_availability: attendanceAvailability.availabilityByEventId.get(id) ?? null,
       gym,
       teams,
       creator,

@@ -1,0 +1,42 @@
+import type { AttendanceAvailabilityContract, AttendanceMode, AttendanceStatus } from '@/types/attendance'
+
+export interface AthleteCalendarTeam {
+  id: string
+  name: string
+  code: string
+}
+
+export interface AthleteCalendarAttendance {
+  status: AttendanceStatus
+  responded_at: string | null
+  is_early_absence?: boolean
+}
+
+export interface AthleteCalendarEvent {
+  id: string
+  title: string
+  description: string | null
+  location: string | null
+  start_time: string
+  end_time: string
+  is_recurring: boolean
+  /** Legacy display field retained for existing calendar consumers. */
+  teams: string[]
+  /** Authorized team context for filtering and detail views. */
+  team_details: AthleteCalendarTeam[]
+  team_ids: string[]
+  event_kind: string | null
+  requires_confirmation: boolean
+  attendance_mode?: AttendanceMode
+  confirmation_deadline: string | null
+  my_attendance: AthleteCalendarAttendance | null
+  /** Additive RSVP capability contract; absent on legacy payloads. */
+  attendance_availability?: AttendanceAvailabilityContract | null
+  /** Derived presentation flag; it never removes or prioritizes an event. */
+  has_conflict?: boolean
+}
+
+export interface AthleteCalendarContract {
+  events: AthleteCalendarEvent[]
+  teams: AthleteCalendarTeam[]
+}

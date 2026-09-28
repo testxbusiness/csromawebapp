@@ -107,14 +107,20 @@ export async function GET() {
       .from('teams')
       .select('id, name, code, activity_id')
 
-    if (teamsError) {
-      console.error('Errore caricamento squadre:', teamsError)
+    const { data: allActivities, error: activitiesError } = await adminClient
+      .from('activities')
+      .select('id, season_id')
+      .in('id', [...new Set((allTeams ?? []).map((team) => team.activity_id))])
+
+    if (teamsError || activitiesError) {
+      console.error('Errore caricamento squadre/attività:', teamsError || activitiesError)
     }
 
     // Filtra lato JavaScript per evitare "URI too long"
     const teams = allTeams?.filter(team =>
       teamIds.includes(team.id)
     ) || []
+    const seasonByActivityId = new Map((allActivities ?? []).map((activity) => [activity.id, activity.season_id]))
 
     // Formatta i dati per il frontend
     const formattedAthletes = activeSeasonAthletes.map(athlete => {
@@ -131,7 +137,8 @@ export async function GET() {
           id: membership.team_id,
           name: team?.name || 'Squadra sconosciuta',
           jersey_number: membership.jersey_number,
-          activity_id: team?.activity_id
+          activity_id: team?.activity_id,
+          season_id: team?.activity_id ? seasonByActivityId.get(team.activity_id) : undefined,
         }
       })
 

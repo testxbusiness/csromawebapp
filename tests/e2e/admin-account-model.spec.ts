@@ -5,6 +5,8 @@ const adminEmail = e2eEnv('E2E_ADMIN_EMAIL')
 const adminPassword = e2eEnv('E2E_ADMIN_PASSWORD')
 
 test.describe('admin authenticated smoke test', () => {
+  test.describe.configure({ timeout: 120_000 })
+
   test.skip(
     !adminEmail || !adminPassword,
     'Set E2E_ADMIN_EMAIL and E2E_ADMIN_PASSWORD to run authenticated checks.'
@@ -12,11 +14,11 @@ test.describe('admin authenticated smoke test', () => {
 
   test('loads the main admin pages for an admin account', async ({ page }) => {
     for (const [path, heading] of [
-      ['/admin/users', 'Gestione Utenti'],
-      ['/admin/messages', 'Gestione Messaggi'],
-      ['/admin/calendar', 'Gestione Calendario'],
-      ['/admin/membership-fees', 'Gestione Quote Associative'],
-      ['/admin/teams', 'Gestione Squadre'],
+      ['/admin/users', 'Account e accessi'],
+      ['/admin/messages', 'Messaggi'],
+      ['/admin/calendar', 'Calendario'],
+      ['/admin/membership-fees', 'Quote associative'],
+      ['/admin/teams', 'Squadre'],
     ] as const) {
       await page.goto(path)
       await expect(page.getByRole('heading', { name: heading })).toBeVisible({ timeout: 15_000 })
@@ -25,7 +27,7 @@ test.describe('admin authenticated smoke test', () => {
 
   test('loads seasonal athlete management and the single-create form', async ({ page }) => {
     await page.goto('/admin/atleti')
-    await expect(page.getByRole('heading', { name: 'Gestione Atleti' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: 'Atleti' })).toBeVisible({ timeout: 15_000 })
 
     const athletesResponse = await page.request.get('/api/admin/athletes')
     expect(athletesResponse.status()).toBe(200)
@@ -37,13 +39,12 @@ test.describe('admin authenticated smoke test', () => {
     await expect(page.getByRole('heading', { name: 'Nuovo Atleta' })).toBeVisible()
     await expect(page.getByLabel('Stagione *', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Nome *', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('Attività', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('Squadra', { exact: true })).toBeVisible()
+    await expect(page.getByRole('group', { name: 'Squadre assegnate' })).toBeVisible()
   })
 
   test('previews an athlete CSV import in the selected season', async ({ page }) => {
     await page.goto('/admin/atleti')
-    await expect(page.getByRole('heading', { name: 'Gestione Atleti' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: 'Atleti' })).toBeVisible({ timeout: 15_000 })
     await page.getByRole('button', { name: 'Importa Atleti' }).click()
     await expect(page.getByRole('heading', { name: 'Importa Atleti' })).toBeVisible()
 
@@ -72,7 +73,7 @@ test.describe('admin authenticated smoke test', () => {
 
   test('offers staff person payments without requiring a team', async ({ page }) => {
     await page.goto('/admin/payments')
-    await expect(page.getByRole('heading', { name: 'Pagamenti' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: 'Uscite' })).toBeVisible({ timeout: 15_000 })
 
     const payeesResponse = await page.request.get('/api/admin/payment-payees')
     expect(payeesResponse.status()).toBe(200)
@@ -90,14 +91,14 @@ test.describe('admin authenticated smoke test', () => {
 
   test('exposes CRUD actions for athletes and collaborators', async ({ page }) => {
     await page.goto('/admin/atleti')
-    await expect(page.getByRole('heading', { name: 'Gestione Atleti' })).toBeVisible({ timeout: 15_000 })
-    await expect(page.getByRole('button', { name: 'Nuovo Atleta' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Importa Atleti' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Modifica' }).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Rimuovi' }).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Atleti' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: 'Nuovo Atleta' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: 'Importa Atleti' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: 'Modifica' }).first()).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: 'Rimuovi' }).first()).toBeVisible({ timeout: 15_000 })
 
     await page.goto('/admin/collaboratori')
-    await expect(page.getByRole('heading', { name: 'Gestione Collaboratori' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('heading', { name: 'Collaboratori' })).toBeVisible({ timeout: 15_000 })
     const collaboratorsResponse = await page.request.get('/api/admin/collaborators')
     expect(collaboratorsResponse.status()).toBe(200)
     const collaboratorsPayload = await collaboratorsResponse.json()

@@ -22,6 +22,7 @@ interface ResultInput {
 interface UseChampionshipMatchMutationsOptions {
   selectedGroupId: string | null
   reloadGroupDetails: ReloadGroupDetails
+  coachAuthorized?: boolean
 }
 
 function parseResultInput(input: string) {
@@ -38,6 +39,7 @@ function parseResultInput(input: string) {
 export function useChampionshipMatchMutations({
   selectedGroupId,
   reloadGroupDetails,
+  coachAuthorized = false,
 }: UseChampionshipMatchMutationsOptions) {
   const supabase = useMemo(() => createClient(), [])
   const [savingResult, setSavingResult] = useState(false)
@@ -53,6 +55,14 @@ export function useChampionshipMatchMutations({
   }: MatchInfoInput) => {
     setInfoSaving(true)
     try {
+      if (coachAuthorized) {
+        const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'match_info', match_id: matchId, match_date: matchDate, start_time: startTime, location_text: locationText }) })
+        if (!response.ok) throw new Error('Impossibile aggiornare le info gara')
+        toast.success('Info gara aggiornate')
+        await onSuccess?.()
+        if (selectedGroupId) await reloadGroupDetails()
+        return
+      }
       const { error } = await supabase
         .from('championship_matches')
         .update({
@@ -71,7 +81,7 @@ export function useChampionshipMatchMutations({
     } finally {
       setInfoSaving(false)
     }
-  }, [reloadGroupDetails, selectedGroupId, supabase])
+  }, [coachAuthorized, reloadGroupDetails, selectedGroupId, supabase])
 
   const saveResult = useCallback(async ({ matchId, result, onSuccess }: ResultInput) => {
     let setsToSave: { home: number; away: number }[]
@@ -84,6 +94,14 @@ export function useChampionshipMatchMutations({
 
     setSavingResult(true)
     try {
+      if (coachAuthorized) {
+        const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'match_result', match_id: matchId, sets: setsToSave }) })
+        if (!response.ok) throw new Error('Impossibile salvare il risultato')
+        toast.success('Risultato salvato e classifica aggiornata')
+        await onSuccess?.()
+        if (selectedGroupId) await reloadGroupDetails()
+        return
+      }
       const { error: deleteError } = await supabase
         .from('championship_match_sets')
         .delete()
@@ -117,11 +135,18 @@ export function useChampionshipMatchMutations({
     } finally {
       setSavingResult(false)
     }
-  }, [reloadGroupDetails, selectedGroupId, supabase])
+  }, [coachAuthorized, reloadGroupDetails, selectedGroupId, supabase])
 
   const changeStatus = useCallback(async (matchId: string, status: string) => {
     setStatusUpdating(matchId)
     try {
+      if (coachAuthorized) {
+        const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'match_status', match_id: matchId, status }) })
+        if (!response.ok) throw new Error('Impossibile aggiornare lo stato')
+        toast.success('Stato partita aggiornato')
+        if (selectedGroupId) await reloadGroupDetails()
+        return
+      }
       const { error } = await supabase
         .from('championship_matches')
         .update({ status })
@@ -135,7 +160,7 @@ export function useChampionshipMatchMutations({
     } finally {
       setStatusUpdating(null)
     }
-  }, [reloadGroupDetails, selectedGroupId, supabase])
+  }, [coachAuthorized, reloadGroupDetails, selectedGroupId, supabase])
 
   return { changeStatus, infoSaving, saveMatchInfo, saveResult, savingResult, statusUpdating }
 }

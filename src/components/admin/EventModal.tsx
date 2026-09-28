@@ -5,9 +5,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  EventKindBadge,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui'
+import { EVENT_KIND_OPTIONS } from '@/lib/events/event-kind'
 
 type Gym = { id: string; name: string; city: string }
 type Activity = { id: string; name: string }
@@ -142,7 +144,7 @@ export default function EventModal({
             <h2 className="cs-modal__title">{event ? 'Modifica Evento' : 'Nuovo Evento'}</h2>
             <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               <span className="cs-badge cs-badge--neutral">{form.event_type === 'one_time' ? 'Singolo' : 'Ricorrente'}</span>
-              <span className="cs-badge cs-badge--accent">{({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[form.event_kind]}</span>
+              <EventKindBadge kind={form.event_kind} />
             </div>
           </div>
         </div>
@@ -250,12 +252,11 @@ export default function EventModal({
                 className="cs-select"
                 value={form.event_kind}
                 onChange={(e) => setForm({ ...form, event_kind: e.target.value as any })}
-              >
-                <option value="training">Allenamento</option>
-                <option value="match">Partita</option>
-                <option value="meeting">Riunione</option>
-                <option value="other">Altro</option>
-              </select>
+          >
+              {EVENT_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+          </select>
             </div>
           </div>
 
@@ -321,25 +322,25 @@ export default function EventModal({
           </div>
 
           <div className="cs-card p-4">
-            <label className="cs-field__label mb-2">Conferma partecipazione</label>
+            <label className="cs-field__label mb-2">Gestione disponibilità</label>
             <label className="inline-flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={!!form.requires_confirmation}
                 onChange={(e) => setForm({ ...form, requires_confirmation: e.target.checked })}
               />
-              <span>Vuoi chiedere conferma partecipazione (RSVP)?</span>
+              <span>Abilita segnalazione assenze</span>
             </label>
             {form.requires_confirmation && (
               <div className="mt-3">
-                <label className="cs-field__label">Scadenza conferma (opzionale)</label>
+                <label className="cs-field__label">Scadenza segnalazione (opzionale)</label>
                 <input
                   type="datetime-local"
                   className="cs-input"
                   value={form.confirmation_deadline}
                   onChange={(e) => setForm({ ...form, confirmation_deadline: e.target.value })}
                 />
-                <p className="text-xs text-secondary mt-1">Se vuota, si può rispondere fino all’inizio dell’evento.</p>
+                <p className="text-xs text-secondary mt-1">Se vuota, l’assenza può essere comunicata o revocata fino all’inizio dell’evento.</p>
               </div>
             )}
           </div>

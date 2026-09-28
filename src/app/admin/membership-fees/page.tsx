@@ -1,13 +1,12 @@
 'use client'
 
 import MembershipFeesManager from '@/components/admin/MembershipFeesManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function MembershipFeesPage() {
   return (
-    <>
-      <PageHeader title="Gestione Quote Associative" subtitle="Amministrazione CSRoma" />
-      <MembershipFeesManager />
-    </>
+    <AdminManagementPage title="Quote associative" context="Amministrazione" description="Configura piani, rate e stato delle quote per le squadre.">
+      <MembershipFeesManager embedded />
+    </AdminManagementPage>
   )
 }

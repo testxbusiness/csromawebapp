@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, type ReactNode } from 'react'
+import { X } from 'lucide-react'
 
 interface AdminModalProps {
   isOpen: boolean
@@ -126,7 +127,7 @@ export default function AdminModal({
       >
         <div className="flex items-start justify-between mb-2">
           <h3 className="cs-modal__title">{title}</h3>
-          <button type="button" onClick={onClose} className="cs-modal__close" aria-label="Chiudi">✕</button>
+          <button type="button" onClick={onClose} className="cs-modal__close" aria-label="Chiudi"><X className="h-4 w-4" aria-hidden="true" /></button>
         </div>
         <div className="max-h-[70vh] overflow-y-auto">
           {children}

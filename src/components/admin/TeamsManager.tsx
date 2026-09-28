@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { exportTeams } from '@/lib/utils/excelExport'
 import TeamModal from '@/components/admin/TeamModal'
 import { EmptyState, LoadingState } from '@/components/ui'
+import { BarChart3, Users } from 'lucide-react'
 
 interface Team {
   id?: string
@@ -12,6 +13,7 @@ interface Team {
   code: string
   activity_id: string
   coach_id?: string
+  training_rsvp_enabled?: boolean
   created_at?: string
   updated_at?: string
   activities?: {
@@ -49,20 +51,45 @@ interface Gym {
   address?: string
 }
 
-export default function TeamsManager() {
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
+}
+
+const ALL_SEASONS = 'all'
+
+export default function TeamsManager({ embedded = false }: { embedded?: boolean }) {
   const [teams, setTeams] = useState<Team[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [coaches, setCoaches] = useState<Coach[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
   const [showModal, setShowModal] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const loadTeams = useCallback(async () => {
+    if (!selectedSeasonId) return
+    setLoading(true)
+    let activitiesQuery = supabase
+      .from('activities')
+      .select('id, name, season_id')
+    if (selectedSeasonId !== ALL_SEASONS) activitiesQuery = activitiesQuery.eq('season_id', selectedSeasonId)
+    const { data: activitiesData } = await activitiesQuery
+    const activityIds = (activitiesData ?? []).map((activity) => activity.id)
+    if (activityIds.length === 0) {
+      setTeams([])
+      setLoading(false)
+      return
+    }
+
     const { data: teamsData } = await supabase
       .from('teams')
-      .select('id, name, code, activity_id, created_at, updated_at')
+      .select('id, name, code, activity_id, training_rsvp_enabled, created_at, updated_at')
+      .in('activity_id', activityIds)
       .order('created_at', { ascending: false })
 
     if (!teamsData || teamsData.length === 0) {
@@ -72,15 +99,6 @@ export default function TeamsManager() {
     }
 
     const teamIds = teamsData.map((team) => team.id)
-
-    const { data: activitiesData } = await supabase
-      .from('activities')
-      .select('id, name, season_id')
-      .in('id', teamsData.map((t) => t.activity_id).filter(Boolean))
-
-    const { data: seasonsData } = await supabase
-      .from('seasons')
-      .select('id, name')
 
     const { data: teamCoachesData } = await supabase
       .from('team_coaches')
@@ -93,7 +111,7 @@ export default function TeamsManager() {
     })
 
     const seasonMap = new Map<string, string>()
-    seasonsData?.forEach((season: any) => {
+    seasons.forEach((season) => {
       seasonMap.set(season.id, season.name)
     })
 
@@ -126,39 +144,28 @@ export default function TeamsManager() {
 
     setTeams(teamsWithRelations as Team[])
     setLoading(false)
-  }, [supabase])
+  }, [selectedSeasonId, seasons, supabase])
 
   const loadActivities = useCallback(async () => {
-    const { data: activitiesData } = await supabase
+    if (!selectedSeasonId) return
+    let query = supabase
       .from('activities')
       .select('*')
       .order('name')
+    if (selectedSeasonId !== ALL_SEASONS) query = query.eq('season_id', selectedSeasonId)
+    const { data: activitiesData } = await query
 
     if (activitiesData) {
-      // Get season names for each activity
-      const activitiesWithSeasons = await Promise.all(
-        activitiesData.map(async (activity) => {
-          if (activity.season_id) {
-            const { data: seasonData } = await supabase
-              .from('seasons')
-              .select('name')
-              .eq('id', activity.season_id)
-              .single()
-            
-            return {
-              ...activity,
-              seasons: seasonData ? { name: seasonData.name } : null
-            }
-          }
-          return { ...activity, seasons: null }
-        })
-      )
-      
+      const seasonNames = new Map(seasons.map((season) => [season.id, season.name]))
+      const activitiesWithSeasons = activitiesData.map((activity) => ({
+        ...activity,
+        seasons: activity.season_id ? { name: seasonNames.get(activity.season_id) ?? '' } : null,
+      }))
       setActivities(activitiesWithSeasons)
     } else {
       setActivities([])
     }
-  }, [supabase])
+  }, [selectedSeasonId, seasons, supabase])
 
   const loadCoaches = useCallback(async () => {
     const response = await fetch('/api/admin/coaches', { cache: 'no-store' })
@@ -167,21 +174,39 @@ export default function TeamsManager() {
   }, [])
 
   const loadGyms = useCallback(async () => {
-    const { data } = await supabase
+    if (!selectedSeasonId) return
+    let query = supabase
       .from('gyms')
       .select('id, name, city, address')
       .eq('is_active', true)
       .order('name')
+    if (selectedSeasonId !== ALL_SEASONS) query = query.eq('season_id', selectedSeasonId)
+    const { data } = await query
 
     setGyms(data || [])
+  }, [selectedSeasonId, supabase])
+
+  const loadSeasons = useCallback(async () => {
+    const { data } = await supabase
+      .from('seasons')
+      .select('id, name, is_active')
+      .order('start_date', { ascending: false })
+    const nextSeasons = (data ?? []) as Season[]
+    setSeasons(nextSeasons)
+    setSelectedSeasonId((current) => current ?? nextSeasons.find((season) => season.is_active)?.id ?? ALL_SEASONS)
   }, [supabase])
 
   useEffect(() => {
+    void loadSeasons()
+  }, [loadSeasons])
+
+  useEffect(() => {
+    if (!selectedSeasonId) return
     void loadTeams()
     void loadActivities()
     void loadCoaches()
     void loadGyms()
-  }, [loadActivities, loadCoaches, loadGyms, loadTeams])
+  }, [loadActivities, loadCoaches, loadGyms, loadTeams, selectedSeasonId])
 
   const generateTeamCode = (teamName: string, activityName: string): string => {
     const teamInitials = teamName
@@ -196,7 +221,7 @@ export default function TeamsManager() {
     return `${teamInitials}${activityInitial}${randomNum}`
   }
 
-  const handleCreateTeam = async (teamData: Omit<Team, 'id'>) => {
+  const handleCreateTeam = async (teamData: Omit<Team, 'id'>): Promise<string> => {
     const { coach_id, ...teamPayload } = teamData
 
     const { data, error } = await supabase
@@ -206,47 +231,51 @@ export default function TeamsManager() {
       .single()
 
     if (error || !data) {
-      return
+      throw new Error(error?.message ?? 'Errore creazione squadra')
     }
 
     if (coach_id) {
-      await supabase.from('team_coaches').insert({
+      const { error: coachError } = await supabase.from('team_coaches').insert({
         team_id: data.id,
         coach_id,
         role: 'head_coach',
         assigned_at: new Date().toISOString().slice(0, 10)
       })
+      if (coachError) {
+        await supabase.from('teams').delete().eq('id', data.id)
+        throw new Error('Creazione annullata: assegnazione allenatore non riuscita')
+      }
     }
 
-    setShowModal(false)
-    setEditingTeam(null)
-    loadTeams()
+    await loadTeams()
+    return data.id
   }
 
-  const handleUpdateTeam = async (id: string, teamData: Partial<Team>) => {
+  const handleUpdateTeam = async (id: string, teamData: Partial<Team>): Promise<void> => {
     const { coach_id, ...teamPayload } = teamData
 
     if (Object.keys(teamPayload).length > 0) {
-      await supabase
+      const { error } = await supabase
         .from('teams')
         .update(teamPayload)
         .eq('id', id)
+      if (error) throw new Error('Aggiornamento squadra non riuscito')
     }
 
-    await supabase.from('team_coaches').delete().eq('team_id', id)
+    const { error: deleteCoachError } = await supabase.from('team_coaches').delete().eq('team_id', id)
+    if (deleteCoachError) throw new Error('Aggiornamento allenatore non riuscito')
 
     if (coach_id) {
-      await supabase.from('team_coaches').insert({
+      const { error: coachError } = await supabase.from('team_coaches').insert({
         team_id: id,
         coach_id,
         role: 'head_coach',
         assigned_at: new Date().toISOString().slice(0, 10)
       })
+      if (coachError) throw new Error('Aggiornamento allenatore non riuscito')
     }
 
-    setShowModal(false)
-    setEditingTeam(null)
-    loadTeams()
+    await loadTeams()
   }
 
   const handleDeleteTeam = async (id: string) => {
@@ -269,13 +298,23 @@ export default function TeamsManager() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Squadre</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Squadre</h2>}
         <div className="flex gap-3">
+          <label className="sr-only" htmlFor="teams-season">Stagione</label>
+          <select
+            id="teams-season"
+            className="cs-select"
+            value={selectedSeasonId ?? ''}
+            onChange={(event) => setSelectedSeasonId(event.target.value)}
+          >
+            {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+            <option value={ALL_SEASONS}>Tutte le stagioni (solo storico)</option>
+          </select>
           <button
             onClick={() => exportTeams(teams)}
             className="cs-btn cs-btn--outline"
           >
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button
@@ -284,6 +323,8 @@ export default function TeamsManager() {
               setShowModal(true)
             }}
             className="cs-btn cs-btn--primary"
+            disabled={selectedSeasonId === ALL_SEASONS}
+            title={selectedSeasonId === ALL_SEASONS ? 'Seleziona una stagione per creare una squadra' : undefined}
           >
             Nuova Squadra
           </button>
@@ -320,7 +361,7 @@ export default function TeamsManager() {
               <tr key={team.id}>
                 <td className="flex items-center">
                   <div className="flex items-center">
-                    <div className="text-2xl mr-3">👥</div>
+                    <Users className="mr-3 h-6 w-6 text-[color:var(--cs-brand-red)]" aria-hidden="true" />
                     <div>
                       <div className="text-sm font-medium ">{team.name}</div>
                       <div className="text-xs text-gray-500">
@@ -403,7 +444,7 @@ export default function TeamsManager() {
           <EmptyState
             title="Nessuna squadra creata"
             description="Crea la tua prima squadra per iniziare a organizzare gli atleti in gruppi di lavoro."
-            action={<button onClick={() => { setEditingTeam(null); setShowModal(true) }} className="cs-btn cs-btn--primary">Crea la tua prima squadra</button>}
+            action={<button onClick={() => { setEditingTeam(null); setShowModal(true) }} disabled={selectedSeasonId === ALL_SEASONS} className="cs-btn cs-btn--primary">Crea la tua prima squadra</button>}
           />
         )}
       </div>

@@ -3,26 +3,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
-import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
+import MonthlyMobileCalendar from '@/components/calendar/MonthlyMobileCalendar'
 import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
-import { EmptyState, LoadingState, toast } from '@/components/ui'
+import { EmptyState, EventKindBadge, LoadingState, toast } from '@/components/ui'
+import { AdminRowCheckbox, AdminSelectionBar } from '@/components/admin/AdminManagement'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import EventModal from '@/components/admin/EventModal'
-
-const KIND_COLORS: Record<'training'|'match'|'meeting'|'other', string> = {
-  training: '#413c67', // Allenamento (blu CSRoma)
-  match:    '#d71920', // Partita (rosso CSRoma)
-  meeting:  '#f5eb00', // Riunione (giallo CSRoma)
-  other:    '#6b7280', // Altro (grigio)
-}
-
-const EVENT_KIND_OPTIONS = [
-  { value: 'training', label: 'Allenamento' },
-  { value: 'match', label: 'Partita' },
-  { value: 'meeting', label: 'Riunione' },
-  { value: 'other', label: 'Altro' },
-] as const
+import { BarChart3, SlidersHorizontal } from 'lucide-react'
+import { EVENT_KIND_OPTIONS, eventKindLabel, eventKindVisual } from '@/lib/events/event-kind'
+import { ResponsiveDetail } from '@/components/ui'
 
 interface Event {
   id?: string
@@ -83,12 +73,30 @@ interface Team {
   name: string
   code: string
 }
+interface Season {
+  id: string
+  name: string
+  start_date: string
+  is_active: boolean
+}
 
-export default function EventsManager() {
+function visibleMonthRange(date: Date): { from: string; to: string } {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1)
+  const mondayOffset = (first.getDay() + 6) % 7
+  first.setDate(first.getDate() - mondayOffset)
+  const last = new Date(first)
+  last.setDate(last.getDate() + 41)
+  last.setHours(23, 59, 59, 999)
+  return { from: first.toISOString(), to: last.toISOString() }
+}
+
+export default function EventsManager({ embedded = false }: { embedded?: boolean }) {
   const [events, setEvents] = useState<Event[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [filterSeasonId, setFilterSeasonId] = useState<string>('')
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [filterTeams, setFilterTeams] = useState<string[]>([])
   const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false)
@@ -97,14 +105,19 @@ export default function EventsManager() {
   const [filterFrom, setFilterFrom] = useState<string>('')
   const [filterTo, setFilterTo] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [loadingSelects, setLoadingSelects] = useState(false)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
+  const [selectedEventIds, setSelectedEventIds] = useState<string[]>([])
   const teamDropdownRef = useRef<HTMLDivElement | null>(null)
   const eventKindDropdownRef = useRef<HTMLDivElement | null>(null)
+  const requestedVisibleRangeRef = useRef<string | null>(null)
+  const eventsRequestAbortRef = useRef<AbortController | null>(null)
   const supabase = useMemo(() => createClient(), [])
 
   const selectedTeamsLabel = (() => {
@@ -125,10 +138,49 @@ export default function EventsManager() {
     return `${filterEventKinds.length} tipi selezionati`
   })()
 
+  const visibleRequest = (date = currentDate) => {
+    const range = visibleMonthRange(date)
+    return {
+      from: filterFrom || range.from,
+      to: filterTo ? `${filterTo}T23:59:59.999` : range.to,
+      visible: true,
+    }
+  }
+
+  const handleSeasonChange = (seasonId: string) => {
+    const season = seasons.find((item) => item.id === seasonId)
+    const nextDate = season ? new Date(`${season.start_date}T12:00:00`) : currentDate
+
+    setFilterSeasonId(seasonId)
+    setFilterTeams([])
+    setCurrentDate(nextDate)
+    requestedVisibleRangeRef.current = null
+
+    const range = visibleMonthRange(nextDate)
+    void loadEvents({
+      teamIds: [],
+      from: filterFrom || range.from,
+      to: filterTo ? `${filterTo}T23:59:59.999` : range.to,
+      visible: true,
+      seasonId,
+    })
+  }
+
   useEffect(() => {
-    loadEvents()
-    loadTeams()
+    loadEvents(visibleRequest(new Date()))
+    loadSeasons()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => {
+    eventsRequestAbortRef.current?.abort()
+  }, [])
+
+  useEffect(() => {
+    if (!filterSeasonId) return
+    setGyms([])
+    setActivities([])
+    void loadTeams(filterSeasonId)
+  }, [filterSeasonId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -158,31 +210,48 @@ export default function EventsManager() {
     eventKinds?: string[]
     from?: string
     to?: string
+    visible?: boolean
+    seasonId?: string
   }) => {
+    eventsRequestAbortRef.current?.abort()
+    const controller = new AbortController()
+    eventsRequestAbortRef.current = controller
+    const isCurrentRequest = () => eventsRequestAbortRef.current === controller
+
     setLoading(true)
     try {
       const selectedTeamIds = overrides?.teamIds ?? filterTeams
       const selectedEventKinds = overrides?.eventKinds ?? filterEventKinds
       const selectedFrom = overrides?.from ?? filterFrom
       const selectedTo = overrides?.to ?? filterTo
+      const selectedSeasonId = overrides?.seasonId ?? filterSeasonId
 
       const params = new URLSearchParams()
       if (selectedTeamIds.length > 0) params.set('team_ids', selectedTeamIds.join(','))
+      if (selectedSeasonId) params.set('season_id', selectedSeasonId)
       if (selectedFrom) params.set('from', new Date(selectedFrom).toISOString())
       if (selectedTo) params.set('to', new Date(selectedTo).toISOString())
-      params.set('limit', '5000')
+      if (overrides?.visible) {
+        params.set('visible', '1')
+        requestedVisibleRangeRef.current = [selectedSeasonId, selectedTeamIds.join(','), selectedEventKinds.join(','), selectedFrom, selectedTo].join('|')
+      }
+      params.set('limit', overrides?.visible ? '500' : '5000')
       const qs = params.toString()
-      const response = await fetch(`/api/admin/events${qs ? `?${qs}` : ''}`)
+      const response = await fetch(`/api/admin/events${qs ? `?${qs}` : ''}`, { signal: controller.signal })
       const result = await response.json()
 
       if (!response.ok) {
-        console.error('Errore caricamento eventi:', result.error)
+        if (!isCurrentRequest()) return
+        // During logout the session is deliberately revoked before the route
+        // change unmounts this component. A 401 from an in-flight refresh is
+        // expected and must not be reported as an application error.
+        if (response.status !== 401) console.error('Errore caricamento eventi:', result.error)
         setEvents([])
-        setLoading(false)
         return
       }
 
-      console.log('Eventi caricati:', result.events)
+      if (!isCurrentRequest()) return
+
       // Assicurati che i dati correlati siano sempre oggetti validi
       let eventsWithSafeData = (result.events || []).map((event: Event) => ({
         ...event,
@@ -200,20 +269,26 @@ export default function EventsManager() {
       }
 
       setEvents(eventsWithSafeData)
-      setLoading(false)
+      setSelectedEventIds([])
     } catch (error) {
+      if (controller.signal.aborted || !isCurrentRequest()) return
       console.error('Errore caricamento eventi:', error)
       setEvents([])
-      setLoading(false)
+    } finally {
+      if (isCurrentRequest()) {
+        setLoading(false)
+        setInitialLoading(false)
+      }
     }
   }
 
   const loadSelectOptions = useCallback(async () => {
+    if (!filterSeasonId) return
     setLoadingSelects(true)
     try {
       const [{ data: gymsData }, { data: activitiesData }] = await Promise.all([
-        supabase.from('gyms').select('id, name, address, city').order('name'),
-        supabase.from('activities').select('id, name').order('name')
+        supabase.from('gyms').select('id, name, address, city').eq('season_id', filterSeasonId).order('name'),
+        supabase.from('activities').select('id, name').eq('season_id', filterSeasonId).order('name')
       ])
       setGyms(gymsData || [])
       setActivities(activitiesData || [])
@@ -222,22 +297,41 @@ export default function EventsManager() {
     } finally {
       setLoadingSelects(false)
     }
-  }, [supabase])
+  }, [filterSeasonId, supabase])
 
   // Lazy load gyms/activities solo quando il modal si apre
   useEffect(() => {
-    if (showModal && gyms.length === 0 && activities.length === 0) {
+    if (showModal && filterSeasonId && gyms.length === 0 && activities.length === 0) {
       void loadSelectOptions()
     }
-  }, [activities.length, gyms.length, loadSelectOptions, showModal])
+  }, [activities.length, filterSeasonId, gyms.length, loadSelectOptions, showModal])
 
-  const loadTeams = async () => {
+  const loadTeams = async (seasonId: string) => {
+    setTeams([])
+    const { data: activitiesData, error: activitiesError } = await supabase
+      .from('activities')
+      .select('id')
+      .eq('season_id', seasonId)
+
+    if (activitiesError || !activitiesData || activitiesData.length === 0) return
+
     const { data } = await supabase
       .from('teams')
       .select('id, name, code')
+      .in('activity_id', activitiesData.map((activity) => activity.id))
       .order('name')
 
     setTeams(data || [])
+  }
+
+  const loadSeasons = async () => {
+    const { data } = await supabase
+      .from('seasons')
+      .select('id, name, start_date, is_active')
+      .order('start_date', { ascending: false })
+    const nextSeasons = data || []
+    setSeasons(nextSeasons)
+    setFilterSeasonId((current) => current || nextSeasons.find((season) => season.is_active)?.id || '')
   }
 
   const toggleTeamFilter = (teamId: string) => {
@@ -363,6 +457,20 @@ export default function EventsManager() {
     
   }
 
+  const handleBulkDelete = async () => {
+    if (selectedEventIds.length === 0) return
+    if (!window.confirm(`Vuoi eliminare ${selectedEventIds.length} eventi selezionati?`)) return
+    const results = await Promise.all(selectedEventIds.map(async (id) => {
+      const response = await fetch(`/api/admin/events?id=${encodeURIComponent(id)}&scope=one`, { method: 'DELETE' })
+      return response.ok
+    }))
+    const deletedCount = results.filter(Boolean).length
+    if (deletedCount === results.length) toast.success(`${deletedCount} eventi eliminati`)
+    else toast.error(`${deletedCount} eventi eliminati; alcuni non sono stati rimossi`)
+    setSelectedEventIds([])
+    void loadEvents(viewMode === 'calendar' ? visibleRequest() : { visible: false })
+  }
+
   const exportEventsToExcel = () => {
     exportToExcel(events, [
       { key: 'title', title: 'Titolo Evento', width: 25 },
@@ -373,7 +481,7 @@ export default function EventsManager() {
       { key: 'gyms', title: 'Palestra', width: 15, format: (val) => val?.name || '' },
       { key: 'event_teams', title: 'Squadre', width: 25, format: (val) => Array.isArray(val) ? val.map((et: any) => et.teams?.name).filter(Boolean).join(', ') : '' },
       { key: 'event_type', title: 'Tipo Evento', width: 12, format: (val) => val === 'one_time' ? 'Singolo' : 'Ricorrente' },
-      { key: 'event_kind', title: 'Tipologia', width: 12, format: (val) => ({training:'Allenamento', match:'Partita', meeting:'Riunione', other:'Altro'} as any)[val] || '' },
+      { key: 'event_kind', title: 'Tipologia', width: 12, format: (val) => eventKindLabel(typeof val === 'string' ? val : null) || '' },
       { key: 'created_by_profile', title: 'Creato Da', width: 20, format: (val) => val ? `${val.first_name} ${val.last_name}` : '' }
     ], {
       filename: 'eventi_csroma',
@@ -382,31 +490,80 @@ export default function EventsManager() {
     })
   }
 
-  if (loading) {
+  const navigateCalendar = (action: 'prev' | 'next' | 'today') => {
+    const nextDate = new Date(currentDate)
+    if (action === 'today') {
+      nextDate.setTime(Date.now())
+    } else {
+      nextDate.setMonth(nextDate.getMonth() + (action === 'prev' ? -1 : 1))
+    }
+    setCurrentDate(nextDate)
+    const range = visibleMonthRange(nextDate)
+    void loadEvents({
+      from: filterFrom || range.from,
+      to: filterTo ? `${filterTo}T23:59:59.999` : range.to,
+      visible: true,
+    })
+  }
+
+  const openCreateForDay = (date: Date) => {
+    const start = new Date(date)
+    start.setHours(18, 0, 0, 0)
+    const end = new Date(start)
+    end.setHours(19, 0, 0, 0)
+    setEditingEvent({
+      title: '', description: '', start_date: start.toISOString(), end_date: end.toISOString(),
+      location: '', gym_id: '', activity_id: '', event_type: 'one_time', event_kind: 'training',
+      recurrence_rule: { frequency: 'weekly', interval: 1 }, recurrence_end_date: '', selected_teams: [],
+    })
+    setShowModal(true)
+  }
+
+  if (initialLoading) {
     return <LoadingState label="Caricamento eventi..." />
   }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h2 className="text-2xl font-bold">Calendario e Eventi</h2>
+        <div className="flex min-w-0 items-center gap-3">
+          {!embedded && <h2 className="text-2xl font-bold">Calendario e Eventi</h2>}
+          {loading && <span className="text-xs text-secondary" role="status" aria-live="polite">Aggiornamento eventi…</span>}
+        </div>
         <div className="flex flex-col gap-2 w-full md:w-auto md:flex-row md:flex-wrap md:gap-3">
           <button onClick={exportEventsToExcel} className="cs-btn cs-btn--outline">
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button onClick={() => { setEditingEvent(null); setShowModal(true) }} className="cs-btn cs-btn--primary">
             Nuovo Evento
           </button>
-          <button onClick={() => setViewMode(viewMode==='list'?'calendar':'list')} className="cs-btn cs-btn--ghost">
+          <button onClick={() => {
+            const nextMode = viewMode === 'list' ? 'calendar' : 'list'
+            setViewMode(nextMode)
+            if (nextMode === 'calendar') {
+              const range = visibleMonthRange(currentDate)
+              void loadEvents({ from: range.from, to: range.to, visible: true })
+            } else {
+              void loadEvents({ visible: false })
+            }
+          }} className="cs-btn cs-btn--ghost">
             {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
           </button>
         </div>
       </div>
 
       {/* Filtri */}
-      <div className="cs-card cs-card--primary p-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <div className="hidden md:block cs-card cs-card--primary p-4">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+          <div>
+            <label htmlFor="admin-calendar-season" className="cs-field__label">Stagione</label>
+            <select id="admin-calendar-season" className="cs-input w-full min-h-[44px]" value={filterSeasonId} onChange={(event) => {
+              handleSeasonChange(event.target.value)
+            }}>
+              {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+            </select>
+          </div>
           <div>
             <label className="cs-field__label">Squadra</label>
             <div className="relative" ref={teamDropdownRef}>
@@ -550,14 +707,20 @@ export default function EventsManager() {
             />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => loadEvents()} className="cs-btn cs-btn--primary">Applica filtri</button>
+            <button onClick={() => viewMode === 'calendar'
+              ? loadEvents(visibleRequest())
+              : loadEvents({ visible: false })} className="cs-btn cs-btn--primary">Applica filtri</button>
             <button
               onClick={() => {
+                const activeSeasonId = seasons.find((season) => season.is_active)?.id || ''
                 setFilterTeams([])
+                setFilterSeasonId(activeSeasonId)
                 setFilterEventKinds([])
                 setFilterFrom('')
                 setFilterTo('')
-                loadEvents({ teamIds: [], eventKinds: [], from: '', to: '' })
+                loadEvents(viewMode === 'calendar'
+                  ? { teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true, seasonId: activeSeasonId }
+                  : { teamIds: [], eventKinds: [], from: '', to: '', visible: false, seasonId: activeSeasonId })
               }}
               className="cs-btn cs-btn--ghost"
             >
@@ -566,6 +729,66 @@ export default function EventsManager() {
           </div>
         </div>
       </div>
+
+      <div className="md:hidden">
+        <button
+          type="button"
+          className="cs-btn cs-btn--outline w-full justify-between"
+          onClick={() => setIsFilterSheetOpen(true)}
+          aria-haspopup="dialog"
+        >
+          <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Filtri</span>
+          <span className="text-xs text-secondary">{filterTeams.length + filterEventKinds.length + (filterFrom || filterTo ? 1 : 0) + (filterSeasonId ? 1 : 0)} attivi</span>
+        </button>
+      </div>
+
+      <ResponsiveDetail
+        open={isFilterSheetOpen}
+        onOpenChange={setIsFilterSheetOpen}
+        title="Filtri calendario"
+        description="Restringi gli eventi per squadra, tipologia e intervallo."
+        fullscreenOnMobile
+        footer={<div className="flex w-full gap-2"><button type="button" className="cs-btn cs-btn--ghost flex-1" onClick={() => {
+          setFilterTeams([]); setFilterEventKinds([]); setFilterFrom(''); setFilterTo('')
+          void loadEvents({ teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true })
+          setIsFilterSheetOpen(false)
+        }}>Reset</button><button type="button" className="cs-btn cs-btn--primary flex-1" onClick={() => {
+          void loadEvents(visibleRequest()); setIsFilterSheetOpen(false)
+        }}>Applica</button></div>}
+      >
+        <div className="space-y-5">
+          <div>
+            <label htmlFor="admin-calendar-season-mobile" className="cs-field__label">Stagione</label>
+            <select id="admin-calendar-season-mobile" className="cs-input mt-1 w-full" value={filterSeasonId} onChange={(event) => {
+              handleSeasonChange(event.target.value)
+            }}>
+              {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+            </select>
+          </div>
+          <fieldset>
+            <legend className="cs-field__label">Squadre</legend>
+            <div className="space-y-1" role="group" aria-label="Filtra per squadre">
+              {teams.map((team) => <label key={team.id} className="flex min-h-[44px] items-center gap-3 rounded-md px-2">
+                <input type="checkbox" checked={filterTeams.includes(team.id)} onChange={() => toggleTeamFilter(team.id)} className="h-4 w-4" />
+                <span className="text-sm">{team.name} ({team.code})</span>
+              </label>)}
+              {teams.length === 0 && <p className="text-sm text-secondary">Nessuna squadra disponibile</p>}
+            </div>
+            <div className="mt-2 flex gap-4"><button type="button" className="text-xs font-medium text-primary" onClick={selectAllTeams}>Seleziona tutte</button><button type="button" className="text-xs font-medium text-secondary" onClick={() => setFilterTeams([])}>Svuota</button></div>
+          </fieldset>
+          <fieldset>
+            <legend className="cs-field__label">Tipologia</legend>
+            <div className="space-y-1" role="group" aria-label="Filtra per tipologia evento">
+              {EVENT_KIND_OPTIONS.map((option) => <label key={option.value} className="flex min-h-[44px] items-center gap-3 rounded-md px-2">
+                <input type="checkbox" checked={filterEventKinds.includes(option.value)} onChange={() => toggleEventKindFilter(option.value)} className="h-4 w-4" />
+                <span className="text-sm">{option.label}</span>
+              </label>)}
+            </div>
+            <div className="mt-2 flex gap-4"><button type="button" className="text-xs font-medium text-primary" onClick={selectAllEventKinds}>Seleziona tutte</button><button type="button" className="text-xs font-medium text-secondary" onClick={() => setFilterEventKinds([])}>Svuota</button></div>
+          </fieldset>
+          <div className="grid grid-cols-2 gap-3"><label className="cs-field__label">Dal<input type="date" value={filterFrom} onChange={(event) => setFilterFrom(event.target.value)} className="cs-input mt-1" /></label><label className="cs-field__label">Al<input type="date" value={filterTo} onChange={(event) => setFilterTo(event.target.value)} className="cs-input mt-1" /></label></div>
+        </div>
+      </ResponsiveDetail>
 
       <EventModal
   open={showModal}
@@ -580,6 +803,27 @@ export default function EventsManager() {
 
 
       {viewMode === 'calendar' ? (
+        <>
+        <div className="md:hidden">
+          <MonthlyMobileCalendar
+            currentDate={currentDate}
+            events={events.map((event) => ({
+              id: event.id!,
+              title: event.title,
+              start: event.start_date,
+              end: event.end_date,
+              eventKind: event.event_kind,
+              location: event.location || event.gyms?.name,
+            }))}
+            onNavigate={navigateCalendar}
+            onEventClick={(id) => {
+              const event = events.find((item) => item.id === id)
+              if (event) setSelectedEvent(event)
+            }}
+            onCreateEvent={openCreateForDay}
+          />
+        </div>
+        <div className="hidden md:block">
         <FullCalendarWidget
           initialDate={currentDate}
           view={calView}
@@ -588,15 +832,29 @@ export default function EventsManager() {
             title: e.title,
             start: new Date(e.start_date),
             end: new Date(e.end_date),
-            color: KIND_COLORS[(e.event_kind ?? 'other') as 'training'|'match'|'meeting'|'other'],
+            color: eventKindVisual(e.event_kind)?.colorToken,
           }))}
           onNavigate={(act)=>{
-            const d = new Date(currentDate)
-            if (act==='today') setCurrentDate(new Date())
-            else if (act==='prev') { if (calView==='month') d.setMonth(d.getMonth()-1); else d.setDate(d.getDate()-7); setCurrentDate(new Date(d)) }
-            else { if (calView==='month') d.setMonth(d.getMonth()+1); else d.setDate(d.getDate()+7); setCurrentDate(new Date(d)) }
+            const d = act === 'today' ? new Date() : new Date(currentDate)
+            if (act==='prev') { if (calView==='month') d.setMonth(d.getMonth()-1); else d.setDate(d.getDate()-7) }
+            else if (act==='next') { if (calView==='month') d.setMonth(d.getMonth()+1); else d.setDate(d.getDate()+7) }
+            setCurrentDate(d)
+            const range = visibleMonthRange(d)
+            void loadEvents({ from: range.from, to: range.to, visible: true })
           }}
           onViewChange={(v)=>setCalView(v)}
+          onVisibleRangeChange={(start, end) => {
+            const from = filterFrom || start.toISOString()
+            const to = filterTo ? `${filterTo}T23:59:59.999` : end.toISOString()
+            const requestKey = [filterSeasonId, filterTeams.join(','), filterEventKinds.join(','), from, to].join('|')
+            if (requestedVisibleRangeRef.current === requestKey) return
+            requestedVisibleRangeRef.current = requestKey
+            void loadEvents({
+              from,
+              to,
+              visible: true,
+            })
+          }}
           onEventClick={(id)=>{ const ev = events.find(e=>e.id===id); if (ev) setSelectedEvent(ev) }}
           onSelectSlot={(start, end)=>{
             setEditingEvent({
@@ -616,13 +874,25 @@ export default function EventsManager() {
             setShowModal(true)
           }}
         />
+        </div>
+        </>
       ) : (
       <div className="cs-card cs-card--primary overflow-hidden">
+        <AdminSelectionBar
+          selectedCount={selectedEventIds.length}
+          totalCount={events.length}
+          onClear={() => setSelectedEventIds([])}
+        >
+          <button type="button" className="cs-btn cs-btn--danger cs-btn--sm" onClick={() => void handleBulkDelete()}>
+            Elimina selezionati
+          </button>
+        </AdminSelectionBar>
         {/* Desktop */}
         <div className="hidden md:block">
         <table className="cs-table">
           <thead>
             <tr>
+              <th className="w-12"><AdminRowCheckbox id="select-all-events" checked={events.length > 0 && selectedEventIds.length === events.length} onChange={(checked) => setSelectedEventIds(checked ? events.flatMap((event) => event.id ? [event.id] : []) : [])} label="Seleziona tutti gli eventi" /></th>
               <th>Evento</th>
               <th>Data/Ora</th>
               <th>Luogo</th>
@@ -633,7 +903,8 @@ export default function EventsManager() {
           </thead>
           <tbody>
             {events.map((event) => (
-              <tr key={event.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setSelectedEvent(event)}>
+              <tr key={event.id} className="hover:bg-gray-50">
+                <td className="px-4 py-4"><AdminRowCheckbox id={`select-event-${event.id}`} checked={Boolean(event.id && selectedEventIds.includes(event.id))} onChange={(checked) => event.id && setSelectedEventIds((current) => checked ? [...new Set([...current, event.id!])] : current.filter((id) => id !== event.id))} label={`Seleziona ${event.title}`} /></td>
                 <td className="px-6 py-4">
                   <div>
                     <div className="font-medium">{event.title}</div>
@@ -656,28 +927,19 @@ export default function EventsManager() {
                 </td>
                 <td className="px-6 py-4">
                   <div>
-                    {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'N/D'}
+                    {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'Nessuna palestra/luogo assegnato'}
                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <div>
-                    {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}
+                    {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'Nessuna squadra assegnata'}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`cs-badge ${
-                    event.event_kind === 'training' ? 'cs-badge--primary' :
-                    event.event_kind === 'match' ? 'cs-badge--danger' :
-                    event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                    'cs-badge--neutral'
-                  }`}>
-                    {event.event_kind === 'training' ? 'Allenamento' :
-                     event.event_kind === 'match' ? 'Partita' :
-                     event.event_kind === 'meeting' ? 'Riunione' :
-                     event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                  </span>
+                  <EventKindBadge kind={event.event_kind} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium cs-table__actions">
+                  <button type="button" onClick={() => setSelectedEvent(event)} className="cs-btn cs-btn--ghost cs-btn--sm">Dettagli</button>
                   <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm">Modifica</button>
                   <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm">Elimina</button>
                 </td>
@@ -690,8 +952,8 @@ export default function EventsManager() {
         {/* Mobile cards */}
         <div className="md:hidden p-4 space-y-3">
           {events.map((event) => (
-            <div key={event.id} className="cs-card" onClick={() => setSelectedEvent(event)}>
-              <div className="font-semibold">{event.title}</div>
+            <article key={event.id} className="cs-card">
+              <div className="flex items-start gap-2"><AdminRowCheckbox id={`select-event-mobile-${event.id}`} checked={Boolean(event.id && selectedEventIds.includes(event.id))} onChange={(checked) => event.id && setSelectedEventIds((current) => checked ? [...new Set([...current, event.id!])] : current.filter((id) => id !== event.id))} label={`Seleziona ${event.title}`} /><div className="min-w-0 flex-1 font-semibold">{event.title}</div></div>
               {event.description && (
                 <div className="text-sm text-secondary line-clamp-3">{event.description}</div>
               )}
@@ -704,28 +966,19 @@ export default function EventsManager() {
                     {new Date(event.end_date).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
-                <div><strong>Luogo:</strong> {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'N/D'}</div>
-                <div><strong>Squadre:</strong> {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'N/D'}</div>
+                <div><strong>Luogo:</strong> {event.location || (event.gyms && `${event.gyms.name}, ${event.gyms.city}`) || 'Nessuna palestra/luogo assegnato'}</div>
+                <div><strong>Squadre:</strong> {(event.event_teams || []).map(et => et.teams?.name).filter(Boolean).join(', ') || 'Nessuna squadra assegnata'}</div>
                 <div>
                   <strong>Tipo:</strong>
-                  <span className={`ml-2 cs-badge ${
-                    event.event_kind === 'training' ? 'cs-badge--primary' :
-                    event.event_kind === 'match' ? 'cs-badge--danger' :
-                    event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                    'cs-badge--neutral'
-                  }`}>
-                    {event.event_kind === 'training' ? 'Allenamento' :
-                     event.event_kind === 'match' ? 'Partita' :
-                     event.event_kind === 'meeting' ? 'Riunione' :
-                     event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                  </span>
+                  <EventKindBadge kind={event.event_kind} className="ml-2" />
                 </div>
               </div>
               <div className="mt-3 flex gap-2">
+                <button type="button" onClick={() => setSelectedEvent(event)} className="cs-btn cs-btn--ghost cs-btn--sm flex-1">Dettagli</button>
                 <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setShowModal(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
                 <button onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event.id!) }} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
               </div>
-            </div>
+            </article>
           ))}
           {events.length === 0 && (
             <EmptyState
@@ -780,15 +1033,20 @@ type AttendanceEntry = {
 }
 
 type AttendanceReport = {
+  attendance_mode?: 'rsvp' | 'absence_only'
   going: AttendanceEntry[]
   maybe: AttendanceEntry[]
   declined: AttendanceEntry[]
   no_response: AttendanceProfile[]
+  available?: AttendanceProfile[]
+  absent?: AttendanceEntry[]
   counts: {
     going: number
     maybe: number
     declined: number
     no_response: number
+    available?: number
+    absent?: number
   }
 }
 
@@ -809,10 +1067,13 @@ function EventAttendancePanel({ eventId }: { eventId: string }) {
       const j = await res.json() as Partial<AttendanceReport>
       if (res.ok) {
         setLists({
+          attendance_mode: j.attendance_mode,
           going: j.going ?? [],
           maybe: j.maybe ?? [],
           declined: j.declined ?? [],
           no_response: j.no_response ?? [],
+          available: j.available ?? [],
+          absent: j.absent ?? [],
           counts: j.counts ?? emptyAttendanceReport.counts,
         })
       }
@@ -831,8 +1092,13 @@ function EventAttendancePanel({ eventId }: { eventId: string }) {
   )
   return (
     <div className="mt-4 border-t border-[color:var(--cs-border)] pt-4" aria-label="Report conferme partecipazione">
-      <div className="text-sm font-semibold mb-3">Report conferme partecipazione</div>
+      <div className="text-sm font-semibold mb-3">{lists.attendance_mode === 'absence_only' ? 'Disponibilità della rosa' : 'Report conferme partecipazione'}</div>
+      {lists.attendance_mode === 'absence_only' && <p className="mb-3 text-xs text-secondary">Gli attesi sono gli atleti della rosa senza un’assenza comunicata; non sono presenze effettive.</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {lists.attendance_mode === 'absence_only' ? <>
+          <div className="cs-card cs-card--primary p-3"><div className="text-sm font-semibold mb-1">Attesi ({lists.counts.available ?? 0})</div><div className="space-y-1 text-sm">{renderNames(lists.available ?? [])}</div></div>
+          <div className="cs-card cs-card--primary p-3"><div className="text-sm font-semibold mb-1">Assenti ({lists.counts.absent ?? 0})</div><div className="space-y-1 text-sm">{renderNames(lists.absent ?? [])}</div></div>
+        </> : <>
         <div className="cs-card cs-card--primary p-3">
           <div className="text-sm font-semibold mb-1">Confermati ({lists.counts.going})</div>
           <div className="space-y-1 text-sm">{renderNames(lists.going)}</div>
@@ -849,6 +1115,7 @@ function EventAttendancePanel({ eventId }: { eventId: string }) {
           <div className="text-sm font-semibold mb-1">Nessuna risposta ({lists.counts.no_response})</div>
           <div className="space-y-1 text-sm">{renderNames(lists.no_response)}</div>
         </div>
+        </>}
       </div>
     </div>
   )
@@ -1042,10 +1309,9 @@ function EventForm({
             onChange={(e) => setFormData({ ...formData, event_kind: e.target.value as any })}
             className="cs-select"
           >
-            <option value="training">Allenamento</option>
-            <option value="match">Partita</option>
-            <option value="meeting">Riunione</option>
-            <option value="other">Altro</option>
+            {EVENT_KIND_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </div>
 

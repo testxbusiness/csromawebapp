@@ -2,15 +2,14 @@
 
 import { Suspense } from 'react'
 import AthletesManager from '@/components/admin/AthletesManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function AtletiPage() {
   return (
-    <>
-      <PageHeader title="Gestione Atleti" subtitle="Amministrazione CSRoma" />
+    <AdminManagementPage title="Atleti" context="Persone" description="Gestisci iscrizioni, squadre e stato dei certificati.">
       <Suspense fallback={<div className="text-center py-12">Caricamento gestione atleti...</div>}>
-        <AthletesManager />
+        <AthletesManager embedded />
       </Suspense>
-    </>
+    </AdminManagementPage>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 
-import { Button, Select, Modal } from '@/components/ui'
+import { Button, Select, Modal, StatusBadge } from '@/components/ui'
+import { useEffect, useState } from 'react'
 import { ConvocationPublishedList, EditableConvocationList } from '@/components/championship/ChampionshipPanels'
 import type { ClubTeam, Convocation, ManagerMode, Match, TeamMember } from '@/components/championship/types'
 
@@ -45,6 +46,19 @@ export function ChampionshipConvocationModal({
   onToggle,
   onSave,
 }: ChampionshipConvocationModalProps) {
+  const [confirmingRecipients, setConfirmingRecipients] = useState(false)
+  useEffect(() => {
+    setConfirmingRecipients(false)
+  }, [match?.id, selectedClubTeamId, open])
+
+  const existingMemberCount = convocation?.championship_match_convocation_members?.length ?? 0
+  const actionLabel = saving
+    ? 'Salvataggio…'
+    : confirmingRecipients
+      ? `Conferma ${selection.size} destinatari`
+      : convocation?.id
+        ? existingMemberCount > 0 ? 'Aggiorna convocazione' : 'Completa convocazione'
+        : 'Prepara convocazione'
   return (
     <Modal
       fullscreenOnMobile
@@ -77,6 +91,15 @@ export function ChampionshipConvocationModal({
           <div className="text-sm text-slate-600">
             {selectedClubTeam ? `Rosa: ${selectedClubTeam.name}` : 'Seleziona una squadra CSRoma'}
           </div>
+          {mode !== 'athlete' && !loading && selectedClubTeam ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3" aria-live="polite">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-800">Destinatari finali</span>
+                <StatusBadge status={selection.size > 0 ? 'info' : 'pending'} label={`${selection.size} atleti selezionati`} />
+              </div>
+              <p className="mt-1 text-xs text-slate-600">La convocazione sarà salvata per {selectedClubTeam.name}. Verifica la rosa prima di confermare.</p>
+            </div>
+          ) : null}
           {loading && <div className="text-sm text-slate-500">Caricamento convocazioni...</div>}
 
           {!loading && mode === 'athlete' && (
@@ -112,8 +135,8 @@ export function ChampionshipConvocationModal({
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Chiudi</Button>
             {mode !== 'athlete' && (
-              <Button onClick={onSave} disabled={!canEdit || saving}>
-                {saving ? 'Salvataggio...' : 'Salva convocazioni'}
+              <Button onClick={() => confirmingRecipients ? onSave() : setConfirmingRecipients(true)} disabled={!canEdit || saving || !selectedClubTeam}>
+                {actionLabel}
               </Button>
             )}
           </div>

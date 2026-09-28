@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from '@/components/ui'
+import { X } from 'lucide-react'
 
 interface Installment {
   id: string
@@ -87,7 +88,7 @@ export default function PaymentModal({
   return (
     <div className="fixed inset-0 cs-overlay" aria-hidden="false">
       <div className="cs-modal cs-modal--lg" data-state="open">
-        <button className="cs-modal__close" onClick={handleClose} aria-label="Chiudi">✕</button>
+            <button type="button" className="cs-modal__close" onClick={handleClose} aria-label="Chiudi"><X className="h-4 w-4" aria-hidden="true" /></button>
         <div className="cs-modal__header">
           <h2 className="cs-modal__title">Segna come pagate ({selectedInstallments.length} rate)</h2>
         </div>

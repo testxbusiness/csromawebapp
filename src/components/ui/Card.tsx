@@ -4,8 +4,7 @@ import { HTMLAttributes, forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  // Aggiungi le nuove varianti
-  variant?: 'default' | 'hover' | 'primary'
+  variant?: 'default' | 'hover' | 'primary' | 'subdued' | 'interactive'
 }
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
@@ -17,6 +16,8 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
           'cs-card',
           variant === 'hover' && 'cs-card--hover',
           variant === 'primary' && 'cs-card--primary',
+          variant === 'subdued' && 'cs-card--subdued',
+          variant === 'interactive' && 'cs-card--interactive',
           className
         )}
         {...props}

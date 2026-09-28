@@ -1,24 +1,73 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { firstRelation, type Match, type Standing } from './types'
+import { requestErrorState, responseErrorState, type RequestState } from '@/lib/http/request-state'
+import { SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail } from '@/context/AccessibleProfileContext'
+import { firstRelation, type ManagerMode, type Match, type Standing } from './types'
 
-export function useChampionshipGroupDetails(groupId: string | null) {
+export function useChampionshipGroupDetails(groupId: string | null, subjectProfileId?: string | null, enabled = true, mode: ManagerMode = 'admin') {
   const supabase = useMemo(() => createClient(), [])
   const [matches, setMatches] = useState<Match[]>([])
   const [standings, setStandings] = useState<Standing[]>([])
-  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState<RequestState>('idle')
+  const requestRef = useRef<AbortController | null>(null)
+  const subjectRef = useRef<string | null | undefined>(subjectProfileId)
+
+  useEffect(() => {
+    const handleSubjectChange = (event: Event) => {
+      subjectRef.current = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? null
+      requestRef.current?.abort()
+      setMatches([])
+      setStandings([])
+      setStatus('idle')
+    }
+    window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+    return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+  }, [])
 
   const reload = useCallback(async () => {
+    if (!enabled) {
+      setMatches([])
+      setStandings([])
+      setStatus('idle')
+      return
+    }
+    subjectRef.current = subjectProfileId
+    requestRef.current?.abort()
+    const controller = new AbortController()
+    requestRef.current = controller
+    const isCurrentRequest = () => requestRef.current === controller && !controller.signal.aborted
     if (!groupId) {
       setMatches([])
       setStandings([])
+      setStatus('ready')
       return
     }
 
-    setLoading(true)
+    setStatus('loading')
     try {
+      if (subjectProfileId !== undefined || mode === 'coach') {
+        const params = new URLSearchParams({ view: 'group', groupId })
+        if (subjectProfileId) params.set('subjectProfileId', subjectProfileId)
+        const endpoint = mode === 'coach' ? '/api/coach/championships' : '/api/athlete/championships'
+        const response = await fetch(`${endpoint}?${params.toString()}`, { cache: 'no-store', signal: controller.signal })
+        const payload = await response.json().catch(() => null) as { matches?: any[]; standings?: Standing[]; error?: string } | null
+        if (!isCurrentRequest() || subjectRef.current !== subjectProfileId) return
+        if (!response.ok) {
+          setStatus(responseErrorState(response.status))
+          return
+        }
+        setMatches((payload?.matches ?? []).map((match: any) => ({
+          ...match,
+          home_club_team: firstRelation(match.home_club_team),
+          away_club_team: firstRelation(match.away_club_team),
+        })) as Match[])
+        setStandings(payload?.standings ?? [])
+        setStatus('ready')
+        return
+      }
+
       const [{ data: matchesData, error: matchesError }, standingsResponse] = await Promise.all([
         supabase
           .from('championship_matches')
@@ -34,14 +83,20 @@ export function useChampionshipGroupDetails(groupId: string | null) {
           .order('match_date', { ascending: true }),
         fetch(`/api/championships/standings?group_id=${encodeURIComponent(groupId)}`, {
           cache: 'no-store',
+          signal: controller.signal,
         }),
       ])
 
+      if (!isCurrentRequest()) return
+
       if (matchesError) throw matchesError
 
-      const standingsPayload = standingsResponse.ok
-        ? await standingsResponse.json() as { standings?: Standing[] }
-        : { standings: [] }
+      if (!standingsResponse.ok) {
+        setStatus(responseErrorState(standingsResponse.status))
+        return
+      }
+      const standingsPayload = await standingsResponse.json() as { standings?: Standing[] }
+      if (!isCurrentRequest()) return
 
       setMatches((matchesData || []).map((match: any) => ({
         ...match,
@@ -49,18 +104,21 @@ export function useChampionshipGroupDetails(groupId: string | null) {
         away_club_team: firstRelation(match.away_club_team),
       })) as Match[])
       setStandings(standingsPayload.standings ?? [])
+      setStatus('ready')
     } catch (error) {
+      if (!isCurrentRequest() || error instanceof DOMException && error.name === 'AbortError') return
       console.error('Errore caricamento dettagli girone', error)
-      setMatches([])
-      setStandings([])
+      setStatus(requestErrorState(error))
     } finally {
-      setLoading(false)
+      if (isCurrentRequest()) {
+        setStatus((current) => current === 'loading' ? 'error' : current)
+      }
     }
-  }, [groupId, supabase])
+  }, [enabled, groupId, mode, subjectProfileId, supabase])
 
   useEffect(() => {
     void reload()
   }, [reload])
 
-  return { matches, standings, loading, reload }
+  return { matches, standings, loading: status === 'loading', status, reload }
 }

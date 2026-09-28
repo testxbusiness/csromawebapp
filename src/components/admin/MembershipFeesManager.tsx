@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useState, useEffect, useMemo } from 'react'
-import { EmptyState, LoadingState, toast } from '@/components/ui'
+import { DeniedState, EmptyState, ErrorState, LoadingState, OfflineState, toast } from '@/components/ui'
+import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
+import { AlertTriangle, BarChart3, XCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MembershipFeeModal from '@/components/admin/MembershipFeeModal'
@@ -20,6 +22,7 @@ interface MembershipFee {
   created_by?: string
   created_at?: string
   updated_at?: string
+  season_id?: string
 
   // Joined data
   teams?: {
@@ -57,6 +60,14 @@ interface Team {
   id: string
   name: string
   code: string
+  activity_id?: string
+  season_id?: string
+}
+
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
 }
 
 interface FeeInstallment {
@@ -74,11 +85,14 @@ interface FeeInstallment {
   }
 }
 
-export default function MembershipFeesManager() {
+export default function MembershipFeesManager({ embedded = false }: { embedded?: boolean }) {
   const [fees, setFees] = useState<MembershipFee[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeason, setSelectedSeason] = useState('all')
   const [tab, setTab] = useState<'fees'|'athletes'>('fees')
   const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
   const [editingFee, setEditingFee] = useState<MembershipFee | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [showInstallments, setShowInstallments] = useState<string | null>(null)
@@ -91,8 +105,14 @@ export default function MembershipFeesManager() {
   const [filterTo, setFilterTo] = useState<string>('')
   const [teamAthletes, setTeamAthletes] = useState<{ id: string; first_name: string; last_name: string }[]>([])
   const [flatInstallments, setFlatInstallments] = useState<any[]>([])
+  const [flatLoadState, setFlatLoadState] = useState<'idle' | 'loading' | LoadState>('idle')
   const [selectedInstallments, setSelectedInstallments] = useState<Set<string>>(new Set())
   const supabase = useMemo(() => createClient(), [])
+
+  const seasonTeams = useMemo(
+    () => selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason),
+    [selectedSeason, teams]
+  )
 
   useEffect(() => {
     // All'apertura, ricalcola stati e poi carica dati
@@ -100,32 +120,66 @@ export default function MembershipFeesManager() {
       await recalcInstallmentStatuses(true)
       await loadFees()
     })()
+    loadSeasons()
     loadTeams()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const loadFees = async () => {
+    setLoading(true)
+    setLoadState('loading')
     try {
-      const res = await fetch('/api/admin/membership-fees', { method: 'GET' })
+      const query = selectedSeason === 'all' ? '' : `?season_id=${encodeURIComponent(selectedSeason)}`
+      const res = await fetch(`/api/admin/membership-fees${query}`, { method: 'GET' })
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Errore caricamento quote')
+      if (!res.ok) {
+        setFees([])
+        setLoadState(loadStateFromStatus(res.status))
+        return
+      }
       setFees(json.fees || [])
+      setLoadState('ready')
     } catch (e) {
       console.error('Errore caricamento quote associative:', e)
       setFees([])
+      setLoadState(loadStateFromError(e))
     } finally {
       setLoading(false)
     }
   }
 
+  const loadSeasons = async () => {
+    const { data } = await supabase
+      .from('seasons')
+      .select('id, name, is_active')
+      .order('start_date', { ascending: false })
+    const nextSeasons = data || []
+    setSeasons(nextSeasons)
+    const activeSeason = nextSeasons.find((season) => season.is_active)
+    if (activeSeason) setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
+  }
+
   const loadTeams = async () => {
     const { data } = await supabase
       .from('teams')
-      .select('id, name, code')
+      .select('id, name, code, activity_id')
       .order('name')
-
-    setTeams(data || [])
+    const activityIds = [...new Set((data || []).map((team) => team.activity_id).filter(Boolean))]
+    const { data: activities } = activityIds.length
+      ? await supabase.from('activities').select('id, season_id').in('id', activityIds)
+      : { data: [] as { id: string; season_id: string }[] }
+    const seasonByActivityId = new Map((activities || []).map((activity) => [activity.id, activity.season_id]))
+    setTeams((data || []).map((team) => ({ ...team, season_id: seasonByActivityId.get(team.activity_id) })))
   }
+
+  useEffect(() => {
+    if (selectedSeason !== 'all') {
+      setFilterTeamId('')
+      setFilterAthleteId('')
+    }
+    void loadFees()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeason])
 
   // Load athletes for team filter
   useEffect(() => {
@@ -148,20 +202,32 @@ export default function MembershipFeesManager() {
   }, [filterTeamId])
 
   const loadFlatInstallments = async () => {
+    setFlatLoadState('loading')
     const params = new URLSearchParams()
     if (filterTeamId) params.set('team_id', filterTeamId)
     if (filterAthleteId) params.set('profile_id', filterAthleteId)
     if (filterStatus) params.set('status', filterStatus)
     if (filterFrom) params.set('from', filterFrom)
     if (filterTo) params.set('to', filterTo)
-    const res = await fetch(`/api/admin/installments?${params.toString()}`)
-    const json = await res.json()
-    if (res.ok) setFlatInstallments(json.items || [])
-    else {
-      console.error('Errore caricamento rate per atleta:', json.error)
+    if (selectedSeason !== 'all') params.set('season_id', selectedSeason)
+    try {
+      const res = await fetch(`/api/admin/installments?${params.toString()}`)
+      const json = await res.json()
+      if (res.ok) {
+        setFlatInstallments(json.items || [])
+        setFlatLoadState('ready')
+      } else {
+        console.error('Errore caricamento rate per atleta:', json.error)
+        setFlatInstallments([])
+        setFlatLoadState(loadStateFromStatus(res.status))
+      }
+    } catch (error) {
+      console.error('Errore caricamento rate per atleta:', error)
       setFlatInstallments([])
+      setFlatLoadState(loadStateFromError(error))
+    } finally {
+      setSelectedInstallments(new Set())
     }
-    setSelectedInstallments(new Set())
   }
 
   const handleCreateFee = async (feeData: Omit<MembershipFee, 'id'> & { installments: InstallmentForm[] }) => {
@@ -173,6 +239,7 @@ export default function MembershipFeesManager() {
         },
         body: JSON.stringify({
           ...feeData,
+          season_id: selectedSeason,
           installments: feeData.installments
         })
       })
@@ -207,6 +274,7 @@ export default function MembershipFeesManager() {
         body: JSON.stringify({
           id,
           ...updateData,
+          season_id: editingFee?.season_id || selectedSeason,
           installments: feeData.installments
         })
       })
@@ -426,11 +494,14 @@ export default function MembershipFeesManager() {
   if (loading) {
     return <LoadingState label="Caricamento quote associative..." />
   }
+  if (loadState === 'denied') return <DeniedState description="Non hai i permessi per visualizzare le quote associative." action={<button onClick={() => void loadFees()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'offline') return <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadFees()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'error') return <ErrorState title="Impossibile caricare le quote associative" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadFees()} className="cs-btn cs-btn--outline">Riprova</button>} />
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Quote Associative</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Quote Associative</h2>}
         <div className="flex gap-3">
           <button
             onClick={async () => {
@@ -445,11 +516,15 @@ export default function MembershipFeesManager() {
             onClick={exportFeesToExcel}
             className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center"
           >
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button
             onClick={() => {
+              if (selectedSeason === 'all') {
+                toast.error('Seleziona una stagione prima di creare una quota')
+                return
+              }
               setEditingFee(null)
               setShowModal(true)
             }}
@@ -461,6 +536,21 @@ export default function MembershipFeesManager() {
       </div>
 
       {/* Tabs */}
+      <div className="cs-card cs-card--primary p-4">
+        <label htmlFor="membership-fee-season" className="cs-field__label">Stagione</label>
+        <select
+          id="membership-fee-season"
+          value={selectedSeason}
+          onChange={(event) => setSelectedSeason(event.target.value)}
+          className="cs-select max-w-md"
+        >
+          <option value="all">Tutte le stagioni</option>
+          {seasons.map((season) => (
+            <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="flex gap-2">
         <button onClick={()=>setTab('fees')} className={`px-3 py-1 rounded ${tab==='fees'?'bg-blue-600 text-white':'bg-gray-100'}`}>Quote</button>
         <button onClick={()=>{setTab('athletes'); if (flatInstallments.length===0) loadFlatInstallments()}} className={`px-3 py-1 rounded ${tab==='athletes'?'bg-blue-600 text-white':'bg-gray-100'}`}>Atleti</button>
@@ -470,7 +560,7 @@ export default function MembershipFeesManager() {
   open={showModal}
   onClose={() => { setShowModal(false); setEditingFee(null) }}
   fee={editingFee}
-  teams={teams}
+  teams={seasonTeams}
   onCreate={handleCreateFee}
   onUpdate={handleUpdateFee}
 />
@@ -493,13 +583,13 @@ export default function MembershipFeesManager() {
           <tbody>
             {fees.map((fee) => (
               <tr key={fee.id}>
-                <td>
+                <td className="tabular-nums">
                   <div>
                     <div className="font-medium">{fee.name}</div>
                     <div className="text-secondary text-sm">{fee.description}</div>
                   </div>
                 </td>
-                <td>
+                <td className="tabular-nums">
                   <div>
                     {fee.teams?.name}
                   </div>
@@ -557,7 +647,7 @@ export default function MembershipFeesManager() {
 
               <div className="mt-2 grid gap-2 text-sm">
                 <div><strong>Squadra:</strong> {fee.teams?.name} <span className="text-secondary">{fee.teams?.code}</span></div>
-                <div><strong>Importo:</strong> €{(fee.total_amount ?? 0).toFixed(2)}</div>
+                <div className="tabular-nums"><strong>Importo:</strong> €{(fee.total_amount ?? 0).toFixed(2)}</div>
                 <div>
                   <strong>Dettagli:</strong>
                   <div>Iscrizione: €{fee.enrollment_fee.toFixed(2)}</div>
@@ -601,7 +691,7 @@ export default function MembershipFeesManager() {
               <label className="cs-field__label">Squadra</label>
               <select value={filterTeamId} onChange={(e)=>setFilterTeamId(e.target.value)} className="cs-select">
                 <option value="">Tutte</option>
-                {teams.map(t=> <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
+                {seasonTeams.map(t=> <option key={t.id} value={t.id}>{t.name} ({t.code})</option>)}
               </select>
             </div>
             <div>
@@ -636,8 +726,13 @@ export default function MembershipFeesManager() {
             <button onClick={bulkMarkPaid} className="ml-auto cs-btn cs-btn--primary cs-btn--sm disabled:opacity-50" disabled={selectedInstallments.size===0}>Segna selezionate pagate</button>
           </div>
 
+          {flatLoadState === 'loading' ? <LoadingState label="Caricamento rate..." /> : null}
+          {flatLoadState === 'denied' ? <DeniedState description="Non hai i permessi per visualizzare queste rate." action={<button onClick={() => void loadFlatInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+          {flatLoadState === 'offline' ? <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadFlatInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+          {flatLoadState === 'error' ? <ErrorState title="Impossibile caricare le rate" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadFlatInstallments()} className="cs-btn cs-btn--outline">Riprova</button>} /> : null}
+
           {/* Desktop */}
-          <div className="hidden md:block">
+          <div className={flatLoadState === 'error' || flatLoadState === 'offline' || flatLoadState === 'denied' || flatLoadState === 'loading' ? 'hidden' : 'hidden md:block'}>
             <table className="cs-table">
               <thead>
                 <tr>
@@ -684,7 +779,7 @@ export default function MembershipFeesManager() {
             )}
           </div>
           {/* Mobile cards */}
-          <div className="md:hidden space-y-3">
+          <div className={flatLoadState === 'error' || flatLoadState === 'offline' || flatLoadState === 'denied' || flatLoadState === 'loading' ? 'hidden' : 'md:hidden space-y-3'}>
             {flatInstallments.map((row:any)=> (
               <div key={row.id} className="cs-card">
                 <div className="flex items-start gap-3">
@@ -1109,7 +1204,7 @@ function FeeForm({
                   className="text-red-600 hover:text-red-800 text-xs px-2 py-1"
                   title="Rimuovi rata"
                 >
-                  ❌
+                  <XCircle className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
             ))}
@@ -1130,7 +1225,7 @@ function FeeForm({
             {Math.abs(installments.reduce((sum, inst) => sum + inst.amount, 0) - calculatedTotal) > 0.01 && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-md p-2">
                 <p className="text-xs text-yellow-800">
-                  ⚠️ Attenzione: La somma delle rate (€{installments.reduce((sum, inst) => sum + inst.amount, 0).toFixed(2)}) 
+                  <AlertTriangle className="mr-1 inline h-4 w-4 align-text-bottom" aria-hidden="true" /> Attenzione: La somma delle rate (€{installments.reduce((sum, inst) => sum + inst.amount, 0).toFixed(2)})
                   non corrisponde all'importo totale (€{calculatedTotal.toFixed(2)})
                 </p>
               </div>

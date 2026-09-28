@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
-import { Card, CardTitle, CardMeta, Table, TableActions, Button, Input, Select, toast, Modal } from '@/components/ui'
+import { Badge, Card, CardTitle, CardMeta, EmptyState, LoadingState, Table, TableActions, Button, Input, Select, toast, Modal } from '@/components/ui'
 import { importFromExcel } from '@/lib/utils/excelImport'
 import { CalendarDays, Clock3, MapPin, Plus, Trash2, Trophy, Upload, Users } from 'lucide-react'
 import { CalendarSyncBadge, ChampionshipInfoPanel, ChampionshipToolbar, ConvocationPublishedList, EditableConvocationList, MatchStatusBadge, NextMatchPanel, StandingsPanel } from '@/components/championship/ChampionshipPanels'
@@ -30,7 +30,6 @@ import { useChampionshipMatchMutations } from '@/components/championship/useCham
 import { useImportedClubTeam } from '@/components/championship/useImportedClubTeam'
 import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
 import { useChampionshipCalendarDeletion } from '@/components/championship/useChampionshipCalendarDeletion'
-import { persistImportedMatches, persistImportedResults } from '@/components/championship/championshipImportPersistence'
 import { MatchInfoModal, MatchResultModal } from '@/components/championship/ChampionshipMatchModals'
 import { formatChampionshipDate as formatDate, formatMatchScore as formatScore, formatMatchSetsDetail as formatSetsDetail, matchDateTime, normalizeChampionshipTime as normalizeTime, parseMatchResult } from '@/components/championship/formatters'
 import { matchImportColumns, resultImportColumns } from '@/components/championship/importDefinitions'
@@ -38,10 +37,12 @@ import { ChampionshipCalendarImportModal, ChampionshipResultsImportModal } from 
 import { ChampionshipConvocationModal } from '@/components/championship/ChampionshipConvocationModal'
 import { ChampionshipGroupModal } from '@/components/championship/ChampionshipGroupModal'
 import { ChampionshipGroupTeamsModal, type GroupTeamsSelection, type NewClubTeam } from '@/components/championship/ChampionshipGroupTeamsModal'
+import { useTeamContext } from '@/context/TeamContext'
 
 export default function ChampionshipsManager() {
   let mode = 'coach' as ManagerMode
   const { account } = useAuth()
+  const { selectedTeamId, teams: contextTeams } = useTeamContext()
   const supabase = useMemo(() => createClient(), [])
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
@@ -61,6 +62,7 @@ export default function ChampionshipsManager() {
     activity_id: '',
     start_date: '',
     end_date: '',
+    team_id: '',
     group_name: 'Girone A',
     create_group: true,
   })
@@ -87,6 +89,10 @@ export default function ChampionshipsManager() {
   const [convocationModalOpen, setConvocationModalOpen] = useState(false)
   const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
   const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
+  const effectiveCoachTeamIds = useMemo(
+    () => selectedTeamId ? new Set([selectedTeamId]) : coachTeamIds,
+    [coachTeamIds, selectedTeamId],
+  )
 
   const {
     championships,
@@ -95,13 +101,17 @@ export default function ChampionshipsManager() {
     teams,
     loading: catalogLoading,
     reload: reloadChampionships,
-  } = useChampionshipCatalog({ mode, coachTeamIds, athleteTeamIds })
+  } = useChampionshipCatalog({ mode, coachTeamIds: effectiveCoachTeamIds, athleteTeamIds })
+  const assignedTeams = useMemo(
+    () => teams.filter((team) => coachTeamIds.has(team.id)),
+    [coachTeamIds, teams],
+  )
   const {
     matches,
     standings,
     loading: groupLoading,
     reload: reloadGroupDetails,
-  } = useChampionshipGroupDetails(selectedGroupId)
+  } = useChampionshipGroupDetails(selectedGroupId, undefined, true, 'coach')
   const loading = catalogLoading || groupLoading
   const {
     changeStatus,
@@ -110,8 +120,8 @@ export default function ChampionshipsManager() {
     saveResult: persistResult,
     savingResult: savingMatchResult,
     statusUpdating,
-  } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails })
-  const { ensureClubTeam } = useImportedClubTeam({ championshipId: selectedChampionshipId, teams })
+  } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails, coachAuthorized: true })
+  const { ensureClubTeam } = useImportedClubTeam({ championshipId: selectedChampionshipId, teams, coachAuthorized: true })
   const {
     convocation,
     convocationLoading,
@@ -123,14 +133,29 @@ export default function ChampionshipsManager() {
     setConvocation,
     setConvocationSelection,
     setConvocationTeamMembers,
-  } = useChampionshipConvocations()
-  const { deleteCalendar: persistDeleteCalendar, deleting } = useChampionshipCalendarDeletion()
+  } = useChampionshipConvocations({ coachAuthorized: true })
+  const { deleteCalendar: persistDeleteCalendar, deleting } = useChampionshipCalendarDeletion({ coachAuthorized: true })
 
   useEffect(() => {
     if (seasons[0] && !createForm.season_id) {
       setCreateForm((prev) => ({ ...prev, season_id: seasons[0].id }))
     }
   }, [createForm.season_id, seasons])
+
+  useEffect(() => {
+    if (!showCreateModal) return
+    setCreateForm((previous) => {
+      const selectedTeamIsAssigned = Boolean(selectedTeamId && coachTeamIds.has(selectedTeamId))
+      const preferredTeamId = selectedTeamIsAssigned
+        ? selectedTeamId
+        : assignedTeams.length === 1
+          ? assignedTeams[0].id
+          : previous.team_id
+      return preferredTeamId === previous.team_id
+        ? previous
+        : { ...previous, team_id: preferredTeamId || '' }
+    })
+  }, [assignedTeams, coachTeamIds, selectedTeamId, showCreateModal])
 
   // Allinea importGroupId al girone selezionato di default
   useEffect(() => {
@@ -148,23 +173,6 @@ export default function ChampionshipsManager() {
   useEffect(() => {
     computeNextMatch(matches)
   }, [matches, mode, coachTeamIds, athleteTeamIds]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadCoachTeams = useCallback(async () => {
-    try {
-      const ownerProfileId = account?.ownerProfileId
-      if (!ownerProfileId) return
-
-      const { data: tc } = await supabase
-        .from('team_coaches')
-        .select('team_id')
-        .eq('coach_id', ownerProfileId)
-      const ids = new Set<string>()
-      tc?.forEach((t: any) => t.team_id && ids.add(t.team_id))
-      setCoachTeamIds(ids)
-    } catch (err) {
-      console.error('Errore caricamento squadre coach', err)
-    }
-  }, [account?.ownerProfileId, supabase])
 
   const loadAthleteTeams = useCallback(async () => {
     try {
@@ -184,20 +192,17 @@ export default function ChampionshipsManager() {
   }, [account?.ownerProfileId, supabase])
 
   const loadClubTeams = useCallback(async (championshipId: string) => {
-    const { data, error } = await supabase
-      .from('championship_club_teams')
-      .select('id, championship_id, code, name, is_home_club, team_id, teams(id, name, code)')
-      .eq('championship_id', championshipId)
-      .order('name')
-
-    if (error) {
-      console.error('Errore caricamento squadre campionato', error)
+    const params = new URLSearchParams({ view: 'club-teams', championshipId })
+    const response = await fetch(`/api/coach/championships?${params.toString()}`, { cache: 'no-store' })
+    const payload = await response.json().catch(() => null) as { clubTeams?: ClubTeamOption[]; error?: string } | null
+    if (!response.ok) {
+      console.error('Errore caricamento squadre campionato', payload?.error)
       toast.error('Impossibile caricare le squadre del campionato')
       setClubTeams([])
       return
     }
-    setClubTeams(data || [])
-  }, [supabase])
+    setClubTeams(payload?.clubTeams ?? [])
+  }, [])
 
   const currentGroups = useMemo(() => {
     return championships.find((c) => c.id === selectedChampionshipId)?.championship_groups || []
@@ -276,38 +281,19 @@ export default function ChampionshipsManager() {
       toast.error('Nome e stagione sono obbligatori')
       return
     }
+    if (createForm.create_group && !createForm.team_id) {
+      toast.error('Seleziona la squadra CSRoma del campionato')
+      return
+    }
 
     setSavingResult(true)
     try {
-      const { data: champ, error } = await supabase
-        .from('championships')
-        .insert({
-          name: createForm.name,
-          sport: createForm.sport,
-          status: createForm.status,
-          season_id: createForm.season_id,
-          activity_id: createForm.activity_id || null,
-          start_date: createForm.start_date || null,
-          end_date: createForm.end_date || null,
-        })
-        .select('id')
-        .single()
-
-      if (error) throw error
-
-      if (createForm.create_group && createForm.group_name) {
-        const { error: groupError } = await supabase.from('championship_groups').insert({
-          championship_id: champ.id,
-          name: createForm.group_name,
-          phase: 'regular',
-          sort_order: 0
-        })
-        if (groupError) throw groupError
-      }
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_championship', ...createForm, team_id: createForm.team_id || null, activity_id: createForm.activity_id || null, start_date: createForm.start_date || null, end_date: createForm.end_date || null }) })
+      if (!response.ok) throw new Error('Impossibile creare il campionato')
 
       toast.success('Campionato creato')
       setShowCreateModal(false)
-      setCreateForm((prev) => ({ ...prev, name: '', group_name: 'Girone A' }))
+      setCreateForm((prev) => ({ ...prev, name: '', team_id: selectedTeamId || '', group_name: 'Girone A' }))
       await reloadChampionships()
     } catch (err) {
       console.error('Errore creazione campionato', err)
@@ -328,13 +314,8 @@ export default function ChampionshipsManager() {
     }
     setSavingResult(true)
     try {
-      const { error } = await supabase.from('championship_groups').insert({
-        championship_id: selectedChampionshipId,
-        name: groupForm.name,
-        phase: groupForm.phase,
-        sort_order: (currentGroups.length || 0)
-      })
-      if (error) throw error
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create_group', championship_id: selectedChampionshipId, name: groupForm.name, phase: groupForm.phase, sort_order: currentGroups.length || 0 }) })
+      if (!response.ok) throw new Error('Impossibile creare il girone')
       toast.success('Girone creato')
       setShowGroupModal(false)
       setGroupForm({ name: 'Girone A', phase: 'regular' })
@@ -408,7 +389,8 @@ export default function ChampionshipsManager() {
         return
       }
 
-      await persistImportedMatches(supabase, payload, groupClubTeams)
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import_matches', group_id: groupId, matches: payload, group_club_team_ids: Array.from(groupClubTeams) }) })
+      if (!response.ok) throw new Error('Impossibile importare il calendario')
 
       toast.success(`Importate ${payload.length} partite`)
       setShowImportModal(false)
@@ -508,7 +490,8 @@ export default function ChampionshipsManager() {
         }
       }
 
-      await persistImportedResults(supabase, updates)
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import_results', results: updates }) })
+      if (!response.ok) throw new Error('Impossibile importare i risultati')
       const updated = updates.length
 
       if (errors.length > 0) {
@@ -660,9 +643,9 @@ export default function ChampionshipsManager() {
   }, [currentGroups])
 
   useEffect(() => {
-    if (mode === 'coach') void loadCoachTeams()
+    if (mode === 'coach') setCoachTeamIds(new Set(contextTeams.map((team) => team.id)))
     else if (mode === 'athlete') void loadAthleteTeams()
-  }, [loadAthleteTeams, loadCoachTeams, mode])
+  }, [contextTeams, loadAthleteTeams, mode])
 
   useEffect(() => {
     if (selectedChampionshipId) void loadClubTeams(selectedChampionshipId)
@@ -712,8 +695,8 @@ export default function ChampionshipsManager() {
         is_home_club: newClubTeam.is_home_club || !!newClubTeam.team_id,
         team_id: newClubTeam.team_id || null,
       }
-      const { error } = await supabase.from('championship_club_teams').upsert(payload, { onConflict: 'championship_id,code' }).select('id').single()
-      if (error) throw error
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_club_team', ...payload }) })
+      if (!response.ok) throw new Error('Impossibile creare la squadra')
       toast.success('Squadra aggiunta')
       setNewClubTeam({ code: '', name: '', is_home_club: false, team_id: '' })
       await loadClubTeams(selectedChampionshipId)
@@ -731,20 +714,9 @@ export default function ChampionshipsManager() {
     }
     setGroupTeamsSaving(true)
     try {
-      const current = currentGroups.find((g) => g.id === selectedGroupId)?.championship_group_teams || []
-      const currentIds = new Set(current.map((t) => t.championship_club_team_id))
       const selectedEntries = Object.entries(groupTeamsSelection).filter(([, value]) => value.selected)
-      const selectedIds = new Set(selectedEntries.map(([id]) => id))
-      const toUpsert = selectedEntries.map(([clubTeamId, value]) => ({ championship_group_id: selectedGroupId, championship_club_team_id: clubTeamId, is_home_club: value.is_home_club }))
-      const toDelete = Array.from(currentIds).filter((id) => !selectedIds.has(id))
-      if (toUpsert.length > 0) {
-        const { error } = await supabase.from('championship_group_teams').upsert(toUpsert, { onConflict: 'championship_group_id,championship_club_team_id' })
-        if (error) throw error
-      }
-      if (toDelete.length > 0) {
-        const { error } = await supabase.from('championship_group_teams').delete().eq('championship_group_id', selectedGroupId).in('championship_club_team_id', toDelete)
-        if (error) throw error
-      }
+      const response = await fetch('/api/coach/championships/mutations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save_group_teams', group_id: selectedGroupId, selected: selectedEntries.map(([clubTeamId, value]) => ({ club_team_id: clubTeamId, is_home_club: value.is_home_club })) }) })
+      if (!response.ok) throw new Error('Impossibile aggiornare le squadre del girone')
       toast.success('Squadre aggiornate')
       setShowTeamsModal(false)
       await reloadChampionships()
@@ -857,18 +829,20 @@ export default function ChampionshipsManager() {
             )}
           />
           <div className="flex flex-wrap gap-2">
-            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
-              <Trophy className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
+            <Badge variant="neutral" className="inline-flex min-h-11 items-center gap-2 px-4">
+              <Trophy className="h-4 w-4" aria-hidden="true" />
               {selectedChampionship ? selectedChampionship.name : 'Nessun campionato selezionato'}
-            </div>
-            <div className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 text-sm font-medium text-slate-700">
-              <Users className="h-4 w-4 text-[color:var(--cs-accent)]" aria-hidden="true" />
+            </Badge>
+            <Badge variant="neutral" className="inline-flex min-h-11 items-center gap-2 px-4">
+              <Users className="h-4 w-4" aria-hidden="true" />
               {currentGroups.length} {currentGroups.length === 1 ? 'girone attivo' : 'gironi attivi'}
-            </div>
+            </Badge>
           </div>
         </div>
       </Card>
 
+      {selectedChampionship ? (
+      <>
       <div className="grid gap-4 md:grid-cols-2 mt-4">
         <ChampionshipInfoPanel
           description="Stato del campionato e perimetro del girone selezionato."
@@ -915,7 +889,7 @@ export default function ChampionshipsManager() {
                 <tbody>
                   {matches.length === 0 && (
                     <tr>
-                      <td colSpan={mode === 'athlete' ? 5 : 8} className="text-center text-slate-400 py-4">Nessuna partita</td>
+                      <td colSpan={mode === 'athlete' ? 5 : 8} className="py-4 text-center text-secondary">Nessuna partita</td>
                     </tr>
                   )}
                   {matches.map((m) => (
@@ -929,7 +903,7 @@ export default function ChampionshipsManager() {
                         <div className="font-semibold">
                           {m.home_club_team?.name || clubTeamName(m.home_club_team_id)} vs {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
                         </div>
-                        <div className="text-xs text-slate-500">{m.location_text || '—'}</div>
+                        <div className="text-xs text-secondary">{m.location_text || '—'}</div>
                       </td>
                       {mode !== 'athlete' && (
                         <td>
@@ -945,7 +919,7 @@ export default function ChampionshipsManager() {
                         </td>
                       )}
                       <td className="font-semibold">{formatScore(m.championship_match_sets)}</td>
-                      <td className="text-sm text-slate-600">{formatSetsDetail(m.championship_match_sets)}</td>
+                      <td className="text-sm text-secondary">{formatSetsDetail(m.championship_match_sets)}</td>
                       {mode !== 'athlete' && (
                         <td>
                           <CalendarSyncBadge synced={!!m.event_id} />
@@ -970,38 +944,36 @@ export default function ChampionshipsManager() {
             </div>
             <div className="mt-4 space-y-3 md:hidden">
               {matches.length === 0 && (
-                <div className="rounded-lg border border-slate-200 px-4 py-6 text-center text-sm text-slate-400">
-                  Nessuna partita
-                </div>
+                <EmptyState title="Nessuna partita" description="Le partite del girone compariranno qui quando saranno disponibili." />
               )}
               {matches.map((m) => (
-                <div key={m.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <Card key={m.id} variant="primary" className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      <div className="text-xs font-medium uppercase tracking-wide text-secondary">
                         {m.match_day ? `Giornata ${m.match_day}` : 'Giornata da definire'}
                       </div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">
+                      <div className="mt-1 text-sm font-semibold text-[color:var(--cs-ink)]">
                         {m.match_date ? new Date(m.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '—'}
                         {m.start_time ? ` · ${m.start_time.slice(0,5)}` : ''}
                       </div>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
+                    <Badge variant="neutral" className="px-3 py-1 text-sm font-semibold">
                       {formatScore(m.championship_match_sets)}
-                    </span>
+                    </Badge>
                   </div>
-                  <div className="mt-3 text-sm font-semibold text-slate-900">
+                  <div className="mt-3 text-sm font-semibold text-[color:var(--cs-ink)]">
                     {m.home_club_team?.name || clubTeamName(m.home_club_team_id)}
                   </div>
-                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">vs</div>
-                  <div className="text-sm font-semibold text-slate-900">
+                  <div className="text-xs uppercase tracking-[0.18em] text-secondary">vs</div>
+                  <div className="text-sm font-semibold text-[color:var(--cs-ink)]">
                     {m.away_club_team?.name || clubTeamName(m.away_club_team_id)}
                   </div>
-                  <div className="mt-3 space-y-1 text-sm text-slate-600">
-                    <div><span className="font-medium text-slate-700">Set:</span> {formatSetsDetail(m.championship_match_sets) || '—'}</div>
-                    <div><span className="font-medium text-slate-700">Luogo:</span> {m.location_text || '—'}</div>
-                    <div className="flex items-center justify-between gap-3"><span className="font-medium text-slate-700">Stato</span><MatchStatusBadge status={m.status} label={STATUS_LABEL[m.status] || m.status} /></div>
-                    <div className="flex items-center justify-between gap-3"><span className="font-medium text-slate-700">Calendario</span><CalendarSyncBadge synced={!!m.event_id} /></div>
+                  <div className="mt-3 space-y-1 text-sm text-secondary">
+                    <div><span className="font-medium text-[color:var(--cs-ink)]">Set:</span> {formatSetsDetail(m.championship_match_sets) || '—'}</div>
+                    <div><span className="font-medium text-[color:var(--cs-ink)]">Luogo:</span> {m.location_text || '—'}</div>
+                    <div className="flex items-center justify-between gap-3"><span className="font-medium text-[color:var(--cs-ink)]">Stato</span><MatchStatusBadge status={m.status} label={STATUS_LABEL[m.status] || m.status} /></div>
+                    <div className="flex items-center justify-between gap-3"><span className="font-medium text-[color:var(--cs-ink)]">Calendario</span><CalendarSyncBadge synced={!!m.event_id} /></div>
                   </div>
                   <div className="mt-4 flex flex-col gap-2">
                     <Button size="sm" variant="outline" block onClick={() => openResultEditor(m)}>
@@ -1011,7 +983,7 @@ export default function ChampionshipsManager() {
                       Modifica info gara
                     </Button>
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
 
@@ -1042,6 +1014,12 @@ export default function ChampionshipsManager() {
           <StandingsPanel rows={sortedStandings} />
         </div>
       </div>
+      </>
+      ) : (
+        <Card variant="primary">
+          <EmptyState title="Nessun campionato disponibile" description="Non risultano campionati collegati alle squadre della stagione attiva." />
+        </Card>
+      )}
 
       <ChampionshipConvocationModal
         open={convocationModalOpen}
@@ -1082,9 +1060,7 @@ export default function ChampionshipsManager() {
         onSave={saveConvocation}
       />
 
-      {loading && (
-        <div className="text-center text-slate-500">Caricamento...</div>
-      )}
+      {loading && <div className="py-4"><LoadingState label="Caricamento campionato..." /></div>}
 
       {mode !== 'athlete' && (
         <Modal
@@ -1138,6 +1114,20 @@ export default function ChampionshipsManager() {
                 </Select>
               </div>
               <div>
+                <label className="cs-label">Squadra CSRoma *</label>
+                <Select
+                  value={createForm.team_id}
+                  onChange={(e) => setCreateForm((prev) => ({ ...prev, team_id: e.target.value }))}
+                  disabled={!createForm.create_group || assignedTeams.length === 0}
+                >
+                  <option value="">Seleziona una squadra</option>
+                  {assignedTeams.map((team) => (
+                    <option key={team.id} value={team.id}>{team.name}</option>
+                  ))}
+                </Select>
+                <p className="mt-1 text-xs text-secondary">La squadra selezionata è l’unica CSRoma aggiunta al primo girone.</p>
+              </div>
+              <div>
                 <label className="cs-label">Stato</label>
                 <Select
                   value={createForm.status}
@@ -1168,10 +1158,10 @@ export default function ChampionshipsManager() {
               </div>
             </div>
 
-            <div className="space-y-2 rounded-md border border-slate-200 p-3 bg-slate-50">
+            <Card variant="subdued" className="space-y-2 p-3">
               <label className="cs-label">Crea subito un girone</label>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-sm text-secondary">
                   <input
                     type="checkbox"
                     checked={createForm.create_group}
@@ -1186,7 +1176,7 @@ export default function ChampionshipsManager() {
                   placeholder="Girone A"
                 />
               </div>
-            </div>
+            </Card>
 
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="ghost" onClick={() => setShowCreateModal(false)}>Annulla</Button>

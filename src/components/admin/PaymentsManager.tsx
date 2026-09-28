@@ -4,10 +4,13 @@ import { useCallback, useState, useEffect, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import PaymentModal from '@/components/admin/PaymentModal'
-import { LoadingState } from '@/components/ui'
+import { DeniedState, ErrorState, LoadingState, OfflineState } from '@/components/ui'
+import { loadStateFromError, loadStateFromStatus, type LoadState } from '@/lib/ui/load-state'
+import { BarChart3, CheckCircle2, RotateCcw } from 'lucide-react'
 
 interface Payment {
   id?: string
+  season_id?: string | null
   type: 'general_cost' | 'coach_payment' | 'person_payment'
   description: string
   amount: number
@@ -33,15 +36,19 @@ interface Payment {
     id: string
     name: string
     address: string
+    season_id?: string
   }
   activities?: {
     id: string
     name: string
+    season_id?: string
   }
   teams?: {
     id: string
     name: string
     code: string
+    activity_id?: string
+    season_id?: string
   }
   coaches?: {
     id: string
@@ -63,17 +70,27 @@ interface Gym {
   id: string
   name: string
   address: string
+  season_id?: string
 }
 
 interface Activity {
   id: string
   name: string
+  season_id?: string
 }
 
 interface Team {
   id: string
   name: string
   code: string
+  activity_id?: string
+  season_id?: string
+}
+
+interface Season {
+  id: string
+  name: string
+  is_active: boolean
 }
 
 interface Coach {
@@ -86,13 +103,16 @@ interface Payee extends Coach {
   type: 'coach' | 'staff'
 }
 
-export default function PaymentsManager() {
+export default function PaymentsManager({ embedded = false }: { embedded?: boolean }) {
   const [payments, setPayments] = useState<Payment[]>([])
   const [gyms, setGyms] = useState<Gym[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
   const [teams, setTeams] = useState<Team[]>([])
+  const [seasons, setSeasons] = useState<Season[]>([])
+  const [selectedSeason, setSelectedSeason] = useState('all')
   const [payees, setPayees] = useState<Payee[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<'loading' | LoadState>('loading')
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [filterType, setFilterType] = useState<'all' | 'general_cost' | 'coach_payment' | 'person_payment'>('all')
@@ -100,32 +120,53 @@ export default function PaymentsManager() {
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
-    loadPayments()
     loadGyms()
     loadActivities()
     loadTeams()
     loadPayees()
+    loadSeasons()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    void loadPayments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeason])
+
   const loadPayments = async () => {
+    setLoading(true)
+    setLoadState('loading')
     try {
-      const response = await fetch('/api/admin/payments')
+      const query = selectedSeason === 'all' ? '' : '?season_id=' + encodeURIComponent(selectedSeason)
+      const response = await fetch('/api/admin/payments' + query)
       if (!response.ok) {
-        throw new Error('Failed to load payments')
+        setPayments([])
+        setLoadState(loadStateFromStatus(response.status))
+        return
       }
       const data = await response.json()
       setPayments(data)
+      setLoadState('ready')
     } catch (error) {
       console.error('Error loading payments:', error)
       setPayments([])
+      setLoadState(loadStateFromError(error))
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
+  }
+
+  const loadSeasons = async () => {
+    const { data } = await supabase.from('seasons').select('id, name, is_active').order('start_date', { ascending: false })
+    const nextSeasons = data || []
+    setSeasons(nextSeasons)
+    const activeSeason = nextSeasons.find((season) => season.is_active)
+    if (activeSeason) setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
   }
 
   const loadGyms = async () => {
     const { data } = await supabase
       .from('gyms')
-      .select('id, name, address')
+      .select('id, name, address, season_id')
       .order('name')
 
     setGyms(data || [])
@@ -134,7 +175,7 @@ export default function PaymentsManager() {
   const loadActivities = async () => {
     const { data } = await supabase
       .from('activities')
-      .select('id, name')
+      .select('id, name, season_id')
       .order('name')
 
     setActivities(data || [])
@@ -143,11 +184,19 @@ export default function PaymentsManager() {
   const loadTeams = async () => {
     const { data } = await supabase
       .from('teams')
-      .select('id, name, code')
+      .select('id, name, code, activity_id')
       .order('name')
-
-    setTeams(data || [])
+    const activityIds = [...new Set((data || []).map((team) => team.activity_id).filter(Boolean))]
+    const { data: activitiesData } = activityIds.length
+      ? await supabase.from('activities').select('id, season_id').in('id', activityIds)
+      : { data: [] as { id: string; season_id: string }[] }
+    const seasonByActivityId = new Map((activitiesData || []).map((activity) => [activity.id, activity.season_id]))
+    setTeams((data || []).map((team) => ({ ...team, season_id: seasonByActivityId.get(team.activity_id) })))
   }
+
+  const seasonScopedGyms = useMemo(() => selectedSeason === 'all' ? gyms : gyms.filter((gym) => gym.season_id === selectedSeason), [gyms, selectedSeason])
+  const seasonScopedActivities = useMemo(() => selectedSeason === 'all' ? activities : activities.filter((activity) => activity.season_id === selectedSeason), [activities, selectedSeason])
+  const seasonScopedTeams = useMemo(() => selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason), [selectedSeason, teams])
 
   const loadPayees = async () => {
     const response = await fetch('/api/admin/payment-payees')
@@ -214,8 +263,9 @@ export default function PaymentsManager() {
         // Create each payment individually via API
         for (const date of paymentDates) {
           const paymentToCreate = {
-            ...paymentData,
-            due_date: date,
+          ...paymentData,
+          season_id: selectedSeason === 'all' ? undefined : selectedSeason,
+          due_date: date,
             status: 'pending' as const
           }
           
@@ -242,7 +292,7 @@ export default function PaymentsManager() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(paymentData),
+          body: JSON.stringify({ ...paymentData, season_id: selectedSeason === 'all' ? undefined : selectedSeason }),
         })
 
         if (response.ok) {
@@ -265,7 +315,7 @@ export default function PaymentsManager() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ id, ...paymentData }),
+        body: JSON.stringify({ id, ...paymentData, season_id: selectedSeason === 'all' ? undefined : selectedSeason }),
       })
 
       if (response.ok) {
@@ -398,19 +448,22 @@ export default function PaymentsManager() {
   if (loading) {
     return <LoadingState label="Caricamento pagamenti..." />
   }
+  if (loadState === 'denied') return <DeniedState description="Non hai i permessi per visualizzare i pagamenti." action={<button onClick={() => void loadPayments()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'offline') return <OfflineState description="La connessione non è disponibile. Verifica la rete e riprova." action={<button onClick={() => void loadPayments()} className="cs-btn cs-btn--outline">Riprova</button>} />
+  if (loadState === 'error') return <ErrorState title="Impossibile caricare i pagamenti" description="Si è verificato un problema durante il caricamento. Riprova." action={<button onClick={() => void loadPayments()} className="cs-btn cs-btn--outline">Riprova</button>} />
 
   const filteredPayments = filterPayments()
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Pagamenti</h2>
+        {!embedded && <h2 className="text-2xl font-bold">Pagamenti</h2>}
         <div className="flex gap-3">
           <button
             onClick={exportPaymentsToExcel}
             className="cs-btn cs-btn--accent"
           >
-            <span className="mr-2">📊</span>
+            <BarChart3 className="mr-2 h-4 w-4" aria-hidden="true" />
             Export Excel
           </button>
           <button
@@ -427,13 +480,13 @@ export default function PaymentsManager() {
 
       {/* Statistics */}
 <div className="cs-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 16 }}>
-  <div className="cs-card cs-card--primary p-6">
+  <div className="cs-card cs-card--primary p-6 tabular-nums">
     <div className="text-sm text-secondary">Totale Pagamenti</div>
     <div className="text-2xl font-bold">€{getTotalAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">{filteredPayments.length} pagamenti</div>
   </div>
 
-  <div className="cs-card cs-card--primary p-6">
+  <div className="cs-card cs-card--primary p-6 tabular-nums">
     <div className="text-sm text-secondary">Da Pagare</div>
     <div className="text-2xl font-bold">€{getPendingAmount().toFixed(2)}</div>
     <div className="text-xs text-secondary">
@@ -441,7 +494,7 @@ export default function PaymentsManager() {
     </div>
   </div>
 
-  <div className="cs-card cs-card--primary p-6">
+  <div className="cs-card cs-card--primary p-6 tabular-nums">
     <div className="text-sm text-secondary">Pagati</div>
     <div className="text-2xl font-bold">
       €{(getTotalAmount() - getPendingAmount()).toFixed(2)}
@@ -455,6 +508,13 @@ export default function PaymentsManager() {
       {/* Filters */}
       <div className="cs-card cs-card--primary p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="cs-field__label" htmlFor="payments-season">Stagione</label>
+            <select id="payments-season" value={selectedSeason} onChange={(event) => setSelectedSeason(event.target.value)} className="cs-select">
+              <option value="all">Tutte le stagioni</option>
+              {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
+            </select>
+          </div>
           <div>
             <label className="cs-field__label">Tipo Pagamento</label>
             <select
@@ -487,9 +547,9 @@ export default function PaymentsManager() {
             open={showModal}
             onClose={() => { setShowModal(false); setEditingPayment(null) }}
             payment={editingPayment}
-            gyms={gyms}
-            activities={activities}
-            teams={teams}
+            gyms={seasonScopedGyms}
+            activities={seasonScopedActivities}
+            teams={seasonScopedTeams}
             payees={payees}
             onCreate={handleCreatePayment}
             onUpdate={handleUpdatePayment}
@@ -534,7 +594,7 @@ export default function PaymentsManager() {
             </td>
 
             <td className="p-4 whitespace-nowrap align-top">
-              <div className="text-sm font-semibold">
+              <div className="text-sm font-semibold tabular-nums">
                 €{payment.amount.toFixed(2)}
               </div>
             </td>
@@ -571,7 +631,7 @@ export default function PaymentsManager() {
                   className="cs-btn cs-btn--ghost cs-btn--sm mr-2"
                   title="Segna come pagato"
                 >
-                  ✅
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                 </button>
               ) : (
                 <button
@@ -579,7 +639,7 @@ export default function PaymentsManager() {
                   className="cs-btn cs-btn--ghost cs-btn--sm mr-2"
                   title="Segna come da pagare"
                 >
-                  ↩️
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
                 </button>
               )}
               <button
@@ -618,7 +678,7 @@ export default function PaymentsManager() {
         </div>
 
         <div className="mt-3 grid gap-2">
-          <div className="text-sm"><strong>Importo:</strong> €{payment.amount.toFixed(2)}</div>
+          <div className="text-sm tabular-nums"><strong>Importo:</strong> €{payment.amount.toFixed(2)}</div>
           <div className="text-sm">
             <strong>Stato:</strong>
             <span className={`ml-2 cs-badge ${payment.status === 'paid' ? 'cs-badge--success' : 'cs-badge--warning'}`}>

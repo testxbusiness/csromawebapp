@@ -20,10 +20,11 @@ interface CoachWithDetails extends Coach {
     role: string
     assigned_at: string
     activity_id?: string
+    season_id?: string
   }>
 }
 
-export default function CoachesManager() {
+export default function CoachesManager({ embedded = false }: { embedded?: boolean }) {
   const [coaches, setCoaches] = useState<CoachWithDetails[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [activities, setActivities] = useState<Activity[]>([])
@@ -47,6 +48,14 @@ export default function CoachesManager() {
   const [selectedActivity, setSelectedActivity] = useState<string>('all')
   const [selectedTeam, setSelectedTeam] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
+  const teamsForSelectedSeason = useCallback(<T extends { season_id?: string }>(teamList: T[] | undefined) => {
+    const teams = teamList ?? []
+    return selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason)
+  }, [selectedSeason])
+  const selectableTeams = useMemo(() => {
+    if (selectedSeason === 'all') return teams
+    return teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === selectedSeason))
+  }, [activities, selectedSeason, teams])
 
   const loadCoaches = useCallback(async () => {
     try {
@@ -94,7 +103,11 @@ export default function CoachesManager() {
         `)
         .order('name')
 
-      setSeasons(seasonsData || [])
+      const loadedSeasons = seasonsData || []
+      setSeasons(loadedSeasons)
+      setSelectedSeason((current) => current === 'all'
+        ? loadedSeasons.find((season) => season.is_active)?.id || 'all'
+        : current)
       setActivities(activitiesData || [])
       setTeams(teamsData || [])
     } catch (error) {
@@ -117,7 +130,7 @@ export default function CoachesManager() {
 
       // Filtro attività
       if (selectedActivity !== 'all') {
-        const hasActivity = coach.teams?.some(team => {
+        const hasActivity = teamsForSelectedSeason(coach.teams).some(team => {
           const teamActivity = activities.find(a => a.id === team.activity_id)
           return teamActivity?.name === selectedActivity
         })
@@ -126,7 +139,7 @@ export default function CoachesManager() {
 
       // Filtro squadra
       if (selectedTeam !== 'all') {
-        const hasTeam = coach.teams?.some(team => team.id === selectedTeam)
+        const hasTeam = teamsForSelectedSeason(coach.teams).some(team => team.id === selectedTeam)
         if (!hasTeam) return false
       }
 
@@ -142,7 +155,7 @@ export default function CoachesManager() {
 
       return true
     })
-  }, [activities, coaches, selectedSeason, selectedActivity, selectedTeam, searchTerm])
+  }, [activities, coaches, selectedSeason, selectedActivity, selectedTeam, searchTerm, teamsForSelectedSeason])
 
   // Gestione selezione multipla
   const toggleCoachSelection = (coachId: string) => {
@@ -206,6 +219,10 @@ export default function CoachesManager() {
   }
 
   const handleTeamAssignmentRequest = () => {
+    if (selectedSeason === 'all') {
+      toast.error('Seleziona una stagione prima di assegnare una squadra')
+      return
+    }
     setBulkOperation('assign_to_team')
     setShowTeamAssignmentModal(true)
     setShowBulkModal(false)
@@ -222,7 +239,7 @@ export default function CoachesManager() {
     membershipFeeId?: string
   }) => {
     if (bulkOperation === 'assign_to_team') {
-      handleBulkOperation(bulkOperation, data)
+      handleBulkOperation(bulkOperation, { ...data, seasonId: selectedSeason })
     }
     setShowTeamAssignmentModal(false)
     setBulkOperation(null)
@@ -250,7 +267,7 @@ export default function CoachesManager() {
   const openCollaboratorEdit = (coach: CoachWithDetails) => {
     const seasonId = selectedSeason !== 'all' ? selectedSeason : coach.season_ids?.[0] || seasons.find((season) => season.is_active)?.id || ''
     const seasonTeamIds = new Set(teams.filter((team) => activities.some((activity) => activity.id === team.activity_id && activity.season_id === seasonId)).map((team) => team.id))
-    const seasonAssignments = (coach.teams || []).filter((team) => seasonTeamIds.has(team.id))
+    const seasonAssignments = teamsForSelectedSeason(coach.teams).filter((team) => seasonTeamIds.has(team.id))
     const teamIds = seasonAssignments.map((team) => team.id)
     const teamRoles: CollaboratorFormData['team_roles'] = Object.fromEntries(seasonAssignments.map((team) => [team.id, team.role === 'assistant_coach' ? 'assistant_coach' : 'head_coach']))
     setEditingCollaboratorId(coach.id)
@@ -282,7 +299,7 @@ export default function CoachesManager() {
       <section className="cs-card cs-card--primary p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Collaboratori</h1>
+            {!embedded && <h1 className="text-2xl font-bold">Collaboratori</h1>}
             <p className="text-secondary mt-2">
               {filteredCoaches.length} collaboratori trovati • {selectedCoaches.size} selezionati
             </p>
@@ -344,7 +361,7 @@ export default function CoachesManager() {
               className="cs-select"
             >
               <option value="all">Tutte le squadre</option>
-              {teams.map(team => (
+              {selectableTeams.map(team => (
                 <option key={team.id} value={team.id}>
                   {team.name}
                 </option>
@@ -425,12 +442,12 @@ export default function CoachesManager() {
                   </td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-1">
-                      {coach.teams?.map(team => (
+                      {teamsForSelectedSeason(coach.teams).map(team => (
                         <span key={team.id} className="cs-badge cs-badge--success">
                           {team.name} ({team.role})
                         </span>
                       ))}
-                      {(!coach.teams || coach.teams.length === 0) && (<span className="text-secondary text-sm">Nessuna squadra</span>)}
+                      {teamsForSelectedSeason(coach.teams).length === 0 && (<span className="text-secondary text-sm">Nessuna squadra</span>)}
                     </div>
                   </td>
                   <td className="p-4 text-sm">
@@ -474,7 +491,7 @@ export default function CoachesManager() {
                     <div>
                       <strong>Squadre:</strong>
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {coach.teams?.length ? coach.teams.map(team => (
+                        {teamsForSelectedSeason(coach.teams).length ? teamsForSelectedSeason(coach.teams).map(team => (
                           <span key={team.id} className="cs-badge cs-badge--success">{team.name} ({team.role})</span>
                         )) : <span className="text-secondary">Nessuna squadra</span>}
                       </div>
@@ -530,6 +547,7 @@ export default function CoachesManager() {
         }}
         onSubmit={handleTeamAssignmentConfirm}
         athleteIds={Array.from(selectedCoaches)}
+        teams={selectableTeams}
         loading={bulkLoading}
         userType="coaches"
       />
@@ -560,9 +578,9 @@ export default function CoachesManager() {
             </div>
             <div className="cs-card p-4">
               <h4 className="font-semibold mb-2">Squadre assegnate</h4>
-              {detailsCollaborator.teams.length > 0 ? (
+              {teamsForSelectedSeason(detailsCollaborator.teams).length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {detailsCollaborator.teams.map((team) => (
+                  {teamsForSelectedSeason(detailsCollaborator.teams).map((team) => (
                     <span key={`${team.id}-${team.role}`} className="cs-badge cs-badge--success">{team.name} ({team.role})</span>
                   ))}
                 </div>

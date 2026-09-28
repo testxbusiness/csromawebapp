@@ -1,13 +1,12 @@
 'use client'
 
 import UsersManager from '@/components/admin/UsersManager'
-import PageHeader from '@/components/shared/PageHeader'
+import { AdminManagementPage } from '@/components/admin/AdminManagement'
 
 export default function UsersPage() {
   return (
-    <>
-      <PageHeader title="Gestione Utenti" subtitle="Amministrazione CSRoma" />
-      <UsersManager />
-    </>
+    <AdminManagementPage title="Account e accessi" context="Persone" description="Gestisci identità, ruoli e stato degli account.">
+      <UsersManager embedded />
+    </AdminManagementPage>
   )
 }

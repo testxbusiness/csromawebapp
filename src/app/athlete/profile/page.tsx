@@ -1,5 +1,5 @@
-import UserProfile from '@/components/shared/UserProfile'
+import AthleteProfileManager from '@/components/athlete/AthleteProfileManager'
 
 export default function AthleteProfilePage() {
-  return <UserProfile userRole="athlete" />
+  return <AthleteProfileManager />
 }

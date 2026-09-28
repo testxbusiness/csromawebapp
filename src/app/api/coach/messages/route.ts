@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { coachMessageCreateSchema, coachMessageUpdateSchema } from '@/lib/validation/messages'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 import { notifyMessageRecipients } from '@/server/messages/push-notifications'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,6 +19,9 @@ export async function GET(request: NextRequest) {
     if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ messages: [] })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
 
     // Get coach's teams
     const { data: coachTeams, error: teamsError } = await supabase
@@ -30,13 +34,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error loading teams' }, { status: 400 })
     }
 
-    const teamIds = (coachTeams || []).map(team => team.team_id)
+    const teamIds = (coachTeams || []).map(team => team.team_id).filter((id) => activeTeamIds.has(id))
+    const requestedTeamId = searchParams.get('team_id')
+    if (requestedTeamId && !teamIds.includes(requestedTeamId)) {
+      return NextResponse.json({ error: 'Squadra non assegnata al coach' }, { status: 403 })
+    }
+    const visibleTeamIds = requestedTeamId ? [requestedTeamId] : teamIds
 
     // Get message IDs for coach's teams or direct-to-coach
     // Build OR filter only with available clauses (avoid empty IN())
     const orClauses = [] as string[]
-    if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
-    orClauses.push(`profile_id.eq.${account.ownerProfileId}`)
+    if (visibleTeamIds.length > 0) orClauses.push(`team_id.in.(${visibleTeamIds.join(',')})`)
+    if (!requestedTeamId) orClauses.push(`profile_id.eq.${account.ownerProfileId}`)
 
     const { data: messageRecipients, error: recipientsError } = await supabase
       .from('message_recipients')
@@ -258,6 +267,9 @@ export async function POST(request: NextRequest) {
 
     const account = await requireAccountContext(supabase)
     if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ error: 'Nessuna stagione attiva configurata' }, { status: 403 })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
     const ownerProfileId = account.ownerProfileId
 
     const { subject, content, attachment_url, attachments, selected_teams } = body
@@ -268,8 +280,12 @@ export async function POST(request: NextRequest) {
       .select('team_id')
       .eq('coach_id', ownerProfileId)
 
-    const allowedTeamIds = new Set((coachTeams || []).map(t => t.team_id))
-    const teamsToAssign: string[] = (selected_teams || []).filter((id: string) => allowedTeamIds.has(id))
+    const allowedTeamIds = new Set((coachTeams || []).map(t => t.team_id).filter((id) => activeTeamIds.has(id)))
+    const requestedTeamIds = selected_teams || []
+    if (requestedTeamIds.some((id) => !allowedTeamIds.has(id))) {
+      return NextResponse.json({ error: 'Una o più squadre non sono assegnate al coach' }, { status: 403 })
+    }
+    const teamsToAssign: string[] = requestedTeamIds
 
     // Create message (RLS: created_by must be the owner profile id)
     const { data: created, error: createErr } = await supabase
@@ -319,6 +335,7 @@ export async function POST(request: NextRequest) {
     try {
       await notifyMessageRecipients({
         adminClient,
+        messageId: created.id,
         subject: body.subject,
         senderProfileId: ownerProfileId,
         selectedTeamIds: body.selected_teams,
@@ -355,9 +372,21 @@ export async function PUT(request: NextRequest) {
 
     const account = await requireAccountContext(supabase)
     if (!account.roles.includes('coach')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ error: 'Nessuna stagione attiva configurata' }, { status: 403 })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
     const ownerProfileId = account.ownerProfileId
 
     const { id, subject, content, attachment_url, attachments, selected_teams } = body
+
+    const { data: coachTeams } = await supabase
+      .from('team_coaches')
+      .select('team_id')
+      .eq('coach_id', ownerProfileId)
+    const allowedTeamIds = new Set((coachTeams || []).map(t => t.team_id).filter((id) => activeTeamIds.has(id)))
+    if ((selected_teams || []).some((teamId) => !allowedTeamIds.has(teamId))) {
+      return NextResponse.json({ error: 'Una o più squadre non sono assegnate al coach' }, { status: 403 })
+    }
 
     // Ensure the message belongs to the coach
     const { data: ownedMsg } = await supabase

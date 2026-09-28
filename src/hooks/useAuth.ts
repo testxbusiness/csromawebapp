@@ -3,7 +3,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
-import { clearPwaRuntimeCaches } from '@/lib/pwa/service-worker-registration'
+import { clearPwaClientState, clearPwaRuntimeCaches } from '@/lib/pwa/service-worker-registration'
 
 type ProfileRow = {
   id: string
@@ -431,10 +431,7 @@ function useAuthState(): UseAuthReturn {
     setAccount(null)
     lastProfileFor.current = null
     currentUserIdRef.current = null
-
-    try {
-      sessionStorage.removeItem(PROFILE_CACHE_KEY)
-    } catch {}
+    clearPwaClientState()
   }, [supabase])
 
   return {
@@ -465,4 +462,8 @@ export function useAuth(): UseAuthReturn {
     throw new Error('useAuth deve essere utilizzato all’interno di AuthProvider')
   }
   return auth
+}
+
+export function useAuthOptional(): UseAuthReturn | null {
+  return useContext(AuthContext)
 }

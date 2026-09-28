@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,10 @@ export async function GET(request: NextRequest) {
     if (!account.roles.includes('coach')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const activeSeason = await resolveActiveSeason(supabase)
+    if (!activeSeason) return NextResponse.json({ events: [], teams: [] })
+    const activeTeamIds = new Set(await resolveActiveSeasonTeamIds(supabase, activeSeason.id))
+    const requestedTeamId = new URL(request.url).searchParams.get('team_id')
 
     // 1. Resolve assignments and team rows separately. Keeping the assignment
     // query independent avoids losing teams when PostgREST cannot expand the
@@ -24,7 +29,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events: [], teams: [] })
     }
 
-    const assignedTeamIds = [...new Set((coachTeams || []).map(row => row.team_id))]
+    const assignedTeamIds = [...new Set((coachTeams || []).map(row => row.team_id).filter((id) => activeTeamIds.has(id)))]
+    if (requestedTeamId && !assignedTeamIds.includes(requestedTeamId)) {
+      return NextResponse.json({ error: 'Squadra non assegnata al coach' }, { status: 403 })
+    }
     if (assignedTeamIds.length === 0) {
       return NextResponse.json({ events: [], teams: [] })
     }
@@ -45,7 +53,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events: [], teams: [] })
     }
 
-    const teamIds = teamData.map(t => t.id)
+    const teamIds = requestedTeamId ? [requestedTeamId] : teamData.map(t => t.id)
 
     // 2. Get event-team relations (batch processing for large arrays)
     let eventIds: string[] = []
@@ -94,7 +102,7 @@ export async function GET(request: NextRequest) {
         const batch = eventIds.slice(i, i + 100)
         const { data: events } = await supabase
           .from('events')
-          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, confirmation_deadline')
+          .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, attendance_mode, confirmation_deadline')
           .in('id', batch)
           .gte('start_date', fromDate.toISOString())
           .lte('start_date', throughDate.toISOString())
@@ -104,7 +112,7 @@ export async function GET(request: NextRequest) {
     } else {
       const { data: events, error: evErr } = await supabase
         .from('events')
-        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, confirmation_deadline')
+        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, parent_event_id, created_by, requires_confirmation, attendance_mode, confirmation_deadline')
         .in('id', eventIds)
         .gte('start_date', fromDate.toISOString())
         .lte('start_date', throughDate.toISOString())
@@ -158,6 +166,7 @@ export async function GET(request: NextRequest) {
         parent_event_id: ev.parent_event_id,
         created_by: ev.created_by,
         requires_confirmation: ev.requires_confirmation,
+        attendance_mode: ev.attendance_mode === 'absence_only' ? 'absence_only' : 'rsvp',
         confirmation_deadline: ev.confirmation_deadline
       }))
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())

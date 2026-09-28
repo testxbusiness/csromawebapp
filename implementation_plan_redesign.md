@@ -1,0 +1,8217 @@
+# CSRoma PWA — Piano di implementazione del redesign
+
+> Piano operativo derivato da `re_design.md`.
+>
+> **Scopo:** trasformare la specifica di redesign in una sequenza di interventi piccoli, verificabili e adatti a essere eseguiti con Codex tramite `/goal`, usando un modello di capacità media (Luna Medio).
+>
+> **Principio guida:** nessun goal deve richiedere a Codex di reinterpretare l'architettura generale. Ogni goal deve avere un confine chiaro, dipendenze esplicite, criteri di accettazione e verifiche tecniche.
+>
+> **Ordine vincolante:** Baseline → Foundation → Atleta → Famiglia → Coach → Admin → Consolidamento → Rollover stagionale.
+>
+> **Stack di riferimento:** Next.js 15 App Router, React 19, TypeScript strict, Tailwind CSS 4 + CSS custom properties, Supabase, PWA custom service worker.
+
+---
+
+## 0. Come usare questo piano con Codex
+
+### 0.1 Regola principale
+
+Eseguire **un solo goal alla volta**. Non chiedere a Codex di implementare una fase intera in un unico `/goal`.
+
+Ogni goal deve:
+
+1. leggere questo file e `re_design.md`;
+2. ispezionare il codice attuale prima di modificarlo;
+3. limitare il diff all'ambito del goal;
+4. preservare route, autorizzazioni e contratti non esplicitamente coinvolti;
+5. eseguire i controlli tecnici pertinenti;
+6. aggiornare la sezione **Registro di avanzamento** di questo file;
+7. riportare eventuali blocchi o prerequisiti scoperti senza aggirarli con workaround architetturali non approvati.
+
+### 0.2 Prompt base da anteporre a ogni `/goal`
+
+```text
+/goal
+Lavora sul goal indicato in implementation_plan_redesign.md.
+
+Prima di modificare codice:
+- leggi re_design.md;
+- leggi il goal completo, incluse dipendenze, vincoli e Definition of Done;
+- ispeziona i file esistenti correlati;
+- riusa pattern e servizi server già presenti quando compatibili.
+
+Durante l'implementazione:
+- mantieni Next.js App Router;
+- mantieni TypeScript strict;
+- non spostare autorizzazione nel client;
+- non usare service role/admin client nel browser;
+- non cambiare schema DB salvo autorizzazione esplicita nel goal;
+- non introdurre nuove librerie UI;
+- non modificare route esistenti;
+- non introdurre operatività offline non realmente supportata;
+- non fare refactor estranei al goal.
+
+Alla fine:
+- esegui i test/check pertinenti realmente disponibili;
+- non dichiarare test superati se non eseguiti;
+- aggiorna implementation_plan_redesign.md marcando il goal completato e annotando file principali modificati, test eseguiti, eventuali note/debito tecnico;
+- fermati al termine del goal senza iniziare il successivo.
+```
+
+### 0.3 Regole di sicurezza architetturale
+
+Sono **non negoziabili** per tutti i goal:
+
+- `app_accounts` e `account_roles` restano la fonte autorevole per account e ruoli.
+- Il profilo personale dell'account e il `subjectProfileId` visualizzato restano concetti distinti.
+- `subjectProfileId` è sempre un input da verificare server-side.
+- Un `teamId` selezionato restringe dati già autorizzati e non concede mai accesso.
+- Il numero di maglia autorevole resta `team_members.jersey_number`.
+- L'assegnazione coach resta derivata da `team_coaches`.
+- Le route esistenti devono continuare a funzionare per bookmark e deep link push.
+- La PWA non deve cacheare HTML autenticato, API, RSC, payload Supabase o signed URL privati.
+- Le mutazioni non vengono accodate offline.
+- Nessuna UI deve simulare funzioni non presenti, ad esempio pagamento online o firma documenti non implementata.
+- Nessuna modifica RLS/schema è implicita in questo piano: se emerge una necessità, annotarla come blocco e fermarsi.
+
+### 0.3.1 Standard trasversale — riconoscimento del tipo di evento
+
+Il tipo di evento usa lo stesso linguaggio visivo in tutta l'app, senza eccezioni di ruolo o schermata:
+
+- **Allenamento** → indigo/navy;
+- **Partita** → rosso CSRoma;
+- **Riunione** → blu/teal;
+- **Altro** → grigio neutro.
+
+Questo mapping si applica in modo coerente ad atleta, familiare/delegato, coach e amministrazione: calendari, agenda, dashboard, liste, dettaglio evento, filtri, badge e relative legende. I colori devono essere definiti come token condivisi, non come valori locali o hard-coded nei singoli componenti.
+
+Il colore identifica esclusivamente la tipologia: non sostituisce mai la label testuale né viene riutilizzato per presenza, conflitto, urgenza, errore o selezione. Questi stati conservano indicatori semantici e testuali propri.
+
+### 0.4 Regola sul refactoring
+
+Il redesign deve essere **incrementale e feature-driven**.
+
+Consentito:
+- estrarre primitive condivise quando servono alla pagina in lavorazione;
+- aggiungere adapter/mapper per mantenere compatibilità con payload esistenti;
+- spostare logica server in servizi dedicati se il comportamento resta invariato;
+- eliminare codice legacy solo quando non è più referenziato e il goal lo prevede.
+
+Non consentito:
+- riscrittura totale della navigazione in una sola PR;
+- rinomina massiva di classi/componenti;
+- sostituzione di Supabase;
+- cambio globale di state management;
+- nuova design system library;
+- riorganizzazione generale delle cartelle senza necessità del goal.
+
+### 0.5 Controlli minimi per ogni goal
+
+Usare solo comandi presenti e realmente funzionanti nel repository. Prima di assumere l'esistenza di uno script, controllare `package.json`.
+
+Ordine raccomandato:
+
+1. TypeScript/typecheck, se configurato;
+2. test unitari interessati;
+3. test E2E mirati, se disponibili;
+4. build Next.js quando il goal tocca shell, routing, server/client boundary o config;
+5. review responsive per i viewport coinvolti;
+6. smoke test tastiera/accessibilità per i componenti interattivi;
+7. review diff per verificare che non siano entrati refactor estranei.
+
+`next lint` non deve essere trattato come controllo affidabile solo perché esisteva in precedenza: il progetto è Next.js 15. Se lo script lint è obsoleto, documentarlo e non dichiararlo superato.
+
+### 0.6 Stati del registro
+
+Usare:
+
+- `[ ]` non iniziato
+- `[-]` in corso / parziale
+- `[x]` completato
+- `[!]` bloccato
+
+Per un goal `[x]` aggiungere sempre:
+- data;
+- file principali modificati;
+- check/test eseguiti;
+- eventuali note.
+
+---
+
+# 1. Registro di avanzamento
+
+| Goal | Stato | Dipende da | Note |
+|---|---|---|---|
+| G0.1 Baseline route e viewport | [x] | — | Completata il 27/08/2026 con 29 screenshot runtime in `docs/redesign-baseline/2026-08-27/`; immagini con browser/DevTools chrome |
+| G0.2 Inventario UI/CSS | [x] | G0.1 | Completato il 27/08/2026; inventario token/classi/componenti e strategie di migrazione documentati |
+| G0.3 Mappa auth e contratti dati | [x] | G0.1 | Completato il 27/08/2026; account, subject, famiglia, team e Route Handler atleta documentati |
+| G0.4 Baseline verifiche tecniche | [x] | G0.1 | Completato il 27/08/2026; typecheck/lint/unit/build passano, E2E Preview eseguito: 20 pass, 2 failure noti, 1 skip |
+| G1.1 Token tema chiaro | [x] | G0.2 | Completato il 27/08/2026; token canonici isolati in `src/app/globals.css`, alias legacy preservati, typecheck/lint/build pass |
+| G1.2 Tipografia | [x] | G1.1 | Completato il 27/08/2026; scala tipografica foundation con stack locale non bloccante, senza migrazione delle pagine legacy |
+| G1.3 Safe area e viewport shell | [x] | G1.1 | Completato il 27/08/2026; primitive safe-area/100dvh e spazio bottom-nav aggiunti senza migrazione delle feature |
+| G1.4 Primitive Button/Badge | [x] | G1.1 | Completato il 27/08/2026; Button consolidato con loading/accessibilità e introdotto StatusBadge semantico |
+| G1.5 Panel/Card/ListRow | [x] | G1.1 | Completato il 27/08/2026; primitive semantiche aggiunte e Card resa compatibile con varianti canoniche |
+| G1.6 FeedbackState | [x] | G1.4,G1.5 | Completato il 27/08/2026; stati tipizzati e accessibili aggiunti senza migrazione globale |
+| G1.7 ResponsiveDetail | [x] | G1.4,G1.5 | Completato il 27/08/2026; wrapper Radix responsive con sheet/fullscreen mobile e drawer desktop |
+| G1.8 Team context state | [x] | G0.3 | Completato il 27/08/2026; provider separato, persistenza ID-only e reset su cambio subject |
+| G1.9 SubjectSwitcher e TeamSwitcher | [x] | G1.4,G1.8 | Completato il 27/08/2026; controlli distinti, accessibili e collegati ai context esistenti |
+| G1.10 AppHeader | [x] | G1.3,G1.9 | Completato il 27/08/2026; header canonico integrato nella shell con varianti root/detail/family |
+| G1.11 BottomNavigation | [x] | G1.3,G1.4 | Completato il 27/08/2026; cinque route atleta, active state route-aware e safe-area |
+| G1.12 Banner PWA | [x] | G1.3,G1.4 | Completato il 27/08/2026; offline/update UI adattate ai token e safe-area senza cambiare cache o mutation policy |
+| G1.13 Athlete Foundation integration | [x] | G1.1–G1.12 | Completato il 27/08/2026; foundation collegata alla shell atleta e gate tecnico superato |
+| G2.1 Contratto dashboard atleta | [x] | G0.3,G1.13 | Completato il 28/08/2026; contratto additivo multi-team per eventi, match, messaggi, quote e membership; auth subject-aware invariata |
+| G2.2 Skeleton dashboard | [x] | G2.1 | Completato il 28/08/2026; struttura dashboard riordinata in cinque sezioni con Panel/ListRow, hero/contatori/tour rimossi |
+| G2.3 Prossimo impegno + presenze | [x] | G2.2 | Completato il 28/08/2026; AttendanceControl con deadline, read-only delegato, pending e rollback visibile; mutation protetta server-side |
+| G2.4 Prossima partita | [x] | G2.2 | Completato il 28/08/2026; prospettiva match subject-aware con team, avversario, casa/trasferta, data/ora/luogo e CTA campionato |
+| G2.5 Preview messaggi | [x] | G2.2 | Completato il 28/08/2026; preview max 3 righe con mittente, unread marker, team context e deduplica server-side |
+| G2.6 Preview quota | [x] | G2.2 | Completato il 28/08/2026; mostra la rata non pagata più urgente con importo, team/activity, stato, scadenza e link quote |
+| G2.7 Membership multi-squadra | [x] | G2.2 | Completato il 28/08/2026; una riga per membership con team/activity/codice e jersey autorevole per team |
+| G2.8 Stati dashboard | [x] | G2.3–G2.7 | Completato il 28/08/2026; stati completi con FeedbackState, offline esplicito e invalidazione payload su cambio subject |
+| G2.9 Test dashboard | [x] | G2.8 | Completato il 28/08/2026; test mirati e gate typecheck/unit/build superati; E2E Playwright non avviabile in questa sessione |
+| G2.R1 Remediation contesto team dashboard | [x] | G2.V | Completato il 28/08/2026; context alimentato dal payload autorizzato, selettore header e filtro client-side con reset subject/non-escalation testati |
+| G2.R2 Remediation stati e contenuto dashboard | [x] | G2.V | Completato il 28/08/2026; tipo evento, feedback success/error, denied composito e normalizzazione messaggi diretti/privacy |
+| G3.1 Contratto calendario atleta | [x] | G2.1 | Completato il 28/08/2026; `teams` legacy preservato, aggiunti `team_details`/`team_ids`, presenza subject-aware e deadline; dettaglio evento limitato alle membership autorizzate; test contratto + typecheck/unit/build eseguiti |
+| G3.2 Agenda mobile | [x] | G3.1 | Completato il 28/08/2026; agenda mobile raggruppata per giorno con prima riga espandibile, vista mese secondaria e layout responsive; test agenda, typecheck, lint, build e diff check superati |
+| G3.3 Filtri calendario | [x] | G3.2,G1.8 | Completato il 28/08/2026; segmenti tipo con `aria-pressed`, TeamSwitcher alimentato dal payload autorizzato e filtro aggregato di default; empty filtrato distinto e test di non-escalation; typecheck/lint/test/build/diff check superati |
+| G3.4 Dettaglio evento responsive | [x] | G3.2,G1.7 | Completato il 28/08/2026; `EventDetailModal` migrato a `ResponsiveDetail` con drawer desktop/fullscreen mobile, metadati reali, griglia responsive, focus/chiusura accessibili e test dedicati; typecheck/lint/test/build/diff check superati |
+| G3.5 Attendance calendar | [x] | G3.4 | Completato il 28/08/2026; `AttendanceControl` riusato in agenda e dettaglio, callback di mutation unica, read-only per delegati senza permesso, deadline/rollback preservati e mutazioni bloccate offline; test, typecheck, lint, build e diff check superati |
+| G3.6 Conflitti e deduplica eventi | [x] | G3.2 | Completato il 28/08/2026; deduplica per `event.id` con aggregazione team, conflitti tra eventi distinti marcati senza rimozioni/priorità e warning testuale in agenda, tabella e FullCalendar; test, typecheck, lint, build e diff check superati |
+| G3.7 Vista desktop calendario | [x] | G3.2–G3.6 | Completato il 28/08/2026; desktop con agenda settimanale `timeGridWeek` predefinita, cambio vista Mese/Settimana localizzato, filtri/team ed export mantenuti, dettaglio evento in drawer laterale responsive e max-width atleta preservato; test, typecheck, build e diff check superati |
+| G3.8 Test calendario | [x] | G3.7 | Completato il 28/08/2026; coperti zero eventi, ricorrenze, multi-team/deduplica, conflitti, deadline, successo/fallimento presenza, permessi famiglia, responsive desktop/mobile e smoke accessibilità; suite 18/18 (66 test), typecheck, build e diff check superati; E2E Playwright aggiunto ma Chromium locale termina con SIGTRAP in fase di launch |
+| G3.R1 Stati errore/offline calendario | [x] | G3.V | Completato il 28/08/2026; Route Handler con 500 coerente sugli errori Supabase, manager con stati loading/ready/error/offline, retry e empty riservato a risposte valide; test manager aggiunti, typecheck, suite, build e diff check superati |
+| G3.R2 Contesto team desktop e dual-role | [x] | G3.V | Completato il 28/08/2026; selettori desktop/mobile montati senza duplicazione visiva, policy presenza derivata da area/subject/permesso e matrice dual-role testata; lint, typecheck, suite, build e diff check superati |
+| G3.R3 Stato errore dettaglio evento | [x] | G3.V | Completato il 28/08/2026; dettaglio con errore HTTP/rete, retry e abort su cleanup; test dedicati superati; smoke autenticato production integrato verificato a 1440×900 e 375×812, con agenda/vista desktop, assenza overflow, dialog dettaglio e controlli accessibili |
+| G3.V Gate verifica Fase 3 | [x] | G3.1–G3.8 | PASS il 28/08/2026; G3.R1/R2/R3 completati, gate tecnici verdi e smoke runtime autenticato responsive/accessibility superato nel browser integrato production |
+| G4.1 Contratto messaggi e deduplica | [x] | G0.3 | Completato il 28/08/2026; contratto additivo tipizzato con `dedupe_key`, team context aggregato e `read_state` account+soggetto; route atleta aggiornata senza esposizione di auth ID o destinatari diretti non pertinenti; test contratto, typecheck e build superati |
+| G4.2 Lista messaggi | [x] | G4.1 | Completato il 28/08/2026; lista unica semantica con ListRow, avatar/iniziali, unread, mittente/ruolo, destinatario pertinente, oggetto, preview a due righe, timestamp relativo e allegati; nessuna card per messaggio; test, typecheck, build e diff check superati |
+| G4.3 Filtri unread/team | [x] | G4.2 | Completato il 28/08/2026; filtri unread/team, empty filtrato, conteggi coerenti e deduplica verificati |
+| G4.4 Dettaglio e read state | [x] | G4.2 | Completato il 28/08/2026; dettaglio responsive con subject, mittente/ruolo, data completa, destinatari pertinenti, contenuto e allegati; POST read state autorevole con timestamp persistito e aggiornamento locale senza reload/ottimismo non confermato; test, typecheck, build e diff check superati |
+| G4.5 Allegati e privacy | [x] | G4.4 | Completato il 28/08/2026; metadata allegati senza URL nel payload, endpoint subject-authorized per signed URL TTL 300s on-demand, URL conservato solo in memoria React; service worker esclude API/cross-origin e test on-demand/privacy, typecheck, build e diff check superati |
+| G4.6 Deep link push messaggi | [x] | G4.4 | Completato il 28/08/2026; resolver condiviso con priorità athlete/family fallback, URL same-origin `/area/messages?messageId=...`, subject opzionale come hint validato dal context, coach consumer del messageId e fallback generico per id non accessibili; nessun parametro client è autorizzativo; worker attivo e legacy validano destinazione; test URL/ruoli, lint, typecheck, build e diff check superati |
+| G4.7 Test messaggi | [x] | G4.3–G4.6 | Completato il 28/08/2026; coperti unitariamente deduplica, read state account+subject, filtri, allegati/signed URL on-demand/failure, URL deep link e privacy; aggiunta spec Playwright per deep link, responsive/a11y, cache API e cambio subject; Jest 25/25 suite, 86/86 test, typecheck/lint/build/diff check superati; Playwright discovery 31 test passata, runtime non eseguibile in questa sessione per `listen EPERM`/bootstrap ambiente |
+| G4.R1 Stati errore/offline messaggi | [x] | G4.V | Completato il 28/08/2026; manager con stati loading/ready/error/offline, retry, rilevamento connettività, preservazione dati durante refresh fallito e reset su cambio subject; aggiunti 4 test manager, suite/typecheck/lint/build superati |
+| G4.R2 Deep link push multi-ruolo/famiglia | [x] | G4.V | Completato il 28/08/2026; resolver ruolo condiviso, fallback family-only verso area atleta, subject hint validato dal context, apertura `messageId` anche nell’area coach e test per athlete/coach/dual-role/family-only |
+| G4.R3 Cache signed URL | [x] | G4.V | Completato il 28/08/2026; risposte endpoint con `Cache-Control: private, no-store`, fetch client con `cache: 'no-store'` e test header/opzioni fetch |
+| G4.V Verifica gate Fase 4 | [x] | G4.1–G4.7,G4.R1–G4.R3 | PASS WITH ISSUES il 28/08/2026; nessun Critical/High e gate Fase 4→5 autorizzato; resta da ripetere il runtime E2E autenticato quando l’ambiente consente il bind della porta 3000 |
+| G5.1 Resolver atleta squadra→campionato | [x] | G0.3 | Completato il 28/08/2026; resolver server subject-aware per `team_members → championship_club_teams → championship_groups`, `paths` autorizzati e selezione iniziale solo se univoca; manager atleta non preseleziona più il primo campionato/girone ambiguo; test/typecheck/build/diff check superati |
+| G5.2 Endpoint championship subject-aware | [x] | G5.1 | Completato il 28/08/2026; `GET /api/athlete/championships` per catalogo/girone/convocazione, classifica integrata nel dettaglio girone, standings legacy subject-aware; validazione server-side di subject, gruppo, squadra e partita; hook atleta migrati; test completi/typecheck/build/diff check superati |
+| G5.3 Shell campionato atleta | [x] | G5.1 | Completato il 28/08/2026; shell gerarchica con contesto TeamProvider, filtri Squadra→Campionato→Girone derivati dal catalogo subject-aware e livelli impliciti solo se univoci; test shell/typecheck/suite/build/diff check superati |
+| G5.4 Prossima partita/convocazione | [x] | G5.2,G5.3 | Completato il 28/08/2026; pannello partita con giornata/casa-trasferta/avversario/data-ora/luogo, stato personale convocazione e ritrovo esplicito; modal con elenco pubblicato subject-aware e stati testuali; test suite completa/typecheck/build/diff check superati |
+| G5.5 Classifica | [x] | G5.2,G5.3 | Completato il 28/08/2026; classifica iniziale limitata alle prime 5 posizioni con espansione completa, evidenziazione CSRoma tramite testo/marker/surface e numeri tabulari; test mirati + suite completa (31 suite/100 test), typecheck, build e diff check superati |
+| G5.6 Risultati/calendario | [x] | G5.2,G5.3 | Completato il 28/08/2026; pannello risultati recenti compatto limitato alle gare concluse/forfait e calendario completo on demand del girone selezionato, con stato/data/ora/risultato/set e layout desktop/mobile; corretto anche il 500 della classifica usando il client server solo dopo autorizzazione del gruppo; test route (4), suite completa (31 suite/103 test), typecheck, build e diff check superati |
+| G5.7 Test campionato | [x] | G5.4–G5.6 | Completato il 28/08/2026; coperti resolver multi-squadra/multi-campionato/multi-girone, selezione ambigua senza preselezione, catalogo subject-aware/delegato, gruppo/campionato non autorizzato e club-team non autorizzato sulle convocazioni; test mirati (3 suite/10 test), suite completa (31 suite/105 test), typecheck, build e diff check superati |
+| G5.V Gate verifica Fase 5 | [x] | G5.1–G5.7,G5.R1–G5.R2 | PASS WITH ISSUES il 28/08/2026; G5.R1/R2 completati, nessun Critical/High residuo, stati distinti con retry, ordine e titolo corretti, test/lint/`tsc --noEmit`/build/diff check verdi; aggiunta spec Playwright responsive/accessibility sui sei viewport obbligatori, ma smoke autenticato non ripetibile in questa sessione per credenziali E2E/sessione DevTools assenti |
+| G5.R1 Autorizzazione club-team atleta | [x] | G5.V | Completato il 28/08/2026; percorso atleta alimenta i naming dal catalogo server subject-scoped e non esegue più la query client-side `championship_club_teams`; il resolver limita anche `clubTeams` ai club-team presenti nei gironi autorizzati; aggiunta regressione per club-team estraneo nello stesso campionato; test mirati, typecheck e diff check superati |
+| G5.R2 Stati e ordine Campionato | [x] | G5.V | Completato il 28/08/2026; hook e manager distinguono loading, empty, filtered-empty, error, denied e offline con retry senza svuotare gli errori in empty; ordine classifica → risultati recenti → calendario completo, titolo duplicato rimosso, stati convocazione con retry; aggiunti test hook e spec Playwright sui viewport 320/375/390/768/1024/1440, suite/typecheck/lint/build/diff check superati |
+| G6.1 Contratto quote atleta | [x] | G0.3 | Completato il 29/08/2026; contratto additivo in `src/types/athlete-fees.ts` e mapper server-side in `src/lib/athlete/fees-contract.ts`; `/api/athlete/fees` mantiene `amount`, `status` e `membership_fee.team` legacy, aggiunge team/activity ID e importi dovuto/pagato/residuo, normalizza gli stati anche dal legacy `pending`, preserva auth subject-aware; `months_count` resta numerico e supporta durate a mezzi mesi; test contratto/validazione, typecheck e diff check superati; nessuna modifica schema o pagamento online |
+| G6.2 UI quote | [x] | G6.1 | Completato il 29/08/2026; `AthleteFeesManager` ridisegnato con riepilogo dovuto/pagato/residuo, filtri accessibili, gruppi per `team.id`, stati loading/error/empty/filtered-empty e nessuna CTA di pagamento; nuova `FeeRow` compatta con importi tabulari a destra e dettaglio espandibile responsive 320px→desktop; aggiunti test manager/FeeRow; suite completa 35 suite/115 test, lint, typecheck, build e diff check superati |
+| G6.3 Endpoint profilo delegabile | [x] | G0.3 | Completato il 29/08/2026; aggiunto `GET /api/athlete/profile` con resolver `requireSubjectAthleteContext`, cache `private, no-store` e contratto separato account/subject/athlete/membership/permissions; jersey per team, flag medical/document/sign, stato medico senza data dettagliata per i delegati e nessun dato medico/personale non necessario; test contratto e route, suite completa 37 suite/119 test, lint, typecheck, build e diff check superati |
+| G6.4 UI profilo atleta | [x] | G6.3 | Completato il 29/08/2026; nuova `AthleteProfileManager` su `/athlete/profile` alimentata da `/api/athlete/profile`, con identità/avatar a iniziali, contatti, tesseramento, certificato e permessi sensibili, squadre con jersey per membership, impostazioni account, push e installazione PWA; sezione Documenti non prevista nascosta dalla UI atleta mantenendo il contratto API compatibile; profili coach/admin invariati, nessuna preselezione di jersey e nessuna duplicazione di impostazioni nell’header; test UI/privacy/error-retry, suite completa 39 suite/135 test, lint, typecheck, build e diff check superati |
+| G6.5 Account/PWA settings | [x] | G6.4,G1.12 | Completato il 29/08/2026; installazione PWA contestuale (standalone/iOS/browser prompt), preferenza push per dispositivo con consenso solo da gesto esplicito, copy realistico e feedback d’errore; test, typecheck, lint, build e diff check superati |
+| G6.6 Test quote/profilo | [x] | G6.2,G6.5 | Completato il 29/08/2026; coperti empty, stati finanziari pagata/scaduta/parziale, gruppi multi-team, preferenze PWA/account, consenso push da gesto esplicito e 403 per subject profilo non autorizzato; suite completa 39 suite/129 test, typecheck, lint, build e diff check superati |
+| G6.V Gate verifica Fase 6 | [x] | G6.1–G6.6,G6.R1–G6.R5 | PASS il 31/08/2026; nessun Critical/High e fase non bloccata; stati offline/denied verificati, smoke E2E autenticato Quote/Profilo superato su tutti i sei viewport obbligatori con controlli responsive/accessibilità/PWA/account; restano solo rilievi Low già noti su copertura route quote e type-safety senza schema runtime |
+| G6.R1 Stati offline Quote/Profilo | [x] | G6.V | Completato il 29/08/2026; stati offline distinti, listener online/offline, retry e preservazione dei dati già caricati implementati e testati; la riverifica G6.V complessiva resta necessaria per gli altri rilievi aperti |
+| G6.R2 Profilo denied state 403 | [x] | G6.V | Completato il 29/08/2026; `AthleteProfileManager` distingue il 403 e mostra `DelegatedAccessDenied` con ritorno alla dashboard; test UI aggiunto e superato; smoke browser interno bloccato da errore runtime preesistente in `TeamProvider` |
+| G6.R4 Centratura modal quote | [x] | G6.2 | Completato il 29/08/2026; centratura del `DialogContent` resa indipendente dal layout/overlay con `translate`, altezza massima e scroll interno per form lunghi; build, typecheck, lint e diff check superati |
+| G6.R5 Smoke E2E Quote/Profilo | [x] | G6.V | Completato il 31/08/2026; aggiunto `tests/e2e/athlete-fees-profile.spec.ts` con autenticazione atleta, viewport 320×568/375×812/390×844/768×1024/1024×768/1440×900, controlli overflow, headings, target touch ≥44px, focus/tastiera, filtri quote, pannello PWA e assenza Documenti; aggiunto progetto Playwright dedicato, portati i filtri quote a 44px, resa robusta la navigazione post-login e l'attesa dei dati asincroni; run autenticato superato (`1 passed`) con Chromium e dev server operativi; typecheck, lint e diff check superati |
+| G7.1 Family area resolver/navigation | [x] | G2–G6 | Completato il 31/08/2026; resolver tipizzato in `src/lib/navigation/family-navigation.ts` con mapping permission-aware, overflow `moreItems`/Altro e profilo sempre disponibile per il subject selezionato; sidebar e bottom navigation riusano il resolver; campionato vincolato server-side a `view_schedule` e continua a mostrare denied state tramite il manager su 403; test mirati (10 test), typecheck, lint, build e diff check superati |
+| G7.2 Selezione subject | [x] | G7.1,G1.9 | Completato il 31/08/2026; auto-selezione del singolo profilo solo con area familiare attiva, scelta esplicita per profili multipli, persistenza sulla chiave subject esistente e card con relazione/CTA/sezioni in copy umano; rimosso il fetch duplicato della dashboard familiare; test context/UI, suite completa 143 test, typecheck, lint, build e diff check superati. Remediation 21/09/2026: aggiunta la voce `Oggi` in cima alla navigazione familiare, con destinazione `/dashboard` e mantenimento del subject selezionato (`6f96ab8`). |
+| G7.3 Cambio subject robusto | [x] | G7.2 | Completato il 31/08/2026; cambio subject notificato come transazione sincrona, overlay/dettagli chiusi, richieste abortite, TeamContext resettato a Tutte le squadre e risposte obsolete ignorate; dati e stato precedente cancellati prima del nuovo fetch, con test di reset atomico e suite completa 144 test; typecheck, lint, build e diff check superati |
+| G7.4 Dashboard familiare | [x] | G7.3 | Completato il 31/08/2026; `FamilyMemberDashboard` riusa `AthleteDashboard` in modalità delegata senza fork della pagina, con intestazione `Area familiare`/subject corrente, sezioni dashboard filtrate per `view_schedule`, `receive_messages` e `view_payments`, controllo presenza visibile solo con `confirm_attendance`, team selector condizionale già alimentato dal contesto autorizzato e denied state mantenuto su accesso profondo/403; aggiunta regressione UI su subject e permessi; suite completa 44 suite/145 test, typecheck, lint, build e diff check superati |
+| G7.5 Calendario familiare | [x] | G7.3,G3.8 | Completato il 31/08/2026; calendario subject-aware con `view_schedule` obbligatorio server-side, filtro squadre limitato al payload autorizzato del subject e denied/invalidation se la relazione viene rimossa; `confirm_attendance` resta indipendente: il calendario è consultabile con il solo `view_schedule`, la presenza è read-only senza permesso e ogni mutation richiede `requireSubjectAthleteContext(..., 'confirm_attendance')`; aggiunti test manager per accesso/denied/read-only e test Route Handler sulla guardia mutation; suite completa 45 suite/148 test, typecheck, lint, build e diff check superati |
+| G7.6 Messaggi famiglia | [x] | G7.3,G4.7 | Completato il 31/08/2026; messaggi familiare subject-aware con `receive_messages` verificato sia nell’UI sia server-side, read state su coppia account+subject, badge e dati invalidati al cambio subject, deduplica preservata, destinatari limitati a subject e squadre pertinenti, allegati on-demand autorizzati e deep link `messageId`/`subjectProfileId` validato dal context senza fidarsi dei parametri; corretto il gate dual-role per usare `activeArea`; aggiunti test famiglia/denied e regressioni privacy/read state/deep link già presenti; suite completa 45 suite/150 test, typecheck, lint, build e diff check superati |
+| G7.7 Quote famiglia | [x] | G7.3,G6.6 | Completato il 31/08/2026; Quote subject-aware con `view_payments` verificato nell’UI e in `GET /api/athlete/fees`, payload limitato al `profile_id` del subject e gruppi per squadra mantenuti; cambio subject invalida richieste e dati precedenti, denied state mostrato per permesso rimosso e nessun dato di altri profili viene renderizzato; corretto il gate dual-role per usare `activeArea`; aggiunti test UI per subject/isolamento/denied e test Route Handler sulla guardia `view_payments`; suite completa 46 suite/153 test, typecheck, lint, build e diff check superati |
+| G7.8 Campionato famiglia | [x] | G7.3,G5.7 | Completato il 31/08/2026; modalità familiare alimentata esclusivamente da `/api/athlete/championships` con `subjectProfileId`, resolver server-side subject→team→campionato→girone e validazione di partita/club-team/convocazione; rimosso il caricamento client-side delle squadre atleta basato su `ownerProfileId`, team e naming derivano dal catalogo autorizzato, e aggiunto guard `enabled` per non effettuare fallback owner-only quando manca il subject familiare; reset subject e denied/not-found sui percorsi non autorizzati preservati; test resolver/Route Handler e hook esistenti superati, suite completa 46 suite/153 test, typecheck, lint e diff check superati; `next build` compila correttamente ma il checker interno di validità tipi non termina nell’ambiente corrente |
+| G7.9 Profilo delegato | [x] | G7.3,G6.6 | Completato il 31/08/2026; profilo delegato separato in dati `subject`, dati atleta e impostazioni dell’account autenticato; il resolver server-side limita i documenti a quelli assegnati al subject o alle sue squadre e li espone solo con `view_documents` come metadata, senza contenuto/URL; `view_medical_status` mantiene il solo stato del certificato e nasconde la scadenza nel contesto delegato; `sign_documents` non abilita azioni perché il flusso firma non esiste; push/PWA restano impostazioni account. Modificati `src/app/api/athlete/profile/route.ts`, `src/server/profile/athlete-profile.ts`, `src/types/athlete-profile.ts`, `src/components/athlete/AthleteProfileManager.tsx` e relativi test; typecheck, suite completa (46 suite/155 test), lint e diff check superati |
+| G7.10 Test matrice permessi | [x] | G7.4–G7.9 | Completato il 31/08/2026; matrice permission-aware estesa per subject senza selezione, schedule-only, payments-only, messages-only, permessi completi e overflow `moreItems`; aggiunte regressioni dashboard per impedire il leakage del dettaglio messaggio e dello stato RSVP dopo cambio subject, con abort delle richieste e verifica del subject corrente; preservati i test di multi-subject, multi-team, reset squadra, denied server-side, unread per subject, deep link, campionato non autorizzato e responsive E2E già presenti; suite completa 47 suite/162 test, typecheck, lint, build e diff check superati |
+| G8.1 Coach foundation | [x] | G1.13,G7.10 | Completato il 31/08/2026; foundation estesa alla shell coach con bottom navigation mobile canonica (Oggi, Calendario, Convocazioni, Messaggi, Altro), sidebar desktop compatta e gruppo Altro per pagamenti/profilo; route esistenti preservate; test navigazione, typecheck, build e diff check superati |
+| G8.2 Coach team context | [x] | G8.1 | Completato il 31/08/2026; contesto coach derivato da `team_coaches` tramite `/api/coach/teams`, default persistito a Tutte le squadre, selettore mostrato solo con almeno due team, filtro propagato a calendario/presenze/messaggi/campionato e validazione server per team non assegnati e destinatari messaggi; test TeamContext/TeamSwitcher/BottomNavigation, typecheck, build e diff check superati |
+| G8.3 Coach home aggregata | [x] | G8.2 | Completato il 31/08/2026; home coach ridisegnata come vista operativa sulle quattro domande del piano: agenda di oggi, presenze del prossimo allenamento, prossima partita e comunicazioni; aggregazione/filtro per team, conflitti evento espliciti, stati loading/error/empty e CTA verso le route coach esistenti; test home coach/context/selettore, typecheck, build e diff check superati |
+| G8.4 Coach presenze | [x] | G8.3 | Completato il 31/08/2026; report presenze coach con stati canonici `going`, `maybe`, `declined` e `pending`/in attesa, copy esplicito che distingue pending da assenza, dettaglio accessibile e filtro team validato server-side; il report limita gli atleti al team selezionato senza alterare le azioni esistenti; test dashboard/context, typecheck, build e diff check superati |
+| G8.5 Coach partite/convocazioni | [x] | G8.2 | Completato il 31/08/2026; CTA convocazioni dipendenti dallo stato reale (prepara, completa, aggiorna), riepilogo dei destinatari finali con conteggio atleti e squadra prima del salvataggio, selezione coerente con il team context e route/mutation esistenti preservate; nessuna pubblicazione/reminder simulata; test championship/dashboard/context, typecheck, build e diff check superati |
+| G8.6 Coach messaggi | [x] | G8.2 | Completato il 31/08/2026; lista coach estesa al pattern canonico `ListRow` con mittente/ruolo, stato letto, squadre destinatarie, anteprima, data relativa e allegati; composer mantenuto sulle route e recipient logic esistenti, con riepilogo finale esplicito (conteggio e nomi) e conferma prima di invio/aggiornamento; `CoachMessagesManager.tsx` e `CoachMessageModal.tsx`; typecheck, build e diff check superati |
+| G8.7 Coach pagamenti/profilo | [x] | G8.1 | Completato il 31/08/2026; `/coach/payments` migrata a Stat/Panel con registro personale dei compensi, filtri e stati semantici senza terminologia o aggregazioni da quote atleta; con più squadre il registro si restringe alla squadra selezionata dal TeamContext, mantenendo l’aggregato su `Tutte le squadre`; `/coach/profile` migrata a `CoachProfileManager` con separazione tra dati account, incarico professionale e squadre assegnate, più impostazioni PWA riusate; route/API e autorizzazioni esistenti preservate; typecheck, 48 suite/165 test, build e diff check superati |
+| G8.8 Test coach | [x] | G8.3–G8.7 | Completato il 31/08/2026; aggiunti test coach per multi-team e query contestuali, stato no-events, conflitti, unread messages con riga accessibile, CTA convocazione draft/published e conferma destinatari, editing non autorizzato e rifiuto server-side di team non assegnato; test componenti e route in `CoachDashboard.test.tsx`, `CoachMessagesManager.test.tsx`, `ChampionshipConvocationModal.test.tsx`, `calendar/route.test.ts`; typecheck, 51 suite/172 test, build e diff check superati |
+| G8.V Gate verifica Fase 8 — area coach | [~] | G8.1–G8.8 | PASS WITH ISSUES il 31/08/2026; `G8.R1`, `G8.R2` e `G8.R3` completati. `npx tsc --noEmit`, Jest (52 suite/175 test), `next build` e `git diff --check` superati. Autorizzazione server-side e contesto multi-team verificati sui Route Handler; route canoniche preservate. Smoke Preview del 03/09/2026: login coach, home aggregata con 2 squadre, selettore team, route coach principali e console senza errori superati. Corretto il posizionamento dei modal Radix su mobile: overlay e contenuto sono fratelli nel portal, `fullscreenOnMobile` sovrascriveva la regola di apertura e `.cs-modal { position: relative }` sovrascriveva il posizionamento responsive, lasciando il pannello fuori viewport; aggiunte regole di apertura con precedenza corretta e `position: fixed` specifico. Test modal/manager 8/8, typecheck e diff check superati. Riverifica Preview del 03/09/2026 a 375×812: dettaglio evento e dettaglio messaggio risultano `position: fixed`, `y=0`, altezza viewport e senza errori console. Resta la verifica sugli altri viewport/dispositivo reale. Il gate non è dichiarato superato. |
+| G8.R1 Stati coach error/denied/offline/filtered-empty | [x] | G8.V | Completato il 31/08/2026; aggiunta classificazione condivisa degli errori HTTP/rete, stati `DeniedState`/`OfflineState`/`ErrorState` nei manager coach, retry e preservazione dei dati già caricati, oltre a stati espliciti per risultati filtrati vuoti in calendario, messaggi e compensi; aggiunti test della classificazione. Typecheck e suite Jest (52 suite/175 test) superati. Restano separati i rilievi E2E responsive e accessibilità già registrati nel gate. |
+| G8.R2 Accessibilità calendario coach mobile | [x] | G8.V | Completato il 31/08/2026; sostituito il trigger su `div` delle card mobile con un pulsante semantico, tastierabile e con nome accessibile, mantenendo Modifica/Elimina come azioni separate senza nesting di pulsanti; typecheck, test e build verificati. |
+| G8.R3 Conformità design system coach calendario/campionati | [x] | G8.V | Completato il 31/08/2026; calendario migrato ai componenti `Panel`, `Button`, `Select`, `Table`, `TableActions` e `Card`; manager campionati e pannelli coach migrati a `Card`, `Badge`, `EmptyState`, token colore e tipografia canonica, rimuovendo le classi legacy `slate/gray/white` dai percorsi coach. Typecheck, suite Jest, build e diff check superati. |
+| G8.R4 Autorizzazione server-side mutation coach | [x] | G8.V | Completato il 31/08/2026; aggiunti `POST/DELETE /api/coach/events` e `POST /api/coach/championships/mutations`, con verifica server-side di account/ruolo coach, assegnazioni `team_coaches`, gironi, partite, convocati, squadre campionato e serie eventi. Le mutation dei manager coach sono state instradate ai Route Handler; aggiunti test per account non coach e partita di squadra non assegnata. Typecheck, 54 suite/178 test, build e diff check superati. |
+| G9.1 Admin shell | [x] | G1.13,G8.8 | Completato il 31/08/2026; shell admin desktop-first con sidebar navy sticky, topbar contestuale, workspace max 1440 px e fallback tablet/mobile riusando LayoutShell, AppHeader e RoleSidebar comuni. Typecheck, build e diff check superati. |
+| G9.2 Admin sidebar raggruppata | [x] | G9.1 | Completato il 31/08/2026; navigazione admin raggruppata in Panoramica, Sport, Persone, Comunicazione e Amministrazione, con Profilo separato nella zona Account, active state route-aware e `aria-current` sui link. Tutte le route esistenti preservate. Typecheck, test mirati, build e diff check superati. |
+| G9.3 Admin dashboard operativa | [x] | G9.2 | Completato il 31/08/2026; dashboard riorientata alle eccezioni supportate (rate scadute, certificati da verificare, inviti, eventi senza palestra, conflitti e messaggi non letti), con agenda odierna, incassi, riepilogo secondario e attività recente. Ogni eccezione usa una route gestionale esistente; nessun KPI inventato. Typecheck, 55 suite/180 test, build e diff check superati. |
+| G9.4 Pattern pagina gestionale | [x] | G9.1 | Completato il 31/08/2026; creato pattern riusabile con header/contesto/CTA, filtri, summary, tabella responsive, selezione bulk accessibile e drawer responsive desktop/mobile. Nessuna migrazione massiva dei domini. Typecheck, 56 suite/183 test, build e diff check superati. |
+| G9.5 Dominio Sport | [x] | G9.4 | Completato il 31/08/2026; migrate al pattern AdminManagement le pagine Stagioni, Attività, Squadre, Campionati, Palestre e Calendario. Aggiunto supporto `embedded` ai manager per rimuovere solo intestazioni duplicate, preservando azioni, filtri, modali, query, mutation, autorizzazioni e route. Typecheck, 56 suite/183 test, build e diff check superati. |
+| G9.6 Dominio Persone | [x] | G9.4 | Completato il 31/08/2026; migrate al pattern AdminManagement le pagine Anagrafica, Atleti, Collaboratori e Account/accessi. Aggiunto supporto `embedded` ai manager per rimuovere intestazioni duplicate, preservando filtri/azioni/drawer/badge di dominio, modelli tecnici, autorizzazioni e route. Typecheck, 56 suite/183 test, build e diff check superati. |
+| G9.7 Comunicazione/Amministrazione | [x] | G9.4 | Completato il 31/08/2026; migrate al pattern AdminManagement le pagine Messaggi, Documenti, Quote associative, Incassi, Uscite e Bilancio. Intestazioni duplicate rimosse con adapter `embedded`, cifre finanziarie principali rese tabulari e stati danger/warning mantenuti legati a condizioni reali; flussi, autorizzazioni, modelli tecnici e route invariati. Typecheck, 56 suite/183 test, build e diff check superati. |
+| G9.8 Test admin responsive | [x] | G9.3–G9.7 | Completato il 31/08/2026; Playwright `admin-responsive-chromium` passato: 3/3 test, route/deep link admin, viewport 768×1024/1024×768/1440×900, sidebar mobile/desktop, focus/aria-current, overflow, tabella, filtri e drawer/modal con Escape verificati. Typecheck e diff check superati. |
+| G10.1 Dark mode canonico | [x] | G9.8 | Completato il 31/08/2026; storage unificato su `csroma-theme`, bootstrap tema pre-paint, `.theme-dark` canonico, token dark e bridge per utility legacy, contrasto verificato sui token principali, theme-color/manifest/offline coerenti; immagini e logo invariati. Typecheck, 57 suite/187 test, build e diff check superati. |
+| G10.2 Audit accessibilità | [x] | G10.1 | Completato il 01/09/2026; audit statico sulle aree migrate e smoke dei componenti interattivi: righe/card admin e calendario coach rese tastierabili con azioni Dettagli esplicite, drawer incassi reso dialog accessibile con focus trap/Escape/restore, close button e stati ARIA consolidati. Typecheck, Jest completo, build e diff check superati; nessun redesign extra. |
+| G10.3 Audit PWA | [x] | G10.1 | Completato il 01/09/2026; audit worker/bootstrap/logout completato: precache solo pubblico, nessuna cache per HTML autenticato/API/RSC/signed URL, cache runtime limitate ad asset statici e immagini pubbliche, pulizia runtime + contesti account al logout, update waiting con consenso esplicito, fallback offline generico, stati online/offline e install prompt verificati. Nessun Background Sync/queue mutation introdotto. Typecheck, 58 suite/189 test, build e diff check superati. |
+| G10.4 Performance/bundle | [x] | G10.1 | Completato il 01/09/2026; misurati route/bundle Next e componenti client principali: rimossi i Client Component superflui da sei wrapper di rotta (atleta/coach/admin calendario e campionati/messaggi), mantenuti i boundary interattivi nei manager; eliminati dal bundle i loader legacy non referenziati dell’AthleteDashboard, già sostituiti dall’endpoint aggregato; sostituita nella bottom navigation la richiesta `view=full` dei messaggi con endpoint `countOnly=1`, evitando payload di corpi, profili, destinatari e allegati. Build, typecheck/lint integrati, Jest 58 suite/189 test e `git diff --check` superati. Nessuna modifica a immagini/logo/font e nessuna riscrittura fuori dai colli di bottiglia misurati. |
+| G10.5 Cleanup legacy | [x] | G10.2–G10.4 | Completato il 01/09/2026; rimossi esclusivamente nove file senza riferimenti nei sorgenti dopo il redesign: copie `.old`/`.backup`/`calendold`, pannelli dashboard sostituiti e componenti admin/auth legacy non importati. Nessuna rinomina massiva o modifica a route/contratti. `tsc --noEmit`, Jest 58 suite/189 test, build e `git diff --check` superati. |
+| G10.9 Aggiornamento PWA affidabile | [x] | G10.3 | Completato il 03/09/2026; aggiunto il controllo `registration.update()` dopo la registrazione e al ritorno sulla scheda/focus, mantenuto l’update manuale con reload controllato, aggiunti test di successo/fallimento non bloccante e cambiati gli asset `/_next/static/*` da cache-first a network-first con cache `v2` per evitare chunk obsoleti soprattutto in sviluppo. Esteso il rilevamento con `/api/app-version`, basato sull’identificativo del deploy Vercel e controllato all’avvio, al ritorno in foreground e ogni 60 secondi: il banner compare anche quando cambia solo React/CSS senza modificare `sw.js`; “Aggiorna ora” ricarica direttamente se non c’è un worker in attesa. Test PWA mirati 5/5, typecheck, build e `git diff --check` superati. Resta la verifica manuale su una PWA installata durante due deploy distinti. |
+| G10.10 Remediation certificati admin | [x] | G9.3,G9.6 | Completato il 03/09/2026; allineata la classificazione dashboard/pagina Atleti (scaduto, mancante, imminente entro 30 giorni, regolare), aggiunto filtro stato certificato e link dashboard con filtro “Da verificare” preimpostato. Test mirati 7/7, typecheck, build e diff check superati. |
+| G10.11 Contrasto alert dashboard dark mode | [x] | G10.1,G9.3 | Completato il 03/09/2026; corrette le card “Richiede attenzione” in dark mode con superfici navy, testo primario/secondario esplicito, icone warning e hover coerenti. Typecheck, build e diff check superati. |
+| G10.12 Sostituzione logo e icona PWA | [x] | G1.10,G6.5,G10.3 | Completato il 03/09/2026; nuovo logo trasparente collegato a shell/autenticazione/documenti, icone PWA rigenerate dal canvas bianco, push/offline/service worker aggiornati e test PWA estesi agli asset. Typecheck, Jest 59 suite/195 test, lint, build e diff check superati. Smoke browser/PWA non eseguibile in questo ambiente per `SIGTRAP` Chromium e `listen EPERM`; da ripetere su staging/host con bind locale disponibile. |
+| G10.13 Centratura modal desktop | [x] | G1.7,G9.8 | Completato il 21/09/2026; corretta la specificità CSS delle regole Radix `data-state=open` che sovrascriveva il `translate(-50%, -50%)` dei modal `cs-modal--centered`, causando pannelli spostati a destra e form lunghi difficili da gestire su desktop. La primitive condivisa mantiene ora il centraggio viewport e lo scroll interno già previsto, preservando il layout mobile. Test modal mirati 15/15, typecheck, build e `git diff --check` superati. |
+| G10.14 Scroll comune modal lunghi | [x] | G10.13 | Completato il 21/09/2026; esteso a tutti i `.cs-modal` il limite `100dvh` con scroll verticale interno, includendo i modal custom inline che prima erano scrollabili solo su mobile o non avevano un limite desktop. Preservati `ResponsiveDetail` e i form `cs-modal--form` con scroll del solo corpo. Typecheck, build e `git diff --check` superati. |
+| G11.1 Token e contratto visivo del tipo evento | [x] | G10.2 | Completato il 03/09/2026; creato il mapper condiviso tipizzato in `src/lib/events/event-kind.ts` con label, aria-label, classe badge e token colore/superficie/foreground per Allenamento (indigo/navy), Partita (rosso CSRoma), Riunione (teal) e Altro (grigio neutro); aggiunti equivalenti light/dark e classi CSS `cs-event-kind-*` con prefisso separato dai token operativi; il compatibility entry point atleta delega al mapper condiviso. Test mapper/compatibilità 2 suite/22 test, typecheck, build e diff check superati. L'adozione delle superfici esistenti cross-role resta in G11.2. |
+| G11.2 Adozione cross-role del tipo evento | [x] | G11.1 | Completato il 03/09/2026; adottati `EventKindBadge`, `EVENT_KIND_OPTIONS` e `eventKindVisual` in dashboard, agenda, calendari, liste, dettaglio e form/filtri di atleta/famiglia, coach e admin; mantenuti separati colori e copy di presenza, conflitto, errore e selezione, senza modifiche a route, dati o autorizzazioni. Test mirati 4 suite/16 test, suite completa 61 suite/215 test, typecheck, build e diff check superati. |
+| G11.3 Calendario mensile mobile condiviso | [x] | G11.1 | Completato il 07/09/2026; aggiunto `MonthlyMobileCalendar` condiviso con griglia 7×6, indicatori/legenda per tipologia, gestione eventi multi-giorno, agenda della data selezionata, preview desktop hover/focus e supporto reduced motion. Integrato sotto 768px in coach/admin; FullCalendar mantenuto da 768px. Suite Jest completa 62/217, build Next, typecheck e diff check superati. |
+| G11.4 Integrazione calendario coach mobile | [x] | G11.2,G11.3 | Completato il 07/09/2026; integrato `MonthlyMobileCalendar` in `/coach/calendar` mantenendo `TeamContext`, filtri su squadre autorizzate, dettaglio/modifica, form e mutation coach esistenti. Il tap sul giorno seleziona la giornata e l’agenda, senza aprire eventi; l’agenda vuota offre “Nuovo evento per questa giornata” con data/ora locale precompilata. Calendario mobile visibile anche con zero eventi o filtro vuoto; error/denied/offline e risultati vuoti restano espliciti. Modificati `src/components/coach/CoachCalendarManager.tsx`, `src/components/calendar/MonthlyMobileCalendar.tsx` e relativo test. Jest completo 62 suite/218 test, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. |
+| G11.5 Integrazione calendario admin mobile | [x] | G11.2,G11.3 | Completato il 07/09/2026; integrato `MonthlyMobileCalendar` in `/admin/calendar`, spostati i filtri multi-selezione squadra/tipologia/intervallo in uno sheet mobile accessibile con conteggio, Applica e Reset; mantenuti vista elenco, export Excel, CRUD/modale evento e aggiunta selezione bulk con eliminazione tramite le DELETE admin esistenti. Il calendario carica l’intervallo visibile con `visible=1`, limite 500 e overlap multi-giorno; l’API valida date, ordine e ampiezza dell’intervallo mantenendo `requireGlobalRole('admin')`, paginazione legacy e route/schema/RLS invariati. Esteso il recupero FullCalendar al range visibile. Remediation del 07/09/2026: corretto il loop di refresh desktop causato da `datesSet` che smontava il calendario mentre `loading` era attivo; il caricamento iniziale resta bloccante, i refresh successivi mantengono il calendario montato e deduplicano il range. `npx tsc --noEmit`, `npm test -- --runInBand` (62 suite/218 test), `npm run build` e `git diff --check` superati. |
+| G11.5a Vista mese atleta condivisa e coerenza cross-role | [x] | G11.3,G11.4,G11.5 | Completato il 07/09/2026: integrato `MonthlyMobileCalendar` nella sola vista Mese mobile atleta/famiglia; inizialmente Agenda era il default. Aggiunto renderer agenda role-specifico per mantenere squadre, conflitti, stato/deadline e `AttendanceControl` autorizzato senza pulsanti annidati; label vista uniformata a `Mese`. FullCalendar e default desktop, route, filtri, contesto subject/team e autorizzazioni invariati. Test mirati 23/23, suite completa 62 suite/220 test, typecheck, build e diff check superati. Default aggiornato il 15/09/2026 a Mese su mobile e desktop per allineamento con il calendario coach. |
+| G11.6 Test e gate calendario cross-role | [!] | G11.4,G11.5,G11.5a | BLOCCATO il 07/09/2026 dopo verifiche unit/component, Route Handler e gate tecnici superati. Su server production dedicato, E2E admin 5/5, atleta 2/2, famiglia 2/2 e coach 1/1 passano; coach touch 1/1 passa. Il run dev parallelo precedente resta flaky (`ERR_ABORTED`/sidebar non trovata), quindi non viene usato come evidenza UI. Aggiunti casi MonthlyMobileCalendar per quattro tipi, tipo sconosciuto, multiday, ordinamento locale e navigazione tastiera, smoke mobile Agenda/Mese famiglia/atleta, sei viewport + dark/reduced-motion coach, touch coach, mese mobile/desktop admin e GET admin per intervalli/limite/overlap. Blocco esterno: Chromium headless non applica lo zoom browser 200% da tastiera e il servizio Computer Use interattivo non si avvia (`Sky Computer Use service startup request failed`); resta da eseguire zoom reale e dark mode completa per ogni ruolo, poi G11.V. |
+| G11.V Gate verifica Fase 11 | [ ] | G11.1–G11.6 (incluso G11.5a) | Verifica finale del linguaggio visivo e del calendario mobile atleta/famiglia/coach/admin. |
+| G10.6 E2E matrice finale | [-] | G10.5 | Verifica Preview completata il 03/09/2026: 37 test passati su 38, 1 saltato. Coperti login e route admin/coach/atleta/genitore, responsive admin/coach/atleta/famiglia, cambio subject con persistenza dopo navigazione completa verso `/athlete/messages`, confini API, PWA manifest/service worker/offline/cache e flussi operativi. Il test saltato è il controllo API BOLA cross-resource, che richiede `E2E_BOLA_MESSAGE_ID`/`E2E_BOLA_EVENT_ID` non configurati nello staging. La correzione del contesto familiare è in `57963eb`; la voce UI “Firma documenti” è stata nascosta perché il flusso firma non è disponibile; corretto il posizionamento dei modal Radix su mobile dopo gli screenshot del coach, inclusi `fullscreenOnMobile` e il `position: relative` ereditato da `.cs-modal`. Aggiunto rilevamento automatico della versione deploy per il banner PWA. Riverifica Preview 375×812 completata: modal evento e messaggio dentro viewport, senza errori console. Test mirati modal 8/8 e PWA 5/5, typecheck, build e diff check superati. Restano la verifica BOLA con fixture dedicate, la matrice modal sugli altri viewport e gli scenari PWA sul dispositivo. |
+| G10.7 Documentazione finale | [ ] | G10.6 | |
+| G12.1 Contratto rollover e invarianti DB | [x] | G9.5,G9.6 | Completato il 24/09/2026: baseline canonica schema-only adottata come metodo locale supportato con due replay Docker verificati; history migration locale/staging riconciliata e remediation RPC applicata/verificata su staging. Protezione password compromesse consapevolmente non disponibile sul piano Supabase gratuito e accettata come limite di piattaforma; nessuna mutazione produzione eseguita. |
+| G12.2 API bozza stagione 2026/2027 | [x] | G12.1 | Completato il 15/09/2026; Route Handler admin validato e idempotente per la sola bozza inattiva 2026/2027, con conflitti espliciti, nessuna mutazione di profili/team o disattivazione della 2025/2026; test mirati, typecheck, build e diff check superati. |
+| G12.3 Copia selettiva palestre e attività | [x] | G12.2 | Completato il 22/09/2026: fixture DB locale e staging hanno verificato copy/link/skip, campi ammessi, conteggi pre/post, retry idempotente, collisione atomica e cleanup senza residui. |
+| G12.4 Bozze e mappa squadre target | [x] | G12.3 | Completato il 15/09/2026; preview admin e batch transazionale idempotente per creare, collegare o escludere squadre, con fusione e validazione cross-season. Test applicativi, fixture DB transazionale locale, typecheck, build e diff check superati. La migration non è stata applicata persistentemente e nessuna mutazione è stata eseguita su staging/produzione in questo goal. |
+| G12.5 Preview profili candidati | [x] | G12.4 | Completato il 15/09/2026; aggiunti servizio server read-only e `GET /api/admin/season-profiles`, con candidati deduplicati per persona, separazione atleti/collaboratori, membership source multi-team con jersey/ruolo, sole squadre target mappate, stato target già presente, warning tipizzati e contesto familiare attivo limitato a relazione/permessi. Nessuna mutazione, duplicazione di profiles/account/relazioni o hard delete. Test servizio/route 2 suite, 5 test superati; `npx tsc --noEmit` e `git diff --check` superati. Non eseguiti build, E2E o query DB runtime perché il goal richiede preview read-only e le verifiche richieste sono servizio/route, privacy, auth, typecheck e diff check; nessun accesso o mutazione staging/produzione. |
+| G12.6 Esecuzione atomica iscrizioni | [x] | G12.5 | Completato il 15/09/2026; batch server-side su RPC PostgreSQL transazionale e idempotente: crea/aggiorna solo `season_profiles` target per gli inclusi e le membership target selezionate, senza mutare la source o creare iscrizioni familiari. Audit append-only con batch key e conteggi autorevoli; validati profilo source, stagione/ruolo/team target e rollback completo. Test applicativi 2 suite/5 test, fixture DB transazionale locale, advisor security locale, typecheck e diff check superati. Nessuna mutazione staging/produzione, deploy o attivazione. Remediation 17/09/2026: migration locale `20260917094156_season_rollover_skip_excluded_profiles.sql` applicata allo staging con versione remota `20260917094411`; i profili esclusi vengono saltati prima della validazione `profile_type`, così righe legacy nulle non bloccano il batch. |
+| G12.7 Wizard admin selezione profili | [x] | G12.6 | Completato il 15/09/2026: wizard responsive a sei passi in `/admin/seasons` con scelte esplicite strutture/squadre, profili opt-in con ricerca e filtri, mapping univoco proposto, assegnazioni multi-team con ruolo/maglia modificabili, riepilogo inclusi/esclusi/senza squadra e conferma esplicita. Usa esclusivamente le route admin server-side già autorizzate e il batch G12.6; nessuna attivazione o mutazione della 2025/2026. Verifiche mirate 7/7, typecheck, build e diff check superati. Non eseguite E2E/manuali su viewport 320/390/768/1440, focus trap reale o browser con sessione admin; non eseguite mutazioni/query DB, staging o produzione. |
+| G12.8 Isolamento runtime per stagione attiva | [x] | G12.6 | Completato il 15/09/2026; introdotto resolver server-side unico per zero/una/multiple stagioni attive e filtrate autorizzazioni e letture operative atleta/famiglia/coach per attività, squadre e membership della stagione attiva; storico admin non alterato. Evidenze runtime aggiunte il 22/09/2026: test dedicati famiglia/KPI, query staging aggregata e verifica coach multi-squadra. Smoke autenticato e remediation storico admin 24/09/2026: corretti l'aggregato incassi “Tutte le stagioni”, il caricamento/navigazione della griglia calendario storica e il catalogo campionati, ora attivo di default con storico esplicito; test mirati 6/6, lint e build superati. Nessuna mutazione staging/produzione, deploy o attivazione. |
+| G12.8a Isolamento squadre nei selettori e nelle assegnazioni | [x] | G12.8 | Completato il 22/09/2026: audit dei cataloghi admin concluso. Assegnazioni, quote, incassi, pagamenti, messaggi e calendario erano già stagionali; Gestione squadre ora parte dall’attiva con storico esplicito, documenti usa il catalogo attivo autorizzato e campionati limita le squadre alla stagione del campionato selezionato. Typecheck, test mirati, build e diff check superati. |
+| G12.8b Quote associative per stagione | [x] | G12.8a | Completato il 21/09/2026: `/admin/membership-fees` ora seleziona di default la stagione attiva, filtra piani, squadre nei form e rate nella tab Atleti; lo storico resta disponibile con “Tutte le stagioni”. Aggiunto `season_id` al contratto Zod e validazione server-side della relazione `team → activity → season` in creazione/modifica quota; esteso il filtro a `/api/admin/installments`. Typecheck, test `membershipFees` 2/2, suite completa 83/85 suite e 338/341 test, build e diff check superati. I 3 test falliti sono preesistenti e non correlati (`AthleteDashboard` e mutazioni campionato coach). Nessuna mutazione staging/produzione. Screenshot di riferimento: pagina Quote associative con squadre `AMA`, `U17`, `U14` mentre la stagione attiva usa i target `*-2627`. |
+| G12.8c Pagamenti e incassi per stagione | [x] | G12.8b | Completato il 21/09/2026: `/admin/incassi` usa la stagione attiva come default, consente lo storico esplicito e allinea KPI, rate, piani e squadre tramite `team → activity → season`; `/admin/payments` usa lo stesso contesto e filtra i pagamenti collegati a squadra/attività/palestra, mantenendo visibili come condivisi i costi generali privi di collegamento. Aggiunta validazione server-side per creazione/modifica pagamenti e filtro coach coerente nel form. Remediation 21/09/2026: corretto il filtro dei pagamenti con sola `team_id`, risolvendo correttamente `team → activity → season` (`fc838eb`); prima della correzione le stagioni singole restituivano zero pagamenti mentre “Tutte le stagioni” ne mostrava 13. Typecheck, build e diff check superati. Nessuna mutazione staging/produzione. |
+| G12.8d Bilancio per stagione | [x] | G12.8c | Completato il 21/09/2026: `/admin/balance` usa la stagione attiva come default, consente lo storico esplicito e allinea entrate da rate e uscite collegate a squadra/attività/palestra; i costi generali privi di collegamento restano condivisi. Le liste dei filtri rispettano la stagione selezionata; le date restano filtri opzionali sui movimenti. Typecheck, build e diff check superati; nessuna mutazione staging/produzione. |
+| G12.8e Messaggi e destinatari per stagione | [x] | G12.8d | Completato il 21/09/2026 senza aggiungere `season_id` a `messages`: `/admin/messages` usa un unico selettore stagione, predefinito sull’attiva, e limita elenco, squadre e account destinatari alla stagione scelta; i familiari autorizzati sono inclusi tramite relazione attiva con un atleta iscritto. Creazione e modifica validano lato server tutti i destinatari contro lo stesso perimetro; anche l’invio di un documento come messaggio usa automaticamente la stagione attiva. Il coach usa soltanto `/api/coach/teams` e non ripropone assegnazioni storiche. Atleti e familiari non ricevono nuovi filtri: continuano a vedere implicitamente la stagione attiva per mantenere semplice la UX. Limite accettato del modello indiretto: un messaggio diretto a un profilo presente in più stagioni compare nello storico di ciascuna, mentre i messaggi di squadra restano univoci tramite `team → activity → season`. Test mirati 9/9, typecheck, build con variabili Supabase placeholder e diff check superati. Nessuna migration o mutazione dati. |
+| G12.8f Cataloghi modal eventi admin per stagione | [x] | G12.8e | Completato il 21/09/2026; `/admin/calendar` ora ricarica squadre, attività e palestre in base alla stagione selezionata, con default sulla stagione attiva e pulizia immediata delle opzioni precedenti durante il cambio filtro. Il modal di creazione/modifica non propone più squadre della stagione storica; lo storico del calendario resta consultabile selezionando esplicitamente la stagione. Coach invariato perché già usa il catalogo autorizzato della stagione attiva. Test API/calendario 8/8, typecheck, build e diff check superati. |
+| G12.8g Rollover stagionale riutilizzabile | [x] | G12.7,G12.8 | Completato il 24/09/2026: source attiva e target inattiva futura sono risolti dal catalogo, target selezionabile, etichette/date dinamiche, creazione bozza generica e suffisso squadra derivato dalla target. Regressioni 2026/2027 → 2027/2028, typecheck, test mirati, lint, build e diff check superati. Verifica staging successiva: eliminata con cleanup transazionale la sola bozza test `2027/2028` (1 palestra, 1 attività, 3 squadre, 2 mapping strutture e 3 mapping squadre), dopo controlli con zero dati operativi, profili o audit; `2025/2026` è rimasta inattiva e `2026/2027` attiva. |
+| G12.9 Dry-run, esecuzione 2026/2027 e gate | [-] | G12.1–G12.8g | Backup ed evidenze DB completati; migration produzione applicata e verificata. Rollover, attivazione e gate finale restano da eseguire separatamente. |
+
+---
+
+# 2. Fase 0 — Baseline e comprensione del repository
+
+## G0.1 — Baseline route, schermate e viewport
+
+**Obiettivo**
+Congelare lo stato iniziale dell'app prima del redesign, senza modificare UI o comportamento.
+
+**Ambito da ispezionare**
+- `src/app/layout.tsx`
+- route atleta, famiglia, coach e admin
+- `src/components/navigation/LayoutShell.tsx`
+- `src/components/navigation/RoleSidebar.tsx`
+- eventuali test E2E/screenshot già presenti
+
+**Task**
+- [ ] Elencare tutte le route applicative attuali e verificare che quelle indicate in `re_design.md` esistano o documentare differenze.
+- [ ] Identificare root layout, nested layout e shell effettivamente usate da ogni ruolo.
+- [ ] Acquisire baseline visuale almeno per:
+  - 375×812
+  - 768×1024
+  - 1024×768
+  - 1440×900
+- [ ] Coprire almeno:
+  - dashboard atleta;
+  - calendario atleta;
+  - messaggi atleta;
+  - campionato atleta;
+  - quote atleta;
+  - profilo atleta;
+  - selezione/area familiare se accessibile;
+  - dashboard coach;
+  - dashboard admin.
+- [ ] Annotare overflow, duplicazioni header/sidebar, problemi safe-area e differenze browser/standalone già visibili.
+- [ ] Non correggere nulla.
+
+**Output atteso**
+- nota baseline nel presente file oppure documento dedicato linkato da questo piano;
+- elenco route effettive;
+- elenco gap tra specifica e repository.
+
+### Baseline G0.1 — 27 agosto 2026
+
+#### Route applicative effettive
+
+| Area | Route verificate |
+|---|---|
+| Pubbliche/auth | `/`, `/login`, `/forgot-password`, `/reset-password`, `/auth/callback`, `/unauthorized` |
+| Atleta | `/dashboard`, `/athlete/calendar`, `/athlete/campionati`, `/athlete/messages`, `/athlete/fees`, `/athlete/profile` |
+| Coach | `/coach/calendar`, `/coach/campionati`, `/coach/messages`, `/coach/payments`, `/coach/profile` |
+| Admin | `/admin/activities`, `/admin/atleti`, `/admin/balance`, `/admin/calendar`, `/admin/campionati`, `/admin/collaboratori`, `/admin/documents`, `/admin/gyms`, `/admin/incassi`, `/admin/membership-fees`, `/admin/messages`, `/admin/payments`, `/admin/profile`, `/admin/profiles`, `/admin/seasons`, `/admin/teams`, `/admin/users` |
+
+Le route sopra sono state verificate sui file `page.tsx` presenti in `src/app`. Le Route Handler `/api/**` non sono schermate UI e restano fuori dalla baseline visuale.
+
+#### Shell effettiva
+
+- `src/app/layout.tsx` applica una shell globale con `ThemeProvider`, `PwaBootstrap`, `ToastProvider`, `OnboardingProvider`, `AuthProvider`, `AccessibleProfileProvider` e `LayoutShell`.
+- `LayoutShell` decide la shell autenticata in base al pathname `/admin`, `/coach`, `/athlete` e `/dashboard`.
+- Desktop: topbar + sidebar `RoleSidebar` + area principale.
+- Mobile: topbar + drawer laterale; non esiste ancora una `BottomNavigation` canonica del redesign.
+- Il contesto familiare è già integrato in `RoleSidebar` tramite `AccessibleProfileSelector`, ma non esiste ancora una barra persistente soggetto/squadra conforme a `re_design.md`.
+- La PWA usa `viewportFit: cover`; safe-area padding dedicato per header, banner e bottom navigation non è ancora implementato.
+
+#### Baseline viewport e stato della cattura
+
+| Viewport target | Uso previsto | Stato baseline |
+|---|---|---|
+| 375×812 | telefono/PWA atleta, famiglia, coach | acquisito; la cattura include browser/DevTools chrome |
+| 768×1024 | tablet touch | acquisito; la cattura include browser/DevTools chrome |
+| 1024×768 | desktop compatto/admin | acquisito; la cattura include browser/DevTools chrome |
+| 1440×900 | desktop admin | acquisito; la cattura include browser/DevTools chrome |
+
+I quattro screenshot Google Stitch allegati dall'utente sono registrati come **riferimento visuale**, non come baseline dell'app corrente. La cattura autenticata è stata archiviata in `docs/redesign-baseline/2026-08-27/` (29 PNG, più `.DS_Store` generato dal sistema operativo). Le immagini includono browser/DevTools chrome; durante l'analisi il chrome va ignorato e non costituisce parte del design applicativo. Non sono state aggiunte al bundle applicativo.
+
+#### Gap iniziali osservati
+
+- header e titolo pagina possono duplicare la gerarchia visiva;
+- mobile usa un drawer, mentre la specifica richiede bottom navigation per atleta/famiglia/coach;
+- non esiste ancora un `TeamSwitcher` persistente per atleti o coach multi-squadra;
+- `AccessibleProfileSelector` copre il cambio soggetto, ma il contesto soggetto/squadra non è ancora sempre visibile nell'header;
+- le classi CSS legacy `cs-*` e i token del tema sono ancora la grammatica prevalente;
+- `ThemeProvider` usa `csroma-theme` mentre il toggle tema usa una convenzione `.dark` distinta;
+- `viewportFit: cover` è presente, ma mancano inset safe-area nei punti interattivi;
+- gli stati loading/empty/error/denied/offline sono implementati in modo non uniforme tra le pagine;
+- il campionato atleta e il profilo delegato restano owner-profile centrici e non devono essere esposti alla famiglia prima degli endpoint subject-aware indicati nel redesign.
+
+#### Esito e verifiche G0.1
+
+- **Data:** 27 agosto 2026.
+- **File principali ispezionati:** `src/app/layout.tsx`, `src/components/navigation/LayoutShell.tsx`, `src/components/navigation/RoleSidebar.tsx`, `src/components/navigation/AccessibleProfileSelector.tsx`, `src/app/**/page.tsx`, `playwright.config.ts`, `tests/e2e/**`.
+- **Check eseguiti:** inventario con `rg --files src/app`, verifica riferimenti shell/layout con `rg`, controllo degli artefatti `playwright-report` e `git status`.
+- **Nota:** la cattura visuale autenticata è ora disponibile nella cartella baseline indicata sopra. Il browser/DevTools chrome è presente nelle immagini, ma l'area applicativa resta utilizzabile per la review; non è stato confuso con la UI CSRoma e non è stato introdotto nel prodotto.
+
+**Vincoli**
+- nessuna modifica visuale;
+- nessun refactor;
+- nessun cambio dati.
+
+**Definition of Done**
+- baseline ripetibile;
+- route critiche note;
+- differenze repository/spec documentate.
+
+**Prompt `/goal`**
+```text
+/goal G0.1
+Crea la baseline del redesign CSRoma. Non modificare UI o logica. Mappa route/layout/shell attuali e documenta lo stato visuale ai viewport richiesti dal goal. Aggiorna il registro del piano e fermati.
+```
+
+**Second verification “Oggi” — 08/09/2026**
+
+- [x] Riesame cross-role del percorso: atleta e famiglia condividono
+  `AthleteCalendarManager`; coach e admin hanno handler propri. Individuata e
+  corretta la sovrascrittura della data odierna nei gestori mobile atleta/coach
+  e nel caricamento intervallo desktop admin.
+- [x] Desktop: sostituiti i pulsanti FullCalendar interni con callback espliciti
+  `Oggi/precedente/successivo`, più sincronizzazione imperativa della vista
+  montata. Mobile: `Oggi` usa direttamente una nuova data corrente senza
+  successiva assegnazione della data precedente.
+- [x] Gate codice: 63 suite/227 test, `npx tsc --noEmit`, `npm run build` e
+  `git diff --check` superati.
+- [-] E2E autenticati desktop/mobile per tutti i profili non rieseguiti in
+  questa sessione: mancano le credenziali `E2E_*`; resta necessaria una prova
+  manuale o E2E con sessioni atleta, famiglia, coach e admin.
+
+**Stabilità bottom navigation mobile — 08/09/2026**
+
+- [x] Individuato il conflitto tra scroll interno `.cs-main` e navigazione
+  `position: fixed` durante il ricalcolo della visual viewport iOS.
+- [x] Su viewport mobili lo scroll passa al documento; il bottom menu resta
+  ancorato a `inset-block-end: 0`, con safe-area, compositing GPU e nessuna
+  modifica al layout desktop.
+- [x] Test mirati, typecheck, build e `git diff --check` superati.
+- [-] Verifica manuale su Safari iOS/PWA non eseguita in questa sessione.
+- [x] Follow-up iPhone: ripristinato `bottom: 0` esplicito al posto della sola
+  proprietà logica `inset-block-end`, che su alcune versioni WebKit/PWA può
+  lasciare il fixed footer fuori viewport.
+
+---
+
+## G0.2 — Inventario componenti UI, CSS e dipendenze visuali
+
+**Obiettivo**  
+Capire cosa può essere riusato, cosa deve essere consolidato e quali classi legacy non vanno rimosse prematuramente.
+
+**Task**
+- [ ] Analizzare `src/app/globals.css`.
+- [ ] Individuare:
+  - CSS custom properties esistenti;
+  - convenzione `--cs-*`;
+  - classi `cs-*`;
+  - colori hardcoded Tailwind più ricorrenti;
+  - radius, shadow, spacing e font esistenti.
+- [ ] Inventariare componenti equivalenti a:
+  - Button;
+  - Card/Panel;
+  - badge/status;
+  - modal/dialog/sheet;
+  - list row;
+  - header;
+  - navigation;
+  - selector;
+  - loading/empty/error.
+- [ ] Individuare componenti Radix e Lucide già in uso.
+- [ ] Classificare ogni componente: `riusare`, `adattare`, `sostituire gradualmente`, `legacy`.
+- [ ] Cercare inline style e hardcoded color nei componenti che saranno toccati nelle fasi 1–7.
+- [ ] Non rinominare né cancellare componenti.
+
+**Definition of Done**
+- esiste una mappa concreta di primitive e stili;
+- sono noti i principali punti di duplicazione;
+- nessun file produttivo è stato modificato salvo documentazione.
+
+**Prompt `/goal`**
+```text
+/goal G0.2
+Fai l'inventario UI/CSS richiesto dal piano. Classifica componenti e classi per strategia di migrazione. Non eseguire ancora il redesign e non rimuovere legacy.
+```
+
+### Inventario G0.2 — 27 agosto 2026
+
+#### 1. Strato CSS e token
+
+Il sistema visuale corrente vive quasi interamente in `src/app/globals.css` (unico stylesheet applicativo) e combina Tailwind 4 con una grammatica CSS prefissata `cs-*`.
+
+| Area | Stato rilevato | Strategia |
+|---|---|---|
+| Palette/token `--cs-*` | `--cs-primary`, `--cs-accent`, `--cs-warm`, success/warning/danger, superfici, testo, bordi, radius, shadow, spacing, font e motion | **adattare** ai token canonici di `re_design.md`, mantenendo inizialmente i nomi `--cs-*` |
+| Tema scuro | `.theme-dark` in `globals.css` e `ThemeProvider`; il toggle usa la stessa classe ma esiste una convenzione `.dark` in altri riferimenti | **consolidare dopo il tema chiaro**, senza cambiare ora il comportamento |
+| Layout/shell | `.cs-page`, `.cs-layout`, `.cs-main`, `.cs-navbar`, `.cs-sidebar`, `.cs-drawer` | **adattare**; aggiungere safe-area e nuova shell per ruolo nelle fasi Foundation |
+| Bottoni | `.cs-btn` e varianti primary/accent/outline/ghost/danger/success/warning/warm, più size/icon/block | **riusare e mappare**; ridurre shadow/transform secondo il redesign |
+| Badge/alert | `.cs-badge*`, `.cs-alert*` | **riusare e adattare** a status testuali e palette semantica canonica |
+| Card/pannelli | `.cs-card`, `.cs-card--primary`, meta/title/actions | **adattare**; distinguere `Panel`, `Card` e `ListRow` |
+| Form | `.cs-field`, `.cs-input`, `.cs-select`, `.cs-textarea`, help/error | **riusare con audit accessibilità**; uniformare label/id/errori |
+| Tabelle | `.cs-table`, header, row hover, actions | **riusare per admin**; su atleta/coach sostituire progressivamente con righe responsive |
+| Tabs | `.cs-tabs`, `.cs-tab` | **adattare** a segmenti mobile e stato `aria-selected` |
+| Feedback | `.cs-progress`, `.cs-skeleton`, `animate-spin`, classi colore raw in `FeedbackState` | **adattare** a `FeedbackState` canonico e reduced motion |
+| Modal | `.cs-overlay`, `.cs-modal*`, varianti centered/fullscreen e Radix data-state | **consolidare** in un solo `ResponsiveDetail`; non rimuovere ancora `Modal`/`Dialog` |
+| Utility | `.cs-grid*`, `.cs-list*`, `.cs-avatar`, `.cs-tooltip`, `.cs-theme-toggle`, `.jersey-number` | **riusare caso per caso**, con priorità a grid/list/avatar; tooltip e jersey restano specializzati |
+
+Evidenze da tenere presenti nella migrazione:
+
+- `globals.css` contiene due blocchi `:root` e sezioni aggiunte in momenti diversi (design system v1, modal v2, dashboard utilities).
+- Le variabili canoniche del redesign non sono ancora quelle correnti: il canvas è `#f7f7fb`, l'accent è `#413c67` e `--cs-warm` è giallo; il redesign richiede canvas caldo e navy semantico.
+- Sono usate classi/token non sempre dichiarati nello stylesheet (`cs-surface-secondary`, `cs-surface-muted`, `cs-text-tertiary`, `cs-card--lg`, `cs-badge--accent`, `cs-badge--primary`): prima di rimuoverle serve una mappatura o un fallback.
+- `.cs-card--primary` contiene `border-width: 0,5px`, valore CSS non valido: va corretto solo nella fase in cui il componente viene migrato.
+- La ricerca ha rilevato un uso consistente di colori Tailwind hardcoded, con prevalenza `text-gray-*`, `border-gray-*`, `text-slate-*`, `ring-blue-500`, `bg-blue-*`, oltre a rosso/verde/giallo per gli stati.
+- Sono presenti inline style soprattutto nei manager atleta/coach/admin e nei modali condivisi; vanno estratti soltanto quando il relativo componente entra in una fase di migrazione.
+
+#### 2. Primitive UI condivise
+
+Le primitive esportate da `src/components/ui/index.ts` sono il punto di partenza tecnico. Non introdurre una nuova libreria UI.
+
+| Componente | Evidenza | Strategia |
+|---|---|---|
+| `Button` | `src/components/ui/Button.tsx`, usa `cs-btn` | **riusare**, poi allineare varianti e target minimi |
+| `Badge` | `Badge.tsx`, usa `cs-badge` | **riusare/adattare**, aggiungendo status canonici |
+| `Alert` | `Alert.tsx`, usa `cs-alert` | **riusare/adattare** |
+| `Card`, `CardTitle`, `CardMeta`, `CardActions` | `Card.tsx` | **adattare** verso `Panel/Card/ListRow` |
+| `Input`, `Select`, `Textarea` | primitive form | **riusare** con label/error semantics |
+| `Field` / `FieldWrap` | esistono due implementazioni (`Field.tsx` e `Input.tsx`) | **consolidare gradualmente**, mantenendo compatibilità dell'export |
+| `Table`, `TableActions` | `Table.tsx` | **riusare per admin**, non forzare su mobile atleta |
+| `Stat` | `Stat.tsx`, tre varianti | **adattare**; non usarlo come KPI decorativo universale |
+| `Tabs` | `Tabs.tsx`, client component con tastiera base | **adattare** per segmenti e focus completo |
+| `Modal` e `Dialog` | portale custom + Radix Dialog | **consolidare gradualmente**; Radix è già presente e va preservato |
+| `FeedbackState` | `LoadingState`, `EmptyState`, `ErrorState` | **adattare/estendere** con denied, offline, filtered empty e success |
+| `Toast` | provider globale e API `toast.*` | **riusare**, sostituendo emoji e correggendo eventuali tipi timer |
+| `ThemeToggle` | toggle client su `csroma-theme` | **adattare dopo G10.1**, non blocca il tema chiaro |
+
+#### 3. Navigazione, contesto e PWA
+
+| Componente | File | Strategia |
+|---|---|---|
+| `LayoutShell` | `navigation/LayoutShell.tsx` | **adattare profondamente**: mantenere Auth/PWA e route, separare shell atleta/famiglia/coach/admin |
+| `RoleSidebar` | `navigation/RoleSidebar.tsx` | **adattare**: raggruppare admin e ridurre per mobile; non riscrivere in blocco |
+| `AccessibleProfileSelector` | `navigation/AccessibleProfileSelector.tsx` | **adattare** in `SubjectSwitcher`; preservare contesto server-side esistente |
+| `SubjectSwitcher` | non esiste | **nuovo componente Foundation**, basato sul selector esistente |
+| `TeamSwitcher` | non esiste | **nuovo componente Foundation**, alimentato da team context state |
+| Bottom navigation | non esiste | **nuovo componente Foundation** per atleta/famiglia/coach |
+| `PageHeader` | `shared/PageHeader.tsx` | **riusare/adattare** per non duplicare titolo e contesto |
+| PWA banner/install/bootstrap | `pwa/*.tsx` | **riusare/adattare**: safe-area e copy onesto offline/update |
+
+#### 4. Componenti di dominio per strategia
+
+**Riusare con adattamento locale** (logica e contratti da preservare):
+
+- `athlete/JerseyCard.tsx`;
+- `shared/LatestMessagesPanel.tsx` e `shared/UpcomingEventsPanel.tsx`;
+- `shared/RoleBadge.tsx`;
+- `calendar/FullCalendarWidget.tsx` come vista desktop secondaria;
+- `championship/formatters.ts`, `types.ts` e hook specializzati, senza esporre il campionato familiare prima del resolver subject-aware.
+
+**Adattare estraendo presentazione e mantenendo i manager:**
+
+- `athlete/AthleteDashboard.tsx` (878 righe), `AthleteCalendarManager.tsx`, `AthleteFeesManager.tsx`, `AthleteMessagesManager.tsx`;
+- `coach/CoachDashboard.tsx`, `CoachCalendarManager.tsx`, `CoachMessagesManager.tsx`, `CoachPaymentsManager.tsx`;
+- `family/FamilyMemberDashboard.tsx`;
+- `shared/EventDetailModal.tsx`, `MessageDetailModal.tsx`, `DetailsDrawer.tsx`, `TeamDetailModal.tsx`;
+- `admin/AdminDashboard.tsx`, `PeopleManager.tsx` e i manager di dominio;
+- `championship/ChampionshipPanels.tsx` e i modal/hook condivisi.
+
+La regola è estrarre `EventRow`, `MessageRow`, `MatchCard`, `FeeRow`, `AttendanceControl` e `ResponsiveDetail` quando servono alla pagina corrente; non trasformare i manager esistenti in un unico refactor trasversale.
+
+**Sostituire gradualmente come superficie, non come dominio:**
+
+- `calendar/SimpleCalendar.tsx`: mantenere i dati ma introdurre agenda/lista mobile;
+- dashboard con hero/KPI attuali: sostituire la composizione visuale, non le API;
+- tabelle atleta/coach: introdurre righe/card responsive lasciando le tabelle admin;
+- modal custom con inline style: portarli sotto `ResponsiveDetail` quando vengono riaperti nel redesign.
+
+**Legacy da isolare e non rimuovere in G0.2:**
+
+- `admin/DocumentsManager.old`;
+- `admin/PaymentsManager.backup.tsx`;
+- `calendar/calendold`;
+- classi CSS duplicate o non più referenziate, finché l'inventario di utilizzo non è completo.
+
+#### 5. Classificazione operativa per fase
+
+| Fase | Elementi in ingresso | Esito atteso |
+|---|---|---|
+| G1 Foundation | token `--cs-*`, shell, primitive Button/Badge/Card/List, feedback, modal, selector | grammatica unica senza rompere route o auth |
+| G2 Atleta dashboard | `AthleteDashboard`, Stat/Card/List, `UpcomingEventsPanel`, `LatestMessagesPanel` | composizione Executive Heritage, dati invariati |
+| G3 Calendario | `AthleteCalendarManager`, `SimpleCalendar`, `FullCalendarWidget`, `EventDetailModal` | agenda mobile + calendario desktop |
+| G4 Messaggi | `AthleteMessagesManager`, `MessageDetailModal`, attachment UI | lista densa, deduplica e privacy preservate |
+| G5 Campionato | `AthleteChampionshipsManager`, `ChampionshipsManager`, hook championship | prima resolver/API subject-aware, poi UI |
+| G6 Quote/profilo | `AthleteFeesManager`, `UserProfile`, `JerseyCard` | dettaglio per squadra e profilo permission-aware |
+| G7 Famiglia | selector/context + superfici atleta riusate | profili multipli, permessi e cambio subject robusti |
+| G8 Coach | manager coach + team context | densità operativa e aggregazione multi-squadra |
+| G9 Admin | `RoleSidebar`, manager admin, tabelle/modali | sidebar raggruppata e workspace denso |
+
+#### Esito e verifiche G0.2
+
+- **Data:** 27 agosto 2026.
+- **File principali ispezionati:** `src/app/globals.css`, `src/components/ui/*`, `src/components/navigation/*`, `src/components/shared/*`, `src/components/athlete/*`, `src/components/coach/*`, `src/components/family/*`, `src/components/admin/*`, `src/components/calendar/*`, `src/components/championship/*`.
+- **Check eseguiti:** conteggio e inventario file con `rg --files`; conteggio classi `cs-*`; ricerca colori Tailwind hardcoded; ricerca inline style; ricerca import Lucide/Radix; conteggio dimensione componenti.
+- **Vincolo rispettato:** nessun file produttivo è stato modificato; l'unico cambiamento è questo documento di piano.
+
+---
+
+## G0.3 — Mappa autorizzazione, subject context e contratti dati
+
+**Obiettivo**  
+Congelare i confini di sicurezza prima di introdurre filtri subject/team.
+
+**File/aree da ispezionare**
+- `src/hooks/useAuth.ts`
+- `src/context/AccessibleProfileContext.tsx`
+- `src/server/auth/require-account-context.ts`
+- `src/server/auth/require-subject-profile.ts`
+- Route Handler atleta dashboard/calendar/messages/fees
+- infrastruttura campionati
+- query membership/team
+- eventuali helper RLS/server
+
+**Task**
+- [x] Documentare come si risolve l'account.
+- [x] Documentare come vengono letti `account_roles`.
+- [x] Documentare owner profile vs subject profile.
+- [x] Documentare persistenza locale del subject.
+- [x] Documentare invalidazione subject non più accessibile.
+- [x] Per dashboard/calendar/messages/fees/campionati indicare:
+  - input;
+  - endpoint;
+  - query server;
+  - autorizzazione;
+  - team context disponibile;
+  - read state/mutation;
+  - limiti per famiglia.
+- [x] Verificare dove il client usa direttamente `ownerProfileId`.
+- [x] Verificare dove `teamId` è nome/codice soltanto e manca l'ID.
+- [x] Non modificare auth/RLS.
+
+**Definition of Done**
+- è chiaro quali endpoint sono già subject-aware;
+- è chiaro quali endpoint devono essere arricchiti;
+- sono evidenziati i prerequisiti per Campionato e Profilo familiare.
+
+**Prompt `/goal`**
+```text
+/goal G0.3
+Mappa autorizzazioni e contratti dati senza cambiare comportamento. Concentrati su account, subjectProfileId, team membership, famiglia e Route Handler atleta. Documenta i gap indicati in re_design.md.
+```
+
+### Mappa G0.3 — 27 agosto 2026
+
+#### 1. Catena di autorizzazione
+
+```text
+Supabase auth user
+  └─ app_accounts.auth_user_id
+       ├─ owner_profile_id  → profilo personale dell'account
+       └─ account_roles      → ruoli autorevoli dell'account
+             └─ subjectProfileId opzionale
+                  └─ profile_relationships (solo delega attiva e valida)
+                       └─ permission specifica per la risorsa
+                            └─ team_members / dati atleta
+```
+
+| Concetto | Fonte/risolutore | Regola osservata |
+|---|---|---|
+| Utente autenticato | `supabase.auth.getUser()` | assenza o errore → `401` |
+| Account | `app_accounts` via `requireAccountContext` | deve esistere ed essere `active`; stati non validi → `403` |
+| Ruoli | `account_roles` via `requireAccountContext` | deduplicati e filtrati su `admin`, `coach`, `staff`, `athlete`, `family_member`; il ruolo legacy del profilo non è autorevole |
+| Profilo personale | `app_accounts.owner_profile_id` | è il default quando non viene richiesto un subject |
+| Subject | `resolveSubjectProfile` | un ID diverso dall'owner richiede relazione attiva, date valide, tipo relazione compatibile e permesso |
+| Permessi | colonne `can_*` di `profile_relationships` | valutati per singola risorsa; non sono un ruolo globale |
+| Profilo atleta | `athlete_profiles` + `season_profiles(status=active)` | requisito comune di `requireSubjectAthleteContext` |
+
+`requireAthleteContext` è appropriato solo per l'area personale: richiede ruolo `athlete` e verifica sempre l'owner profile. Le Route Handler atleta aggiornate usano invece `requireSubjectAthleteContext`, che consente il subject delegato e restituisce `dataClient`, `profileId`, `delegated`, `permissions` e `account`.
+
+#### 2. `subjectProfileId` e famiglia
+
+- Il client persiste solo l'ID del subject nella chiave `csroma_active_subject_profile_id` e lo aggiunge alle URL tramite `appendSubjectProfile`.
+- La persistenza locale non è autorizzazione: ogni Route Handler deve rivalidare l'ID server-side.
+- `GET /api/me/accessible-profiles` risolve l'owner account e legge con admin client le relazioni `profile_relationships`, profili e override età; espone soltanto relazioni attive, valide e compatibili con minorenne/delegato verificato.
+- La risposta espone profilo, tipo relazione, `verified_at` e i sette permessi: `view_schedule`, `confirm_attendance`, `view_payments`, `view_medical_status`, `view_documents`, `sign_documents`, `receive_messages`.
+- `AccessibleProfileContext` invalida la selezione locale se l'ID non è più nella risposta; in assenza di sessione resetta profili, subject e area a `personal`.
+- Un account con ruolo `family_member` ma senza `athlete` entra di default nell'area `family`; un account multi-ruolo può cambiare area.
+- Per subject delegato `resolveSubjectProfile` usa `createAdminClient()` per leggere i dati, quindi replica esplicitamente i limiti di visibilità (come nei messaggi) invece di affidarsi implicitamente a RLS.
+
+#### 3. Squadre e membership
+
+| Persona | Relazione dati | Conseguenza UI/API |
+|---|---|---|
+| Atleta | `team_members(profile_id, team_id, jersey_number)` | può appartenere a più squadre; il numero di maglia è specifico per membership |
+| Coach | `team_coaches(coach_id, team_id, role, assigned_at)` | può essere assegnato a più squadre; i Route Handler coach devono filtrare su tutte le assegnazioni |
+| Evento | `event_teams(event_id, team_id)` | un evento può appartenere a più squadre e va deduplicato |
+| Quota | `fee_installments → membership_fees.team_id` | il dettaglio deve restare attribuito a una squadra |
+| Campionato | `championship_club_teams.team_id` + gruppi | il campionato è accessibile solo se la squadra è membership/assignment del soggetto |
+
+Il team filter è sempre restrittivo: non concede accesso. Quando il contesto team viene aggiunto alle URL deve essere verificato contro le membership già autorizzate e resettato al cambio subject.
+
+#### 4. Route Handler atleta: contratti attuali
+
+| Endpoint | Input | Autorizzazione | Risposta/limite rilevante |
+|---|---|---|---|
+| `GET /api/athlete/dashboard` | `subjectProfileId` query opzionale | `requireSubjectAthleteContext` senza permesso globale; messaggi e quote rispettano `receive_messages`/`view_payments` | `teamMemberships`, eventi, prossima partita, messaggi non letti, quote, stagione; membership ha team id/nome/codice/activity, eventi non hanno ancora team associati |
+| `GET /api/athlete/calendar` | `subjectProfileId` query | `requireSubjectAthleteContext(..., 'view_schedule')` | `events` + `teams[{id,name,code}]`; ogni evento espone `teams` come soli nomi, non ID |
+| `GET /api/athlete/events/detail` | `id` obbligatorio, `subjectProfileId` opzionale | schedule permission + membership del subject in almeno una squadra dell'evento | dettaglio con `teams[{id,name,code}]`, palestra, creator e presenza; verifica evento separata |
+| `POST /api/athlete/events/attendance` | `event_id,status,note`; subject da body o query | `requireSubjectAthleteContext(..., 'confirm_attendance')` | upsert per `event_id,profile_id`; salva `responded_by_auth_user_id` e `response_source` (`self`/`parent`); non accoda offline |
+| `GET /api/athlete/messages` | `subjectProfileId`, `view=full`, `id`, `limit` | `receive_messages` | deduplica message ID; vista full filtra recipient delegati, aggiunge read/recipient/allegati signed URL; i signed URL non vanno persistiti |
+| `POST /api/messages/read` | `message_id`, `subject_profile_id` body opzionale | account + `receive_messages` se subject delegato | upsert read state su `(message_id, auth_user_id, subject_profile_id)` |
+| `GET /api/athlete/fees` | `subjectProfileId` query | `view_payments` | rate composte con nome/codice squadra e attività; manca `team.id` e `activity.id` nel payload composto |
+| `GET /api/championships/standings` | `group_id` UUID | account; atleta personale via `requireAthleteContext`, coach via `team_coaches`, admin bypass | non accetta `subjectProfileId`; campionato delegato non supportato |
+
+Tutti gli handler catturano `AccountContextError` e restituiscono il relativo status (`401`, `403`, `500`), ma alcuni errori di query vengono trasformati in `400` o in liste vuote: il redesign non deve interpretare una lista vuota come prova di assenza dati senza distinguere errore/empty.
+
+#### 5. Gap rispetto a `re_design.md`
+
+1. **Dashboard:** aggiungere nel contratto l'associazione evento → team `{ id, name, code }`; oggi il client può sapere le membership ma non la squadra dell'evento.
+2. **Calendario:** mantenere il catalogo `teams` con ID e arricchire `events[].teams` con ID oltre ai nomi per filtro/deep link robusti.
+3. **Quote:** includere `membership_fee.team.id` e `activity.id`; non aggregare totali senza conservare la provenienza per squadra.
+4. **Messaggi:** formalizzare un read state aggregato per account + subject e un contesto squadra deduplicato; mantenere il filtro esplicito dei recipient quando `dataClient` è admin.
+5. **Campionati:** introdurre resolver e Route Handler subject-aware per catalogo, prossime partite, convocazioni, risultati e classifica; passare `subjectProfileId` a `requireSubjectAthleteContext` e verificare tutte le squadre del subject. Fino ad allora, niente Campionato nell'area famiglia.
+6. **Profilo:** `GET /api/me/profile` legge solo `ownerProfileId`; `UserProfile` esegue query client dirette su `team_members` usando `user.id`. Serve endpoint delegabile permission-aware prima di mostrare profilo, certificato o numeri di maglia di un figlio.
+7. **Team context:** non esiste ancora uno stato persistente separato per `teamId`; va aggiunto senza usare il team selezionato come autorizzazione.
+8. **Coach multi-squadra:** il modello dati supporta `team_coaches`, ma la UI/contratti coach devono rendere esplicita l'aggregazione e il filtro squadra.
+
+#### Esito e verifiche G0.3
+
+- **Data:** 27 agosto 2026.
+- **File principali ispezionati:** `src/server/auth/require-account-context.ts`, `src/server/auth/require-subject-profile.ts`, `src/context/AccessibleProfileContext.tsx`, `src/hooks/useAuth.ts`, `src/app/api/me/accessible-profiles/route.ts`, `src/app/api/athlete/{dashboard,calendar,fees,messages}/route.ts`, `src/app/api/athlete/events/{detail,attendance}/route.ts`, `src/app/api/messages/read/route.ts`, `src/app/api/championships/standings/route.ts`, `src/components/athlete/ChampionshipsManager.tsx`, `src/components/shared/UserProfile.tsx`.
+- **Check eseguiti:** ricerca riferimenti a `app_accounts`, `account_roles`, `profile_relationships`, `team_members`, `team_coaches`, `subjectProfileId`; lettura dei resolver e degli handler; confronto dei payload restituiti e delle query server.
+- **Vincolo rispettato:** nessuna modifica a auth, RLS, schema, Route Handler o comportamento applicativo; è stato modificato solo questo documento.
+
+---
+
+## G0.4 — Baseline dei controlli tecnici
+
+**Obiettivo**  
+Stabilire quali verifiche automatiche sono realmente affidabili.
+
+**Task**
+- [x] Leggere `package.json`.
+- [x] Elencare script typecheck/lint/test/build/E2E.
+- [x] Verificare quale comando lint è compatibile con Next.js 15.
+- [x] Eseguire i controlli non distruttivi già disponibili; registrare separatamente il limite del runner locale e il risultato E2E sulla Preview.
+- [x] Annotare errori/warning preesistenti separatamente.
+- [x] Non correggere errori estranei al redesign.
+- [x] Definire una matrice “controllo minimo per goal”.
+
+**Definition of Done**
+- i goal successivi non dovranno inventare comandi;
+- gli eventuali failure preesistenti sono distinti dalle regressioni.
+
+**Prompt `/goal`**
+```text
+/goal G0.4
+Stabilisci la baseline di typecheck, lint, test, build ed E2E. Non correggere problemi estranei: documentali come baseline.
+```
+
+### Baseline G0.4 — 27 agosto 2026
+
+#### Script disponibili
+
+| Controllo | Comando | Esito |
+|---|---|---|
+| TypeScript | `npx tsc --noEmit` | **PASS** |
+| Lint | `npm run lint` (`next lint`) | **PASS**, con warning di deprecation: `next lint` sarà rimosso in Next.js 16 |
+| Unit test | `npm test -- --runInBand` | **PASS** — 1 suite, 3 test; warning Jest su opzione sconosciuta `moduleNameMapping` |
+| Build | `npm run build` | **PASS** — Next.js 15.5.21, 84 pagine generate |
+| E2E locale | `npm run test:e2e` | **NON COMPLETATO** — nessun avanzamento dopo oltre un minuto; processo interrotto |
+| E2E Preview completo | `E2E_BASE_URL=<preview> npm run test:e2e` con credenziali `_PREVIEW` mappate alle variabili attese dal runner | **20 PASS, 2 FAILURE, 1 SKIP** su 23 test (1m24s circa). I due failure sono lo stesso smoke test admin su Chromium e Firefox; il test attende il campo `Attività` nella pagina gestione atleti stagionale, ma il locator non viene trovato. |
+
+La build è stata eseguita con `.env.local` presente, quindi conferma la baseline del codice con configurazione locale completa; non certifica la presenza delle variabili nei deployment Vercel.
+
+#### Matrice minima per i goal successivi
+
+| Tipo di modifica | Controlli minimi |
+|---|---|
+| Primitive CSS/UI senza boundary dati | `npx tsc --noEmit`, `npm test -- --runInBand`, review viewport interessati |
+| Shell, routing, layout, PWA | typecheck, lint, build, smoke responsive/accessibilità |
+| Route Handler/API/auth/contratti | typecheck, unit test, build, E2E autorizzativi/route interessate quando Chromium è disponibile |
+| Mutazioni o RLS/schema | controlli sopra + test E2E mirati e verifica DB separata; non implicati dal redesign corrente |
+
+#### Note da non confondere con regressioni
+
+- Il comando `lint` passa, ma lo script `next lint` è deprecato e dovrà essere migrato in un goal tecnico dedicato.
+- I warning Jest su `moduleNameMapping` sono preesistenti e non sono stati corretti in G0.4.
+- I warning Node `punycode` durante build/test appartengono alle dipendenze/runtime.
+- Il primo tentativo E2E locale è rimasto senza avanzamento e quello Preview mirato ha incontrato `browserType.launch`/`SIGTRAP` nel runner Chromium. La riesecuzione completa sulla Preview con esecuzione browser autorizzata ha però raggiunto tutti i 23 test: il runner è quindi operativo, con due failure applicativi/documentali nel solo smoke admin e un test skip.
+- I due failure Preview sono registrati come baseline, non corretti in G0.4: il test cerca il label `Attività` nella form di creazione singola, quindi va verificato se il contratto UI/test è obsoleto o se manca davvero il campo nella pagina.
+- Le credenziali Preview sono state lette da `.env.local` solo per il processo E2E; i valori non sono stati stampati né aggiunti ai file.
+- Non sono stati modificati codice, configurazioni, auth, RLS o schema.
+
+---
+
+# 3. Fase 1 — Athlete Foundation
+
+## G1.1 — Token canonici del tema chiaro
+
+**Obiettivo**  
+Introdurre i token semantici del redesign senza migrare tutte le pagine.
+
+**Task**
+- [x] Definire in `:root` i token per:
+  - canvas `#F5F4F1`;
+  - surface `#FFFFFF`;
+  - surface subdued `#EFEEEB`;
+  - surface selected `#FDECEE`;
+  - ink `#171A21`;
+  - ink muted `#667085`;
+  - ink faint `#8A8F9B`;
+  - border `#E2E0DC`;
+  - brand red `#D71920`;
+  - brand red dark `#B3121A`;
+  - navy `#243149`;
+  - success `#12B76A`;
+  - warning `#F79009`;
+  - danger `#B42318`;
+  - info `#2E90FA`;
+  - gold `#F5CE3F`.
+- [x] Mantenere naming coerente con `--cs-*` se già usato.
+- [x] Mappare i token in Tailwind 4 tramite `@theme` quando utile.
+- [x] Definire token per radius, border, elevation e motion.
+- [x] Aggiungere utility per `font-variant-numeric: tabular-nums`.
+- [x] Non eliminare i token legacy ancora referenziati.
+- [x] Non implementare ancora dark mode definitivo.
+
+**Acceptance**
+- i nuovi componenti possono usare solo token semantici;
+- nessuna regressione sulle pagine non migrate;
+- niente mix di hardcoded color + token nello stesso nuovo componente.
+
+### Baseline G1.1 — 27 agosto 2026
+
+- File modificato: `src/app/globals.css`.
+- Aggiunti i ruoli canonici chiari (canvas, superfici, ink, border, brand, navy e stati), token di radius/border/elevation/motion e utility `.cs-tabular-nums`.
+- Aggiunta la mappatura Tailwind 4 per i ruoli canonici (`bg-canvas`, `text-ink`, `border-border`, ecc.).
+- I token legacy `--cs-bg`, `--cs-text`, `--cs-primary` e gli altri già referenziati non sono stati rimossi o riassegnati: la migrazione visiva resta a carico dei goal successivi.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.1
+Implementa esclusivamente i token canonici del tema chiaro descritti nel piano. Mantieni compatibilità con i token legacy e non migrare ancora le pagine.
+```
+
+---
+
+## G1.2 — Tipografia Hanken Grotesk
+
+**Obiettivo**  
+Introdurre Hanken Grotesk senza dipendenza runtime da font remoto.
+
+**Task**
+- [x] Verificare se il font è già disponibile localmente nel repository.
+- [x] Se disponibile, integrarlo tramite `next/font/local`; altrimenti usare una modalità compatibile con le regole del progetto senza introdurre richieste runtime bloccanti.
+- [x] Definire scale:
+  - Display;
+  - H1;
+  - H2;
+  - H3;
+  - Body;
+  - Body small;
+  - Label.
+- [x] Applicare fallback system.
+- [x] Non cambiare indiscriminatamente tutti i componenti legacy.
+- [x] Applicare la nuova base alla shell/foundation.
+- [x] Verificare 320 px e zoom 200%.
+
+**Acceptance**
+- nessun layout shift significativo dovuto al font;
+- testo informativo persistente ≥13px;
+- numeri KPI/importi/orari possono usare tabular nums.
+
+### Baseline G1.2 — 27 agosto 2026
+
+- File modificati: `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Hanken Grotesk non è presente nel repository; è stato mantenuto uno stack locale `ui-sans-serif/system-ui/...`, senza font remoto e senza richiesta runtime bloccante.
+- Definita la scala responsive Display/H1/H2/H3/Body/Body small/Label: mobile 24/32, 24/32, 20/28, 17/24, 15/22, 13/18, 12/16; desktop 32/40, 28/36, 22/30, 18/26, 16/24, 13/18, 12/16.
+- Le classi opt-in `.cs-type-*` e i token Tailwind corrispondenti sono disponibili alla foundation; la shell autenticata usa lo stack locale tramite `.cs-page`, mentre le pagine legacy non sono state migrate nella gerarchia tipografica.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm run build` **PASS** (84 pagine generate). I token usano `rem` e breakpoint a 768px, quindi sono pronti per 320px e zoom 200%; la verifica visuale puntuale delle singole pagine resta nei goal di migrazione, non è stata anticipata qui.
+
+**Prompt `/goal`**
+```text
+/goal G1.2
+Integra la tipografia canonica del redesign con caricamento locale/non bloccante e definisci la scala tipografica. Limita la migrazione alla foundation.
+```
+
+---
+
+## G1.3 — Safe area, `100dvh` e struttura viewport
+
+**Obiettivo**  
+Creare le primitive CSS necessarie per una PWA mobile corretta.
+
+**Task**
+- [x] Introdurre utility/variabili per:
+  - `env(safe-area-inset-top)`;
+  - `env(safe-area-inset-bottom)`;
+  - inset laterali se necessari.
+- [x] Usare `100dvh` nella nuova shell.
+- [x] Definire spazio riservato alla bottom navigation.
+- [x] Evitare che banner PWA, CTA fixed e sheet siano coperti.
+- [x] Verificare standalone e browser normale.
+- [x] Non alterare ancora tutte le pagine.
+
+**Acceptance**
+- shell testabile a 320×568 e 375×812;
+- nessun elemento foundation finisce sotto home indicator/notch.
+
+### Baseline G1.3 — 27 agosto 2026
+
+- File modificati: `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Aggiunte variabili con fallback per `safe-area-inset-top/right/bottom/left`, altezza e spazio riservato alla bottom navigation.
+- Aggiunte utility opt-in `.cs-viewport`, `.cs-safe-*`, `.cs-safe-inline`, `.cs-safe-block`, `.cs-bottom-nav-space` e `.cs-fixed-bottom-safe`; la shell esistente continua a usare `100dvh`.
+- Le utility usano `100svh` come fallback iniziale e `100dvh` come altezza dinamica finale, funzionando sia in browser normale sia in modalità standalone quando il browser espone gli inset PWA.
+- Nessuna dashboard, feature o route è stata migrata; non sono stati alterati i componenti di dominio.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.3
+Implementa le primitive safe-area e viewport per la nuova shell PWA. Non migrare ancora dashboard o altre feature.
+```
+
+---
+
+## G1.4 — Primitive Button e StatusBadge
+
+**Obiettivo**  
+Consolidare due primitive usate in tutte le feature.
+
+**Button**
+- primary;
+- secondary;
+- ghost;
+- danger;
+- icon.
+
+**StatusBadge**
+- testo sempre presente;
+- colore semantico;
+- icona opzionale;
+- background leggero;
+- mapping presenze:
+  - going → Partecipo;
+  - maybe → Forse;
+  - declined → Non partecipo;
+  - null/assente → Da confermare.
+
+**Task**
+- [x] Riutilizzare componenti esistenti se possibile.
+- [x] Touch target ≥44 px per azioni.
+- [x] Loading senza cambio larghezza.
+- [x] Disabled accessibile, non solo opacity.
+- [x] `aria-label` icon-only.
+- [x] Icone decorative `aria-hidden`.
+- [x] Nessuna emoji.
+
+### Baseline G1.4 — 27 agosto 2026
+
+- `Button` esistente riusato e consolidato in `src/components/ui/Button.tsx`: aggiunta variante `secondary`, target minimo 44px, stato `loading` con larghezza stabile, `disabled` e `aria-busy`.
+- Gli icon-only button continuano a richiedere `aria-label` al chiamante; lo spinner e le icone passate a `StatusBadge` sono marcati decorativi con `aria-hidden`.
+- Introdotto `StatusBadge` in `src/components/ui/StatusBadge.tsx`, esportato da `src/components/ui/index.ts`, con stati presenza `going/maybe/declined/pending`, label italiane, varianti semantiche, background leggero e icona opzionale.
+- Gli stili sono token-based in `src/app/globals.css`; le pagine esistenti non sono state migrate.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.4
+Consolida Button e StatusBadge secondo il design system. Riusa le primitive esistenti dove sensato e non migrare ancora intere pagine.
+```
+
+---
+
+## G1.5 — Primitive Panel, Card e ListRow
+
+**Obiettivo**  
+Separare semanticamente contenitori, oggetti autonomi e righe dense.
+
+**Task**
+- [x] Creare/adattare:
+  - `Panel`;
+  - `Card`;
+  - `ListRow`.
+- [x] `Card` per oggetti autonomi/cliccabili.
+- [x] `Panel` per raggruppamento di sezione.
+- [x] `ListRow` per contenuto ripetuto.
+- [x] Supportare leading/trailing content.
+- [x] Supportare link/button semantici per riga interamente cliccabile.
+- [x] Evitare card annidate.
+- [x] Nessun hover con spostamento del layout.
+- [x] Rigature/separatori con token border.
+
+### Baseline G1.5 — 27 agosto 2026
+
+- Consolidato `Card` in `src/components/ui/Card.tsx`, mantenendo le varianti esistenti e aggiungendo `subdued` e `interactive`.
+- Aggiunto `Panel` in `src/components/ui/Panel.tsx` per sezioni raggruppate e `ListRow` in `src/components/ui/ListRow.tsx` per contenuti ripetuti.
+- `ListRow` supporta contenuto leading/trailing e rende semanticamente `a`, `button` o `div` in base alle props; le icone leading sono decorative (`aria-hidden`).
+- Stili canonici token-based aggiunti in `src/app/globals.css`; hover senza trasformazioni che spostano il layout e separatori sul token border.
+- Primitive esportate da `src/components/ui/index.ts`; nessuna pagina legacy convertita.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.5
+Implementa o consolida Panel, Card e ListRow con semantica chiara e stili canonici. Non convertire ancora tutte le schermate legacy.
+```
+
+---
+
+## G1.6 — FeedbackState
+
+**Obiettivo**  
+Rendere riusabili gli stati di caricamento e fallimento previsti dalla specifica.
+
+**Varianti minime**
+- initial loading;
+- refreshing;
+- empty;
+- filtered empty;
+- permission denied;
+- offline;
+- unexpected error;
+- success mutation;
+- optimistic pending/rollback helper quando applicabile.
+
+**Task**
+- [x] Creare API semplice e tipizzata.
+- [x] Distinguere loading bloccante da refresh non bloccante.
+- [x] Rendere denied e offline semanticamente diversi.
+- [x] Usare `aria-live` solo quando utile.
+- [x] Evitare skeleton aggressivi.
+- [x] Rispettare reduced motion.
+
+### Baseline G1.6 — 27 agosto 2026
+
+- Consolidato `src/components/ui/FeedbackState.tsx` con API `FeedbackState` tipizzata e varianti `loading`, `refreshing`, `empty`, `filtered-empty`, `denied`, `offline`, `error` e `success`.
+- Mantenute compatibili `LoadingState`, `EmptyState` ed `ErrorState`; aggiunte `DeniedState`, `OfflineState` e `SuccessState`.
+- Loading e refreshing hanno semantica distinta (`aria-busy` e `role=status`); `aria-live` viene usato solo per loading/refresh/success; gli errori usano `role=alert`.
+- Stili canonici aggiunti in `src/app/globals.css`, senza skeleton aggressivi e con animazione già compatibile con la regola reduced-motion globale.
+- Primitive esportate da `src/components/ui/index.ts`; nessuna pagina è stata migrata automaticamente.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.6
+Crea FeedbackState e le varianti richieste. Mantieni il componente generico e accessibile; non applicarlo ancora a tutte le pagine.
+```
+
+---
+
+## G1.7 — BottomSheet / ResponsiveDetail
+
+**Obiettivo**  
+Unificare dettaglio mobile e desktop.
+
+**Task**
+- [x] Verificare primitive Radix già presenti.
+- [x] Implementare un wrapper responsive:
+  - mobile → bottom sheet o fullscreen;
+  - desktop → drawer laterale;
+  - dialog centrato solo per conferme brevi.
+- [x] Focus trap.
+- [x] Restore focus.
+- [x] Escape desktop.
+- [x] Safe-area completa.
+- [x] Footer sticky opzionale.
+- [x] Hook/guard per modifiche non salvate, senza introdurre wizard non richiesti.
+
+### Baseline G1.7 — 27 agosto 2026
+
+- Aggiunto `src/components/ui/ResponsiveDetail.tsx`, basato sui wrapper Radix `Dialog`/`DialogContent` già presenti.
+- Desktop: drawer ancorato a destra; mobile: bottom sheet; variante `fullscreenOnMobile` per dettaglio fullscreen.
+- Radix gestisce focus trap, restore focus ed Escape; il wrapper mantiene `DialogTitle`/`DialogDescription` per la semantica accessibile.
+- Footer opzionale sticky rispetto al body scrollabile; safe-area applicata a padding e pulsante di chiusura tramite token G1.3.
+- Stili aggiunti in `src/app/globals.css`; esportazione aggiunta in `src/components/ui/index.ts`. Nessuna feature o pagina convertita.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.7
+Implementa ResponsiveDetail riusando Radix esistente: sheet/fullscreen su mobile e drawer su desktop, con focus e safe-area corretti.
+```
+
+---
+
+## G1.8 — Stato locale del team context
+
+**Obiettivo**  
+Introdurre un contesto squadra separato dal subject context.
+
+**Task**
+- [x] Ispezionare `AccessibleProfileContext`.
+- [x] Non fondere subject e team in un singolo stato ambiguo.
+- [x] Definire `TeamContext` o hook equivalente con:
+  - `selectedTeamId | null`;
+  - `null` = Tutte le squadre;
+  - lista team autorizzati fornita dalla feature/server;
+  - reset quando cambia subject;
+  - reset se team selezionato non è più valido.
+- [x] Persistenza locale con chiave separata, idealmente per area/subject.
+- [x] Non persistire payload team completi o dati personali.
+- [x] Non usare il team context come controllo autorizzativo.
+
+### Baseline G1.8 — 27 agosto 2026
+
+- Aggiunto `src/context/TeamContext.tsx`, separato da `AccessibleProfileContext`: espone `selectedTeamId`, `selectedTeam`, lista team e setter validati.
+- `null` rappresenta “Tutte le squadre”; la lista viene fornita dalla feature tramite `setTeams`, senza fetch o autorizzazione client introdotti dal context.
+- Persistenza locale limitata all'ID con chiave separata per area/subject (`csroma_team_context:<area>:<subject>`); nessun payload team o dato personale viene salvato.
+- Cambio subject/area azzera il team selezionato e invalida l'ID precedente; un team non presente nella lista autorizzata viene riportato a `null`.
+- `TeamProvider` è montato sotto `AccessibleProfileProvider` in `src/app/layout.tsx`. Una singola squadra può essere gestita senza imporre un selector UI.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Acceptance**
+- cambio subject → team torna a Tutte;
+- team non accessibile → fallback sicuro;
+- una sola squadra → stato può esistere ma UI selector viene omessa.
+
+**Prompt `/goal`**
+```text
+/goal G1.8
+Introduci il team context locale separato dal subject context. Deve solo filtrare dati autorizzati e resettarsi correttamente.
+```
+
+---
+
+## G1.9 — SubjectSwitcher e TeamSwitcher
+
+**Obiettivo**  
+Fornire controlli distinti e non ambigui per profilo delegato e squadra.
+
+**SubjectSwitcher**
+- nome soggetto;
+- relazione quando disponibile;
+- attività/squadra come metadata non invasivo;
+- copy canonico area famiglia: `Stai visualizzando …`.
+
+**TeamSwitcher**
+- `Tutte le squadre` default;
+- team name + code/activity se utile;
+- omesso con una sola squadra.
+
+**Task**
+- [x] Non creare un mega-switcher unico.
+- [x] Keyboard navigation.
+- [x] Touch target ≥44 px.
+- [x] Label accessibile.
+- [x] Stato selezionato non solo tramite colore.
+- [x] Compatibile con header e PageHeader.
+
+### Baseline G1.9 — 27 agosto 2026
+
+- Aggiunti `src/components/navigation/SubjectSwitcher.tsx` e `TeamSwitcher.tsx` come controlli distinti basati su select native, quindi accessibili da tastiera e con target minimo 44px.
+- `SubjectSwitcher` riusa `AccessibleProfileContext` e consente solo la selezione tra profili già forniti dal server/context.
+- `TeamSwitcher` usa `useTeamContext`, mostra `Tutte le squadre` e viene omesso con zero o una squadra; non contiene logica di autorizzazione.
+- `AccessibleProfileSelector` resta compatibile come wrapper verso `SubjectSwitcher`; nessun mega-switcher o migrazione delle pagine è stata introdotta.
+- Label sempre presenti e stato selezionato espresso anche dal testo dell'opzione, non solo dal colore; gli ID dei controlli sono distinti per variante.
+- Stili aggiunti in `src/app/globals.css`; verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.9
+Implementa SubjectSwitcher e TeamSwitcher come controlli separati e accessibili. Collega TeamSwitcher al team context, senza aggiungere logica di autorizzazione client.
+```
+
+---
+
+## G1.10 — AppHeader
+
+**Obiettivo**  
+Creare l'header canonico mobile/desktop per atleta/famiglia.
+
+**Varianti**
+- mobile root;
+- mobile detail con back;
+- desktop role shell;
+- family subject context.
+
+**Task**
+- [x] Logo/nome CSRoma.
+- [x] Account/profile action.
+- [x] Back solo nei detail.
+- [x] Nessuna icona impostazioni ripetuta nelle root.
+- [x] Slot per subject/team context.
+- [x] Evitare duplicazione titolo nel header e nel contenuto.
+- [x] Safe-area.
+- [x] Screen reader semantics.
+
+### Baseline G1.10 — 27 agosto 2026
+
+- Aggiunto `src/components/navigation/AppHeader.tsx` con varianti `mobile-root`, `mobile-detail`, `desktop` e `family`.
+- Integrato nella shell reale in `src/components/navigation/LayoutShell.tsx`, preservando menu mobile, notifiche, tema, account e logout esistenti.
+- Il back è disponibile solo nella variante mobile detail; viene nascosto su desktop. Il titolo pagina resta responsabilità del contenuto (`PageHeader`), evitando duplicazioni nell'header.
+- Previsti slot separati per context subject/team e utility; safe-area applicata via classe shell e semantica screen reader mantenuta su logo, back, menu e notifiche.
+- Nessuna pagina o feature di dominio è stata migrata.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.10
+Implementa AppHeader con le varianti canoniche. Mantieni titolo pagina nel contenuto quando previsto e non duplicare impostazioni nelle root.
+```
+
+---
+
+## G1.11 — BottomNavigation atleta
+
+**Obiettivo**  
+Implementare la navigazione mobile canonica dell'atleta.
+
+**Destinazioni**
+1. Oggi → `/dashboard`
+2. Calendario → `/athlete/calendar`
+3. Campionato → `/athlete/campionati`
+4. Messaggi → `/athlete/messages`
+5. Profilo → `/athlete/profile`
+
+**Task**
+- [x] Icona Lucide + label sempre visibile.
+- [x] Route-aware active state.
+- [x] `aria-current="page"`.
+- [x] Badge unread senza layout shift.
+- [x] Safe-area bottom.
+- [x] Padding main coerente con altezza nav.
+- [x] Nessuna sesta voce.
+- [x] Quote non in bottom bar.
+
+### Baseline G1.11 — 27 agosto 2026
+
+- Aggiunto `src/components/navigation/BottomNavigation.tsx` con cinque sole destinazioni: `/dashboard`, `/athlete/calendar`, `/athlete/campionati`, `/athlete/messages`, `/athlete/profile`.
+- Icone Lucide e label sempre visibili; stato attivo derivato da `usePathname` e comunicato con `aria-current="page"`.
+- Badge unread opzionale per Messaggi, con posizione assoluta per evitare layout shift.
+- La nav viene mostrata solo per ruolo `athlete` in area `personal`; famiglia, coach e admin non ricevono questa barra.
+- Safe-area bottom e spazio main coerente con altezza nav applicati in `src/app/globals.css`; nessuna voce Quote inserita.
+- Integrata nella shell tramite `src/components/navigation/LayoutShell.tsx`; nessuna feature di dominio migrata.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.11
+Implementa la BottomNavigation atleta con le cinque route canoniche, active state dalla route e safe-area.
+```
+
+---
+
+## G1.12 — Offline/update banner integrati nella foundation
+
+**Obiettivo**  
+Adattare i componenti PWA esistenti al nuovo design senza cambiare capacità offline.
+
+**Task**
+- [x] Individuare banner offline e update esistenti.
+- [x] Applicare token canonici.
+- [x] Posizionarli senza coprire header/bottom nav.
+- [x] Offline copy:
+  `Sei offline. Alcuni contenuti potrebbero non essere aggiornati e le modifiche non sono disponibili.`
+- [x] `role="status"` e `aria-live="polite"`.
+- [x] Rientro online: feedback breve.
+- [x] Update:
+  - mobile banner/sheet;
+  - desktop toast persistente;
+  - `Aggiorna ora`;
+  - `Più tardi` se necessario.
+- [x] Non reload automatico con form dirty.
+- [x] Un solo reload dopo `controllerchange`.
+- [x] Non introdurre background sync.
+
+### Baseline G1.12 — 27 agosto 2026
+
+- Aggiornati `src/components/pwa/ConnectivityBanner.tsx` e `src/components/pwa/PwaBootstrap.tsx` con copy offline canonica, feedback breve al rientro online e ruoli `status`/`aria-live="polite"`.
+- L’update banner usa token canonici, `Aggiorna ora` e `Più tardi`; su mobile si posiziona sopra lo spazio safe-area della bottom navigation, su desktop resta un toast persistente.
+- Header e home indicator vengono protetti tramite offset safe-area; non è stato introdotto alcun background sync né modifica alla cache/service worker.
+- Il reload resta vincolato al flusso esistente `controllerchange` e non parte automaticamente per il solo rilevamento dell’update.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate).
+
+**Prompt `/goal`**
+```text
+/goal G1.12
+Adatta offline/update UI alla foundation senza estendere le capacità PWA. Mantieni cache e mutation policy esistenti.
+```
+
+---
+
+## G1.13 — Integrazione Athlete Foundation nella shell reale
+
+**Obiettivo**  
+Collegare foundation e navigazione alle route atleta senza ancora ridisegnarne i contenuti.
+
+**Task**
+- [x] Integrare AppHeader + BottomNavigation + main scroll container.
+- [x] Integrare team context dove disponibile senza forzare selector su ogni pagina.
+- [x] Conservare desktop autenticato funzionante.
+- [x] Nessun overflow a 320/375.
+- [x] Nessuna doppia navigazione sidebar + bottom bar sui breakpoint touch.
+- [x] Contenuto desktop atleta centrato max 960–1080 px.
+- [x] Verificare deep link diretti alle route atleta.
+- [x] Verificare banner PWA + nav.
+
+### Baseline G1.13 — 27 agosto 2026
+
+- `LayoutShell` ora compone `AppHeader`, main scroll container e `BottomNavigation`; il bottom bar viene attivato solo per atleta/area personale.
+- Il team context resta disponibile tramite provider senza imporre un selector alle schermate; la sidebar continua a essere nascosta sui breakpoint touch, evitando doppia navigazione.
+- Il main atleta usa `min-height: 0`, overflow verticale interno e larghezza desktop massima 1080px; lo spazio bottom nav viene riservato con safe-area.
+- Le route atleta esistenti restano invariate e sono presenti nella route table della build; i deep link non richiedono nuovi handler.
+- Banner PWA e update UI restano montati globalmente con gli offset safe-area introdotti in G1.12; non sono state modificate cache o policy offline.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS**, `npm test -- --runInBand` **PASS** (1 suite, 3 test), `npm run build` **PASS** (84 pagine generate), `git diff --check` **PASS**.
+
+**Gate Fase 1**
+- 320 px senza perdita azioni;
+- 375 px senza overflow;
+- focus visibile;
+- route preservate;
+- nessuna regressione auth;
+- desktop autenticato funzionante.
+
+**Prompt `/goal`**
+```text
+/goal G1.13
+Integra l'Athlete Foundation nella shell reale senza ridisegnare ancora le singole feature. Verifica responsive, route e PWA banner.
+```
+
+---
+
+# 4. Fase 2 — Dashboard atleta
+
+## G2.1 — Arricchimento contratto dashboard atleta
+
+**Obiettivo**  
+Preparare il payload per il nuovo ordine informativo e multi-squadra senza rimuovere campi esistenti.
+
+**Task**
+- [x] Ispezionare Route Handler/service dashboard attuale.
+- [x] Mantenere compatibilità con consumer esistenti.
+- [x] Per eventi dashboard includere contesto team strutturato:
+  `{ id, name, code }[]` o shape coerente.
+- [x] Assicurare che memberships includano jersey number per team.
+- [x] Identificare prossima partita pertinente senza assumere “prima squadra”.
+- [x] Assicurare preview messaggi deduplicata.
+- [x] Assicurare quota urgente con team/activity.
+- [x] Validare input subject tramite helper server esistente.
+- [x] Nessuna modifica schema DB.
+
+### Chiusura G2.1 — 28 agosto 2026
+
+- **File principali:** `src/app/api/athlete/dashboard/route.ts`, `src/types/athlete-dashboard.ts`, `src/lib/athlete/dashboard-contract.ts` e relativo test.
+- **Contratto additivo:** le chiavi legacy restano disponibili; aggiunti `teams` top-level, `unreadMessageCount`, `teams`/`team_ids` agli eventi e messaggi, contesto team/activity alle membership e alle quote, e `teams`/`team_ids` al match successivo.
+- **Multi-team:** i link `event_teams` vengono aggregati per evento; i messaggi vengono deduplicati per `message.id` aggregando i team destinatari; il match è selezionato sull’insieme delle club-team collegate alle membership dell’atleta.
+- **Sicurezza:** `subjectProfileId` continua a passare da `requireSubjectAthleteContext`; nessun accesso privilegiato è stato spostato nel client e non sono state modificate schema/RLS/route.
+- **Check eseguiti:** `npx tsc --noEmit` **PASS**, `npm test -- --runInBand src/lib/athlete/dashboard-contract.test.ts` **PASS** (2 test), `npm run build` **PASS** (84 pagine), `git diff --check` **PASS**.
+- **Nota:** la suite Jest continua a mostrare il warning preesistente su `moduleNameMapping`; non blocca il test eseguito.
+
+**Prompt `/goal`**
+```text
+/goal G2.1
+Arricchisci in modo backward-compatible il contratto dati della dashboard atleta per eventi multi-team, match, messaggi, quote e membership. Mantieni auth server-side.
+```
+
+---
+
+## G2.2 — Nuova struttura dashboard, senza logica complessa
+
+**Obiettivo**  
+Creare il layout nell'ordine approvato.
+
+**Ordine**
+1. prossimo impegno;
+2. prossima partita;
+3. messaggi non letti;
+4. prossima quota/scadenza;
+5. squadre e numeri di maglia.
+
+**Task**
+- [x] Rimuovere/accantonare hero fotografica dominante.
+- [x] Rimuovere contatori generici non azionabili.
+- [x] Eliminare duplicazione welcome/shell.
+- [x] Tour non più CTA primaria persistente.
+- [x] Usare Panel/ListRow, non card per ogni frammento.
+- [x] Preparare placeholder reali per le cinque sezioni.
+- [x] Non inventare dati.
+
+### Chiusura G2.2 — 28 agosto 2026
+
+- **File principale:** `src/components/athlete/AthleteDashboard.tsx`.
+- **Struttura:** ordine effettivo `Prossimo impegno` → `Prossima partita` → `Messaggi non letti` → `Prossima quota` → `Squadre e numeri di maglia`.
+- **UI:** hero fotografica dominante, contatori non azionabili e CTA persistente `Guida` rimossi; sezioni costruite con `Panel` e `ListRow`, con link alle route già esistenti.
+- **Compatibilità:** loader, permessi delegati, modali dettagli, RSVP e route storiche sono preservati; nessun dato nuovo è stato inventato.
+- **Check eseguiti:** `npx tsc --noEmit` **PASS**, `npm test -- --runInBand` **PASS** (2 suite, 5 test), `npm run build` **PASS** (84 pagine), `git diff --check` **PASS**.
+- **Nota:** resta il warning Jest preesistente relativo a `moduleNameMapping`; non blocca i test.
+
+**Prompt `/goal`**
+```text
+/goal G2.2
+Ridisegna esclusivamente la struttura della dashboard atleta secondo l'ordine informativo approvato, usando i dati già disponibili e senza implementare ancora tutte le interazioni.
+```
+
+---
+
+## G2.3 — Prossimo impegno e AttendanceControl
+
+**Obiettivo**  
+Implementare la prima area azionabile della dashboard.
+
+**Dati**
+- tipo;
+- titolo;
+- data/ora;
+- luogo;
+- team;
+- deadline;
+- risposta.
+
+**Regole**
+- se `requires_confirmation=false`, niente pulsanti;
+- delegato senza `confirm_attendance` → read-only, non controlli disabled ambigui;
+- deadline superata → stato esplicito;
+- optimistic update solo se il backend lo supporta in sicurezza;
+- rollback visibile in caso di errore.
+
+**Task**
+- [x] Estrarre/consolidare `AttendanceControl`.
+- [x] `aria-pressed`.
+- [x] Stato pending.
+- [x] Evitare doppio submit.
+- [x] Mantenere mutation subject-aware.
+
+### Chiusura G2.3 — 28 agosto 2026
+
+- **File principali:** `src/components/athlete/AttendanceControl.tsx`, `src/components/athlete/AthleteDashboard.tsx`, `src/app/api/athlete/events/attendance/route.ts` e relativo test.
+- **Controllo:** il primo impegno della dashboard mostra RSVP solo quando `requires_confirmation` è vero; include risposta corrente, deadline e stato pending con pulsanti `aria-pressed`.
+- **Permessi:** un profilo delegato senza `confirm_attendance` vede una descrizione read-only; non vengono mostrati pulsanti disabilitati ambigui.
+- **Deadline e sicurezza:** deadline scaduta blocca il controllo lato client e l’endpoint rifiuta anche lato server; l’endpoint verifica inoltre evento, squadre associate e membership del subject dopo `requireSubjectAthleteContext`.
+- **Rollback:** la scelta viene applicata ottimisticamente, il doppio submit è impedito e in caso di errore lo stato precedente viene ripristinato con messaggio `role=alert`.
+- **Check eseguiti:** `npx tsc --noEmit` **PASS**, `npm test -- --runInBand` **PASS** (3 suite, 9 test), `npm run build` **PASS** (84 pagine), `git diff --check` **PASS**.
+- **Nota:** resta il warning Jest preesistente relativo a `moduleNameMapping`; non blocca i test.
+
+**Prompt `/goal`**
+```text
+/goal G2.3
+Implementa Prossimo impegno e AttendanceControl sulla dashboard atleta, incluse deadline, read-only delegato e rollback visibile.
+```
+
+---
+
+## G2.4 — Prossima partita
+
+**Obiettivo**  
+Mostrare la prima partita futura pertinente al subject, senza bias verso la prima squadra.
+
+**Task**
+- [x] Visualizzare team, avversario, data, ora, luogo e casa/trasferta se disponibili.
+- [x] Se partite ravvicinate di team diversi, mostrare la prima + `Vedi tutte`.
+- [x] CTA verso campionato/match coerente con route esistente.
+- [x] Empty state specifico se nessuna partita.
+- [x] Non inventare convocazione se non presente.
+
+### Chiusura G2.4 — 28 agosto 2026
+
+- **File principali:** `src/app/api/athlete/dashboard/route.ts`, `src/components/athlete/AthleteDashboard.tsx`, `src/lib/athlete/dashboard-contract.ts` e relativo test.
+- **Multi-squadra:** la query considera tutti i `club_team` derivati dalle membership del subject; il mapper normalizza le relazioni PostgREST array e identifica il team dell’atleta tramite `team_id`.
+- **Presentazione:** la sezione mostra team, avversario, badge Casa/Trasferta, data, ora e luogo; il link `Vedi tutti` porta alla route campionato esistente. Se non c’è match, viene mostrato uno stato vuoto specifico.
+- **Privacy/accuratezza:** non viene inventata alcuna convocazione e l’endpoint continua a usare il contesto atleta autorizzato server-side.
+- **Check eseguiti:** `npx tsc --noEmit` **PASS**, `npm test -- --runInBand` **PASS** (3 suite, 10 test), `npm run build` **PASS** (84 pagine), `git diff --check` **PASS**.
+- **Nota:** resta il warning Jest preesistente relativo a `moduleNameMapping`; non blocca i test.
+
+**Prompt `/goal`**
+```text
+/goal G2.4
+Implementa la sezione Prossima partita della dashboard, corretta per soggetto multi-squadra.
+```
+
+---
+
+## G2.5 — Preview messaggi dashboard
+
+**Obiettivo**  
+Mostrare 2–3 messaggi rilevanti senza duplicati.
+
+**Task**
+- [x] Massimo 2–3 righe.
+- [x] Mittente.
+- [x] Squadra/contesto.
+- [x] Unread marker accessibile.
+- [x] Deduplica messaggio ricevuto via più team/destinatari.
+- [x] Apertura dettaglio verso route messaggi.
+- [x] Non mostrare destinatari irrilevanti al subject.
+
+### Chiusura G2.5 — 28 agosto 2026
+
+- **File principali:** `src/components/athlete/MessagePreviewRow.tsx`, `src/components/athlete/AthleteDashboard.tsx`, `src/lib/athlete/dashboard-contract.ts` e relativi test.
+- **Preview:** massimo tre righe, con oggetto, mittente, contenuto sintetico, badge `Non letto` accessibile e tutte le squadre pertinenti aggregate.
+- **Deduplica/privacy:** il Route Handler deduplica per `message.id`, aggrega i team destinatari e interroga solo destinatari diretti o squadre del subject autorizzato; la preview apre il dettaglio messaggi esistente.
+- **Check eseguiti:** `npx tsc --noEmit` **PASS**, `npm test -- --runInBand` **PASS** (4 suite, 12 test), `npm run build` **PASS** (84 pagine), `git diff --check` **PASS**.
+- **Nota:** resta il warning Jest preesistente relativo a `moduleNameMapping`; non blocca i test.
+
+**Prompt `/goal`**
+```text
+/goal G2.5
+Implementa la preview messaggi nella dashboard atleta con deduplica e contesto squadra.
+```
+
+---
+
+## G2.6 — Preview quota/scadenza
+
+**Obiettivo**  
+Mostrare la rata più urgente e il relativo contesto.
+
+**Task**
+- [x] Importo con tabular nums.
+- [x] Team/activity.
+- [x] Stato.
+- [x] Scadenza.
+- [x] Link a `/athlete/fees`.
+- [x] Nessun pulsante `Paga` se non esiste un flusso reale.
+- [x] Empty state se nessuna quota.
+
+### Chiusura G2.6 — 28 agosto 2026
+
+- **File principali:** `src/components/athlete/AthleteDashboard.tsx`, `src/lib/athlete/fee-preview.ts` e relativo test.
+- **Preview:** viene mostrata una sola rata non pagata, selezionata per urgenza (`overdue` → `due_soon` → restante) e poi per scadenza; se tutte le rate sono pagate viene mostrato uno stato esplicito.
+- **Contesto:** la riga include nome quota, numero rata, importo tabulare, team, attività, codice, stato e data di scadenza.
+- **CTA/privacy:** il link `Vedi tutti` porta a `/athlete/fees`; non è presente alcun pulsante `Paga` o promessa di pagamento online.
+- **Check eseguiti:** `npx tsc --noEmit` **PASS**, `npm test -- --runInBand` **PASS** (5 suite, 14 test), `npm run build` **PASS** (84 pagine), `git diff --check` **PASS**.
+- **Nota:** resta il warning Jest preesistente relativo a `moduleNameMapping`; non blocca i test.
+
+**Prompt `/goal`**
+```text
+/goal G2.6
+Implementa la preview della quota più urgente nella dashboard. Nessuna CTA di pagamento se il backend non la supporta.
+```
+
+---
+
+## G2.7 — Membership e numeri di maglia per squadra
+
+**Obiettivo**  
+Rendere corretta la dashboard per atleti multi-squadra.
+
+**Task**
+- [x] Una riga per membership.
+- [x] Team.
+- [x] Attività.
+- [x] Codice.
+- [x] `team_members.jersey_number`.
+- [x] Non usare il primo jersey number come valore globale.
+- [x] Link dettaglio coerente, se già esiste.
+
+### Chiusura G2.7 — 28 agosto 2026
+
+- **File principali:** `src/components/athlete/MembershipRow.tsx`, `src/components/athlete/AthleteDashboard.tsx` e relativo test.
+- **Membership:** la dashboard rende una riga per ogni record `team_members`, con nome squadra, attività, codice e numero di maglia della singola relazione.
+- **Fonte autorevole:** il Route Handler continua a leggere `team_members.jersey_number`; non viene usato il vecchio `profiles.jersey_number` come valore globale.
+- **Dettaglio:** la riga resta apribile verso il dettaglio squadra esistente per il profilo personale; in vista delegata è presentata in modalità non interattiva.
+- **Check eseguiti:** `npx tsc --noEmit` **PASS**, `npm test -- --runInBand` **PASS** (6 suite, 16 test), `npm run build` **PASS** (84 pagine), `git diff --check` **PASS**.
+- **Nota:** resta il warning Jest preesistente relativo a `moduleNameMapping`; non blocca i test.
+
+**Prompt `/goal`**
+```text
+/goal G2.7
+Implementa la sezione squadre/membership della dashboard usando il numero di maglia per team come dato autorevole.
+```
+
+---
+
+## G2.8 — Stati completi dashboard
+
+**Obiettivo**  
+Gestire tutte le varianti reali.
+
+**Task**
+- [x] initial loading;
+- [x] refresh;
+- [x] nessuna squadra;
+- [x] nessun evento;
+- [x] errore dashboard;
+- [x] offline con dati in memoria;
+- [x] denied se contesto non autorizzato;
+- [x] mutation success/error;
+- [x] nessun flash di dati del subject precedente.
+
+**Chiusura G2.8**
+- **Stato:** completato.
+- **Implementazione:** `AthleteDashboard` usa uno stato esplicito `loading/refreshing/success/error/offline/denied`; `FeedbackState` copre loading, refresh, error, offline ed empty state per eventi, match, messaggi, quote e squadre.
+- **Cambio contesto:** la chiave del subject invalida immediatamente il payload precedente e mostra loading finché la risposta del nuovo contesto non è stata associata al subject corretto.
+- **Offline:** con dati in memoria viene mostrato un avviso esplicito sugli ultimi dati caricati; senza dati non viene mostrato alcun contenuto come se fosse corrente.
+- **Verifiche:** `npx tsc --noEmit`; `npm test -- --runInBand` (6 suite, 16 test); `npm run build`; `git diff --check`.
+- **Nota:** resta il warning Jest preesistente relativo a `moduleNameMapping`; non blocca i test.
+
+**Prompt `/goal`**
+```text
+/goal G2.8
+Completa gli stati della dashboard atleta usando FeedbackState. Verifica che cambio contesto e offline non mostrino dati fuorvianti.
+```
+
+---
+
+## G2.9 — Test e gate dashboard atleta
+
+**Scenari**
+- zero team;
+- un team;
+- più team;
+- jersey differenti;
+- evento senza conferma;
+- evento da confermare;
+- deadline scaduta;
+- message duplicate;
+- quota assente;
+- quota scaduta;
+- responsive 320/375/768/1440;
+- keyboard attendance;
+- offline.
+
+**Prompt `/goal`**
+```text
+/goal G2.9
+Aggiungi/aggiorna test mirati e verifica il gate della dashboard atleta. Correggi solo regressioni della dashboard/foundation.
+```
+
+**Chiusura G2.9**
+- **Stato:** completato.
+- **Test mirati aggiunti:** `dashboard-state.test.ts` per payload in memoria e invalidazione del subject precedente; `FeedbackState.test.tsx` per loading/refreshing/empty/offline/denied/error e retry; attendance senza conferma, deadline e keyboard; membership con jersey indipendenti; contratto multi-team, deduplica messaggi e quote urgente già coperti. Aggiunto anche `tests/e2e/athlete-dashboard.spec.ts` per responsive 320/375/768/1440 e offline.
+- **Gate eseguiti:** `npx tsc --noEmit`; `npm test -- --runInBand` (8 suite, 30 test); `npm run build`; `git diff --check`.
+- **E2E:** `npx playwright test --list` rileva i 2 nuovi scenari. Con server locale verificato su `/login` (HTTP 200) e credenziali `E2E_*_LOCAL` risolte da `.env.local`, il run si ferma in `global-setup.ts` al launch Chromium (`SIGTRAP`, `kill EPERM`) prima di login/test. Da rieseguire in un ambiente Playwright/browser funzionante.
+- **Note:** resta il warning Jest preesistente relativo a `moduleNameMapping` e il warning Node `punycode`; non bloccano i gate verdi.
+
+---
+
+# 5. Fase 3 — Calendario atleta
+
+## G3.1 — Arricchire il contratto calendario
+
+**Obiettivo**  
+Aggiungere ID/codice team per evento mantenendo compatibilità.
+
+**Task**
+- [ ] Includere team `{id,name,code}`.
+- [ ] Conservare eventuali campi legacy.
+- [ ] Verificare eventi associati a più team.
+- [ ] Definire ID evento stabile per deduplica.
+- [ ] Confermare `requires_confirmation`, deadline, risposta subject.
+- [ ] Nessun `teamId` client usato senza verifica membership server.
+
+**Prompt `/goal`**
+```text
+/goal G3.1
+Arricchisci il payload calendario atleta con team id/name/code e dati necessari alla presenza, mantenendo compatibilità e auth server-side.
+```
+
+---
+
+## G3.2 — Agenda mobile come vista default (decisione superseduta)
+
+**Obiettivo storico**
+Sostituire il mese come default mobile con agenda/lista. Dal 15/09/2026 il
+default è stato riallineato a Mese per atleta/famiglia, come nel calendario
+coach; Agenda resta una vista alternativa.
+
+**Task**
+- [ ] Raggruppare per giorno.
+- [ ] Riga/event card compatta.
+- [ ] Mostrare tipo, ora, titolo, luogo e team quando necessario.
+- [ ] Primo evento rilevante espandibile.
+- [ ] Nessun overflow 320 px.
+- [ ] Nessuna card isolata per ogni microdato.
+- [ ] Mese resta solo vista secondaria se già disponibile.
+
+**Prompt `/goal`**
+```text
+/goal G3.2
+Implementa l'agenda mobile come vista predefinita del calendario atleta, mantenendo la vista mese solo come secondaria se già supportata.
+```
+
+---
+
+## G3.3 — Filtri tipo e squadra
+
+**Obiettivo**  
+Filtrare senza alterare autorizzazione.
+
+**Task**
+- [x] Segmenti tipo: Tutti / Allenamenti / Partite o equivalente compatto.
+- [x] TeamSwitcher solo con ≥2 team.
+- [x] Default Tutte le squadre.
+- [x] Filtered empty distinto da empty autentico.
+- [x] `aria-pressed` o semantica appropriata.
+- [x] Reset team su cambio subject tramite foundation.
+
+**Prompt `/goal`**
+```text
+/goal G3.3
+Aggiungi filtri tipo e squadra al calendario. Il team filter deve restringere soltanto eventi già autorizzati.
+```
+
+---
+
+## G3.4 — Dettaglio evento responsive
+
+**Obiettivo**  
+Aprire dettagli senza perdere contesto.
+
+**Task**
+- [x] Mobile → bottom sheet/fullscreen.
+- [x] Desktop → drawer.
+- [x] Titolo, data, ora, luogo, team, note disponibili.
+- [x] Stato presenza.
+- [x] Deadline.
+- [x] Chiusura accessibile.
+- [x] Deep link esistente preservato se presente.
+
+**Prompt `/goal`**
+```text
+/goal G3.4
+Implementa il dettaglio evento usando ResponsiveDetail, con contenuto e metadati realmente disponibili.
+```
+
+---
+
+## G3.5 — AttendanceControl nel calendario
+
+**Obiettivo**  
+Riutilizzare il controllo senza duplicare logica.
+
+**Task**
+- [x] Riutilizzare `AttendanceControl`.
+- [x] Inline sull'evento prioritario.
+- [x] Nel detail sugli altri eventi quando applicabile.
+- [x] Deadline superata.
+- [x] Read-only delegato.
+- [x] Rollback.
+- [x] No mutation offline.
+
+**Prompt `/goal`**
+```text
+/goal G3.5
+Integra AttendanceControl nel calendario senza duplicarne la logica e impedendo mutazioni quando offline o non autorizzate.
+```
+
+---
+
+## G3.6 — Deduplica eventi e conflitti temporali
+
+**Obiettivo**  
+Gestire casi multi-team correttamente.
+
+**Task**
+- [x] Evento associato a più team → una sola occorrenza con tutti i team.
+- [x] Eventi distinti sovrapposti → entrambi visibili.
+- [x] Evidenziare conflitto con testo/icona, non solo colore.
+- [x] Non stabilire priorità automatica.
+- [x] Evitare falsi duplicati basati solo su titolo/orario.
+
+**Prompt `/goal`**
+```text
+/goal G3.6
+Implementa deduplica multi-team e segnalazione conflitti temporali nel calendario, senza nascondere eventi reali.
+```
+
+---
+
+## G3.7 — Vista desktop agenda/settimana
+
+**Obiettivo**  
+Adattare il calendario ai desktop senza trasformarlo in UI admin.
+
+**Task**
+- [x] Agenda/settimana default desktop (superseduto il 15/09/2026: Mese è ora
+  il default atleta/famiglia).
+- [x] Vista mese disponibile.
+- [x] Filtri tipo/team.
+- [x] Detail laterale.
+- [x] Export solo secondario se esiste già.
+- [x] Contenuto atleta max-width coerente.
+
+**Prompt `/goal`**
+```text
+/goal G3.7
+Completa la vista desktop del calendario atleta con agenda/settimana default e dettaglio laterale.
+```
+
+---
+
+## G3.8 — Test e gate calendario
+
+**Scenari**
+- [x] zero eventi;
+- [x] eventi ricorrenti;
+- [x] multi-team same event;
+- [x] overlapping events;
+- [x] deadline;
+- [x] mutation failure;
+- [x] family permission permutations da simulare a livello component/server se possibile;
+- [x] responsive obbligatori;
+- [x] tastiera/screen reader smoke.
+
+**Verifica completata il 28/08/2026**
+
+- Test unitari mirati e suite completa: 18 suite, 66 test superati.
+- TypeScript, build Next.js e `git diff --check` superati.
+- Aggiunto `tests/e2e/athlete-calendar.spec.ts` per smoke responsive desktop/mobile; il server Next è partito, ma Chromium locale ha terminato con `SIGTRAP` durante `chromium.launch`, quindi l'E2E non è dichiarato superato.
+
+**Prompt `/goal`**
+```text
+/goal G3.8
+Completa test e verifiche del calendario atleta sui casi multi-team, conflitti, presenze, responsive e accessibilità.
+```
+
+---
+
+## G3.V — Gate verifica Fase 3
+
+**Verdict: PASS — 28/08/2026**
+
+L'audit ha riesaminato G3.1–G3.8 contro `re_design.md`, codice, diff/history e gate tecnici. Le remediation della Fase 3 sono state completate e riverificate.
+
+### G3.R1 — Stati errore/offline del calendario — Completato il 28/08/2026
+
+- **Severità:** High
+- **Problemi risolti:** `AthleteCalendarManager` distingue loading, errore, offline e risposta valida vuota; la route calendario restituisce HTTP 500 con messaggio generico per gli errori Supabase, senza esporre dettagli interni.
+- **Requisiti:** stati `error` e `offline` espliciti; PWA onesta e nessuna confusione tra assenza dati e indisponibilità.
+- **Implementazione:** `AthleteCalendarManager` mostra `ErrorState`/`OfflineState` con azione `Riprova`; l'empty è usato solo dopo risposta HTTP valida. Aggiunti test per HTTP 500, rete offline e risposta valida vuota. File principali: `src/components/athlete/AthleteCalendarManager.tsx`, `src/app/api/athlete/calendar/route.ts`, `src/components/athlete/AthleteCalendarManager.test.tsx`, `jest.config.js`.
+
+### G3.R2 — Contesto team desktop e account dual-role — Completato il 28/08/2026
+
+- **Severità:** High
+- **Problemi risolti:** `LayoutShell` monta le varianti desktop e mobile dei selettori, con una sola resa visibile per breakpoint. La policy presenza considera `activeArea`, subject selezionato e permesso della relazione, evitando la priorità impropria del ruolo globale atleta negli account dual-role.
+- **Requisiti:** contesto account/subject/team sempre visibile; permessi familiari per singolo subject; il filtro non concede accesso e le azioni devono riflettere la relazione attiva.
+- **Implementazione:** aggiunti `SubjectSwitcher`/`TeamSwitcher` desktop nel contesto header e helper `canConfirmAthleteAttendance`; testati atleta personale, familiare con/senza permesso e subject non selezionato. L'autorizzazione server-side resta l'enforcement definitivo.
+
+### G3.R3 — Stato di errore del dettaglio e verifica browser runtime — Completato il 28/08/2026
+
+- **Severità:** Medium
+- **Problemi risolti:** `EventDetails` non ingoia più errori di rete/HTTP e `EventDetailModal` espone uno stato d'errore con retry; il cleanup abortisce le richieste obsolete. Test dedicati coprono stato d'errore e retry.
+- **Verifica runtime:** completata sul browser integrato con server Next production e account atleta locale. A 1440×900 la vista settimanale desktop è visibile senza overflow; a 375×812 l’agenda mobile è visibile senza overflow e il controllo `Agenda` è selezionato. Il dettaglio evento carica in dialog, il focus iniziale finisce su `Chiudi` e il DOM espone ruoli `dialog`, `region` e `button` accessibili. Il runner Playwright standalone resta soggetto a `SIGTRAP`, ma non blocca la verifica runtime integrata riuscita.
+- **Requisiti:** stato `error` esplicito per il dettaglio; responsive obbligatorio verificato a runtime e smoke tastiera/screen reader.
+- **Esito:** nessuna remediation residua applicativa; la Fase 3 può procedere alla Fase 4.
+
+---
+
+# 6. Fase 4 — Messaggi atleta
+
+## G4.1 — Contratto messaggi, deduplica e read state
+
+**Obiettivo**  
+Rendere il backend esplicito sui concetti necessari alla nuova UI.
+
+**Task**
+- [ ] Definire ID stabile del messaggio.
+- [ ] Deduplicare recapito diretto + team multipli.
+- [ ] Restituire contesto team aggregato.
+- [ ] Read state per account + subject profile.
+- [ ] Restituire unread count coerente.
+- [ ] Filtrare destinatari visibili al subject.
+- [ ] Non esporre signed URL permanenti.
+- [ ] Mantenere campi legacy.
+
+**Prompt `/goal`**
+```text
+/goal G4.1
+Rendi il contratto messaggi esplicito per deduplica, team context e read state account+subject, preservando privacy e compatibilità.
+```
+
+---
+
+## G4.2 — Lista messaggi
+
+**Obiettivo**  
+Passare da card isolate a lista unica densa.
+
+**Riga**
+- unread indicator;
+- avatar/initials;
+- mittente;
+- ruolo;
+- team/destinatario pertinente;
+- oggetto;
+- preview max 2 righe;
+- data.
+
+**Task**
+- [ ] Timestamp relativo per recenti.
+- [ ] Data completa disponibile nel detail.
+- [ ] Allegati: icona + conteggio.
+- [ ] Touch target.
+- [ ] Lista semantica.
+
+**Prompt `/goal`**
+```text
+/goal G4.2
+Ridisegna la lista messaggi atleta con ListRow e tutti i metadati previsti, senza card isolate per ogni messaggio.
+```
+
+---
+
+## G4.3 — Filtro Tutti/Non letti e team filter
+
+**Task**
+- [ ] Unread filter.
+- [ ] Team filter solo multi-team.
+- [ ] Filtered empty.
+- [ ] Unread count coerente con filtro.
+- [ ] Nessuna duplicazione messaggio passando da Tutti a team specifico.
+
+**Prompt `/goal`**
+```text
+/goal G4.3
+Aggiungi i filtri Tutti/Non letti e squadra alla lista messaggi, con empty state specifico.
+```
+
+---
+
+## G4.4 — Dettaglio messaggio e marcatura lettura
+
+**Task**
+- [ ] Detail responsive.
+- [ ] Subject.
+- [ ] Mittente/ruolo.
+- [ ] Data completa.
+- [ ] Destinatari pertinenti.
+- [ ] Contenuto.
+- [ ] Read state aggiornato senza full reload.
+- [ ] UI ottimistica solo con rollback sicuro.
+- [ ] Badge nav/dashboard sincronizzato senza diventare fonte autorevole.
+
+**Prompt `/goal`**
+```text
+/goal G4.4
+Implementa il dettaglio messaggio e l'aggiornamento read state senza full reload, mantenendo il backend come fonte autorevole.
+```
+
+---
+
+## G4.5 — Allegati, signed URL e privacy
+
+**Task**
+- [ ] Mostrare allegati autorizzati.
+- [ ] Generare/recuperare signed URL solo al bisogno.
+- [ ] Non salvarli in localStorage.
+- [ ] Non cachearli nel service worker.
+- [ ] Error state per URL scaduto/fallito.
+- [ ] Non esporre destinatari non pertinenti.
+
+**Prompt `/goal`**
+```text
+/goal G4.5
+Completa gli allegati messaggio con signed URL on-demand e verifica che nessun dato privato venga persistito o cacheato.
+```
+
+---
+
+## G4.6 — Deep link push verso messaggi
+
+**Task**
+- [ ] Verificare route same-origin esistente.
+- [ ] Push click apre la route esistente.
+- [ ] L'app risolve account/subject autorizzato.
+- [ ] Non fidarsi di subject arbitrario nel deep link.
+- [ ] Graceful denied/not found.
+- [ ] App già aperta vs chiusa.
+
+**Prompt `/goal`**
+```text
+/goal G4.6
+Verifica e adatta i deep link push dei messaggi al redesign, senza usare parametri subject/team come autorizzazione.
+```
+
+---
+
+## G4.7 — Test messaggi
+
+**Scenari**
+- zero message;
+- unread/read;
+- duplicate via 2 team;
+- direct+team;
+- allegato;
+- signed URL fail;
+- deep link;
+- subject switch;
+- offline;
+- responsive/a11y.
+
+**Prompt `/goal`**
+```text
+/goal G4.7
+Completa i test della feature messaggi, inclusi deduplica, read state, allegati, deep link e cambio subject.
+```
+
+## G4.V — Verifica completa Fase 4
+
+**Data verifica:** 2026-08-28
+
+**Perimetro verificato:** G4.1–G4.7, contratto API, deduplica diretto/team,
+contesto subject/team, read state account+subject, privacy destinatari,
+allegati e signed URL, deep link push, PWA/cache, responsive/accessibilità,
+stati loading/empty/filtered-empty/error/denied/offline, TypeScript, test,
+lint, build e discovery E2E.
+
+**Esito:** PASS WITH ISSUES — nessun rilievo Critical/High; la Fase 4 non è
+bloccata dal gate, ma le issue sotto restano da chiudere prima del cleanup
+finale e della matrice E2E completa.
+
+**Evidenze positive**
+- `buildAthleteMessages` espone ID stabile, `dedupe_key`, team aggregati e
+  read state separato per `auth_user_id + subject_profile_id`.
+- Il route atleta limita destinatari e allegati al subject/team autorizzato;
+  il route allegati genera URL firmati on-demand senza restituire il path.
+- Il service worker bypassa `/api/` e richieste RSC; i test PWA verificano che
+  payload API e URL Supabase non vengano persistiti in Cache Storage.
+- La UI copre lista semantica, filtri, empty filtrato, dettaglio responsive,
+  read state autorevole senza full reload e fallback denied/deep-link.
+- **Nota di tracciamento risolta:** durante l’audit il marker G4.3 era
+  incoerente con filtri e test presenti; è stato riallineato a `[x]` insieme
+  alla remediation G4.R1, senza modificare il perimetro funzionale dell’audit.
+- Verifiche eseguite: TypeScript OK; Jest 24 suite/81 test OK; lint OK; build
+  OK; Playwright discovery 31 test OK; `git diff --check` OK.
+
+**Issue rilevate**
+
+1. **[Medium] Errore/offline mostrato come zero messaggi.**
+   - Requisito violato: G4.7 e criteri di stato error/offline; l’utente deve
+     distinguere assenza dati da mancato caricamento.
+   - Attuale: `AthleteMessagesManager` svuota `messages` nel catch e rende
+     l’`EmptyState` globale anche per errori HTTP/rete
+     (`src/components/athlete/AthleteMessagesManager.tsx`, righe 66–69 e
+     144–145).
+   - Atteso: stato error esplicito con retry e stato offline coerente con la
+     connettività, senza trasformare un errore in “Nessun messaggio”.
+   - Remediation: introdurre stato discriminato `error/offline`, preservare
+     l’ultimo dato utile quando opportuno e aggiungere test manager/UI.
+
+2. **[Medium] Deep link push non completo per account multi-ruolo/famiglia.**
+   - Requisito violato: G4.6 “l’app risolve account/subject autorizzato” e
+     apertura del messaggio dal push.
+   - Attuale: il resolver push sceglie coach prima di athlete e non produce
+     alcun URL per un account solo `family_member`
+     (`src/server/messages/push-notifications.ts`, righe 119–131); inoltre
+     `CoachMessagesManager` non legge `messageId` dalla query.
+   - Atteso: il click deve arrivare a una route che risolva il contesto
+     account/subject e apra il messaggio, senza usare il parametro come
+     autorizzazione, anche con ruoli multipli o soggetto famiglia.
+   - Remediation: definire un resolver deep-link condiviso per ruolo/subject,
+     con fallback autorizzato e test app aperta/chiusa, dual-role e famiglia.
+
+3. **[Low] Mancano direttive esplicite no-store per il recupero signed URL.**
+   - Requisito a rischio: G4.5 privacy/cache; il service worker è corretto,
+     ma browser/HTTP cache non sono vincolati dal solo bypass SW.
+   - Attuale: il client usa fetch senza `cache: 'no-store'` e l’endpoint non
+     imposta `Cache-Control` (`src/components/shared/MessageDetailModal.tsx`,
+     righe 84–91; `src/app/api/athlete/messages/attachments/[id]/route.ts`,
+     righe 37–49).
+   - Atteso: signed URL e risposta metadata esclusi esplicitamente dalle
+     cache persistenti/intermedie.
+   - Remediation: aggiungere `Cache-Control: private, no-store` lato route e
+     `cache: 'no-store'` lato client, con test header.
+
+**Limitazione di verifica:** il runtime Playwright autenticato non è stato
+  eseguito: la configurazione non riesce ad avviare il web server in questa
+  sessione (`listen EPERM: operation not permitted 0.0.0.0:3000`). La
+  discovery e i test unit/integration locali restano verdi; la matrice E2E
+  autenticata va ripetuta in un ambiente che consenta il bind della porta.
+
+**Stato remediation G4.R1:** completata il 28/08/2026. `AthleteMessagesManager`
+  distingue empty autentico, error e offline; offre retry, evita fetch offline,
+  reagisce al ritorno online, preserva i dati durante un refresh fallito e
+  resetta messaggi/detail al cambio subject. Test manager aggiunti per empty,
+  HTTP error/retry, offline e preservazione dati; typecheck, Jest 25 suite/86
+  test, lint e build superati.
+
+**Stato remediation G4.R2:** completata il 28/08/2026. Il resolver push
+  `resolveMessagePushArea` tratta athlete come destinazione preferenziale,
+  usa `/athlete/messages` per family-only e può allegare `subjectProfileId`
+  soltanto come hint. Il context accessibile e le API restano le sole fonti di
+  autorizzazione; `CoachMessagesManager` consuma il `messageId` della query.
+  Test aggiunti per area athlete/coach/admin, dual-role e family-only; Jest,
+  typecheck, lint e build superati.
+
+**Stato remediation G4.R3:** completata il 28/08/2026. Il route signed URL
+  usa `Cache-Control: private, no-store` su risposte positive ed errori; il
+  client usa `cache: 'no-store'` nel recupero on-demand. Aggiunto test
+  esplicito dell’header e aggiornata la verifica del fetch; Jest 25 suite/86
+  test, typecheck, lint, build e `git diff --check` superati.
+
+---
+
+# 7. Fase 5 — Campionato atleta
+
+## G5.1 — Resolver squadra → campionato → girone per atleta
+
+**Obiettivo**  
+Eliminare l'assunzione “primo campionato disponibile”.
+
+**Task**
+- [ ] Derivare i team dal subject atleta autorizzato.
+- [ ] Per ogni team elencare campionati pertinenti.
+- [ ] Per campionato elencare gironi pertinenti.
+- [ ] Gerarchia:
+  `Squadra → Campionato → Girone`.
+- [ ] Se livello univoco, può essere implicito.
+- [ ] Default non deve selezionare dati di un team non esplicitamente derivato.
+- [ ] Nessuna query client basata solo su `ownerProfileId` per la nuova modalità.
+
+**Prompt `/goal`**
+```text
+/goal G5.1
+Implementa il resolver atleta Squadra→Campionato→Girone partendo dal subject autorizzato, eliminando l'assunzione del primo campionato disponibile.
+```
+
+---
+
+## G5.2 — Endpoint campionato subject-aware
+
+**Obiettivo**  
+Creare il prerequisito tecnico che servirà anche alla famiglia.
+
+**Task**
+- [ ] Route Handler/service per:
+  - catalogo;
+  - classifica;
+  - partite;
+  - convocazioni.
+- [ ] Input `subjectProfileId` validato con `requireSubjectAthleteContext` o helper equivalente.
+- [ ] Ogni team richiesto deve appartenere al subject.
+- [ ] Ogni championship/group deve essere pertinente al team.
+- [ ] Zod per parametri.
+- [ ] Thin handlers + server service.
+- [ ] Nessun admin/service role esposto.
+- [ ] Compatibilità con consumer atleta esistenti.
+
+**Prompt `/goal`**
+```text
+/goal G5.2
+Introduci endpoint campionato subject-aware per catalogo, classifica, partite e convocazioni. Valida rigorosamente subject, team e campionato server-side.
+```
+
+---
+
+## G5.3 — Shell UI campionato atleta
+
+**Task**
+- [ ] Titolo `Campionato`.
+- [ ] Team/campionato selector solo quando necessario.
+- [ ] Ordine:
+  1. prossima partita;
+  2. convocazione;
+  3. posizione;
+  4. risultati;
+  5. calendario completo.
+- [ ] Team context coerente con foundation.
+- [ ] Nessuna selezione implicita ambigua.
+
+**Prompt `/goal`**
+```text
+/goal G5.3
+Ridisegna la shell della pagina Campionato atleta con gerarchia e selettori derivati dal resolver.
+```
+
+---
+
+## G5.4 — Prossima partita e convocazione
+
+**Campi**
+- giornata;
+- casa/trasferta;
+- avversario;
+- data/ora;
+- luogo;
+- stato convocazione;
+- ritrovo;
+- `Vedi convocazione` se disponibile.
+
+**Regole**
+- non mostrare convocazioni non pubblicate/non autorizzate;
+- stati testuali;
+- empty separato.
+
+**Prompt `/goal`**
+```text
+/goal G5.4
+Implementa Prossima partita e convocazione personale/pubblicata nel Campionato atleta usando gli endpoint subject-aware.
+```
+
+---
+
+## G5.5 — Classifica
+
+**Task**
+- [ ] Top 5 iniziale.
+- [ ] Expand classifica completa.
+- [ ] Evidenziare CSRoma con testo/marker/surface.
+- [ ] Numeri allineati/tabular.
+- [ ] Non usare solo rosso.
+- [ ] Non imporre top-three decorativo se non significativo.
+
+**Prompt `/goal`**
+```text
+/goal G5.5
+Implementa la classifica Campionato con evidenziazione accessibile CSRoma, top 5 iniziale ed espansione completa.
+```
+
+---
+
+## G5.6 — Risultati recenti e calendario completo
+
+**Task**
+- [ ] Risultati recenti compatti.
+- [ ] Calendario completo on demand.
+- [ ] Team/championship context preservato.
+- [ ] Stati match chiari.
+- [ ] Nessuna duplicazione con “prossima partita”.
+
+**Prompt `/goal`**
+```text
+/goal G5.6
+Completa Risultati recenti e Calendario completo del Campionato, preservando il contesto selezionato.
+```
+
+---
+
+## G5.7 — Test campionato
+
+**Scenari**
+- una squadra/un campionato;
+- più team;
+- più campionati;
+- più gironi;
+- nessuna partita futura;
+- nessuna convocazione;
+- classifica vuota;
+- teamId non autorizzato;
+- subject delegabile a livello server;
+- responsive.
+
+**Prompt `/goal`**
+```text
+/goal G5.7
+Testa il flusso Campionato multi-squadra e gli endpoint subject-aware, inclusi tentativi con team/campionato non autorizzati.
+```
+
+---
+
+# 8. Fase 6 — Quote e profilo atleta
+
+## G6.1 — Contratto quote atleta
+
+**Task**
+- [x] Includere `team.id`.
+- [x] Includere `activity.id`.
+- [x] Mantenere nome/codice.
+- [x] Definire importi dovuto/pagato/residuo in modo coerente.
+- [x] Stati:
+  - non ancora dovuta;
+  - in scadenza;
+  - scaduta;
+  - parziale;
+  - pagata.
+- [x] Subject auth server.
+- [x] Nessun pagamento online inventato.
+
+**Prompt `/goal`**
+```text
+/goal G6.1
+Arricchisci il contratto quote atleta con team/activity ID e stati finanziari coerenti, mantenendo compatibilità.
+```
+
+---
+
+## G6.2 — UI quote atleta
+
+**Layout**
+- totale dovuto/pagato/residuo;
+- gruppi per team;
+- filtri Tutte/Da pagare/Pagate/Scadute;
+- FeeRow;
+- dettaglio espandibile.
+
+**Task**
+- [x] Totali non nascondono il breakdown team.
+- [x] Importi a destra, tabular.
+- [x] Filtered empty.
+- [x] Nessun `Paga`.
+- [x] Responsive 320→desktop.
+
+**Prompt `/goal`**
+```text
+/goal G6.2
+Ridisegna la pagina Quote atleta con riepilogo, gruppi per squadra, filtri e righe compatte. Non introdurre pagamenti online.
+```
+
+---
+
+## G6.3 — Endpoint profilo atleta/delegato permission-aware
+
+**Obiettivo**  
+Preparare una fonte server che non dipenda da query client owner-only.
+
+**Task**
+- [x] Separare dati account da dati subject.
+- [x] Endpoint/service profilo subject-aware.
+- [x] Restituire solo dati necessari alla UI.
+- [x] Predisporre permission flags per:
+  - medical status;
+  - documents.
+- [x] Membership con jersey per team.
+- [x] Non restituire dati medici dettagliati se la specifica autorizza solo stato.
+- [x] Nessuna modifica delle regole di permission.
+
+**Prompt `/goal`**
+```text
+/goal G6.3
+Crea un endpoint profilo subject-aware e permission-aware, separando dati account, dati atleta, membership e informazioni sensibili.
+```
+
+---
+
+## G6.4 — UI profilo atleta
+
+**Sezioni**
+- identità/avatar;
+- contatti;
+- tesseramento;
+- certificato;
+- squadre + jersey;
+- preferenze;
+- notifiche;
+- installazione;
+- sicurezza/account.
+
+**Task**
+- [x] Separare visivamente dati subject da impostazioni account.
+- [x] Jersey per team.
+- [x] Nessun “primo jersey”.
+- [x] Dati medical/document permission-aware.
+- [x] Nessuna duplicazione impostazioni in header.
+
+**Prompt `/goal`**
+```text
+/goal G6.4
+Ridisegna il profilo atleta separando chiaramente identità sportiva del subject e impostazioni dell'account.
+```
+
+---
+
+## G6.5 — Installazione PWA, push e preferenze account — Completato il 29/08/2026
+
+**Task**
+- [x] Comando installazione nel profilo.
+- [x] Nascondere se standalone.
+- [x] iOS instructions dedicate.
+- [x] Copy beneficio: accesso rapido + notifiche.
+- [x] Non promettere offline completo.
+- [x] Push permission solo dopo gesto.
+- [x] Preferenze per device/account.
+- [x] Compatibilità piattaforme senza Badging API.
+- [x] Verificare doppia convenzione storage tema, documentando il fix da fare in G10.1 se non necessario ora.
+
+**Implementazione e verifica**
+- `AthleteProfileManager` espone installazione PWA e stato push nel pannello preferenze account; il consenso browser viene richiesto solo dal click su `Attiva`, con messaggi distinti per browser non supportato, permesso negato, stato attivo e fallimento operativo.
+- `InstallPwaButton` gestisce `beforeinstallprompt`, `appinstalled`, modalità standalone e istruzioni manuali dedicate a iOS; non introduce cache o comportamento offline aggiuntivo.
+- Aggiunti test per click esplicito/errori push, prompt PWA post-click, standalone e istruzioni iOS: suite completa 39 suite/126 test; typecheck, lint, build e `git diff --check` superati.
+- Nessuna modifica alla convenzione storage tema in questo goal; il controllo/fix resta tracciato in G10.1.
+
+**Prompt `/goal`**
+```text
+/goal G6.5
+Integra installazione PWA e preferenze push nel profilo account, con richiesta permesso solo su gesto esplicito e copy realistico.
+```
+
+---
+
+## G6.6 — Test quote e profilo
+
+**Scenari**
+- 0 quote;
+- pagata/scaduta/parziale;
+- multi-team;
+- jersey differenti;
+- certificate status;
+- push unsupported;
+- standalone;
+- iOS install instructions;
+- endpoint profilo con subject non autorizzato.
+
+**Prompt `/goal`**
+```text
+/goal G6.6
+Completa i test di Quote e Profilo atleta, inclusi casi multi-team, PWA account settings e autorizzazione del profilo.
+```
+
+**Implementazione e verifica**
+- Estesi `AthleteFeesManager.test.tsx` e le regressioni esistenti di `FeeRow`/contratto per quote vuote, multi-team, pagate, scadute, parziali e residui finanziari.
+- Esteso `AthleteProfileManager.test.tsx` per identità sportiva/account separati, installazione PWA nel pannello preferenze e attivazione push solo dopo click; `InstallPwaButton.test.tsx` copre prompt post-gesto, standalone e istruzioni iOS.
+- Esteso `GET /api/athlete/profile` con test del rifiuto server-side per subject non autorizzato (HTTP 403), mantenendo il controllo nel resolver.
+- Verifiche eseguite: test mirati 13/13, suite completa 39 suite/129 test, `npx tsc --noEmit`, `npm run lint`, `npm run build` e `git diff --check` superati.
+
+## G6.V — Verifica completa Fase 6 — 29 agosto 2026
+
+**Perimetro:** G6.1–G6.6; contratto/API quote, UI quote, contratto/API profilo,
+UI profilo, account/subject/team context, PWA/push, stati, autorizzazione,
+responsive/accessibilità, regressioni e gate tecnici.
+
+**Verdict: PASS WITH ISSUES.** Non sono emersi rilievi Critical/High; la Fase 6
+non è bloccata. Le remediation G6.R1 e G6.R2 hanno chiuso i rilievi Medium
+relativi agli stati offline e al 403 del profilo; restano incomplete le
+seguenti evidenze o conformità:
+
+1. **[Medium] Manca smoke E2E autenticato specifico per Quote e Profilo.**
+   - Requisito violato: responsive ai viewport obbligatori, accessibilità e
+     verifica PWA runtime della Fase 6.
+   - Attuale: `npx playwright test --list` rileva 33 test, ma nessuno copre
+     `/athlete/fees` o `/athlete/profile`; le spec responsive esistenti sono
+     per dashboard/calendario/campionato/messaggi. Il tentativo dei progetti
+     atleta/PWA in questa sessione non ha prodotto uno smoke runtime concluso.
+   - Atteso: spec autenticata su 320×568, 375×812, 390×844, 768×1024,
+     1024×768 e 1440×900 con overflow, heading, tastiera, touch target,
+     stati e pannello PWA/account verificati.
+   - Remediation: aggiungere spec E2E dedicate e rieseguirle in un ambiente
+     con credenziali atleta/famiglia e browser runtime operativo.
+
+2. **[Low] Autorizzazione route quote senza regressione route-level dedicata.**
+   - Requisito a rischio: matrice autorizzativa e test pertinenti.
+   - Attuale: `/api/athlete/fees` usa correttamente
+     `requireSubjectAthleteContext(..., 'view_payments')` (`src/app/api/athlete/fees/route.ts:9-14`),
+     ma i test verificano il mapper e la UI, non 401/403 del route né
+     subject non autorizzato per la route quote.
+   - Atteso: test route per account non autenticato, ruolo non atleta,
+     relazione senza `view_payments` e subject fuori grafo.
+   - Remediation: aggiungere `src/app/api/athlete/fees/route.test.ts` con
+     mock del resolver e asserzioni di status/body senza indebolire il server.
+
+3. **[Low] Type-safety incompleta ai confini dati quote.**
+   - Requisito a rischio: TypeScript strict e contratti esterni prevedibili.
+   - Attuale: il route usa fallback `as any[]`
+     (`src/app/api/athlete/fees/route.ts:48,54`) e i manager fanno cast
+     diretto del JSON a `Partial<AthleteFeesContract>`/
+     `AthleteProfileContract`, senza validazione runtime.
+   - Atteso: nessun `any` nei confini API e payload verificato prima del
+     rendering, mantenendo il contratto backward-compatible.
+   - Remediation: definire validator Zod (o equivalente già presente), usare
+     `unknown`/parse e tipizzare i fallback del client Supabase.
+
+**Evidenze positive**
+
+- Quote: ID team/activity, stati finanziari coerenti, aggregazione per
+  `team.id`, jersey per membership e nessuna CTA pagamento inventata.
+- Profilo: account/subject distinti, dati medici limitati dal permesso,
+  jersey per team, resolver `requireSubjectAthleteContext` e `no-store`.
+- PWA: prompt solo da gesto esplicito, standalone/iOS e cache privata non
+  estesa; componenti e test usano token/primitive condivise, focus e
+  `aria-pressed`/`aria-expanded` dove pertinenti.
+- Regressioni: `npm test -- --runInBand` 39 suite/134 test, `npx tsc --noEmit`,
+  `npm run lint`, `npm run build` e `git diff --check` superati. La discovery
+  Playwright passa (33 test); lo smoke runtime Phase 6 resta non certificato.
+- Il worktree contiene modifiche cumulative delle fasi precedenti e non ha
+  un commit isolato G6; non risultano refactor produttivi nuovi introdotti
+  durante questo audit, ma l’attribuzione puntuale dei cambiamenti storici
+  resta limitata dalla cronologia non separata.
+
+## G6.R1 — Stati offline Quote e Profilo — Completato il 29 agosto 2026
+
+- `AthleteFeesManager` e `AthleteProfileManager` distinguono gli stati
+  `loading`, `ready`, `error` e `offline`, con `OfflineState` dedicato sia
+  all’assenza iniziale di rete sia al refresh durante una sessione aperta.
+- I listener `offline`/`online` aggiornano il feedback e ritentano il fetch al
+  ritorno della connessione; i dati già caricati restano visibili mentre la
+  rete è assente o il refresh fallisce. Il reset dei dati avviene al cambio
+  subject per non mostrare il profilo precedente nel nuovo contesto.
+- Test aggiunti in `AthleteFeesManager.test.tsx` e
+  `AthleteProfileManager.test.tsx` per offline iniziale, perdita rete con
+  dati presenti e retry online. Verifiche: test mirati 12/12, suite completa
+  39 suite/133 test, `npx tsc --noEmit`, lint, build e `git diff --check`
+  superati.
+- Restano aperti gli altri rilievi G6.V: copertura E2E autenticata dedicata,
+  route Quote e type-safety runtime.
+
+## G6.R2 — Profilo denied state 403 — Completato il 29 agosto 2026
+
+- `AthleteProfileManager` tratta una risposta HTTP `403` come stato `denied`,
+  invalida eventuali dati precedentemente caricati e renderizza
+  `DelegatedAccessDenied` con il messaggio "Accesso non abilitato" e il link
+  sicuro "Torna alla dashboard" (`/dashboard`). Le risposte non autorizzate
+  restano quindi distinte dagli errori tecnici `5xx`.
+- Test aggiunto in `src/components/athlete/AthleteProfileManager.test.tsx`;
+  test mirato superato. Il tentativo di smoke autenticato con browser interno
+  è stato eseguito su `http://localhost:3001/login`, ma l'app dev presenta un
+  errore client-side in `src/app/layout.tsx:58` (`TeamProvider`,
+  `Cannot read properties of undefined (reading 'call')`) prima del login;
+  nessun dato finanziario è stato creato o modificato.
+- File modificati: `src/components/athlete/AthleteProfileManager.tsx`,
+  `src/components/athlete/AthleteProfileManager.test.tsx` e questo piano.
+- Restano aperti gli altri rilievi G6.V (smoke E2E autenticato, copertura route
+  Quote e type-safety runtime).
+
+## G6.R4 — Centratura modal quote — Completato il 29 agosto 2026
+
+- La variante `cs-modal--centered` ora usa un centramento viewport indipendente
+  dall’overlay Radix, con `translate: -50% -50%`, `max-height` e scroll interno
+  per i form più lunghi.
+- File modificato: `src/app/globals.css`. Verifiche: test mirato, typecheck,
+  lint, build e `git diff --check` superati.
+
+---
+
+# 9. Fase 7 — Area familiare
+
+> Questa fase è il gate architetturale principale del redesign. Non limitarsi a “cambiare nome nell'header”: deve dimostrare che account, subject, permessi e team sono davvero separati.
+
+## G7.1 — Resolver area familiare e navigazione permission-aware
+
+**Obiettivo**  
+Calcolare le destinazioni disponibili per il subject selezionato.
+
+**Task**
+- [ ] Derivare profili accessibili dal sistema esistente.
+- [ ] Calcolare permission set per subject.
+- [ ] Mappare:
+  - `view_schedule` → Calendario;
+  - `receive_messages` → Messaggi;
+  - `view_payments` → Quote;
+  - Campionato solo se endpoint G5.2 completo;
+  - Profilo/contesto sempre con dati filtrati.
+- [ ] Se >5 destinazioni, prevedere `Altro`.
+- [ ] Una feature non autorizzata viene omessa.
+- [ ] Deep link negato → denied state + ritorno.
+- [ ] Nessuna permission decision solo client-side: il client usa permessi server per rendering, ma il server continua a verificare.
+
+**Prompt `/goal`**
+```text
+/goal G7.1
+Implementa il resolver di navigazione area familiare basato sui permessi del subject. Le route negate devono restare protette server-side e mostrare denied state.
+```
+
+---
+
+## G7.2 — Selezione iniziale subject familiare
+
+**Task**
+- [ ] Se un solo profilo:
+  - auto-selezione solo quando area famiglia è esplicitamente attiva.
+- [ ] Se più profili:
+  - lista profili;
+  - nome;
+  - relazione;
+  - attività/team principali se disponibili;
+  - sezioni autorizzate in copy semplice;
+  - CTA `Apri profilo`.
+- [ ] Nessun copy tecnico sui permission key.
+- [ ] Persistenza subject con chiave esistente.
+
+**Prompt `/goal`**
+```text
+/goal G7.2
+Implementa la selezione iniziale dell'area familiare, gestendo uno o più profili senza esporre nomi tecnici dei permessi.
+```
+
+---
+
+## G7.3 — Cambio subject robusto
+
+**Obiettivo**  
+Eliminare leakage visivo e stato cross-profile.
+
+**Quando cambia subject**
+- [ ] chiudere drawer/dialog;
+- [ ] abortire fetch precedenti;
+- [ ] team → Tutte;
+- [ ] ricalcolare navigation;
+- [ ] ricalcolare badge/read state;
+- [ ] cancellare dati UI del subject precedente;
+- [ ] transizione breve senza blank page;
+- [ ] invalidare subject se relazione rimossa;
+- [ ] nessun dato personale in localStorage oltre identificatore minimo già previsto.
+
+**Prompt `/goal`**
+```text
+/goal G7.3
+Rendi atomico e sicuro il cambio subject familiare: chiudi overlay, abortisci richieste, resetta team e impedisci flash di dati del profilo precedente.
+```
+
+---
+
+## G7.4 — Dashboard familiare
+
+**Obiettivo**  
+Riutilizzare la dashboard atleta in modalità delegata senza fork completo.
+
+**Task**
+- [ ] Header:
+  `Area familiare`
+  `Stai visualizzando {nome}`
+- [ ] Team selector condizionale.
+- [ ] Prossimo impegno solo se permesso calendario.
+- [ ] Attendance solo se `confirm_attendance`.
+- [ ] Messaggi solo `receive_messages`.
+- [ ] Quote solo `view_payments`.
+- [ ] Campionato widget solo se autorizzato/implementato.
+- [ ] Nessun controllo disabled che faccia pensare a un errore.
+- [ ] Denied state su deep link.
+
+**Prompt `/goal`**
+```text
+/goal G7.4
+Adatta la dashboard alla modalità familiare riusando i componenti atleta e applicando i permessi per subject senza forkare l'intera pagina.
+```
+
+---
+
+## G7.5 — Calendario familiare
+
+**Task**
+- [ ] `view_schedule` richiesto.
+- [ ] `confirm_attendance` indipendente.
+- [ ] Team filter subject-specific.
+- [ ] Attendance read-only se solo view.
+- [ ] Subject server verification a ogni mutation.
+- [ ] Relation removed durante sessione → denied/invalidation.
+
+**Prompt `/goal`**
+```text
+/goal G7.5
+Abilita il calendario familiare subject-aware: view_schedule e confirm_attendance devono restare permessi distinti.
+```
+
+---
+
+## G7.6 — Messaggi famiglia
+
+**Task**
+- [ ] `receive_messages` richiesto.
+- [ ] Read state per account + subject.
+- [ ] Badge cambia con subject.
+- [ ] Deduplica invariata.
+- [ ] Non mostrare destinatari estranei.
+- [ ] Deep link risolve il subject autorizzato.
+
+**Prompt `/goal`**
+```text
+/goal G7.6
+Abilita Messaggi nell'area familiare con read state account+subject, privacy destinatari e deep link autorizzato.
+```
+
+---
+
+## G7.7 — Quote famiglia
+
+**Task**
+- [ ] `view_payments`.
+- [ ] Dati subject-aware.
+- [ ] Breakdown team.
+- [ ] Nessun dato di altro figlio.
+- [ ] Team reset al cambio figlio.
+- [ ] Deep link denied se permission rimossa.
+
+**Prompt `/goal`**
+```text
+/goal G7.7
+Abilita Quote per il subject familiare con view_payments e isolamento completo tra profili.
+```
+
+---
+
+## G7.8 — Campionato famiglia
+
+**Prerequisito**  
+G5.2 e G5.7 completati.
+
+**Task**
+- [ ] Mostrare Campionato solo dopo resolver delegato reale.
+- [ ] Subject → team → championship server validated.
+- [ ] Nessun fallback a `account.ownerProfileId`.
+- [ ] Convocazione del subject corretto.
+- [ ] Deep link team/championship non autorizzato → denied/not found.
+
+**Prompt `/goal`**
+```text
+/goal G7.8
+Abilita Campionato nell'area familiare esclusivamente tramite gli endpoint subject-aware. Elimina ogni dipendenza owner-only per questa modalità.
+```
+
+---
+
+## G7.9 — Profilo delegato
+
+**Task**
+- [ ] Dati subject consentiti.
+- [ ] Account familiare separato.
+- [ ] Push/installazione mostrati come impostazioni account, non “del figlio”.
+- [ ] `view_medical_status` → stato certificato.
+- [ ] `view_documents` → documenti.
+- [ ] Non mostrare dettagli non autorizzati.
+- [ ] `sign_documents` non abilita alcuna firma se il flusso non esiste.
+
+**Prompt `/goal`**
+```text
+/goal G7.9
+Implementa il profilo delegato separando dati atleta e impostazioni account, rispettando medical/documents permissions senza inventare flussi.
+```
+
+---
+
+## G7.10 — Test matrice familiare
+
+**Scenari obbligatori**
+- 1 figlio;
+- più figli;
+- figlio multi-team;
+- permessi completi;
+- solo calendario;
+- calendario senza conferma;
+- solo quote;
+- solo messaggi;
+- relazione rimossa;
+- deep link negato;
+- cambio figlio con dialog aperto;
+- cambio figlio durante fetch;
+- cambio figlio con team selezionato;
+- unread badge per subject;
+- campionato non autorizzato;
+- viewport 320/375/768.
+
+**Gate**
+La fase famiglia non è completata se è possibile vedere anche brevemente dati del subject precedente dopo il cambio.
+
+**Prompt `/goal`**
+```text
+/goal G7.10
+Esegui e automatizza dove possibile la matrice test dell'area familiare. Correggi leakage di stato, permission rendering e regressioni subject/team.
+```
+
+---
+
+# 10. Fase 8 — Area coach
+
+## G8.1 — Coach foundation e navigazione
+
+**Navigazione mobile**
+1. Oggi
+2. Calendario
+3. Convocazioni
+4. Messaggi
+5. Altro
+
+**Task**
+- [ ] Riutilizzare token/foundation.
+- [ ] Shell mobile coach.
+- [ ] Desktop: rail/sidebar compatta.
+- [ ] No bottom nav + sidebar contemporanee.
+- [ ] Preservare route coach esistenti.
+- [ ] Profilo/pagamenti sotto Altro se necessario.
+
+**Prompt `/goal`**
+```text
+/goal G8.1
+Estendi la foundation all'area coach e implementa la navigazione canonica senza cambiare le route esistenti.
+```
+
+---
+
+## G8.2 — Team context coach
+
+**Task**
+- [ ] Team assegnati da `team_coaches`.
+- [ ] Default Tutte le squadre.
+- [ ] Selector solo ≥2.
+- [ ] Il team scelto filtra agenda/presenze/campionato/convocazioni/messaggi.
+- [ ] Nessun team non assegnato accettato dal server.
+- [ ] Le azioni mostrano destinatari finali prima dell'invio.
+
+**Prompt `/goal`**
+```text
+/goal G8.2
+Implementa team context coach derivato da team_coaches, con default Tutte le squadre e validazione server per le azioni.
+```
+
+---
+
+## G8.3 — Coach home aggregata
+
+**Domande**
+1. Cosa ho oggi?
+2. Chi sarà presente?
+3. Qual è la prossima partita?
+4. Cosa devo comunicare?
+
+**Task**
+- [ ] Agenda combinata.
+- [ ] Team badge.
+- [ ] Presenze prossimo allenamento.
+- [ ] Partite prossime.
+- [ ] Convocazioni incomplete.
+- [ ] Comunicazioni con letture mancanti/da inviare.
+- [ ] Conflitti eventi.
+- [ ] Filtraggio team.
+
+**Prompt `/goal`**
+```text
+/goal G8.3
+Ridisegna la home coach come vista operativa aggregata sulle quattro domande definite nel piano.
+```
+
+---
+
+## G8.4 — Presenze coach
+
+**Task**
+- [ ] Riepilogo prossimo allenamento.
+- [ ] going/maybe/declined/pending espliciti.
+- [ ] Filtri/team context.
+- [ ] Nessuna inferenza su assenza = declined.
+- [ ] Dettaglio accessibile.
+- [ ] Eventuali azioni esistenti preservate.
+
+**Prompt `/goal`**
+```text
+/goal G8.4
+Implementa il modulo presenze coach con stati canonici e team context, senza reinterpretare pending come assenza.
+```
+
+---
+
+## G8.5 — Partite e convocazioni coach
+
+**CTA state-driven**
+- Prepara convocazioni;
+- Pubblica convocazioni;
+- Sollecita risposte;
+- Registra risultato;
+- Consulta risultato.
+
+**Task**
+- [ ] Derivare CTA dallo stato reale.
+- [ ] Mostrare destinatari prima di publish/reminder.
+- [ ] Team context.
+- [ ] Evitare CTA generica sempre uguale.
+
+**Prompt `/goal`**
+```text
+/goal G8.5
+Ridisegna partite/convocazioni coach usando CTA dipendenti dallo stato reale e conferma dei destinatari.
+```
+
+---
+
+## G8.6 — Messaggi coach
+
+**Task**
+- [ ] Lista coerente con MessageRow.
+- [ ] Team filter.
+- [ ] Composizione/invio esistente adattato.
+- [ ] Prima dell'invio mostra destinatari e quantità.
+- [ ] Non cambiare policy recipient.
+- [ ] Allegati/PWA privacy come atleta.
+
+**Prompt `/goal`**
+```text
+/goal G8.6
+Estendi il pattern Messaggi all'area coach, mantenendo recipient logic e mostrando chiaramente i destinatari prima dell'invio.
+```
+
+---
+
+## G8.7 — Pagamenti personali e profilo coach
+
+**Task**
+- [ ] Adattare `/coach/payments`.
+- [ ] Adattare `/coach/profile`.
+- [ ] Separare dati account da dati coach.
+- [ ] Riutilizzare PWA settings.
+- [ ] Non mescolare pagamenti personali del coach con quote atleta.
+
+**Prompt `/goal`**
+```text
+/goal G8.7
+Migra pagamenti personali e profilo coach al design system, mantenendoli semanticamente distinti dalle quote atleta.
+```
+
+---
+
+## G8.8 — Test coach
+
+**Scenari**
+- un team;
+- più team;
+- team non autorizzato;
+- no events;
+- conflict;
+- convocazione draft/published;
+- unread messages;
+- responsive touch/desktop;
+- keyboard.
+
+**Prompt `/goal`**
+```text
+/goal G8.8
+Completa i test dell'area coach, con particolare attenzione a multi-team, autorizzazioni e CTA di convocazione.
+```
+
+---
+
+# 11. Fase 9 — Area amministrativa
+
+## G9.1 — Admin shell desktop
+
+**Obiettivo**  
+Creare shell densa e desktop-first usando lo stesso design system.
+
+**Task**
+- [ ] Sidebar fissa.
+- [ ] Topbar.
+- [ ] Workspace max 1440 px.
+- [ ] Detail drawer.
+- [ ] Responsive tablet/mobile operativo.
+- [ ] Navy per superfici inverse quando appropriato.
+- [ ] Densità maggiore ma touch target preservati quando touch.
+
+**Prompt `/goal`**
+```text
+/goal G9.1
+Implementa la shell admin desktop-first con sidebar, topbar e workspace, riusando il design system comune.
+```
+
+### Verifica G9.1 — 31 agosto 2026
+
+- File principali: `src/components/navigation/LayoutShell.tsx`, `src/components/navigation/AppHeader.tsx`, `src/components/navigation/RoleSidebar.tsx`, `src/app/globals.css`.
+- La shell admin si attiva su `/dashboard` per account admin e sulle route `/admin/**`; preservate route e manager esistenti.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm run build`, `git diff --check`.
+- Nota: il raggruppamento semantico della sidebar resta nel perimetro di G9.2; il drawer di dettaglio responsive già disponibile nel design system resta pronto per i manager dei goal successivi.
+
+---
+
+## G9.2 — Sidebar admin raggruppata
+
+**Gruppi**
+- Panoramica;
+- Sport;
+- Persone;
+- Comunicazione;
+- Amministrazione.
+
+**Task**
+- [ ] Mappare route attuali nei gruppi senza rinominarle.
+- [ ] Profilo/impostazioni/logout fuori dalla nav operativa.
+- [ ] Active state route-aware.
+- [ ] Collasso/rail se già coerente.
+- [ ] Keyboard navigation.
+
+**Prompt `/goal`**
+```text
+/goal G9.2
+Raggruppa la navigazione admin secondo re_design.md preservando tutte le route esistenti.
+```
+
+### Verifica G9.2 — 31 agosto 2026
+
+- File principali: `src/components/navigation/RoleSidebar.tsx`, `src/app/globals.css`.
+- Le stesse sezioni sono disponibili nella sidebar desktop e nel drawer tablet/mobile; Profilo è fuori dalla navigazione operativa. Logout resta nella zona account della shell.
+- Mappatura: `/dashboard` e `/admin/calendar` in Panoramica; stagioni, attività, squadre, campionati e palestre in Sport; anagrafica, atleti, collaboratori e account/accessi in Persone; messaggi e documenti in Comunicazione; quote, incassi, uscite e bilancio in Amministrazione.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm run build`, `git diff --check`.
+
+---
+
+## G9.3 — Dashboard admin operativa
+
+**Priorità**
+1. Richiede attenzione
+2. Oggi
+3. Incassi
+4. Squadre con anomalie
+5. Comunicazioni
+6. Attività recente
+
+**Esempi eccezioni**
+- rate scadute;
+- certificati in scadenza;
+- inviti non accettati;
+- eventi senza impianto;
+- conflitti;
+- messaggi non letti;
+- convocazioni incomplete.
+
+**Task**
+- [ ] Riutilizzare dati realmente presenti.
+- [ ] Non inventare KPI.
+- [ ] Contatori generici diventano secondari.
+- [ ] Ogni eccezione ha azione/route se disponibile.
+
+**Prompt `/goal`**
+```text
+/goal G9.3
+Ridisegna la dashboard admin come dashboard operativa orientata alle eccezioni, usando solo dati e azioni realmente supportati.
+```
+
+### Verifica G9.3 — 31 agosto 2026
+
+- File principali: `src/components/admin/AdminDashboard.tsx`, `src/app/globals.css`.
+- Fonti utilizzate: stagione Supabase esistente, `/api/admin/incassi/kpi`, `/api/admin/users`, `/api/admin/athletes`, `/api/admin/events` e `/api/admin/messages`.
+- Azioni disponibili: rate e incassi → `/admin/incassi`; certificati → `/admin/atleti`; inviti → `/admin/users`; eventi e conflitti → `/admin/calendar`; messaggi → `/admin/messages`; stagioni → `/admin/seasons`.
+- Stati coperti: loading, errore con retry, primo accesso senza stagione, nessuna eccezione, nessun evento odierno.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm test -- --runInBand` (55 suite / 180 test), `npm run build`, `git diff --check`.
+
+---
+
+## G9.4 — Pattern pagina gestionale
+
+**Schema comune**
+1. titolo/contesto;
+2. primary action;
+3. ricerca/filtri;
+4. indicatori utili;
+5. tabella/lista;
+6. selezione multipla;
+7. drawer detail;
+8. stati.
+
+**Task**
+- [ ] Creare componenti/adapter riusabili.
+- [ ] Table row min 48 px.
+- [ ] Bulk selection accessibile.
+- [ ] Drawer desktop.
+- [ ] Mobile fallback senza overflow.
+- [ ] Non migrare ancora tutti i domini in questo goal.
+
+**Prompt `/goal`**
+```text
+/goal G9.4
+Crea il pattern riusabile delle pagine gestionali admin senza migrare ancora tutti i domini.
+```
+
+### Verifica G9.4 — 31 agosto 2026
+
+- File principali: `src/components/admin/AdminManagement.tsx`, `src/components/admin/AdminManagement.test.tsx`, `src/app/globals.css`.
+- Primitive disponibili: `AdminManagementPage`, `AdminDataTable`, `AdminSelectionBar`, `AdminRowCheckbox`, `AdminDetailDrawer`.
+- Il pattern mantiene separati dati, mutazioni e autorizzazioni dei manager di dominio; espone soltanto slot di composizione.
+- La tabella usa overflow orizzontale controllato su mobile e righe da almeno 48px; il drawer usa `ResponsiveDetail` con fallback bottom sheet/fullscreen già previsto dal design system.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm test -- --runInBand` (56 suite / 183 test), `npm run build`, `git diff --check`.
+- Follow-up visual del 31/08/2026: sidebar admin riallineata ai token comuni della shell (`surface`, `text`, `border`, `surface-selected`) e aggiunti i corrispondenti token canonici dark; autorizzazioni e navigazione invariate.
+
+---
+
+## G9.5 — Migrazione dominio Sport
+
+**Pagine**
+- Stagioni
+- Attività
+- Squadre
+- Campionati
+- Palestre
+- Calendario dove pertinente
+
+**Task**
+- [ ] Applicare pattern G9.4.
+- [ ] Preservare route.
+- [ ] Preservare azioni esistenti.
+- [ ] Filtri utili.
+- [ ] Stati completi.
+- [ ] Nessun refactor backend non necessario.
+
+**Prompt `/goal`**
+```text
+/goal G9.5
+Migra al nuovo pattern admin le pagine del dominio Sport, senza cambiare regole funzionali o route.
+```
+
+### Verifica G9.5 — 31 agosto 2026
+
+- Pagine migrate: `src/app/admin/seasons/page.tsx`, `activities/page.tsx`, `teams/page.tsx`, `campionati/page.tsx`, `gyms/page.tsx`, `calendar/page.tsx`.
+- Manager adattati senza modifica della logica: `SeasonsManager`, `ActivitiesManager`, `TeamsManager`, `AdminChampionshipsManager`/`ChampionshipsManager`, `GymsManager`, `EventsManager`.
+- Il pattern condiviso fornisce il contesto Sport, titolo, descrizione e contenitore; le toolbar e le azioni di dominio restano nei rispettivi manager.
+- Route preservate: `/admin/seasons`, `/admin/activities`, `/admin/teams`, `/admin/campionati`, `/admin/gyms`, `/admin/calendar`.
+- Verifiche eseguite: `npx tsc --noEmit`, test mirati (11 test), `npm test -- --runInBand` (56 suite / 183 test), `npm run build`, `git diff --check`.
+
+---
+
+## G9.6 — Migrazione dominio Persone
+
+**Pagine**
+- Anagrafica
+- Atleti
+- Collaboratori
+- Account e accessi
+
+**Obiettivo UX**
+Far apparire le pagine come parti dello stesso dominio, pur mantenendo responsabilità tecniche distinte.
+
+**Task**
+- [ ] Ricerca/filtri coerenti.
+- [ ] Detail drawer.
+- [ ] Badge stato account/accesso.
+- [ ] Non fondere tabelle/backend se non necessario.
+- [ ] Non modificare auth model.
+
+**Prompt `/goal`**
+```text
+/goal G9.6
+Migra il dominio Persone al pattern admin comune mantenendo separati i modelli tecnici e invariata l'autorizzazione.
+```
+
+### Verifica G9.6 — 31 agosto 2026
+
+- Pagine migrate: `src/app/admin/profiles/page.tsx`, `atleti/page.tsx`, `collaboratori/page.tsx`, `users/page.tsx`.
+- Manager adattati con adapter `embedded`: `PeopleManager`, `AthletesManager`, `CoachesManager`, `UsersManager`; le toolbar, i filtri, le azioni, i detail drawer e i badge restano di responsabilità dei rispettivi domini.
+- Il pattern condiviso fornisce contesto Persone, titolo, descrizione e contenitore responsive; non sono stati modificati API, schema, modello auth o route esistenti.
+- Route preservate: `/admin/profiles`, `/admin/atleti`, `/admin/collaboratori`, `/admin/users`.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm test -- --runInBand src/components/admin/AdminManagement.test.tsx` (3 test), `npm test -- --runInBand` (56 suite / 183 test), `npm run build`, `git diff --check`.
+
+---
+
+## G9.7 — Comunicazione e Amministrazione
+
+**Pagine**
+- Messaggi
+- Documenti
+- Quote
+- Incassi
+- Uscite
+- Bilancio
+
+**Task**
+- [ ] Applicare pattern comune.
+- [ ] Numeri finanziari tabular.
+- [ ] Danger/warning solo per veri stati.
+- [ ] Bulk action con conferma quando distruttiva.
+- [ ] Nessun nuovo pagamento/firma.
+
+**Prompt `/goal`**
+```text
+/goal G9.7
+Migra Comunicazione e Amministrazione al nuovo pattern visuale senza introdurre flussi funzionali non esistenti.
+```
+
+### Verifica G9.7 — 31 agosto 2026
+
+- Pagine migrate: `src/app/admin/messages/page.tsx`, `documents/page.tsx`, `membership-fees/page.tsx`, `incassi/page.tsx`, `payments/page.tsx`, `balance/page.tsx`.
+- Manager adattati dove avevano un’intestazione interna duplicata: `MessagesManager`, `DocumentsManager`, `MembershipFeesManager`, `PaymentsManager`; `InstallmentsManager` e `BalanceDashboard` sono stati ricomposti direttamente perché non richiedevano un secondo titolo.
+- Azioni esistenti preservate: invio/modifica/eliminazione messaggi, template/generazione documenti, gestione rate e incassi, pagamenti, filtri e report di bilancio. Non sono stati aggiunti pagamenti, firme o altre operatività.
+- Route e backend invariati: `/admin/messages`, `/admin/documents`, `/admin/membership-fees`, `/admin/incassi`, `/admin/payments`, `/admin/balance`; nessuna modifica a schema, API o autorizzazione.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm test -- --runInBand` (56 suite / 183 test), `npm run build`, `git diff --check`.
+
+---
+
+## G9.8 — Test admin responsive e operativi
+
+**Viewport**
+- 768×1024
+- 1024×768
+- 1440×900
+- mobile emergenza se supportato
+
+**Test**
+- sidebar;
+- focus;
+- tabelle;
+- filtri;
+- bulk;
+- drawer;
+- modal;
+- no overflow critico;
+- route/deep link.
+
+**Verifica completata — 31/08/2026**
+- `npm run test:e2e -- --project=admin-responsive-chromium --workers=1`: 3/3 test passati (1,1 min).
+- `npx tsc --noEmit`: passato.
+- `git diff --check`: passato.
+- Note: il test E2E è stato eseguito con il server locale e le credenziali admin configurate in `.env.local`; nessun server è lasciato attivo al termine.
+
+**Prompt `/goal`**
+```text
+/goal G9.8
+Completa il gate admin con test responsive, tastiera, tabelle, drawer, filtri e route esistenti.
+```
+
+---
+
+# 12. Fase 10 — Consolidamento trasversale
+
+## G10.1 — Dark mode canonico e storage tema
+
+**Obiettivo**  
+Stabilizzare il tema scuro solo dopo il tema chiaro e le aree principali.
+
+**Task**
+- [x] Risolvere la doppia convenzione storage tema identificata nella baseline.
+- [x] Definire `.theme-dark`.
+- [x] Canvas quasi nero-blu, non nero puro.
+- [x] Superfici distinte per luminosità/bordi.
+- [x] Red più luminoso se necessario al contrasto.
+- [x] Stati semantic contrast.
+- [x] Logo non invertito automaticamente.
+- [x] Manifest/metadata/theme-color coerenti quando il browser lo supporta.
+- [x] Test contrasto delle primitive.
+
+**Prompt `/goal`**
+```text
+/goal G10.1
+Completa il dark mode canonico, correggi la persistenza tema e verifica contrasto e theme-color senza alterare immagini/logo.
+```
+
+---
+
+## G10.2 — Audit accessibilità WCAG 2.2 AA
+
+**Checklist**
+- [x] focus visibile;
+- [x] keyboard completa;
+- [x] 44×44;
+- [x] label reali;
+- [x] error association;
+- [x] aria-current;
+- [x] aria-pressed;
+- [x] aria-expanded;
+- [x] dialog names/focus trap/restore;
+- [x] no color-only;
+- [x] date/time SR;
+- [x] unread announcements non rumorosi;
+- [x] zoom 200%;
+- [x] reduced motion;
+- [x] contrast light/dark;
+- [x] screen reader smoke su dashboard/calendar/messages/family/admin tramite semantica DOM e test responsive/accessibility già presenti.
+
+**Prompt `/goal`**
+```text
+/goal G10.2
+Esegui l'audit accessibilità WCAG 2.2 AA sulle aree migrate e correggi le regressioni senza redesign extra.
+```
+
+---
+
+## G10.3 — Audit PWA e cache privacy
+
+**Scenari**
+- browser;
+- standalone;
+- install prompt;
+- iOS instructions;
+- offline pagina aperta;
+- offline nuova nav;
+- reconnect;
+- update waiting;
+- dirty form;
+- push app open/closed;
+- logout;
+- cambio account.
+
+**Cache audit**
+- [x] no authenticated HTML;
+- [x] no API;
+- [x] no RSC;
+- [x] no Supabase payload;
+- [x] no signed URL privati;
+- [x] public runtime cache pulita logout;
+- [x] fallback offline generico;
+- [x] nessuna queue mutation.
+
+**Audit scenari PWA**
+- [x] browser e standalone: manifest/display/viewport e install prompt mantenuti;
+- [x] offline pagina aperta e nuova navigazione: fallback `offline.html`, senza caching di HTML autenticato;
+- [x] reconnect: banner online/offline e retry espliciti;
+- [x] update waiting: banner con applicazione esplicita tramite `SKIP_WAITING`;
+- [x] dirty form: nessun update automatico imposto dal client;
+- [x] push app aperta/chiusa: URL validato same-origin e apertura/focus della finestra;
+- [x] logout/cambio account: runtime cache e contesti profilo/squadra puliti;
+- [x] nessun background sync.
+
+**Prompt `/goal`**
+```text
+/goal G10.3
+Esegui l'audit PWA completo con particolare attenzione a cache privacy, update, offline e logout. Non introdurre background sync.
+```
+
+---
+
+## G10.4 — Performance e bundle
+
+**Task**
+- [x] Analizzare bundle delle aree principali.
+- [x] Cercare Client Components eccessivamente grandi.
+- [x] Spostare composizione/dati iniziali a Server Components quando ragionevole e senza riscrittura.
+- [x] Ridurre il payload duplicato del badge messaggi con endpoint contatore minimale.
+- [x] Preservare AbortController nei flussi già soggetti a cambio subject.
+- [x] Verificare font e immagini: nessuna modifica necessaria.
+- [x] Nessun refactor prematuro fuori dai colli di bottiglia misurati.
+
+**Esito G10.4 (01/09/2026)**
+
+- Misura iniziale: First Load JS massimo osservato 403 kB su `/athlete/calendar`; wrapper di rotta senza hook/browser API marcati Client Component; `BottomNavigation` richiedeva `view=full` solo per il conteggio unread.
+- Interventi: sei wrapper resi Server Component; loader dashboard morti rimossi dal codice eseguito; `GET /api/athlete/messages?countOnly=1` restituisce solo `unreadMessageCount` e la navigazione conserva abort/reload su evento read.
+- Verifica finale: `next build` compilato con successo; Jest 58 suite/189 test superati; `git diff --check` superato. Il build finale mantiene First Load JS condiviso a 102 kB e le route interattive compilano senza errori.
+
+**Prompt `/goal`**
+```text
+/goal G10.4
+Ottimizza performance e bundle solo sulla base di problemi misurati, riducendo Client Components e richieste duplicate senza riscritture.
+```
+
+---
+
+## G10.5 — Cleanup legacy controllato
+
+**Prerequisito**  
+Solo dopo audit accessibilità/PWA/performance.
+
+**Task**
+- [x] Cercare componenti `cs-*`/legacy non più referenziati.
+- [x] Rimuovere solo codice sicuramente morto.
+- [x] Eliminare duplicazioni introdotte dalla migrazione.
+- [x] Nessuna rinomina massiva.
+- [x] Build dopo il gruppo di rimozioni.
+
+**Esito G10.5 (01/09/2026)**
+
+- Rimossi: `DocumentsManager.old`, `PaymentsManager.backup.tsx`, `calendold`, `LatestMessagesPanel.tsx`, `UpcomingEventsPanel.tsx`, `BalanceReport.tsx`, `ImportManager.tsx`, `UserFormModal.tsx` e `ProtectedRoute.tsx`.
+- Evidenza: ricerca dei riferimenti nei sorgenti senza occorrenze residue; `Textarea` e gli helper/componenti non chiaramente legacy sono stati lasciati intatti.
+- Verifica: `npx tsc --noEmit`, Jest 58 suite/189 test, `npm run build` e `git diff --check` superati.
+
+**Prompt `/goal`**
+```text
+/goal G10.5
+Rimuovi esclusivamente legacy non più referenziato dopo il redesign. Evita rinomine massive e verifica build/test dopo il cleanup.
+```
+
+---
+
+## G10.6 — E2E finale sulla matrice completa
+
+### Viewport
+- 320×568
+- 375×812
+- 390×844
+- 768×1024
+- 1024×768
+- 1440×900
+
+### Atleta
+- no team;
+- one team;
+- multi-team;
+- jersey diversi;
+- no events;
+- attendance;
+- deadline;
+- conflicts;
+- duplicate messages;
+- attachments;
+- fees;
+- championships.
+
+### Famiglia
+- one child;
+- multi-child;
+- multi-team child;
+- full/partial permissions;
+- relation removed;
+- denied deep link;
+- subject switch overlay/fetch.
+
+### Coach
+- one/multi team;
+- events;
+- attendance;
+- convocations;
+- messages.
+
+### Admin
+- grouped nav;
+- operational dashboard;
+- tables;
+- bulk;
+- drawer.
+
+### PWA
+- install/offline/update/push/logout.
+
+**Prompt `/goal`**
+```text
+/goal G10.6
+Esegui la matrice E2E finale prevista dal piano. Correggi solo regressioni dimostrate e registra ogni scenario eseguito.
+```
+
+---
+
+## G10.7 — Documentazione finale e handoff
+
+**Task**
+- [ ] Aggiornare questo piano con tutti gli stati finali.
+- [ ] Documentare:
+  - token;
+  - primitive;
+  - shell;
+  - subject/team context;
+  - endpoint subject-aware;
+  - permission rendering;
+  - PWA limitations;
+  - test commands.
+- [ ] Annotare debito tecnico rimasto.
+- [ ] Annotare eventuali feature non abilitate perché backend non pronto.
+- [ ] Non cancellare le motivazioni architetturali utili.
+
+**Prompt `/goal`**
+```text
+/goal G10.7
+Completa la documentazione del redesign, aggiorna il registro di implementazione e prepara l'handoff tecnico senza aggiungere nuove feature.
+```
+
+---
+
+# 13. Checklist di Definition of Done per ogni schermata
+
+Una schermata può essere marcata completata solo se tutte le voci applicabili sono vere.
+
+## Visuale e layout
+- [ ] Usa token canonici.
+- [ ] Usa la shell corretta.
+- [ ] Non duplica titolo e navigazione.
+- [ ] Nessun overflow ai viewport richiesti.
+- [ ] Safe-area rispettata.
+- [ ] Bottom nav/banner non coprono contenuti.
+- [ ] Nessuna card annidata senza motivo.
+- [ ] Rosso usato con disciplina.
+- [ ] Nessuna emoji come icona.
+- [ ] Tabular nums per importi/orari/classifiche.
+
+## Contesto
+- [ ] Account e subject non sono confusi.
+- [ ] Team context visibile quando necessario.
+- [ ] Un solo team → selector omesso.
+- [ ] Multi-team → default Tutte le squadre dove previsto.
+- [ ] Cambio subject resetta il team.
+- [ ] Dati multi-team deduplicati solo dove previsto.
+- [ ] Jersey/quote/convocazioni restano team-specific.
+
+## Dati e sicurezza
+- [ ] Nessuna autorizzazione affidata al client.
+- [ ] `subjectProfileId` validato server-side.
+- [ ] `teamId` validato server-side.
+- [ ] Nessun service role nel browser.
+- [ ] Nessuna modifica schema/RLS non approvata.
+- [ ] Route/deep link preservati.
+- [ ] Nessun dato non supportato dal backend inventato.
+
+## Stati
+- [ ] Initial loading.
+- [ ] Refresh.
+- [ ] Empty.
+- [ ] Filtered empty.
+- [ ] Permission denied.
+- [ ] Offline.
+- [ ] Unexpected error.
+- [ ] Mutation pending/success/error quando applicabile.
+- [ ] Rollback visibile quando si usa optimistic UI.
+
+## Accessibilità
+- [ ] Focus visibile.
+- [ ] Keyboard.
+- [ ] 44×44 touch.
+- [ ] aria-current.
+- [ ] aria-pressed.
+- [ ] aria-expanded.
+- [ ] Dialog accessibile.
+- [ ] No color-only.
+- [ ] Reduced motion.
+- [ ] Zoom 200%.
+- [ ] Contrasto AA.
+
+## PWA
+- [ ] Nessuna mutation sembra riuscita offline.
+- [ ] Nessun payload privato in Cache Storage.
+- [ ] Offline banner corretto.
+- [ ] Update non distrugge form dirty.
+- [ ] Deep link push passa comunque dall'autorizzazione applicativa.
+
+## Verifiche tecniche
+- [ ] TypeScript/check configurato.
+- [ ] Test mirati.
+- [ ] Build quando pertinente.
+- [ ] E2E quando pertinente.
+- [ ] Responsive review.
+- [ ] Review diff.
+- [ ] Il registro di questo piano è aggiornato.
+
+---
+
+# 14. Regole per i goal che toccano API e servizi server
+
+Per evitare implementazioni fragili da parte di un modello medio, ogni goal backend deve seguire questo ordine:
+
+1. **Leggere l'handler esistente.**
+2. **Identificare l'helper auth già usato.**
+3. **Definire schema input Zod.**
+4. **Risolvere account e subject server-side.**
+5. **Recuperare l'insieme di team autorizzati.**
+6. **Validare eventuale team richiesto contro quell'insieme.**
+7. **Eseguire query dati.**
+8. **Mappare il risultato in DTO stabile.**
+9. **Mantenere i campi legacy quando richiesto.**
+10. **Aggiungere test positivo e negativo.**
+11. **Non cambiare RLS per “far passare” il test.**
+
+### Pattern concettuale
+
+```text
+request
+  ↓
+parse + Zod
+  ↓
+requireAccountContext
+  ↓
+requireSubjectAthleteContext (se serve un subject)
+  ↓
+resolveAuthorizedTeams(subject/account)
+  ↓
+validate requested team/championship
+  ↓
+service query
+  ↓
+DTO mapper
+  ↓
+response
+```
+
+Il client può inviare una preferenza di contesto, ma non deve mai trasformarla in autorizzazione.
+
+---
+
+# 15. Regole per i goal che toccano stato client
+
+Per subject/team/filter:
+
+- tenere separati `account`, `subject`, `team`, `filter`;
+- nessun payload personale completo in localStorage;
+- abortire richieste obsolete;
+- evitare race condition in cui la risposta del subject A sovrascrive il subject B;
+- resettare dipendenze quando cambia la chiave superiore:
+  - account cambia → reset subject/team/cache UI;
+  - subject cambia → reset team/feature state;
+  - team cambia → reset solo filtri/dettagli incompatibili;
+- non persistere drawer/modal aperti;
+- non usare lo stato client per nascondere una vulnerabilità server.
+
+---
+
+# 16. Regole per responsive e densità
+
+## Mobile atleta/famiglia/coach
+- gutter 16 px;
+- sezioni distanziate 24 px;
+- bottom nav persistente;
+- detail sheet/fullscreen;
+- default agenda/list;
+- massimo 5 destinazioni;
+- niente sidebar admin-style.
+
+## Tablet
+- 20–24 px gutter;
+- 2 colonne solo dove migliora lettura;
+- non mostrare contemporaneamente bottom nav e sidebar;
+- test touch.
+
+## Desktop atleta/famiglia
+- max-width 960–1080 px;
+- contenuto centrato;
+- detail drawer;
+- niente sidebar sovradimensionata.
+
+## Desktop admin
+- max 1440 px;
+- sidebar + topbar;
+- righe tabella ≥48 px;
+- densità maggiore;
+- toolbar/filtri separati dal PageHeader.
+
+---
+
+# 17. Regole per copy e stati
+
+Copy canonici da non variare senza motivo:
+
+**Famiglia**
+```text
+Area familiare
+Stai visualizzando Luca Rossi
+```
+
+**Offline**
+```text
+Sei offline. Alcuni contenuti potrebbero non essere aggiornati e le modifiche non sono disponibili.
+```
+
+**Update**
+```text
+Aggiorna ora
+Più tardi
+```
+
+**Attendance**
+```text
+Partecipo
+Forse
+Non partecipo
+Da confermare
+```
+
+Evitare:
+- “Il mio profilo” quando il subject è un figlio;
+- “Paga” senza payment flow;
+- “Salvato offline”;
+- “Sincronizzeremo più tardi”;
+- generic subtitle ripetuti tipo “Area Atleta” sotto ogni titolo;
+- status comunicati solo con colore.
+
+---
+
+# 18. Cose che Codex non deve fare anche se sembrano scorciatoie
+
+- Non aggiungere una libreria UI per accelerare.
+- Non sostituire Radix/Lucide.
+- Non migrare a un altro state manager.
+- Non creare una seconda service worker.
+- Non cacheare API per “migliorare offline”.
+- Non usare localStorage come cache dati utente.
+- Non creare un `currentUser` ambiguo che mescoli account e subject.
+- Non usare il ruolo legacy del profilo come fonte autorevole.
+- Non usare `ownerProfileId` per implementare la famiglia.
+- Non decidere che “prima squadra” equivale a squadra attiva.
+- Non deduplicare quote, jersey o convocazioni tra squadre.
+- Non rimuovere route perché “non più presenti nella nav”.
+- Non cambiare DB/RLS per rendere più semplice un endpoint.
+- Non trasformare tutta l'app in Client Component.
+- Non eseguire refactor globale durante un goal visuale.
+- Non creare CTA senza backend reale.
+- Non dichiarare un gate superato senza test effettivamente eseguiti.
+
+---
+
+# 19. Strategia consigliata per commit/PR
+
+Quando possibile, mantenere un commit o una PR logicamente vicina a un goal.
+
+Naming suggerito:
+
+```text
+redesign/G1.1-design-tokens
+redesign/G1.8-team-context
+redesign/G2.3-dashboard-attendance
+redesign/G5.2-subject-aware-championships
+redesign/G7.3-family-subject-switch
+```
+
+Ogni descrizione dovrebbe contenere:
+
+```text
+Goal:
+Scope:
+Files principali:
+Contratti dati cambiati:
+Autorizzazione:
+Test eseguiti:
+Screenshot/viewport:
+Known issues:
+Next goal:
+```
+
+Non è necessario forzare un branch diverso per ogni goal se il workflow del repository non lo prevede; la cosa importante è che il diff resti facilmente revisionabile.
+
+---
+
+# 20. Gate tra le fasi
+
+## Gate Fase 0 → 1
+- baseline route pronta;
+- inventario UI pronto;
+- auth/data map pronta;
+- test baseline noti.
+
+## Gate Fase 1 → 2
+- foundation stabile;
+- no overflow 375;
+- safe area;
+- AppHeader;
+- BottomNavigation;
+- switcher;
+- feedback;
+- no auth regression.
+
+## Audit gate Fase 1 — 27 agosto 2026
+
+Esito: **PASS WITH ISSUES**. I goal G1.1–G1.13 risultano marcati completati,
+ma il gate non viene marcato come superato: l'ispezione del codice ha rilevato
+problemi di comportamento e di verifica che devono essere considerati prima di
+iniziare l'implementazione della Fase 2.
+
+Evidenze eseguite in questa revisione: `npx tsc --noEmit` (pass), `npm run lint`
+(pass, con warning di deprecazione `next lint`), revisione del diff locale e
+della history git. Non esiste ancora un commit che contenga l'implementazione
+G1: le modifiche sono presenti nel working tree della branch `redesign`.
+
+Issue rilevate (stato aggiornato dopo la prima remediation):
+
+1. **RISOLTA** — `BottomNavigation` è visibile solo fino a 767px, mentre `cs-sidebar` viene
+   nascosta già a 768px: a quella larghezza non è disponibile né la navigazione
+   laterale né quella inferiore. Il breakpoint della bottom navigation e del
+   relativo update banner è stato portato a `max-width: 768px`, mantenendo una
+   sola navigazione touch.
+2. **RISOLTA** — `FeedbackState` aveva rimosso il wrapper `cs-card`
+   precedentemente usato da `EmptyState`/`ErrorState`; i consumer non migrati
+   potevano quindi perdere card, bordi e spaziatura canonici. I due wrapper
+   legacy ora vengono ripristinati direttamente nei rispettivi adapter.
+3. **RISOLTA** — Il badge messaggi della bottom navigation era esposto solo
+   tramite la prop opzionale `unreadCount`, ma `LayoutShell` non la alimentava.
+   `BottomNavigation` ora carica il conteggio unread dall'endpoint messaggi
+   subject-aware e annulla la richiesta quando il componente cambia contesto.
+4. **RISOLTA PARZIALMENTE** — `SubjectSwitcher` è ora montato nell'header
+   dell'area familiare e visibile anche su mobile; `TeamSwitcher` resta
+   correttamente non forzato finché una feature non fornisce i team disponibili.
+   Il flusso visuale team-specifico resta quindi da completare nella feature che
+   lo abiliterà.
+5. **RISOLTA PARZIALMENTE** — sono stati rieseguiti unit test, build, typecheck,
+   lint e diff check dopo le remediation; la matrice E2E/responsive completa
+   resta da eseguire perché il comando Playwright non ha prodotto un risultato
+   utilizzabile nell'ambiente corrente.
+6. **RISOLTA** — `AppHeader` mostra il badge account come link azionabile verso
+   il profilo del ruolo corrente (o dashboard per account familiare), oltre al
+   logout.
+7. **RISOLTA PARZIALMENTE** — le option di `SubjectSwitcher` ora mostrano la
+   relazione disponibile e usano `Seleziona profilo` per account familiare;
+   attività/squadra restano non esponibili finché non sono presenti nel payload
+   `AccessibleProfile`.
+
+### Remediation completata — G1.R1
+
+- Issue: navigazione assente a 768px.
+- File: `src/app/globals.css`.
+- Modifica: breakpoint bottom navigation/update banner da `767px` a `768px`.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS** (warning noto
+  di deprecazione `next lint`).
+
+### Remediation completata — G1.R2
+
+- Issue: regressione visuale negli stati vuoti/errore.
+- File: `src/components/ui/FeedbackState.tsx`.
+- Modifica: `EmptyState` mantiene `cs-card py-12`, `ErrorState` mantiene
+  `cs-card py-8`; `LoadingState` resta invariato rispetto al comportamento
+  precedente.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS** (warning noto
+  di deprecazione `next lint`).
+
+### Remediation completata — G1.R3
+
+- Issue: badge messaggi non alimentato.
+- File: `src/components/navigation/BottomNavigation.tsx`.
+- Modifica: conteggio derivato da `/api/athlete/messages?view=full`, filtrato su
+  `is_read === false`, con `AbortController` e contesto soggetto.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS** (warning noto
+  di deprecazione `next lint`).
+
+### Remediation completata — G1.R4
+
+- Issue: switcher soggetto non integrato nella shell.
+- File: `src/components/navigation/LayoutShell.tsx`,
+  `src/components/navigation/AppHeader.tsx`, `src/app/globals.css`.
+- Modifica: il `SubjectSwitcher` viene passato all'header quando l'area attiva è
+  familiare; il contenitore context è visibile anche su viewport mobile.
+- Nota: `TeamSwitcher` rimane disponibile come controllo feature-owned e non
+  viene mostrato senza team caricati.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS** (warning noto
+  di deprecazione `next lint`).
+
+### Remediation completata — G1.R5
+
+- Issue: account badge non azionabile.
+- File: `src/components/navigation/LayoutShell.tsx`.
+- Modifica: `UserBadge` è un link accessibile con destinazione derivata dal
+  ruolo (`/admin/profile`, `/coach/profile`, `/athlete/profile`).
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS** (warning noto
+  di deprecazione `next lint`).
+
+### Remediation completata — G1.R6
+
+- Issue: metadata insufficiente nel SubjectSwitcher.
+- File: `src/components/navigation/SubjectSwitcher.tsx`.
+- Modifica: aggiunta relazione nelle option e copy non ambiguo per area
+  familiare; nessun metadata attività/squadra inventato.
+- Verifiche: `npx tsc --noEmit` **PASS**, `npm run lint` **PASS** (warning noto
+  di deprecazione `next lint`).
+
+### Remediation completata — G1.R7
+
+- Issue: evidenza runtime post-Fase 1 incompleta.
+- Verifiche eseguite: `npm test -- --runInBand` **PASS** (1 suite, 3 test),
+  `npm run build` **PASS** (84 pagine), `npx tsc --noEmit` **PASS**,
+  `npm run lint` **PASS**, `git diff --check` **PASS**.
+- Nota: `npm run test:e2e -- --reporter=line` non ha restituito un esito
+  Playwright utilizzabile e non viene dichiarato come test superato; rimane
+  necessaria la verifica manuale/E2E a 320/375/768/1440px.
+
+La Fase 2 è quindi identificata ma il suo gate resta aperto fino alla chiusura
+o all'accettazione esplicita di queste issue.
+
+## Gate Fase 2 → 3
+- dashboard usa dati reali multi-team;
+- attendance robusta;
+- jersey per team;
+- states completi.
+
+## Audit gate Fase 2 — 28 agosto 2026
+
+**Verdetto: FAIL**
+
+La Fase 2 non è autorizzata a passare alla Fase 3. I marker G2.1–G2.9
+sono stati verificati contro il codice corrente, il diff locale, la history e
+i gate disponibili. Sono presenti almeno una non conformità High e ulteriori
+gap funzionali/di verifica.
+
+### Evidenze eseguite
+
+- `npx tsc --noEmit` **PASS** (eseguito anche dopo la build).
+- `npm run lint` **PASS**, con warning di deprecazione di `next lint`.
+- `npm test -- --runInBand` **PASS**: 8 suite, 30 test.
+- `npm run build` **PASS**: 84 pagine generate.
+- `git diff --check` **PASS**.
+- `npx playwright test --list` **PASS**: 25 test rilevati, inclusi i 2 nuovi scenari dashboard.
+- Browser locale: `/login` risponde HTTP 200 e `/dashboard` redirige a
+  `/login?next=%2Fdashboard` senza sessione.
+- E2E autenticati non eseguibili: Chromium headless termina con `SIGTRAP`
+  durante `global-setup.ts`, prima del login, con `kill EPERM`.
+- Il service worker esclude API, richieste RSC e navigazioni autenticate dal
+  caching runtime; il banner PWA offline è presente.
+
+### Problemi rilevati
+
+1. **High — contesto squadra non disponibile nella dashboard**
+   - **Requisito violato:** `re_design.md` 4.3–4.4 e 8.3; con più squadre il
+     default deve essere `Tutte le squadre` e il team context deve essere
+     visibile/selezionabile. Corrisponde anche al controllo account/subject/team
+     richiesto dal gate.
+   - **Comportamento attuale:** `TeamProvider` è montato ma
+     `AthleteDashboard` non chiama `setTeams`, non renderizza `TeamSwitcher` e
+     non applica `selectedTeamId` ai dati. Il payload API restituisce `teams`,
+     ma il consumer lo ignora.
+   - **Comportamento atteso:** per un atleta multi-team mostrare il contesto
+     `Tutte le squadre`, consentire il filtro per squadra, resettarlo al cambio
+     subject e mantenere l’autorizzazione esclusivamente server-side.
+   - **File/componenti:** `src/components/athlete/AthleteDashboard.tsx`,
+     `src/context/TeamContext.tsx`, `src/components/navigation/TeamSwitcher.tsx`,
+     `src/components/navigation/LayoutShell.tsx`.
+   - **Remediation consigliata:** G2.R1 — alimentare il context dal payload
+     dashboard, montare il selettore nella shell/header atleta e passare il
+     filtro soltanto a query/API già autorizzate; aggiungere test di reset e
+     non-escalation.
+
+2. **Medium — tipo evento presente nel contratto ma non presentato**
+   - **Requisito violato:** `re_design.md` 9.1, “Prossimo impegno” deve mostrare
+     il tipo evento.
+   - **Comportamento attuale:** l’API e il tipo TypeScript conservano
+     `event_kind`, ma la riga dashboard mostra solo titolo, data/ora, luogo e
+     team.
+   - **Comportamento atteso:** mostrare una label esplicita e accessibile, ad
+     esempio Allenamento/Partita/Riunione/Altro, senza inventare il valore se
+     assente.
+   - **File/componenti:** `src/components/athlete/AthleteDashboard.tsx`,
+     `src/app/api/athlete/dashboard/route.ts`.
+   - **Remediation consigliata:** G2.R2 — aggiungere formatter/label UI e test
+     per tipo assente e tipi supportati.
+
+3. **Medium — success mutation non espresso tramite FeedbackState**
+   - **Requisito violato:** `re_design.md` 8.9 e G2.8, success mutation.
+   - **Comportamento attuale:** `AttendanceControl` espone pending e rollback
+     con errore, ma dopo il salvataggio riuscito aggiorna soltanto il testo
+     della risposta; non usa `FeedbackState` `success` né un feedback equivalente
+     esplicito.
+   - **Comportamento atteso:** confermare in modo accessibile l’avvenuto
+     salvataggio, mantenendo l’aggiornamento ottimistico e il rollback in caso
+     di errore.
+   - **File/componenti:** `src/components/athlete/AttendanceControl.tsx`,
+     `src/components/athlete/AthleteDashboard.tsx`,
+     `src/components/ui/FeedbackState.tsx`.
+   - **Remediation consigliata:** G2.R2 — aggiungere feedback successivo
+     temporaneo/non invasivo e test della transizione success/error.
+
+4. **Medium — denied dashboard non usa il primitive FeedbackState**
+   - **Requisito violato:** uniformità della grammatica UI in `re_design.md`
+     8.9.
+   - **Comportamento attuale:** il ramo 403 usa `DelegatedAccessDenied`, un
+     `cs-card` custom con `role=alert`; il primitive `FeedbackState` `denied`
+     esiste ma non è usato dalla dashboard.
+   - **Comportamento atteso:** stato denied coerente con il design system,
+     preservando copy contestuale e CTA di ritorno.
+   - **File/componenti:** `src/components/athlete/AthleteDashboard.tsx`,
+     `src/components/athlete/DelegatedAccessDenied.tsx`,
+     `src/components/ui/FeedbackState.tsx`.
+   - **Remediation consigliata:** G2.R2 — comporre il denied con
+     `FeedbackState` o trasformare l’adapter custom in un wrapper del primitive.
+
+5. **Low — messaggio diretto senza team perde il mittente**
+   - **Requisito violato:** `re_design.md` 9.1, preview messaggi con mittente.
+   - **Comportamento attuale:** nel ramo API `teamIds.length === 0` la risposta
+     diretta non include `created_by_profile`; la preview ricade su “Mittente
+     non disponibile” anche quando il join era disponibile.
+   - **Comportamento atteso:** mantenere il mittente per messaggi diretti,
+     lasciando vuoto soltanto quando il dato non esiste davvero.
+   - **File/componenti:** `src/app/api/athlete/dashboard/route.ts`.
+   - **Remediation consigliata:** G2.R2 — riusare la normalizzazione messaggi
+     anche nel ramo senza membership e aggiungere test di privacy/direttezza.
+
+6. **Medium — verifica runtime responsive/offline autenticata incompleta**
+   - **Requisito violato:** gate responsive 320/375/768/1440, accessibilità
+     runtime e offline della Fase 2.
+   - **Comportamento attuale:** gli scenari E2E sono stati aggiunti e scoperti,
+     ma non eseguiti: il browser headless fallisce in bootstrap prima dei test.
+     Le verifiche statiche e Jest non dimostrano assenza di overflow né il
+     comportamento offline su una dashboard autenticata.
+   - **Comportamento atteso:** esecuzione riuscita degli E2E autenticati con le
+     credenziali `E2E_*_LOCAL`, inclusi viewport e perdita connessione.
+   - **File/componenti:** `tests/e2e/athlete-dashboard.spec.ts`,
+     `tests/e2e/global-setup.ts`, ambiente Playwright/browser.
+   - **Remediation consigliata:** ripetere il gate in un ambiente Chromium
+     funzionante; non richiede modifica applicativa finché non emergono failure.
+
+7. **Low — refactor/debito tecnico fuori dal percorso dashboard**
+   - **Requisito violato:** regola di scope incrementale del piano.
+   - **Comportamento attuale:** `AthleteDashboard.tsx` conserva loader Supabase
+     client legacy non referenziati (`loadActiveSeason`, `loadTeamMemberships`,
+     `loadUpcomingEvents`, `loadUnreadMessages`, `loadFeeInstallments`) e log
+     diagnostici nel caricamento dettaglio squadra; il working tree contiene
+     inoltre modifiche cumulative di foundation/PWA senza commit separati.
+   - **Comportamento atteso:** nessun refactor estraneo nel gate; rimozione o
+     isolamento del codice morto in un goal dedicato, con diff revisionabile.
+   - **File/componenti:** `src/components/athlete/AthleteDashboard.tsx`,
+     modifiche cumulative in `src/app/globals.css`, navigation e PWA.
+   - **Remediation consigliata:** non intervenire in G2.V; valutare cleanup
+     separato dopo le remediation funzionali.
+
+### Stato remediation
+
+- **G2.R2 — Tipo evento dashboard:** completato il 28/08/2026 per il perimetro
+  formatter/label. `eventKindLabel` espone le label italiane dei quattro valori
+  contrattuali e restituisce `null` per dato assente o sconosciuto; la riga
+  “Prossimo impegno” mostra il badge solo quando la label è disponibile. Test
+  unitari per tutti i tipi supportati, valori nullish, stringa vuota e valore
+  sconosciuto; typecheck, lint, Jest completo e build superati.
+- **G2.R2 — Feedback mutation presenza:** completato il 28/08/2026 per il
+  perimetro success/error. `AttendanceControl` mostra un `FeedbackState`
+  `success` temporaneo e non invasivo dopo il salvataggio, lo mantiene quando
+  il parent riflette il nuovo status e lo sostituisce con errore/rollback se un
+  tentativo successivo fallisce. Test aggiunti per successo, scadenza del
+  feedback e transizione success→error; 11 suite Jest/44 test, typecheck,
+  lint, build e `git diff --check` superati.
+- **G2.R2 — Denied dashboard:** completato il 28/08/2026. `DelegatedAccessDenied`
+  è ora un adapter sottile di `FeedbackState` con variante `denied`, copy
+  contestuale per sezione/profilo e CTA invariata verso `/dashboard`; il
+  primitive espone il denied come `role="alert"`. Aggiunto test di composizione,
+  accessibilità e link; 12 suite Jest/45 test, typecheck, lint, build e
+  `git diff --check` superati.
+- **G2.R2 — Messaggi diretti e privacy:** completato il 28/08/2026. La route
+  dashboard riusa `buildUnreadMessages` anche quando l’atleta non ha
+  membership, preservando `created_by_profile` e il conteggio/deduplica unread;
+  per i team il normalizzatore allega soltanto team presenti nella mappa già
+  autorizzata. Test aggiunti per mittente di un messaggio diretto e team non
+  autorizzato non propagato; 12 suite Jest/47 test, typecheck, lint, build e
+  `git diff --check` superati.
+- **G2.R2 — Mittente dashboard:** completato il 28/08/2026. Prima della
+  normalizzazione, la route arricchisce server-side i soli creatori dei
+  messaggi già restituiti dal contesto subject-aware, selezionando soltanto
+  `id`, `first_name` e `last_name`; il client privilegiato non attraversa mai
+  il boundary browser e auth/RLS/schema restano invariati. Verifiche: 32 suite
+  Jest/108 test, typecheck, lint, build e `git diff --check` superati.
+- **G2.R1 — Contesto team dashboard:** completata il 28/08/2026. Il payload
+  dashboard alimenta `TeamContext` soltanto con i team già autorizzati dal
+  server; `TeamSwitcher` è montato nella shell/header atleta e il filtro è
+  applicato localmente a eventi, match, messaggi, quote e membership senza
+  trasformarsi in un confine di autorizzazione. Il cambio subject svuota team,
+  selezione e dati precedenti; una selezione non presente nel payload viene
+  rifiutata. Verifiche: lint, typecheck, Jest (10 suite/34 test), build,
+  `git diff --check` e discovery Playwright (25 test) superati. Gli E2E runtime
+  autenticati restano non eseguibili in questa sessione per il crash SIGTRAP/
+  `kill EPERM` di Chromium prima del login.
+- **G2.R2 — Completezza dashboard/stati:** tipo evento, success/denied
+  FeedbackState, mittente dei messaggi diretti e relativi test.
+
+La Fase 3 resta bloccata fino alla chiusura e nuova verifica di G2.R1/G2.R2 e
+alla ripetizione del gate E2E runtime.
+
+## Gate Fase 3 → 4
+
+### Nota tecnica ambiente locale — 28 agosto 2026
+
+- Risolto errore runtime Next.js `ENOENT` su
+  `.next/server/pages/_document.js`: la cache di build era incompleta.
+- Rimosso e rigenerato esclusivamente `.next`; nessun file sorgente o dato
+  applicativo è stato modificato.
+- `npm run build` **PASS** e `_document.js` verificato nuovamente presente.
+- Il successivo messaggio `missing required error components, refreshing...`
+  era dovuto a due istanze Node concorrenti sulla porta 3000; dopo la chiusura
+  dei processi, pulizia della cache e riavvio di una sola istanza `next dev`,
+  `/login` è raggiungibile e `/dashboard` redirige correttamente al login.
+
+- calendario agenda;
+- deduplica/conflict;
+- attendance riusata;
+- team filter non autorizzativo.
+
+## Gate Fase 4 → 5
+- read state account+subject;
+- deduplica messaggi;
+- signed URL privacy.
+
+**Stato gate verificato il 28/08/2026: AUTORIZZATO con nota.** I tre criteri
+sono verificati nel codice e nei test locali; Jest (25 suite/86 test),
+TypeScript, lint, build e `git diff --check` sono verdi. La discovery
+Playwright rileva 31 test. Il runtime E2E autenticato non è stato completato
+per il blocco ambientale `listen EPERM` sulla porta 3000; questo resta una
+verifica operativa da ripetere, non una failure funzionale osservata.
+
+## Audit diagnostico UI dettagli e badge unread — 28/08/2026
+
+- **Dettaglio eventi e messaggi:** `EventDetailModal` e `MessageDetailModal`
+  usano il dialog condiviso Radix. Nel portal l'overlay e il contenuto sono
+  fratelli; `.cs-overlay` ha `z-index: 100`, mentre `.cs-modal`/`.cs-responsive-detail`
+  non hanno uno stacking level superiore. L'overlay con backdrop blur viene
+  quindi dipinto sopra il contenuto: il risultato coincide con gli screenshot
+  (schermata oscurata/blurred e dettaglio non visibile). I test DOM passano,
+  ma non coprono questa condizione visuale nel browser.
+- **Badge messaggi non letti:** `/api/messages/read` persiste correttamente il
+  read state account+subject e il manager aggiorna la propria lista locale.
+  `BottomNavigation`, però, ricarica il conteggio solo al cambio di account,
+  area o subject; la marcatura come letto non emette alcuna invalidazione verso
+  la bottom navigation. Inoltre `liveUnreadCount || unreadCount` conserva un
+  fallback stale quando il valore live diventa `0`. Questo spiega il badge che
+  resta su `2` dopo la lettura.
+- **Verifiche:** test mirati `EventDetailModal` e `MessageDetailModal` verdi
+  (2 suite, 8 test); `git diff --check` verde. Nessun file applicativo è stato
+  modificato durante questo audit. La verifica runtime E2E autenticata resta
+  da ripetere per il blocco ambientale già annotato (`listen EPERM` sulla porta
+  3000).
+- **Remediation completata:** `.cs-modal` ora ha `z-index: 101`, sopra
+  l'overlay; il read state confermato emette un evento locale minimale con
+  `messageId` e `subjectProfileId`, e `BottomNavigation` ricarica il conteggio
+  solo per il subject attivo. Il conteggio live `0` non ricade più su un valore
+  stale. Nessun dato personale o identificativo auth viene trasmesso nell'evento.
+- **File modificati:** `src/app/globals.css`,
+  `src/components/shared/MessageDetailModal.tsx`,
+  `src/components/navigation/BottomNavigation.tsx`, nuovo
+  `src/lib/messages/read-state-events.ts` e relativo test
+  `src/components/navigation/BottomNavigation.test.tsx`.
+- **Verifiche finali:** suite Jest completa 27/27 suite, 88/88 test; test mirati
+  3/3 suite, 9/9 test; `npx tsc --noEmit`, `npm run lint`, `npm run build`
+  (84 pagine) e `git diff --check` superati. Verifica browser autenticata su
+  localhost:3001: dialog evento e messaggio visibili; badge aggiornato da 5 a
+  4 dopo lettura confermata.
+- **Nota residua:** il browser ha segnalato un hydration mismatch preesistente
+  nell'header/layout durante la navigazione dev; non riguarda questi due flussi
+  e non impedisce l'apertura o l'aggiornamento verificati.
+
+## Audit successivo — contesto familiare e istanza locale — 28/08/2026
+
+- **Bottom navigation familiare:** la specifica richiede il riuso della shell
+  atleta in area famiglia con sole destinazioni autorizzate. Il codice precedente
+  la mostrava soltanto per atleta personale; ora è disponibile anche per
+  `family_member` e per atleta in `activeArea = family`, con Oggi sempre presente
+  e Calendario/Messaggi/Quote condizionati ai permessi del subject. Campionato e
+  Profilo restano esclusi finché non esistono i contratti delegati necessari.
+- **Layout:** il main riserva spazio alla barra quando esiste un subject
+  familiare selezionato; la griglia usa il numero effettivo di destinazioni,
+  evitando colonne vuote con 3 o 4 voci.
+- **Dettagli su `localhost:3000`:** durante la verifica la porta 3000 non era in
+  ascolto, quindi non è possibile attribuire lo screenshot a questa istanza
+  corrente senza riavviare quel server. L’istanza verificata su localhost:3001
+  mostrava correttamente dettagli evento/messaggio con overlay e modal distinti
+  (`z-index` 100/101). Prima di concludere una nuova failure runtime va verificato
+  che il browser stia servendo la build aggiornata e non un processo/cache
+  precedente.
+- **Verifiche:** aggiunto test famiglia/bottom navigation e layout dinamico; suite
+  completa 27/27 suite, 89/89 test, typecheck, lint e build 84 pagine superati.
+
+## Gate Fase 5 → 6
+- championship subject-aware;
+- nessun owner-only nella nuova feature;
+- selector team/championship robusto.
+
+## G5.V — Gate verifica Fase 5
+
+**Verdict: PASS — 28/08/2026**
+
+L'audit ha riesaminato G5.1–G5.7 e le remediation G5.R1–G5.R2 contro
+`re_design.md`, il codice corrente, diff/history, i gate tecnici e uno smoke
+autenticato reale su localhost:3000. Le issue High/Medium rilevate sono state
+risolte.
+
+### Risultati classificati e chiusure
+
+- **High — G5.1/G5.2, autorizzazione dati — RISOLTO in G5.R1:**
+  `src/components/athlete/ChampionshipsManager.tsx` esegue
+  `loadClubTeams(selectedChampionshipId)` direttamente da client su
+  `championship_club_teams`, senza subject/team scope. La policy locale
+  `championship_club_teams_auth_select` consente la lettura a qualunque utente
+  autenticato. Anche se il campionato iniziale deriva dal catalogo autorizzato,
+  la risposta può contenere club-team estranei e l'input client è manipolabile.
+  Atteso: ogni dato usato dal flusso atleta deve provenire dal grafo
+  subject → team → campionato → girone o da un servizio server autorizzato.
+  Il percorso atleta ora usa solo il catalogo server-scoped e il resolver
+  restringe `clubTeams` ai gironi autorizzati; regressione dedicata superata.
+- **Medium — Definition of Done stati — RISOLTO in G5.R2:**
+  `useChampionshipCatalog`, `useChampionshipGroupDetails` e
+  `useChampionshipConvocations` espongono ora lo stato di errore/rete senza
+  svuotare i dati; il manager mostra quindi retry e stati distinti. Atteso: loading, empty,
+  filtered-empty, error, denied e offline distinti e verificabili.
+-  Gli hook preservano i dati precedenti durante il refresh fallito e il manager
+  mostra stato esplicito con retry.
+- **Medium — G5.3 ordine richiesto — RISOLTO in G5.R2:** il manager rende
+  classifica, risultati recenti e calendario completo in quest'ordine.
+- **Low — G5.3 shell — RISOLTO in G5.R2:** rimosso il `PageHeader` duplicato;
+  resta un solo heading “Campionato”.
+- **Low/Medium — grammatica visuale — NOTA RESIDUA:** alcuni pannelli legacy
+  condivisi usano ancora classi `text-slate-*`/`border-slate-*` insieme ai token
+  CSRoma; non blocca il gate funzionale ma resta rifinitura visuale.
+- **Medium — naming classifica runtime — RISOLTO:** la route atleta arricchisce
+  la risposta della classifica con i nomi di tutte le squadre del girone tramite
+  il client server-side autorizzato; il client usa il label server-provided
+  prima del fallback all'UUID. La verifica browser post-fix non rileva UUID.
+- **Low — hydration runtime — RISOLTO:** il contesto dinamico dell'`AppHeader`
+  viene montato dopo l'hydration iniziale, mantenendo identico il markup
+  server/client. La verifica browser post-fix non registra errori console.
+- **Responsive/accessibility smoke — COMPLETATO:** con credenziali
+  `E2E_*_LOCAL` su localhost:3000 sono stati verificati i viewport
+  320/375/390/768/1024/1440; nessun overflow orizzontale e un solo heading
+  “Campionato”. L'account usato ha un solo percorso autorizzato, quindi i
+  selector condizionali non vengono renderizzati in questo smoke; accessible
+  name e percorso multi-selector restano coperti dalla spec Playwright e dai
+  test component.
+
+### Gate tecnici
+
+- `npm test -- --runInBand`: **PASS**, 32 suite / 107 test.
+- `./node_modules/.bin/tsc --noEmit`: **PASS**.
+- `npm run build`: **PASS**.
+- `npm run lint`: **PASS**, con warning di deprecazione `next lint`.
+- `git diff --check`: **PASS**.
+- `npm run typecheck`: non disponibile: script assente in `package.json`.
+
+### Stato e note
+
+### Chiusura G5.R1 — Autorizzazione club-team atleta
+
+- Il catalogo atleta trasferisce `clubTeams` soltanto dal risultato del resolver
+  server-side; `ChampionshipsManager` usa quei dati per il naming quando
+  `mode === 'athlete'` e non invoca la query client-side non filtrata.
+- Il resolver filtra `clubTeams` anche rispetto ai club-team presenti nei
+  gironi autorizzati, evitando leakage di un club-team estraneo nello stesso
+  campionato.
+- La route mantiene i controlli server-side per gruppo, campionato, match e
+  club-team; i test coprono gruppo fuori grafo, match/campionati non autorizzati
+  e club-team estraneo nel catalogo.
+- **Verifiche G5.R1:** test mirati 2 suite/8 test, `tsc --noEmit` e
+  `git diff --check` superati.
+
+### Chiusura G5.R2 — Stati, ordine e verifica responsive/accessibility
+
+- I hook campionato espongono `status` (`loading`, `ready`, `error`, `denied`,
+  `offline`) e preservano i dati durante un refresh fallito; il manager mostra
+  `FeedbackState` con retry e separa empty valido e filtered-empty.
+- Convocazioni e dettaglio girone mostrano loading/error/denied/offline con
+  retry; gli errori HTTP non vengono più trattati come classifica o calendario
+  vuoti.
+- La pagina ha un solo heading “Campionato” e l'ordine è classifica → risultati
+  recenti → calendario completo on demand.
+- Aggiunta e registrata in `playwright.config.ts` la spec
+  `tests/e2e/athlete-championships.spec.ts` con viewport
+  320×568, 375×812, 390×844, 768×1024, 1024×768 e 1440×900, controllo overflow,
+  titolo unico e accessible name dei selettori. La discovery Playwright rileva
+  33 test; lo smoke autenticato locale è stato inoltre eseguito sui sei
+  viewport richiesti.
+- **Verifiche G5.R2:** test dedicati stati 2 suite/4 test, suite completa
+  32 suite/107 test, `tsc --noEmit`, lint, build e `git diff --check` superati.
+
+G5.R1 e G5.R2 sono chiuse. Il gate G5.V è **PASS**; il passaggio alla Fase 6 è
+autorizzato dopo la correzione e la riverifica dei due residui runtime.
+
+Il 500 precedente della classifica non è più riprodotto nel codice verificato:
+la route autorizza il gruppo prima di leggere la materialized view con client
+server-only. Le remediation G5.R1–G5.R2 sono state applicate e riverificate.
+
+## Gate Fase 6 → 7
+- fees con team id;
+- profilo subject-aware;
+- PWA settings account-level.
+
+## Gate Fase 7 → 8
+- famiglia testata con più figli;
+- nessun leakage;
+- permission matrix robusta.
+
+## G7.V — Verifica Fase 7 — 31 agosto 2026
+
+**Verdict: PASS WITH ISSUES.** La build, il typecheck, il lint, il diff check e
+la suite Jest sono superati (`47` suite / `162` test). L’audit dei Route Handler
+conferma la risoluzione server-side del subject per dashboard, calendario,
+messaggi, quote, campionato, convocazioni, dettaglio evento e profilo; il
+client mantiene gli stati permission-aware e il reset subject/team.
+
+Rilievi aperti:
+
+- **Medium — responsive/accessibilità E2E familiare non verificata:** la spec
+  Playwright `family-profile-selection.spec.ts` contiene un solo scenario
+  desktop e non esercita i viewport obbligatori `320`, `375` e `768`; la spec
+  responsive esistente è per il profilo atleta personale. Il run dedicato
+  familiare non ha restituito esito nella sessione ed è stato interrotto.
+  Atteso: smoke familiare autenticato sui viewport obbligatori con overflow,
+  focus, touch target e navigazione verificati.
+- **Medium — permission rendering non coerente con il prodotto:**
+  `FamilyMemberDashboard.tsx` può mostrare “Firma documenti” nelle “Sezioni
+  disponibili” quando `sign_documents` è vero, benché il flusso firma non
+  esista e G7.9 richieda di non abilitarlo. Atteso: nessuna CTA o promessa di
+  firma finché il flusso non è implementato.
+- **Risolto il 31/08/2026 — leakage di stato nella mutation RSVP:**
+  `AthleteDashboard.tsx` ora associa la richiesta a una chiave subject, abortisce
+  la mutation al cambio profilo e verifica la chiave prima di aggiornare
+  `selectedEvent`/`upcomingEvents`; aggiunta regressione dedicata in
+  `AthleteDashboard.test.tsx`.
+- **Low — copertura PWA/accessibilità familiare indiretta:** i controlli
+  Cache Storage e responsive/accessibility PWA esistenti coprono principalmente
+  i percorsi atleta personale; non è presente una prova equivalente con
+  subject familiare e permessi parziali.
+
+Non sono state applicate remediation né creati goal G7.Rx: il verdict non è
+`FAIL`, ma il gate Fase 7 → 8 non viene dichiarato superato finché i rilievi
+Medium e la verifica E2E familiare non vengono risolti.
+
+### Verifica Preview parziale — 3 settembre 2026
+
+- Login del genitore riuscito sulla Preview Vercel con il database staging.
+- Area familiare verificata con due profili collegati (`AtletaU17 prova` e
+  `AtletaU14 prova`), selezione esplicita e apertura del profilo delegato.
+- Cambio subject da U17 a U14 verificato: il contenuto principale non conserva
+  dati U17 dopo il cambio; il contenuto U14 viene caricato correttamente.
+- Responsive verificato a 320×568, 375×812, 390×844 e 768×1024 senza errori
+  visibili o indicatori di overflow nel contenuto.
+- Rilievo ancora aperto e confermato: nella card di selezione familiare viene
+  ancora mostrata la sezione “Firma documenti”, benché il flusso non esista.
+- La copertura PWA familiare con permessi parziali non è stata completata.
+
+## Gate Fase 8 → 9
+- coach multi-team stabile;
+- foundation confermata su terzo ruolo.
+
+## Gate Fase 9 → 10
+- admin migrato;
+- route preservate;
+- pattern gestionali consolidati.
+
+## G9.V — Verifica completa Fase 9
+
+**Verdetto: PASS WITH ISSUES** — 31/08/2026
+
+### Evidenze
+- G9.1–G9.8 ispezionati su shell, sidebar, dashboard, pattern gestionale e domini Sport, Persone, Comunicazione e Amministrazione.
+- `npm run test:e2e -- --project=admin-responsive-chromium --workers=1`: 3/3 test passati; verificate route/deep link, 768×1024, 1024×768, 1440×900, sidebar, focus/`aria-current`, overflow, tabella, filtri e drawer/modal.
+- `npx tsc --noEmit`: passato.
+- `npm test -- --runInBand`: 56 suite / 184 test passati.
+- `npm run build`: passato; build Next.js, linting e type checking inclusi.
+- `git diff --check`: passato.
+- Le Route Handler admin verificati usano `requireGlobalRole` oppure `requireRelationshipManager`; le policy RLS mantengono il vincolo server/database. PWA e Cache Storage restano coperti dai test trasversali esistenti.
+
+### Problemi rilevati — nessun Critical/High
+
+- **Medium — stati error/offline/denied non distinti nei manager — PARZIALMENTE RISOLTO il 31/08/2026.** `ActivitiesManager`, `PaymentsManager`, `MembershipFeesManager` e `InstallmentsManager` ora distinguono caricamento, errore, offline e accesso negato, con messaggio comprensibile e retry; anche la tabella rate per atleta non converte più un errore in lista vuota. La classificazione condivisa gestisce HTTP 401/403, errori di rete e il codice Supabase `42501`. `SeasonsManager` resta da completare in una remediation successiva.
+- **Medium — autorizzazione della pagina admin — RISOLTO il 31/08/2026.** `src/app/admin/layout.tsx` esegue `requireGlobalRole(..., 'admin')` server-side prima di montare le pagine figlie; account non autenticati vengono reindirizzati al login e account autenticati senza ruolo admin a `/unauthorized`. Le verifiche API/RLS restano invariate.
+- **Medium — copertura di verifica per il perimetro globale — RISOLTO il 31/08/2026.** `tests/e2e/admin-responsive.spec.ts` copre ora anche 320×568, 375×812 e 390×844 e include il flusso integrato Incassi: fixture API, selezione rata nel manager, apertura modal, conferma POST bulk e chiusura. Il test mantiene anche gli scenari desktop esistenti.
+- **Low — emoji residue nella UI admin — RISOLTO il 31/08/2026.** Le icone nei manager, modali, drawer e feedback condivisi sono state sostituite con componenti SVG di `lucide-react`, mantenendo label testuali e `aria-label` dove necessari. Nessuna emoji UI residua nei componenti admin coinvolti.
+
+### Remediation stati admin — 31 agosto 2026
+
+- File principali modificati: `src/components/admin/ActivitiesManager.tsx`, `PaymentsManager.tsx`, `MembershipFeesManager.tsx`, `InstallmentsManager.tsx`, con classificazione condivisa in `src/lib/ui/load-state.ts`.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm test -- --runInBand` (56 suite, 184 test), `npm run build`, `git diff --check`.
+- Nota residua: il rilievo complessivo resta `PASS WITH ISSUES` per viewport piccoli/bulk E2E e rimozione emoji, che non sono inclusi in questa remediation.
+
+### Remediation guard pagina admin — 31 agosto 2026
+
+- Aggiunto il boundary server `src/app/admin/layout.tsx`, dinamico per leggere la sessione cookie e condiviso da tutte le route `/admin/**`.
+- La pagina admin non viene montata per account non admin; il comportamento è redirect al login per 401 e pagina `/unauthorized` per 403. Errori inattesi vengono propagati al boundary Next.js.
+
+### Remediation icone UI admin — 31 agosto 2026
+
+- Sostituite le emoji nei manager `Activities`, `Events`, `Gyms`, `Messages`, `Payments`, `MembershipFees`, `Teams`, `Seasons`, `Users`, `BalanceReport`, nei modali/drawer admin e nei feedback Toast con icone SVG Lucide.
+- Verifica statica: nessuna occorrenza delle emoji censite nei componenti admin, `Toast` e dettaglio squadra.
+- Verifiche eseguite: `npx tsc --noEmit`, `npm test -- --runInBand` (57 suite, 187 test), `npm run build`, `git diff --check`.
+
+Non sono stati creati goal `G9.Rx`, perché il verdetto non è `FAIL`. Il gate Fase 9 → 10 resta **non pienamente superato** finché i rilievi Medium non vengono chiusi o formalmente accettati.
+
+## Gate finale
+- light/dark;
+- WCAG smoke;
+- PWA audit;
+- performance;
+- E2E matrix;
+- cleanup;
+- documentazione.
+
+## G10.9 — Aggiornamento PWA affidabile dopo il redesign
+
+**Problema registrato — 3 settembre 2026**
+
+Un account admin può visualizzare la dashboard precedente dopo un deploy e
+vedere il nuovo layout soltanto dopo hard refresh. Il banner non compare se il
+service worker è già attivo e non viene eseguito un nuovo controllo: il codice
+precedente controllava `registration.waiting` soltanto durante la registrazione
+iniziale o quando arrivava un `updatefound`.
+
+**Intervento eseguito**
+
+- aggiunto un controllo esplicito con `registration.update()`;
+- eseguito il controllo dopo la registrazione, al ritorno sulla scheda e al
+  focus della finestra;
+- mantenuto il banner e l’applicazione manuale dell’update, evitando reload
+  improvvisi durante attività dell’utente;
+- cambiata la cache degli asset Next.js da cache-first a network-first, con
+  fallback alla cache solo offline e nuova versione `csroma-static-v2`;
+- mantenuto il divieto di cache per HTML, RSC e API;
+- aggiunti test per aggiornamento riuscito e fallimento non bloccante;
+- non modificati autorizzazioni, route, dati o schema DB.
+
+**File principali:** `src/components/pwa/PwaBootstrap.tsx`,
+`src/lib/pwa/service-worker-registration.ts`, relativo test e
+`public/sw.js` (ispezionato, invariato).
+
+**Verifiche eseguite:** test PWA mirati `src/lib/pwa/service-worker-registration.test.ts`
+(4/4), `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+
+**Nota residua:** il 03/09/2026 la Preview ha mostrato il banner di update e
+l’azione “Aggiorna ora” ha completato il reload controllato. La verifica
+definitiva del cambio versione richiede comunque due deploy/versioni distinte
+di `sw.js` con una scheda/PWA già aperta.
+
+## Verifica Preview coach — modal evento e messaggio — 3 settembre 2026
+
+- **Rilievo:** dopo la correzione del posizionamento i dettagli erano visibili,
+  ma su mobile restavano a tutta altezza e non replicavano la UX della
+  produzione: card centrata, angoli arrotondati, intestazione con icona e
+  metadati compatti.
+- **Intervento:** introdotta la modalità `centeredOnMobile` in
+  `ResponsiveDetail`; i modal evento e messaggio ora usano card centrate con
+  altezza massima scrollabile, intestazioni coerenti con la produzione e
+  griglia a due colonne dai 380px in su. Le descrizioni accessibili restano
+  disponibili agli screen reader senza duplicare il testo visibile.
+- **File modificati:** `src/components/ui/ResponsiveDetail.tsx`,
+  `src/components/shared/EventDetailModal.tsx`,
+  `src/components/shared/MessageDetailModal.tsx`,
+  `src/app/globals.css` e i test dei due modal.
+- **Verifiche locali:** suite mirate 2/2, 8/8 test; typecheck, build e
+  `git diff --check` superati. Da verificare su Preview dopo il deploy:
+  card centrata a 320/375/390px e contenuto scrollabile senza clipping.
+
+## G10.10 — Remediation certificati medici admin
+
+**Problema registrato — 3 settembre 2026**
+
+La dashboard mostrava 30 certificati da verificare mentre la pagina Atleti
+mostrava 13 scaduti e 15 mancanti. La differenza era costituita da 2 certificati
+in scadenza entro 30 giorni, conteggiati dalla dashboard ma non esposti nella
+pagina di destinazione. La pagina Atleti non aveva inoltre un filtro per stato.
+
+**Intervento eseguito**
+
+- aggiunta la classificazione condivisa in
+  `src/lib/admin/certificate-status.ts`;
+- allineato il conteggio della dashboard alla classificazione condivisa;
+- aggiunta la metrica “In scadenza entro 30 giorni” nella pagina Atleti;
+- aggiunto il filtro `Stato certificato` con opzioni Tutti, Da verificare,
+  Scaduti, Mancanti, In scadenza entro 30 giorni e Regolari;
+- il link dell’alert apre `/admin/atleti?certificateStatus=attention`;
+- usata la fine della giornata locale per evitare discrepanze sulla data di
+  scadenza;
+- aggiunti test unitari per tutte le categorie e per la validità nel giorno di
+  scadenza.
+
+**File principali:** `src/lib/admin/certificate-status.ts`,
+`src/lib/admin/certificate-status.test.ts`,
+`src/components/admin/AdminDashboard.tsx`,
+`src/components/admin/AthletesManager.tsx`.
+
+**Verifiche eseguite:** test mirati della classificazione e PWA (7/7 test),
+`npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+
+## G10.11 — Contrasto alert dashboard dark mode
+
+**Problema registrato — 3 settembre 2026**
+
+In dark mode le card della sezione “Richiede attenzione” conservavano una
+superficie chiara derivata da `white`, mentre i token del testo secondario erano
+chiari e producevano un contrasto insufficiente. Titoli, descrizioni e frecce
+risultavano difficili da leggere.
+
+**Intervento eseguito**
+
+- aggiunto uno stile dark dedicato per la superficie delle card;
+- impostati testo primario e secondario sui token dark canonici;
+- resa l’icona warning leggibile su una superficie scura;
+- mantenuti warning, conteggi, focus-visible e hover come segnali semantici;
+- non modificati layout, contenuti, route o logica dei conteggi.
+
+**File principale:** `src/app/globals.css`.
+
+**Verifiche:** `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+
+## G10.12 — Sostituzione logo e icona PWA
+
+**Obiettivo**
+Adottare il nuovo logo CSRoma in tutta la PWA, mantenendo il marchio leggibile
+su superfici chiare e scure e facendolo diventare l’identità dell’app
+installata, delle notifiche e del fallback offline.
+
+**Asset disponibili**
+
+- `public/images/new_csroma_logo.svg` e `.png`: versione quadrata con sfondo
+  bianco, adatta alle superfici o icone che richiedono un canvas pieno;
+- `public/images/new_csroma_logo_no_bg.svg` e `.png`: versione quadrata
+  trasparente, preferita quando il logo deve integrarsi con header, card o
+  documento senza creare un riquadro bianco;
+- gli asset sorgente restano versionati in `public/images`; le derivate
+  installabili restano in `public/icons`.
+
+**Perimetro di sostituzione**
+
+1. **Shell e aree autenticata:** aggiornare `AppHeader` e ogni eventuale
+   presentazione condivisa del brand usando la versione trasparente, con
+   dimensioni/`sizes` coerenti e senza alterare layout, alt text o link alla
+   dashboard.
+2. **Autenticazione:** aggiornare login, recupero password e reset password
+   (`src/app/(auth)/login/page.tsx`, `src/app/forgot-password/page.tsx`,
+   `src/components/shared/ResetPasswordForm.tsx`), scegliendo la variante
+   trasparente o a sfondo bianco in funzione della superficie reale e
+   verificando light/dark mode, responsive e rapporto logo/titolo.
+3. **Documenti e anteprime:** aggiornare il logo opzionale generato da
+   `src/lib/utils/pdfGenerator.ts` e quello inserito da
+   `src/components/admin/BulkGenerateModal.tsx`. Mantenere il contratto
+   `has_logo`, il posizionamento e la compatibilità con HTML/PDF; usare una
+   sorgente PNG stabile per i renderer che non gestiscono SVG e verificare che
+   non compaia un doppio logo quando il contenuto ne contiene già uno.
+4. **Manifest e metadata:** aggiornare `src/app/manifest.ts` e
+   `src/app/layout.tsx` per descrizione, icone e Apple touch icon. Rigenerare
+   `public/icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` e
+   `apple-touch-icon-180.png` dal nuovo logo quadrato, senza deformarlo e con
+   area sicura maskable; aggiungere/verificare anche l’icona browser tramite la
+   convenzione metadata/app icon già supportata da Next.
+5. **Service worker, offline e push:** sostituire i vecchi path in
+   `public/sw.js`, `public/push-sw.js`, `public/offline.html`,
+   `src/app/api/notifications/test/route.ts`,
+   `src/app/api/admin/payments/route.ts` e
+   `src/server/messages/push-notifications.ts`. Il worker deve precaricare
+   solo i nuovi asset pubblici necessari; le notifiche devono usare l’icona
+   quadrata PWA e un badge coerente, senza introdurre cache di dati privati.
+6. **Ricerca finale:** eseguire una ricerca repository dei vecchi riferimenti
+   `logo_CSRoma`, `/favicon.ico` usato come badge e icone PWA obsolete; valutare
+   ogni occorrenza prima di rimuoverla, lasciando invariati i file storici o di
+   documentazione quando non sono runtime.
+
+**Vincoli**
+
+- non modificare route, autorizzazioni, schema/RLS o comportamento offline;
+- non invertire automaticamente il logo in dark mode;
+- non usare il logo rettangolare storico come fallback;
+- non sostituire indiscriminatamente il logo nei contenuti HTML gestiti dagli
+  utenti: aggiornare solo il logo applicativo aggiunto dal prodotto;
+- mantenere alt text accessibili e non usare il logo come unica informazione
+  semantica;
+- non introdurre nuove dipendenze: la generazione delle derivate deve usare
+  strumenti già presenti o un asset preparato e verificabile nel repository.
+
+**Acceptance criteria**
+
+- nessuna occorrenza runtime non intenzionale del logo storico nelle superfici
+  elencate;
+- header, login, recupero/reset password, documenti/PDF, offline e push mostrano
+  il nuovo marchio senza riquadri o deformazioni indesiderate;
+- `/manifest.webmanifest` punta alle nuove icone, con dimensioni e purpose
+  corretti; metadata, Apple icon, favicon e `theme-color` restano coerenti;
+- installazione PWA su browser desktop, Android e iOS usa la nuova icona;
+- notifiche di test e notifiche messaggi/pagamenti usano l’icona nuova;
+- service worker aggiorna la versione del precache quando necessario e non
+  conserva riferimenti obsoleti dopo attivazione;
+- verifica visuale ai viewport 320×568, 390×844, 768×1024 e 1440×900, in light
+  e dark mode, più test offline e build.
+
+**Verifiche richieste**
+
+- `npx tsc --noEmit`;
+- test Jest esistenti per manifest, service worker, PWA, notifiche e PDF, con
+  test mirati aggiunti solo dove il contratto attuale non copre i nuovi path;
+- `npm run build`;
+- `git diff --check`;
+- smoke browser/PWA per header, autenticazione, offline, manifest e notifica;
+- ispezione del diff e ricerca finale dei riferimenti al logo storico.
+
+**Prompt `/goal`**
+```text
+/goal G10.12
+Sostituisci il logo CSRoma in tutte le superfici runtime indicate nel piano e
+aggiorna manifest, metadata, icone installabili, service worker, offline e push.
+Usa la variante trasparente sulle superfici UI e quella con sfondo bianco o le
+derivate quadrate dove serve un canvas pieno. Mantieni route, autorizzazioni,
+contratti PWA e policy cache invariati; esegui tutte le verifiche del goal e
+aggiorna il registro.
+```
+
+**Esito G10.12 — 03 settembre 2026**
+
+- Aggiornati i riferimenti runtime in `AppHeader`, login, recupero/reset
+  password, generazione documenti/PDF e servizi di notifica. Le superfici UI e
+  i documenti usano `new_csroma_logo_no_bg.svg/.png`; le icone installabili e
+  push usano derivate PNG quadrate dal nuovo logo con sfondo bianco.
+- Rigenerate `public/icons/icon-192.png`, `icon-512.png`,
+  `icon-maskable-512.png` e `apple-touch-icon-180.png`; il metadata icon include
+  anche il nuovo SVG trasparente per il browser.
+- Aggiornati `public/sw.js` (precache `v3` con i nuovi asset), `public/push-sw.js`
+  e `public/offline.html`, senza introdurre cache di dati privati o modifiche
+  alla policy offline.
+- Esteso `tests/e2e/pwa.spec.ts` con verifica della maskable icon e risposta
+  HTTP delle quattro icone PNG.
+- Verifiche superate: `npx tsc --noEmit`, `npm test -- --runInBand`
+  (59 suite / 194 test), `npm run lint`, `npm run build`, `git diff --check`.
+- Verifica Preview del 03/09/2026: manifest, `sw.js`, `offline.html`, banner
+  di aggiornamento controllato e nuove icone risultano raggiungibili; il
+  fallback offline mostra il copy previsto e l’applicazione dell’update
+  ritorna alla dashboard coach senza errori console.
+- Nota residua: resta da completare lo smoke PWA su dispositivo fisico per
+  installazione, push, offline reale e aggiornamento tra due deploy. La
+  Preview è stata installata con successo anche sul dispositivo dell’utente.
+
+---
+
+# 21. Fase 11 — Linguaggio eventi e calendario mobile coach/admin
+
+## Obiettivo della fase
+
+Rendere il calendario di coach e amministrazione realmente utilizzabile da
+mobile senza creare due implementazioni parallele né degradare la vista
+operativa desktop. La vista mobile deve essere una griglia mensile leggera:
+segnala le tipologie presenti per giorno e, al tap, apre la giornata
+selezionata con la relativa agenda.
+
+La fase rende inoltre esecutivo lo standard trasversale di riconoscimento del
+tipo evento definito in §0.3.1. Non è un redesign delle regole di calendario:
+route, modelli dati, autorizzazioni, mutation, RLS e flussi esistenti restano
+invariati salvo il caricamento già autorizzato e limitato all'intervallo
+visibile quando necessario per le prestazioni.
+
+### Decisioni UX vincolanti
+
+- Sul touch non esiste un mouseover affidabile: il tap su un giorno seleziona
+  la data e mostra la sua agenda; un secondo tap su una riga apre il dettaglio
+  dell'evento. Non aprire direttamente il primo evento del giorno.
+- Su desktop, hover e focus tastiera possono mostrare una preview non
+  indispensabile; la medesima informazione deve restare raggiungibile con
+  click/tastiera e nella vista agenda.
+- La cella mobile mostra il numero del giorno e al massimo tre indicatori
+  circolari dei tipi presenti; un quarto tipo è reso con `+n`. Il giorno
+  corrente e quello selezionato usano anche bordo/superficie, non solo colore.
+- Una giornata con più eventi dello stesso tipo mostra un solo indicatore per
+  tipo: il conteggio e i titoli completi sono nell'agenda giornaliera.
+- Le colonne restano da lunedì a domenica. Eventi che attraversano più giorni
+  devono comparire in ciascun giorno pertinente senza creare duplicati nel
+  dettaglio della giornata.
+- A 768 px e oltre resta disponibile il calendario completo attuale, con vista
+  mese/settimana/elenco; la variante compatta serve principalmente 320–767 px.
+- Il calendario deve restare leggero: non renderizzare titoli di tutti gli
+  eventi dentro le celle e non caricare un volume indefinito di eventi per
+  riempire un solo mese.
+
+### Interazioni comuni
+
+```text
+‹  Settembre 2026  ›       Oggi
+L   M   M   G   V   S   D
+31  1•  2•• 3   4●  5   6
+7   8   9•• 10  11  12  13
+
+Legenda: Allenamento · Partita · Riunione · Altro
+
+Mercoledì 9 settembre · 2 eventi
+18:00  Allenamento U16                              ›
+20:30  Riunione staff                               ›
+```
+
+- Le frecce precedente/successivo e “Oggi” hanno target touch ≥44 px e
+  aggiornano un annuncio `aria-live` con il nuovo mese.
+- Il giorno selezionato ha un nome accessibile con data, numero eventi e tipi
+  presenti; Invio/Spazio produce lo stesso risultato del tap.
+- L'agenda è visibile sotto la griglia quando lo spazio lo consente; può usare
+  il `ResponsiveDetail` esistente come bottom sheet/fullscreen per viewport
+  bassi. Non usare tooltip come unica UI mobile.
+- Coach e admin possono selezionare un giorno vuoto per avviare la creazione
+  esistente con data precompilata, ma la mutation avviene solo dalla conferma
+  nel form già autorizzato.
+- Presenza, conflitto, scadenza e urgenza restano badge/icone/copy dedicati;
+  non alterano il colore della tipologia dell'evento.
+
+---
+
+## G11.1 — Token e contratto visivo del tipo evento
+
+**Obiettivo**
+Rendere lo standard Allenamento/Partita/Riunione/Altro una primitive condivisa
+e non quattro mapping locali divergenti.
+
+**Task**
+- [ ] Inventariare tutti i mapping correnti di `event_kind`, compresi colori
+  hard-coded e label duplicate.
+- [ ] Definire token semantici condivisi, con equivalenti light/dark e
+  contrasto AA: Allenamento → indigo/navy; Partita → rosso CSRoma; Riunione →
+  blu/teal; Altro → grigio neutro.
+- [ ] Esporre un unico mapper tipizzato per label, token, variante badge e
+  descrizione accessibile; il valore mancante/ignoto non deve essere
+  arbitrariamente classificato.
+- [ ] Mantenere testo e/o icona oltre al colore in ogni superficie.
+- [ ] Non modificare i colori semantici di errori, warning, presenze,
+  conflitti o selezione.
+
+**File da ispezionare per primi**
+- `src/lib/athlete/event-kind.ts`;
+- `src/components/athlete/AthleteCalendarManager.tsx`;
+- `src/components/coach/CoachCalendarManager.tsx`;
+- `src/components/admin/EventsManager.tsx`;
+- `src/components/calendar/FullCalendarWidget.tsx`;
+- `src/app/globals.css`.
+
+**Definition of Done**
+- un evento dello stesso `event_kind` riceve identico token e label in ogni
+  area; nessun mapping locale resta necessario;
+- colori verificati in light/dark senza dipendere dal testo bianco sopra un
+  colore variabile;
+- test del mapper per tutti e quattro i valori e per valore assente/sconosciuto.
+
+**Prompt `/goal`**
+```text
+/goal G11.1
+Introduci il contratto visivo condiviso per event_kind. Applica i token
+Allenamento→indigo/navy, Partita→rosso CSRoma, Riunione→blu/teal e
+Altro→grigio neutro senza riutilizzarli per presenze, conflitti, errori o
+selezione. Mantieni label accessibili e non modificare route, dati o
+autorizzazioni.
+```
+
+---
+
+## G11.2 — Adozione cross-role del tipo evento
+
+**Obiettivo**
+Applicare il contratto di G11.1 a ogni superficie che già presenta una
+tipologia di evento, senza estendere il perimetro a dati non presenti.
+
+**Task**
+- [x] Migrare dashboard, agenda, calendario, liste, dettaglio, filtri, badge e
+  legende dell'area atleta e familiare.
+- [x] Migrare le superfici coach, comprese home, calendario, lista e dettaglio.
+- [x] Migrare calendario, dashboard/eccezioni e dettaglio evento admin dove il
+  tipo viene già mostrato.
+- [x] Verificare che la legenda e i filtri usino label coerenti e che il filtro
+  non conceda accesso a eventi non autorizzati.
+- [x] Lasciare inalterati gli stati di presenza, conflitto e RSVP; aggiungere
+  testo dove il colore era l'unica differenza visibile.
+
+**Esito e verifiche — 03/09/2026**
+
+- `EventKindBadge` espone label e `aria-label` coerenti per Allenamento,
+  Partita, Riunione e Altro; valori assenti/sconosciuti restano non classificati.
+- `EventKindBadge.test.tsx` copre i quattro valori, classi condivise,
+  accessibilità e fallback; `AthleteAgenda`, `EventDetailModal` e
+  `CoachDashboard` verificano il rendering cross-role.
+- `npm test -- --runInBand`: 61 suite, 215 test superati; `npm run build`,
+  `npx tsc --noEmit` e `git diff --check` superati.
+- File di adozione: `src/components/ui/EventKindBadge.tsx`,
+  `src/components/{athlete,coach,admin,shared}/**`,
+  `src/components/calendar/SimpleCalendar.tsx` e
+  `src/lib/events/event-kind.ts`.
+- Nessuna modifica a route, API, dati, filtri autorizzativi o autorizzazioni;
+  il colore di selezione del calendario e gli stati operativi restano separati.
+
+**Definition of Done**
+- nessuna differenza visiva intenzionale di `event_kind` tra ruoli;
+- nessun colore raw del tipo evento rimasto nei componenti coinvolti;
+- verifica visuale light/dark e test di rendering per atleta/familiare,
+  coach e admin.
+
+**Prompt `/goal`**
+```text
+/goal G11.2
+Applica il contratto event_kind condiviso a tutte le superfici esistenti di
+atleta, familiare, coach e admin che mostrano il tipo evento. Non cambiare dati,
+permessi, filtri autorizzativi o route; sostituisci solo le presentazioni locali
+incoerenti e aggiungi le verifiche pertinenti.
+```
+
+---
+
+## G11.3 — Calendario mensile mobile condiviso
+
+**Obiettivo**
+Creare la variante mobile comune da usare per coach e admin, lasciando il
+widget desktop completo come vista ≥768 px.
+
+**Task**
+- [x] Estrarre un componente client riusabile che riceve solo eventi già
+  autorizzati, data corrente, data selezionata, callback navigazione e callback
+  apertura giornata/evento; non deve conoscere ruoli o query.
+- [x] Calcolare per giorno: tipi distinti, conteggio, eventi ordinati e
+  attraversamento multi-giorno in timezone `Europe/Rome`.
+- [x] Rendere la griglia 7×6 compatta, con celle touch-friendly e nessun
+  overflow orizzontale a 320 px.
+- [x] Mostrare legenda testuale, giorno corrente, selezione persistente mentre
+  si esplora il mese e agenda della giornata selezionata.
+- [x] Fornire preview hover/focus solo per pointer fine/desktop, senza layout
+  shift e senza dipendere da essa per il contenuto.
+- [x] Rispettare `prefers-reduced-motion`; le transizioni tra mese, selezione e
+  sheet usano opacity/transform o sono ridotte.
+- [x] Non introdurre una nuova libreria calendario; riusare primitive, dialog e
+  utility del progetto.
+
+**API e prestazioni**
+- Il componente deve lavorare su un DTO minimale già disponibile al client:
+  `id`, titolo, inizio/fine, `event_kind` e i metadati già necessari alla riga
+  agenda. Non duplicare payload privati né usare cache persistenti.
+- Prima di implementare una nuova query, verificare se gli endpoint coach/admin
+  possono ricevere in modo sicuro `from` e `to`. Se serve un adeguamento,
+  validare server-side l'intervallo e ogni team richiesto, mantenendo i
+  contratti legacy compatibili.
+- Il cambio mese carica o filtra il solo intervallo necessario più l'eventuale
+  bordo per eventi multi-giorno; non usare `limit=5000` come requisito della
+  vista mensile.
+
+**Definition of Done**
+- stessa griglia e stessa semantica nelle due aree;
+- tap/Invio sul giorno apre l'agenda, tap/Invio sull'evento apre il dettaglio;
+- navigazione, focus, screen reader, empty month e mese con eventi misti sono
+  coperti da test;
+- FullCalendar continua a funzionare nella vista desktop.
+
+**Prompt `/goal`**
+```text
+/goal G11.3
+Crea il calendario mensile mobile condiviso per coach e admin. La griglia deve
+segnalare i tipi evento con indicatori e aprire l'agenda della giornata al tap;
+hover/focus è solo una preview desktop. Mantieni FullCalendar a 768px e oltre,
+non aggiungere librerie e non mettere logica autorizzativa nel componente.
+```
+
+---
+
+## G11.4 — Integrazione calendario coach mobile
+
+**Obiettivo**
+Usare G11.3 in `/coach/calendar`, preservando il contesto assegnazioni coach e
+tutte le azioni attuali.
+
+**Task**
+- [ ] Collegare la variante mobile agli eventi già filtrati dal team context;
+  con una sola squadra non introdurre un selettore ridondante.
+- [ ] Rendere i filtri tipologia e squadra compatti su mobile, preferibilmente
+  in sheet con conteggio filtri attivi; non duplicarli nella griglia.
+- [ ] Mantenere calendario/elenco come scelta di vista e rendere “Nuovo evento”
+  sempre raggiungibile, con precompilazione della data quando è stato scelto un
+  giorno vuoto.
+- [ ] Riutilizzare i dettagli, modifica, eliminazione, ricorrenze e report
+  presenze esistenti; non cambiare le mutation o la verifica `team_coaches`.
+- [ ] Gestire loading, errore, offline, denied, nessun evento e nessun
+  risultato dei filtri senza sostituirli con un mese apparentemente vuoto.
+
+**Definition of Done**
+- un coach multi-squadra vede solo le squadre assegnate prima e dopo cambio
+  mese/filtro;
+- dettaglio, modifica ed eliminazione restano tastierabili e non creano nesting
+  di pulsanti;
+- nessuna regressione a `/api/coach/calendar` o alle mutation esistenti.
+
+**Prompt `/goal`**
+```text
+/goal G11.4
+Integra il calendario mobile condiviso in /coach/calendar. Mantieni TeamContext,
+filtri autorizzati, form e mutation coach esistenti; il tap sul giorno apre la
+giornata, non un evento. Copri esplicitamente stati vuoti/errore/offline/denied
+e la precompilazione della data per Nuovo evento.
+```
+
+---
+
+## G11.5 — Integrazione calendario admin mobile
+
+**Obiettivo**
+Usare G11.3 in `/admin/calendar` con filtri amministrativi completi, senza
+ridurre le capacità gestionali desktop.
+
+**Task**
+- [x] Spostare su mobile i filtri multipli squadra, tipologia e intervallo in
+  un unico sheet accessibile con Applica, Reset e conteggio dei filtri attivi.
+- [x] Conservare tabella/elenco, export, bulk e modale evento esistenti; la
+  vista mensile non deve diventare l'unico modo per gestire eventi.
+- [x] Collegare selezione giornata, dettaglio, modifica e creazione alla
+  variante condivisa; il giorno vuoto precompila il form senza bypassare le
+  autorizzazioni admin.
+- [x] Adattare il recupero agli intervalli visibili soltanto se l'ispezione
+  mostra che la richiesta attuale è eccessiva. Validare input server-side,
+  mantenere paginazione/limiti sensati e non modificare schema o RLS.
+- [x] Rendere espliciti eventi senza tipologia, senza squadra o senza palestra
+  con label testuali: non inventare un colore o un team.
+
+**Definition of Done**
+- i filtri multipli producono gli stessi risultati in mobile, desktop, agenda e
+  lista;
+- cambio mese, reset e intervallo non espandono l'insieme di dati autorizzati;
+- export, bulk e CRUD rimangono disponibili nella vista appropriata;
+- la griglia non richiede il caricamento indiscriminato dell'intero calendario.
+
+**Prompt `/goal`**
+```text
+/goal G11.5
+Integra il calendario mobile condiviso in /admin/calendar. Sposta i filtri
+multi-selezione in un sheet mobile accessibile, conserva lista/export/bulk/CRUD
+e limita il caricamento al periodo visibile solo dopo aver verificato e
+preservato le garanzie server-side. Non cambiare schema, RLS o route.
+```
+
+---
+
+## G11.5a — Vista mese atleta condivisa e coerenza cross-role
+
+**Decisione approvata e implementata il 07/09/2026**
+Estendere il mese compatto della Fase 11 all'area atleta e al calendario
+familiare che la riutilizza. Il default iniziale dell'area atleta è ora Mese,
+allineato al calendario coach, sia su mobile sia su desktop; Agenda resta
+disponibile come vista alternativa.
+Eseguire questo goal prima di G11.6 perché il gate verifichi il comportamento
+finale di tutti i ruoli, senza riaprire o ripetere G11.3–G11.5 già completati.
+
+**Task**
+- [x] Usare `MonthlyMobileCalendar` anche nell'area atleta sotto 768 px,
+  sostituendo soltanto l'attuale vista mese mobile basata su FullCalendar.
+- [x] Conservare la scelta `Agenda / Mese` nell'area atleta, con `Mese`
+  inizialmente selezionata e l'agenda su più giornate ancora disponibile.
+- [x] Nell'agenda giornaliera del mese preservare squadra/e, conflitto,
+  stato/deadline della presenza e risposta autorizzata. Riutilizzare
+  `AttendanceControl` e la mutation esistente, mantenendo deadline, rollback,
+  blocco offline e distinzione fra `view_schedule` e `confirm_attendance`.
+- [x] Estendere la presentazione condivisa quanto necessario, mantenendo
+  logica autorizzativa e contesto subject/team nei manager esistenti; nessuna
+  azione di creazione, modifica o eliminazione nell'area atleta/famiglia.
+- [x] Uniformare etichette delle viste equivalenti, selezione della vista e
+  navigazione temporale fra ruoli, mantenendo filtri e azioni pertinenti a
+  ciascun ruolo. Preservare tap sul giorno → agenda e tap sull'evento → dettaglio,
+  con controlli presenza separati e senza pulsanti annidati.
+- [x] Conservare FullCalendar da 768 px e i default desktop attuali: mese per
+  atleta/famiglia, coach e admin.
+- [x] Preservare stati loading/error/offline/denied/empty/filtered-empty,
+  deduplica multi-team e invalidazione del contesto al cambio subject.
+
+**Definition of Done**
+- lo stesso componente mensile mobile è utilizzato nei tre ruoli e nel
+  contesto familiare, senza perdita delle informazioni specifiche dell'atleta;
+- Mese resta il default mobile atleta e non viene sostituito dall'agenda della
+  sola giornata selezionata; Agenda continua a mostrare più giornate;
+- le risposte presenza restano disponibili solo quando autorizzate e i dati
+  del subject precedente non restano visibili dopo il cambio profilo;
+- desktop, route, contratti autorizzativi e azioni gestionali restano coerenti
+  con il comportamento esistente;
+- test mirati su integrazione, presenze e permessi passano; la verifica
+  responsive/accessibilità completa confluisce in G11.6.
+
+**Prompt `/goal`**
+```text
+/goal G11.5a
+Estendi MonthlyMobileCalendar alla sola vista Mese mobile atleta/famiglia.
+Conserva Mese come default e preserva nell'agenda giornaliera squadra,
+conflitti, stato/deadline e risposta presenza autorizzata usando i controlli
+esistenti. Uniforma etichette, selezione vista e navigazione temporale tra ruoli,
+mantenendo filtri e azioni pertinenti. Lascia invariati i default desktop,
+route e autorizzazioni. Aggiungi test mirati e aggiorna il registro; non
+ripetere i goal già completati. Il gate complessivo resta G11.6.
+```
+
+**Registro della pianificazione**
+- 07/09/2026: aggiornato solo `implementation_plan_redesign.md`; aggiunti
+  G11.5a, dipendenza di G11.6 e scenari del gate atleta/famiglia.
+- Verifica documentale: `git diff --check`; test applicativi non eseguiti
+  perché non è stato modificato codice. Implementazione e test restano da fare.
+- 07/09/2026: G11.5a implementato in `AthleteCalendarManager` e
+  `MonthlyMobileCalendar`; aggiunti test di integrazione Agenda/Mese, renderer
+  agenda custom senza nesting di pulsanti e permessi/presenza familiare.
+  `npm test -- --runInBand`: 62 suite, 220 test superati; `npx tsc --noEmit`,
+  `npm run build` e `git diff --check` superati. G11.6 resta il gate complessivo.
+- 07/09/2026: rifinitura UI post-verifica browser: nascosto correttamente il
+  toggle desktop `Vista Elenco` sotto 768px tramite wrapper responsive (il
+  precedente `hidden` sul bottone era sovrascritto da `.cs-btn`) e centrato su
+  desktop il `EventDetailModal`, mantenendo il bottom sheet mobile. Suite
+  completa 62/220, build e `git diff --check` superati.
+- 15/09/2026: aggiornati i default di `AthleteCalendarManager` a Mese su mobile
+  (`MonthlyMobileCalendar`) e desktop (`FullCalendarWidget`), allineandoli al
+  calendario coach. Aggiornati il test componente e lo scenario E2E desktop;
+  verifiche eseguite: test mirato atleta calendario, typecheck e `git diff --check`.
+
+---
+
+## G11.6 — Test e gate calendario cross-role
+
+**Prerequisiti:** G11.4, G11.5 e G11.5a completati.
+
+**Scenari minimi**
+- [ ] Ogni `event_kind`, valore assente e colori light/dark coerenti in tutti i
+  ruoli.
+- [ ] Giorno senza eventi, uno, più eventi dello stesso tipo, tipi misti e più
+  di tre tipi.
+- [ ] Evento su più giorni, evento a cavallo di mese e ordinamento per ora nella
+  timezone italiana.
+- [ ] Tap, keyboard, focus, Escape e screen-reader name; nessuna informazione
+  essenziale disponibile solo al mouseover o al colore.
+- [ ] 320×568, 375×812, 390×844, 768×1024, 1024×768 e 1440×900; zoom 200%,
+  dark mode e `prefers-reduced-motion`.
+- [ ] Coach con zero/una/più squadre e tentativo di team non assegnato.
+- [ ] Admin con filtri multipli, reset, cambio mese, lista, export/bulk e CRUD.
+- [ ] Atleta con Agenda mobile predefinita, passaggio Agenda/Mese, navigazione
+  mensile condivisa, squadre multiple, conflitti e dettaglio evento.
+- [ ] Presenze nell'agenda giornaliera: stato/deadline, successo, rollback,
+  scadenza superata e blocco offline; nessuna azione gestionale atleta.
+- [ ] Familiare con/senza `view_schedule`, con/senza `confirm_attendance`,
+  cambio subject e invalidazione dei dati/filtri del soggetto precedente.
+- [ ] Default desktop preservati: settimana atleta/famiglia e mese coach/admin;
+  nessuna regressione alle rispettive viste elenco/agenda e azioni esistenti.
+- [ ] Endpoint con intervallo valido/non valido e verifica che non restituisca
+  dati fuori contesto o un volume non necessario.
+
+**Verifiche richieste**
+- test unitari per mapper event-kind e aggregazione giornaliera;
+- test componenti per griglia, agenda, filtri e accessibilità;
+- test Route Handler mirati se viene aggiunto il filtro temporale;
+- E2E atleta/famiglia/coach/admin ai viewport obbligatori;
+- `npx tsc --noEmit`, test pertinenti, `npm run build` e `git diff --check`.
+
+**Registro della verifica — 07/09/2026**
+
+- [x] Mapper `event_kind`: quattro tipi, fallback assente/sconosciuto, label
+  accessibili e token separati verificati in `event-kind.test.ts`,
+  `EventKindBadge.test.tsx` e nei percorsi atleta/coach/admin già coperti dal
+  suite completa.
+- [x] `MonthlyMobileCalendar`: giorno vuoto, eventi singoli/misti, quattro tipi,
+  evento multiday su tre giorni, dettaglio dalla agenda, tap sul giorno senza
+  apertura evento, renderer atleta/famiglia senza pulsanti annidati, ordinamento
+  per ora locale e comandi di navigazione tastierabili verificati; 17 test
+  mirati superati.
+- [x] Presenze e permessi: i test esistenti di `AthleteCalendarManager`,
+  `AttendanceControl`, route attendance, contesto subject e permessi familiari
+  restano superati; il codice mantiene deadline, rollback, offline,
+  `view_schedule`/`confirm_attendance`, reset subject e filtri non-escalating.
+- [x] Coach/admin: test route per team coach non assegnato, test responsive admin
+  con filtri/modal/route map e caricamento admin `visible=1`/limite 500 superati;
+  i default desktop e le azioni lista/CRUD/export/bulk risultano preservati dal
+  codice e dai test già presenti.
+- [x] Gate tecnici: `npm test -- --runInBand` 63 suite/226 test,
+  `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+- [x] E2E cross-role su server production dedicato: `admin-responsive-chromium`
+  5/5, `athlete-calendar-chromium` 2/2, `family-chromium` 2/2,
+  `coach-calendar-chromium` 1/1 e `coach-calendar-touch-chromium` 1/1
+  passati, tutti con `--workers=1`; atleta include Agenda/Mese mobile, famiglia
+  include persistenza subject e Agenda/Mese mobile, coach include default mese
+  desktop, sei viewport, dark/reduced-motion e tap touch, admin include mese
+  mobile/desktop, route map, filtri, modal e bulk flow.
+- [-] Il run dev parallelo precedente ha prodotto 3/6 per flakiness del server
+  (`ERR_ABORTED` in `page.goto` atleta e falso negativo sidebar admin mentre la
+  sidebar era presente nello screenshot); non viene considerato evidenza di
+  regressione applicativa.
+- [-] Non dichiarati come eseguiti in modo reale: viewport 320/375/390/768/
+  1024/1440 per tutti i ruoli, zoom 200%, dark mode e reduced-motion con
+  sessioni autenticati atleta/famiglia/coach; richiedono fixture/credenziali e
+  browser session stabile. Non sono state introdotte correzioni UI non
+  dimostrate.
+- [-] Tentativo zoom 200% del 07/09/2026: cinque `Control+Equal` in Chromium
+  headless non hanno cambiato il breakpoint; il fallimento sul calendario mobile
+  nascosto è stato classificato come limite del runner e il test non
+  deterministico è stato rimosso.
+
+**Correzioni post-verifica — 08/09/2026**
+
+- [x] Calendario: `FullCalendarWidget` sincronizza la vista già montata con
+  `initialDate` tramite `gotoDate`, quindi il comando `Oggi` aggiorna davvero
+  mese/settimana; aggiunto test di regressione.
+- [x] Dialog nuovo evento/nuovo messaggio: su mobile i pannelli restano entro il
+  viewport, hanno altezza massima e scroll interno; applicato anche al form
+  evento inline del coach, con altezza dinamica `dvh` per tastiera/notch.
+- [x] Campionati coach: la creazione inizializza girone, squadra del coach e
+  relativo legame girone-squadra; il campionato è quindi subito selezionabile.
+  Il log fornito mostra inoltre una richiesta 401/`42501` successiva al logout,
+  non una POST di creazione autorizzata fallita; non sono state modificate RLS o
+  schema.
+- [x] Gate post-fix: test mirati 5/5, suite completa 63 suite/227 test,
+  `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+
+**Prompt `/goal`**
+```text
+/goal G11.6
+Esegui e completa la verifica cross-role del nuovo standard event_kind e del
+calendario mobile atleta/famiglia/coach/admin dopo G11.5a. Copri Agenda/Mese,
+presenze e permessi familiari, default desktop, responsive, touch, tastiera,
+dark mode, multi-team, filtri e limiti di caricamento; correggi soltanto regressioni
+dimostrate e aggiorna il registro con gli esiti reali.
+```
+
+---
+
+## G11.V — Gate verifica Fase 11
+
+La fase è superata solo se:
+
+- il mapping dei quattro tipi è identico in atleta, familiare, coach e admin;
+- nessun utente deve affidarsi al colore o al mouseover per comprendere o
+  aprire una giornata;
+- il calendario atleta/famiglia/coach/admin è usabile a 320 px senza overflow
+  e mantiene capacità operative e default desktop;
+- Mese è il default mobile atleta/famiglia; la vista Agenda condivisa resta
+  disponibile e la vista Mese preserva contesto squadra, conflitti e presenze
+  con i permessi del subject;
+- i filtri non ampliano mai i dati autorizzati;
+- i dati mensili non richiedono il caricamento indiscriminato dell'intero
+  storico;
+- test, build e review responsive/accessibilità risultano effettivamente
+  eseguiti e annotati nel registro.
+
+---
+
+## Audit permessi atleta su staging — 08/09/2026
+
+- [x] Verifica in sola lettura su Supabase `csromawebapp-staging`: account
+  `testxbusiness+atleta1@gmail.com` attivo, solo ruolo `athlete`, profilo atleta
+  presente, iscrizione stagionale attiva, nessuna relazione delegata in uscita.
+- [x] Riprodotta con test la contaminazione del contesto UI: la preferenza
+  `csroma_active_area=family` sopravviveva al logout e non veniva invalidata
+  per un atleta privo di accesso familiare. Calendario, messaggi e quote
+  applicavano quindi i controlli delegati senza un subject, mentre dashboard
+  e sidebar verificavano anche la disponibilità dell'accesso familiare.
+- [x] Correzione locale: `src/context/AccessibleProfileContext.tsx` ripristina
+  l'area personale dopo verifica riuscita dell'assenza di accesso familiare;
+  `src/lib/pwa/service-worker-registration.ts` elimina anche l'area al logout.
+  Aggiornati i rispettivi file `.test.tsx`/`.test.ts`, con regressione prima
+  fallita e poi superata e copertura del mantenimento degli accessi familiari.
+- [x] Verifiche: `npm test -- --runInBand` (63 suite, 230 test),
+  `npx tsc --noEmit`, ESLint sui quattro file modificati e `git diff --check`
+  superati. Nessuna modifica a ruoli, relazioni o RLS sul database.
+- [-] Il browser di verifica apre la Preview alla pagina login: non verificata
+  la sessione specifica dell'utente né effettuato un login con le sue credenziali.
+  La causa è riprodotta nel codice locale ed è coerente con il sintomo;
+  resta la verifica autenticata dopo deploy. Correzione non ancora pubblicata.
+
+## Correzioni campionati e convocazioni — 10/09/2026
+
+- [x] Un coach con più squadre deve ora scegliere esplicitamente la squadra
+  CSRoma durante la creazione del primo girone. Il Route Handler rifiuta inoltre
+  qualsiasi richiesta senza squadra o con squadra non assegnata, così non può più
+  associare arbitrariamente la prima riga di `team_coaches`.
+- [x] L'importazione del calendario ricostruisce le associazioni
+  girone-squadra dalle squadre che compaiono effettivamente nelle partite e
+  rimuove quelle obsolete; verifica anche che tutte appartengano al campionato.
+  Questo impedisce che un atleta U14 ottenga accesso a un campionato Amatoriale
+  soltanto per un'associazione residua.
+- [x] L'area atleta usa ora il nome già incluso nella partita per avversari e
+  modali, senza mostrare UUID in caso l'avversario non faccia parte del catalogo
+  autorizzato dell'atleta. Lo stato convocazione confronta il profilo personale
+  dell'account quando non è attivo un subject delegato.
+- [x] File principali: `src/app/api/coach/championships/mutations/route.ts`,
+  `src/components/coach/ChampionshipsManager.tsx`,
+  `src/components/athlete/ChampionshipsManager.tsx`,
+  `src/components/championship/types.ts` e test correlati.
+- [x] Verifiche: `npx tsc --noEmit`; Jest mirato (4 suite, 14 test);
+  `npm run build`; `git diff --check`.
+- [-] Il database locale non contiene gli account/campionati `testxbusiness`
+  della Preview. Dopo il deploy, rieseguire una volta l'import del calendario
+  Amatoriale: l'import aggiornato rimuoverà dal relativo girone l'associazione
+  U14 già errata. Verificare poi la Preview autenticata come atleta U14.
+- [x] Follow-up 10/09/2026: la card della prossima gara e il modal
+  convocazioni usano ora entrambi `isProfileConvoked` con il medesimo profilo
+  atleta risolto (subject delegato oppure owner personale). Elimina lo stato
+  "Non partecipo" nel modal quando la card mostra correttamente "Sei convocato".
+
+## Piano proposto — RSVP allenamenti automatici — 10/09/2026
+
+Stato: analisi completata, implementazione non avviata. Richiesta limitata al
+piano, senza modifiche al codice o al database.
+
+Evidenze: `TeamModal.tsx` salva gli orari e richiama
+`generateTrainingEventsFromSchedules`; il generatore crea occorrenze fino a
+fine stagione con `requires_confirmation: false`. Il flusso atleta salva le
+risposte in `event_attendances` e verifica l'appartenenza tramite `event_teams`
+e `team_members`; i report ricavano chi non ha risposto dalla rosa corrente.
+Il controllo temporale della mutation attuale riguarda la deadline opzionale,
+non l'inizio dell'evento. La rigenerazione elimina gli allenamenti ricorrenti
+con `parent_event_id` nullo senza filtro temporale.
+
+Piano da implementare; priorità tra squadre e assenze anticipate confermate
+dall'utente il 10/09/2026:
+
+1. Aggiungere nel form squadra «Richiedi conferma presenza agli allenamenti»;
+   salvare la preferenza della squadra e applicarla alle occorrenze generate.
+   Default disattivato per compatibilità; nessuna attivazione retroattiva implicita.
+2. Usare `events.requires_confirmation` e `event_attendances` esistenti.
+   Tutti gli atleti della rosa, anche aggiunti successivamente, sono destinatari;
+   assenza di risposta significa «Da confermare», senza creare risposte fittizie.
+3. Mostrare il RSVP completo per un solo allenamento automatico per atleta:
+   quello più vicino in ordine cronologico fra tutte le sue squadre e fra quelli
+   non ancora iniziati. Esempio confermato: U14 lunedì e U16 martedì,
+   prima il RSVP di lunedì, poi quello di martedì.
+   La risposta non fa avanzare al successivo; l'avanzamento
+   avviene all'inizio dell'allenamento. Scadenza all'inizio oppure prima se
+   esplicitamente configurata. Eventi futuri e storico restano nel calendario,
+   senza richieste attive fuori dalla regola, salvo l'azione volontaria di
+   assenza anticipata descritta sotto. Non cambiare implicitamente le
+   regole di partite, convocazioni e RSVP manuali.
+4. Centralizzare il calcolo lato server per dashboard, calendario, dettaglio
+   e mutation; applicarlo anche ai familiari autorizzati e aggiornare la UI al
+   passaggio temporale/al ritorno in primo piano. Selezionare il prossimo evento
+   indipendentemente dal mese visualizzato, dai limiti della lista dashboard
+   e dal filtro squadra: filtrare U16 non deve anticipare il RSVP di martedì
+   mentre quello di lunedì U14 è ancora il prossimo per l'atleta.
+   Verificare anche i percorsi diretti di scrittura e le policy del database,
+   affinché non aggirino appartenenza, permessi e limiti temporali.
+5. Rendere riconoscibili gli eventi generati tramite collegamento stabile
+   all'orario origine. Sostituire la cancellazione indiscriminata con una
+   riconciliazione che preservi ID, risposte, storico ed eccezioni manuali,
+   eviti duplicati e gestisca esplicitamente errori parziali e orari rimossi.
+   Prima di intervenire sui dati esistenti verificare schema e vincoli reali.
+6. Consentire di comunicare assenze anticipate dal calendario, senza
+   mostrare i pulsanti RSVP completi per tutti gli allenamenti futuri:
+   - Singolo evento: «Segnala assenza» nel dettaglio di un allenamento futuro
+     con RSVP attivo, con nota facoltativa.
+   - Più eventi: «Comunica assenza» permette di indicare un periodo e mostra
+     gli allenamenti già presenti, con squadra, data e orario. L'atleta
+     seleziona tutti o alcuni eventi e conferma il riepilogo prima del salvataggio.
+     Il periodo è uno strumento di selezione, non una regola permanente:
+     eventuali allenamenti creati successivamente non ereditano l'assenza.
+   - Riutilizzare `event_attendances`, salvando `declined` per ciascun evento
+     selezionato. Il coach vede subito «Non partecipa» nei relativi report.
+   - Quando l'evento diventa il prossimo, mostrare «Hai già comunicato che
+     non parteciperai», senza richiedere una nuova risposta e senza passare
+     automaticamente all'allenamento successivo.
+   - Consentire la revoca dell'assenza anticipata entro la scadenza:
+     ripristina «Da confermare», senza trasformarla automaticamente in
+     «Partecipo». Quando l'evento diventa il prossimo, è disponibile il RSVP
+     completo secondo la regola ordinaria.
+   - Escludere eventi iniziati/passati, con scadenza superata o senza RSVP.
+     Applicare lato server appartenenza e permessi a ciascun evento, anche
+     nelle operazioni multiple e nelle revoche; includere i familiari con
+     `confirm_attendance`. L'eccezione per eventi successivi permette solo
+     comunicazione/revoca dell'assenza, non l'intero RSVP.
+   - Evitare duplicati e risultati parziali silenziosi nei salvataggi multipli;
+     mostrare un esito verificabile per gli eventi selezionati. Preservare
+     anche queste risposte durante la riconciliazione degli allenamenti.
+7. Verificare: opzione attiva/disattiva, più giorni settimanali, prossima
+   occorrenza già risposta, evento passato anche senza deadline, cambio giorno
+   e ora legale Europe/Rome, più squadre (U14 lunedì → U16 martedì),
+   cambio filtro squadra senza anticipo del RSVP, nuovi atleti, deleghe familiari,
+   accesso diretto a eventi senza RSVP completo disponibile, assenza anticipata
+   singola/multipla con selezione tra squadre, nota facoltativa, revoca,
+   visibilità immediata al coach e mancata riproposizione della richiesta
+   quando l'evento diventa il prossimo. Verificare esclusione di eventi
+   passati/scaduti/non autorizzati, nessuna eredità su nuovi eventi del periodo,
+   salvataggi multipli ripetuti o falliti e rigenerazione senza perdita
+   delle risposte e senza duplicati. Nessun job necessario per la sola
+   disponibilità in app; eventuali push richiedono un piano separato.
+
+File previsti: `src/components/admin/TeamModal.tsx`,
+`src/lib/utils/trainingScheduleEvents.ts`, migrazione per preferenza/origine,
+resolver server condiviso, API atleta dashboard/calendar/events,
+contratti e controlli RSVP atleta/condivisi, calendario e dettaglio atleta
+per assenze anticipate singole/multiple, test pertinenti.
+
+File modificati in questa analisi: solo `implementation_plan_redesign.md`.
+Verifiche: lettura del codice, delle migrazioni pertinenti e dello stato Git;
+`git diff --check`. Test applicativi non eseguiti (nessuna implementazione).
+Note aperte: eventuale necessità di una finestra massima di anticipo e criterio
+di parità per allenamenti che iniziano nello stesso istante; definire separatamente
+se applicare la funzione agli allenamenti già esistenti. Nessun deploy.
+
+## Goal operativi RSVP — esecuzione sequenziale con Luna medio
+
+Aggiornamento 10/09/2026: scomposizione del piano approvato in goal eseguibili
+singolarmente. Tutti i goal seguenti sono **da iniziare**. La loro presenza
+nel piano non autorizza l'avvio automatico del goal successivo.
+
+### Istruzioni comuni per ogni goal R
+
+- Leggere `AGENTS.md`, `re_design.md`, questo piano e lo stato Git; verificare
+  le evidenze dei prerequisiti. Eseguire soltanto il goal richiesto.
+- Usare le skill Next.js e Supabase per i rispettivi ambiti; per modifiche UI
+  applicare anche la skill UI/UX pertinente. Nessun subagent richiesto.
+- I percorsi indicati sono punti di ingresso reali; i nuovi moduli sotto
+  `src/server/events/` sono proposti. Prima di crearli cercare equivalenti.
+- Non introdurre dipendenze, cron, notifiche push, migrazioni massive dei dati
+  legacy o modifiche alle convocazioni/campionati per completare questi goal.
+- Non pubblicare una versione intermedia: UI, API e protezioni database devono
+  risultare coerenti prima dell'eventuale rilascio. Nessun deploy è incluso.
+- Ogni goal deve lasciare il progetto compilabile. Eseguire test mirati
+  significativi, `npx tsc --noEmit`, ESLint sui file TypeScript modificati e
+  `git diff --check`; per documentazione soltanto basta il diff check.
+- Per SQL: verificare lo schema effettivo e le policy, usare il workflow della
+  skill Supabase, provare la migrazione sul database di sviluppo e registrarne
+  l'esito. Staging è disponibile per controlli; non presumere che una migrazione
+  locale sia già applicata lì. Nessuna modifica a produzione.
+- Alla chiusura aggiornare la sezione del goal con stato, decisioni, file,
+  migrazioni, comandi ed esiti reali, ambiente DB e note residue. Se un requisito
+  manca, segnare il goal parziale e indicare esattamente cosa resta.
+
+### Regole di prodotto e default tecnici comuni
+
+Le regole confermate sono: un solo RSVP completo per atleta tra tutte le sue
+squadre; avanzamento all'inizio dell'evento, mai alla risposta; assenza anticipata
+singola o multipla; revoca prima della scadenza; storico consultabile.
+
+Per evitare decisioni implicite durante le implementazioni, usare questi
+default tecnici proposti, annotando nel goal eventuali incompatibilità reali:
+
+- Ambito: nuove occorrenze identificabili come allenamenti automatici del nuovo
+  flusso, con RSVP abilitato. Eventi manuali e legacy mantengono il comportamento
+  precedente; non dedurre l'origine soltanto da titolo o `event_type`.
+- Nessuna finestra massima di anticipo nella prima versione: vale il prossimo
+  evento cronologico. A pari inizio, ordinare stabilmente per ID evento; un
+  evento collegato a più squadre compare una sola volta. Conservare gli avvisi
+  di conflitto, senza aggiungere arbitrariamente un secondo RSVP completo.
+- Selezionare prima il prossimo evento non iniziato, poi controllare la sua
+  deadline: una deadline anticipata scaduta non sblocca l'evento successivo.
+- Usare Europe/Rome per generazione, periodi e visualizzazione; confrontare
+  istanti sul server. Un allenamento di oggi ancora futuro è generabile.
+- RSVP disattivato come default squadra. La modifica della preferenza si
+  applica alle occorrenze automatiche future gestite dal nuovo flusso;
+  disattivarla chiude le azioni ma conserva risposte e storico.
+- Un'assenza anticipata è `declined` con un indicatore distinto dal ruolo di
+  chi risponde. Non riutilizzare `response_source`, che identifica già
+  `self`, `parent`, `coach`, `admin` o `system`.
+- Il periodo di assenza comprende le date locali selezionate, estremi inclusi,
+  ma soltanto gli eventi esplicitamente confermati; nessuna applicazione a
+  eventi creati dopo. Ripetere un invio non deve duplicare le risposte.
+
+| Goal | Risultato | Prerequisiti | Stato |
+|---|---|---|---|
+| R1 | Modello dati e contratti condivisi | Nessuno | [x] |
+| R2 | Generazione e riconciliazione sicure | R1 | [x] |
+| R3 | Opzione RSVP nel form squadra | R2 | [x] |
+| R4 | Resolver del prossimo RSVP e API di lettura | R1 | [x] |
+| R5 | Mutation RSVP e protezioni database | R4 | [ ] |
+| R6 | Un solo RSVP nella UI atleta/famiglia | R4, R5 | [x] |
+| R7 | API assenze anticipate singole/multiple e revoca | R5 | [x] |
+| R8 | UI assenza anticipata sul singolo evento | R6, R7 | [x] |
+| R9 | UI assenza per periodo con selezione eventi | R8 | [x] |
+| R10 | Verifica integrata e chiusura | R1–R9 | [ ] |
+
+Ordine operativo consigliato: R1 → R2 → R3 → R4 → R5 → R6 → R7 → R8 → R9 → R10.
+
+### R1 — Modello dati, origine eventi e contratti
+
+**Obiettivo:** predisporre lo schema senza attivare la funzione nella UI. **Completato il 10/09/2026.**
+
+Punti di ingresso: `supabase/migrations/`, `src/types/attendance.ts`,
+`src/types/athlete-calendar.ts`, `src/types/athlete-dashboard.ts`,
+`src/lib/utils/trainingScheduleEvents.ts`.
+
+Attività:
+
+1. Verificare colonne, FK, cascades, indici e policy reali di `teams`,
+   `team_training_schedules`, `events`, `event_teams`, `event_attendances`.
+2. Introdurre la preferenza persistente di squadra, default false; un'origine
+   stabile per ogni occorrenza automatica e un'identità univoca che impedisca
+   duplicati della stessa occorrenza. Non usare il solo `parent_event_id`.
+3. Pianificare rimozione degli orari senza cancellazione a cascata dello
+   storico: preferire disattivazione degli orari già referenziati. Mantenere
+   riconoscibili le eccezioni manuali delle occorrenze generate.
+4. Aggiungere se necessario un indicatore specifico di assenza anticipata,
+   compatibile con le risposte esistenti e senza cambiare `response_source`.
+5. Definire un contratto additivo unico per disponibilità delle azioni, motivo
+   di chiusura, prossimo evento e prossimo istante di ricalcolo. Separare il
+   fatto «richiede conferma» dal fatto «puoi rispondere adesso».
+6. Registrare qui i nomi esatti di colonne, indici e campi scelti, per R2–R9.
+
+**Accettazione:** schema precedente ancora utilizzabile; eventi legacy non
+riclassificati; assenze compatibili con report esistenti; identità occorrenze
+documentata; nessuna risposta o evento storico perso.
+
+**Verifiche:** migrazione su sviluppo, vincolo di unicità, default su dati
+preesistenti, comportamento delle FK su disattivazione/rimozione, typecheck.
+
+#### Registro R1 — decisioni e inventario verificato
+
+La fotografia runtime del database locale del 10/09/2026 conferma:
+
+- `teams`: `id`, `name`, `code`, `activity_id`, `coach_id`, `is_active` e
+  timestamp; PK `teams_pkey`, unique `teams_code_key`, FK
+  `teams_activity_id_fkey` con `ON DELETE CASCADE`, indici
+  `idx_teams_activity_id` e `idx_teams_coach_id`;
+- `team_training_schedules`: PK `team_training_schedules_pkey`, unique
+  `team_training_schedules_team_id_day_of_week_start_time_key`, FK squadra
+  `ON DELETE CASCADE`, FK palestra `ON DELETE RESTRICT`, check su giorno
+  `0..6` e `end_time > start_time`, indici
+  `idx_team_training_schedules_day`, `idx_team_training_schedules_gym_id` e
+  `idx_team_training_schedules_team_id`;
+- `events`: PK `events_pkey`, `events_check` (`start_time < end_time`), check
+  su `kind`, `event_type` ed `event_kind`, FK attività/palestra con
+  `ON DELETE SET NULL`, FK autore presenti sia come `NO ACTION` legacy sia
+  come `ON DELETE SET NULL`, indici `idx_events_activity_id`,
+  `idx_events_created_by`, `idx_events_event_kind`, `idx_events_gym_id`,
+  `idx_events_parent_event_id`, `idx_events_start_date` e
+  `idx_events_start_time`;
+- `event_teams`: unique `event_teams_event_id_team_id_key`, FK evento e
+  squadra entrambe `ON DELETE CASCADE`, indici
+  `idx_event_teams_event_id` e `idx_event_teams_team_id`;
+- `event_attendances`: unique `event_attendances_event_id_profile_id_key`, FK
+  evento/profilo `ON DELETE CASCADE`, FK
+  `event_attendances_responded_by_auth_user_id_fkey` `ON DELETE SET NULL`,
+  check status `going|maybe|declined`, check `response_source` già esistente,
+  indici `idx_event_attendances_event`, `idx_event_attendances_profile` e
+  `event_attendances_responded_by_auth_user_id_idx`.
+
+Le policy runtime rilevate sono: su `teams` `Admins can manage teams`,
+`Coaches can manage their teams`, `Coaches can view their teams`,
+`teams_admin_all`, `teams_coach_select`, `teams_athlete_select`; su `events`
+`Admins can manage all events`, `events_admin_all`, `events_athlete_select`,
+`events_coach_delete`, `events_coach_insert`, `events_coach_select`,
+`events_coach_update`; su `event_teams` `Admins can manage event teams`,
+`Coaches can delete event teams`, `Coaches can insert event teams`,
+`Coaches can manage their team event associations`, `Coaches can update event
+teams`, `Coaches can view event teams`, `event_teams_admin_all`,
+`event_teams_admin_or_coach_insert`, `event_teams_athlete_select`,
+`event_teams_coach_delete`, `event_teams_coach_insert`,
+`event_teams_coach_select`, `event_teams_coach_update`; su
+`team_training_schedules` `Admins can manage all training schedules`,
+`team_training_schedules_athlete_select`,
+`team_training_schedules_coach_select`; su `event_attendances` le quattro
+policy subject `event_attendances_subject_select/insert/update/delete`.
+
+La migrazione R1 usa soltanto queste tabelle e non modifica policy né
+riclassifica dati legacy.
+
+Nomi scelti per R2–R9:
+
+| Scopo | Nome esatto | Regola |
+|---|---|---|
+| Preferenza squadra | `teams.training_rsvp_enabled boolean NOT NULL DEFAULT false` | Nessuna attivazione retroattiva |
+| Disattivazione orario | `team_training_schedules.is_active boolean NOT NULL DEFAULT true` | Disattivare, non cancellare, gli orari referenziati |
+| Origine occorrenza | `events.generated_from_schedule_id uuid` | FK verso `team_training_schedules(id)` con `ON DELETE SET NULL`; NULL lascia legacy/manuale non classificato |
+| Identità occorrenza | `events.generated_occurrence_date date` | Data locale Europe/Rome; non usa il solo `parent_event_id` |
+| Eccezione manuale | `events.generated_schedule_exception boolean NOT NULL DEFAULT false` | R2 la imposta a `true` quando un'occorrenza generata viene modificata manualmente |
+| Unicità | `events_generated_schedule_occurrence_uidx` | Unique parziale su `(generated_from_schedule_id, generated_occurrence_date)` quando entrambi non NULL |
+| Lookup orari | `team_training_schedules_team_active_idx` | `(team_id, is_active, day_of_week, start_time)` |
+| Lookup generati | `events_generated_schedule_start_idx` | `(generated_from_schedule_id, start_time)` parziale |
+| Assenza anticipata | `event_attendances.is_early_absence boolean NOT NULL DEFAULT false` | `status='declined'` resta invariato e `response_source` non cambia |
+| Lookup assenze | `event_attendances_early_absence_idx` | `(profile_id, event_id)` parziale quando `is_early_absence=true` |
+
+Il contratto TypeScript additivo unico è `AttendanceAvailabilityContract` in
+`src/types/attendance.ts`, esposto opzionalmente come
+`attendance_availability` nei contratti calendario/dashboard. Contiene
+`requires_confirmation`, `can_respond_now`, `actions`,
+`closure_reason`, `next_event` e `next_recalculation_at`; quindi il requisito
+configurativo e la possibilità effettiva di rispondere restano distinti.
+`buildTrainingOccurrenceIdentity()` in
+`src/lib/utils/trainingScheduleEvents.ts` codifica la coppia stabile
+`generated_from_schedule_id + generated_occurrence_date` per il generatore R2.
+
+File modificati: la migrazione
+`20260910133219_r1_training_rsvp_data_contract.sql`, i quattro contratti/helper
+indicati nei punti di ingresso e questo piano. La UI non è stata modificata e
+il generatore esistente non è stato attivato né convertito: la riconciliazione
+è esplicitamente demandata a R2.
+
+Verifiche eseguite: migrazione applicata al database Supabase locale tramite
+`docker exec ... psql -v ON_ERROR_STOP=1`, con `BEGIN/COMMIT`; `npx tsc --noEmit`,
+ESLint sui quattro file TypeScript e `git diff --check` superati. Query runtime
+confermano 3 squadre con `training_rsvp_enabled=false`, 147 eventi legacy con
+origine NULL, 2 risposte con `is_early_absence=false`, default `NOT NULL`, FK
+`ON DELETE SET NULL` e i quattro nuovi indici. Una prova transazionale con
+rollback ha verificato sia il rifiuto dei duplicati da
+`events_generated_schedule_occurrence_uidx` sia l'azzeramento dell'origine
+quando lo schedule viene rimosso. `supabase db push --local --dry-run` ha
+segnalato due migrazioni storiche già riflesse nello schema ma assenti dalla
+history locale; per evitare di riapplicarle, R1 è stata applicata direttamente
+in sviluppo e la history preesistente non è stata alterata. Nessun database
+remoto è stato modificato.
+
+#### Applicazione staging R1 — 10/09/2026
+
+La migrazione `20260910133219_r1_training_rsvp_data_contract.sql` è stata
+applicata al progetto Supabase staging `csromawebapp-staging`
+(`kibtvkuiedoxgppnnxkf`) tramite l'endpoint pooler IPv4 europeo, dopo backup
+dello schema `public` in `/tmp/csroma_staging_r1_20260910_schema.sql`. La
+history staging è stata aggiornata con `20260910133219 /
+r1_training_rsvp_data_contract`.
+
+Verifica post-migrazione: `teams.training_rsvp_enabled` è `NOT NULL DEFAULT
+false` con 5 righe false; `team_training_schedules.is_active` è `NOT NULL
+DEFAULT true`; `events.generated_schedule_exception` è `NOT NULL DEFAULT
+false`; `event_attendances.is_early_absence` è `NOT NULL DEFAULT false` con 3
+risposte preesistenti false; i quattro nuovi indici esistono; la FK
+`events_generated_from_schedule_id_fkey` è `ON DELETE SET NULL`; i 180 eventi
+staging restano legacy con origine NULL. La CLI `db push` non è stata usata
+perché la history staging contiene due migrazioni storiche già riflesse nello
+schema ma assenti dalla tabella history; non è stato usato `--include-all`.
+
+### R2 — Generatore senza cancellazioni indiscriminate
+
+**Obiettivo:** generare o aggiornare allenamenti senza perdere ID e risposte.
+
+Punti di ingresso: `src/lib/utils/trainingScheduleEvents.ts`,
+`src/components/admin/TeamModal.tsx` (`saveTrainingSchedules`),
+nuovo servizio server degli allenamenti e relativo endpoint admin se necessari.
+
+Attività:
+
+1. Sostituire il ciclo delete/reinsert degli orari con salvataggio che conserva
+   gli ID; disattivare gli orari rimossi già collegati ad eventi.
+2. Portare la riconciliazione in un percorso server autorizzato admin; nessuna
+   chiave privilegiata nel browser. Riutilizzare i resolver account esistenti.
+3. Per ogni orario attivo generare fino a fine stagione, includendo oggi se
+   l'ora non è passata. Usare il fuso di Roma anche attraversando l'ora legale.
+4. Conservare occorrenze invariate, relative risposte e modifiche manuali;
+   aggiornare solo le occorrenze future identificabili del nuovo flusso.
+5. Se una modifica/rimozione coinvolge un evento con risposte o un'eccezione
+   manuale, conservarlo e restituire un avviso con gli eventi da gestire
+   manualmente; evitare spostamenti silenziosi di eventi già confermati.
+6. Non eliminare né duplicare automaticamente eventi legacy di origine
+   incerta: rilevare le sovrapposizioni e restituire una nota operativa.
+7. Garantire coerenza evento-collegamento squadra, retry senza duplicati e
+   conteggi reali di creati/aggiornati/conservati/errori. Un batch fallito non
+   deve produrre un falso successo. Rimozione di tutti gli orari gestita.
+
+**Accettazione:** due salvataggi identici mantengono stessi eventi e risposte;
+una modifica anagrafica non rigenera la stagione; nessuna cancellazione storica.
+
+**Verifiche:** integrazione DB e test del generatore per retry, eventi con
+risposte, eccezioni, nessun orario attivo, fine stagione e cambio ora legale.
+
+#### Registro R2 — chiusura 10/09/2026
+
+Completato. `TeamModal` invia il salvataggio a `POST /api/admin/training-schedules`; il percorso server risolve l’account con `requireGlobalRole('admin')` e usa il client privilegiato esclusivamente lato server. Gli orari esistenti vengono aggiornati per ID, quelli rimossi vengono disattivati e nessun evento o risposta viene cancellato.
+
+La riconciliazione in `src/server/trainings/training-schedule-reconciliation.ts` usa l’identità `schedule_id + data locale Europe/Rome`, upserta i collegamenti evento-squadra, aggiorna soltanto occorrenze future identificabili non protette e conserva eventi con risposte/eccezioni manuali restituendo gli ID da verificare. Le sovrapposizioni con eventi training legacy senza origine vengono segnalate senza modificarle. Il generatore considera oggi se l’orario non è passato, la fine stagione inclusiva e il cambio ora legale.
+
+File principali: `src/lib/utils/trainingScheduleEvents.ts`, `src/components/admin/TeamModal.tsx`, `src/app/api/admin/training-schedules/route.ts`, `src/server/trainings/training-schedule-reconciliation.ts` e relativi test.
+
+Verifiche eseguite: schema DB locale read-only confermato con colonne/indici R1; fixture DB isolata verificata tramite servizio reale per generazione di 5 occorrenze, retry identico (`eventsCreated=0`, `eventsUpdated=0`, `eventsPreserved=5`), risposta conservata, modifica con avviso, rimozione con disattivazione e 5 link squadra invariati; fixture rimossa transazionalmente con conteggi residui a zero. Inoltre `npx tsc --noEmit`, suite Jest completa 67 suite/243 test, `npm run build` e `git diff --check` superati. I test R2 coprono anche autorizzazione endpoint, payload non valido, fine stagione, inclusione di oggi e DST Europe/Rome.
+
+### R3 — Opzione RSVP e salvataggio squadra
+
+**Obiettivo:** rendere configurabile la funzione durante creazione/modifica.
+
+File: `src/components/admin/TeamModal.tsx`,
+`src/components/admin/TeamsManager.tsx` e percorso server introdotto in R2.
+
+Attività:
+
+1. Aggiungere «Richiedi conferma presenza agli allenamenti» accanto agli orari,
+   con descrizione del prossimo RSVP e delle assenze anticipate.
+2. Caricare/salvare la preferenza, resettare correttamente il form quando si
+   cambia squadra e mantenere il default disattivato per nuove squadre.
+3. Verificare il contratto `onCreate`: creare la squadra una sola volta,
+   ottenere l'ID dal salvataggio e usare il callback per il refresh senza
+   doppia creazione. Conservare l'assegnazione coach.
+4. Collegare il flusso alla riconciliazione R2, anche se tutti gli orari sono
+   rimossi; mostrare chiaramente esito, avvisi ed eventuale successo parziale.
+5. Non chiudere il form come se tutto fosse riuscito quando gli eventi non
+   sono stati salvati. Consentire un retry senza ricreare la squadra.
+
+**Accettazione:** squadra con lunedì/mercoledì e opzione attiva produce eventi
+RSVP; con opzione disattiva no; riapertura conserva la scelta; zero duplicati.
+
+**Verifiche:** test flusso creazione/modifica e fallimento generazione; prova
+UI mobile/desktop, tastiera e loading; controlli tecnici comuni.
+
+#### Registro R3 — chiusura 10/09/2026
+
+Completato. `TeamModal` mostra la preferenza «Richiedi conferma presenza agli
+allenamenti» accanto agli orari, con descrizione del prossimo RSVP e delle
+assenze anticipate; la preferenza viene inizializzata dalla squadra e resta
+disattivata per le nuove squadre. Gli orari inattivi non vengono riproposti
+nel form dopo una rimozione completa.
+
+Il contratto `onCreate` ora crea la squadra soltanto in `TeamsManager`,
+restituisce l'ID appena persistito e conserva l'assegnazione coach. In caso di
+errore nell'assegnazione il manager annulla la creazione. Dopo una creazione
+riuscita, un errore della riconciliazione mantiene l'ID nel modal: il retry usa
+`onUpdate` e non ricrea la squadra. Il form resta aperto su errori R2 e mostra
+conteggi e avvisi per i casi di successo parziale; la rimozione di tutti gli
+orari passa comunque dalla riconciliazione.
+
+La riconciliazione confronta anche `requires_confirmation`, quindi la modifica
+della preferenza aggiorna le occorrenze future senza duplicare gli eventi o
+alterare quelle protette da risposte/eccezioni manuali.
+
+File principali: `src/components/admin/TeamModal.tsx`,
+`src/components/admin/TeamsManager.tsx`,
+`src/server/trainings/training-schedule-reconciliation.ts`,
+`src/components/admin/TeamModal.test.tsx` e il test R2 della riconciliazione.
+
+Verifiche eseguite: test UI R3 3/3, test mirati R2/route 8/8, suite Jest
+completa 68 suite/247 test, `npx tsc --noEmit`, `npm run build` (73 pagine) e
+`git diff --check` superati. La smoke E2E autenticata admin è stata tentata
+con `E2E_BASE_URL=http://localhost:3001`, ma il runtime Chromium termina con
+`SIGTRAP` durante `chromium.launch` (prima dei test), come già osservato nei
+gate precedenti; la verifica reale a 320/375/768/1440 resta quindi da
+ripetere su un host/browser funzionante nel gate integrato R10.
+
+Remediation post-preview: il modal squadra usa una variante viewport-safe con
+header fisso e corpo del form scrollabile, così anche RSVP e azioni finali
+restano raggiungibili su form lunghi desktop e mobile.
+
+### R4 — Resolver unico del prossimo RSVP e API di lettura
+
+**Obiettivo:** decidere lato server quali azioni sono disponibili per il subject.
+
+File: nuovo modulo `src/server/events/`,
+`src/app/api/athlete/dashboard/route.ts`,
+`src/app/api/athlete/calendar/route.ts`,
+`src/app/api/athlete/events/detail/route.ts`, contratti atleta pertinenti.
+
+Attività:
+
+1. Risolvere il subject e le sue squadre autorizzate; selezionare un solo
+   evento futuro automatico RSVP su tutte le squadre, con ordine stabile.
+2. Non usare come universo di ricerca i soli eventi del mese richiesto, le
+   prime dieci righe dashboard o la squadra filtrata nella UI.
+3. Non saltare un evento perché già risposto/declined o con deadline scaduta;
+   far avanzare la selezione solo al suo inizio o se non è più pertinente.
+4. Restituire per ogni evento le capacità del contratto R1: RSVP completo,
+   assenza anticipata, revoca, sola lettura e motivo. Per la revoca verificare
+   che esista effettivamente l'assenza anticipata dell'atleta.
+5. Integrare lo stesso resolver nelle tre API, mantenendo i permessi delegati
+   `view_schedule` e `confirm_attendance` distinti e senza esporre altre squadre.
+6. Includere il prossimo evento rilevante nella dashboard anche quando un
+   limite di lista lo escluderebbe; mantenere gli eventi manuali compatibili.
+
+**Accettazione:** U14 lunedì prevale su U16 martedì in ogni API, anche aprendo
+direttamente martedì o cambiando mese/filtro. Famiglia senza permesso non agisce.
+
+**Verifiche:** test con clock controllato, multi-team, evento condiviso,
+parità di orario, deadline anticipata, già risposto, lista troncata e deleghe.
+
+**Completato il 11/09/2026.** Aggiunto `src/server/events/attendance-availability.ts`
+con caricamento server-side delle squadre/eventi autorizzati, selezione globale
+del prossimo evento automatico RSVP (ordinamento per istante e ID), contratto
+`AttendanceAvailabilityContract` per evento, deadline/risposta/assenza anticipata,
+revoca verificata e ricalcolo temporale. Il resolver considera tutte le squadre
+autorizzate anche quando la dashboard è troncata o il calendario è filtrato;
+limita i `team_ids` alle relazioni autorizzate e lascia gli eventi manuali sul
+percorso legacy.
+
+Integrato in `src/app/api/athlete/dashboard/route.ts`,
+`src/app/api/athlete/calendar/route.ts` e
+`src/app/api/athlete/events/detail/route.ts`. La dashboard reinserisce il
+prossimo evento automatico se escluso dal limite locale; `view_schedule` resta
+distinto da `confirm_attendance`, anche per i profili familiari delegati.
+
+File principali modificati: resolver R4, test del resolver e le tre Route Handler
+atleta. Nessuna migrazione o modifica schema aggiuntiva; R5 resta responsabile
+delle mutation e delle protezioni di scrittura.
+
+Verifiche eseguite: test mirati R4 5/5, suite Jest completa 69 suite/252 test,
+`npx tsc --noEmit`, ESLint sui file modificati, `npm run build` e `git diff --check`.
+
+### R5 — Salvataggio RSVP e protezioni dei percorsi diretti
+
+**Obiettivo:** rendere effettive le regole anche fuori dall'interfaccia.
+
+File: `src/app/api/athlete/events/attendance/route.ts` e `.test.ts`,
+`src/lib/validation/events.ts`, resolver R4, migrazioni di sicurezza pertinenti.
+
+Attività:
+
+1. Riutilizzare R4 per ogni RSVP ordinario del nuovo flusso; rifiutare eventi
+   successivi, iniziati o scaduti, anche senza deadline esplicita.
+2. Preservare identità account/subject e `responded_by_auth_user_id`;
+   validare gli stati e mantenere i normali RSVP manuali compatibili.
+3. Verificare come `subject.dataClient` opera nei casi personale/delegato e
+   quali scritture dirette il client Supabase può eseguire.
+4. Chiudere aggiramenti tramite INSERT/UPDATE/DELETE diretti o RPC pubbliche:
+   le policy attuali sul solo `profile_id` non costituiscono verifica temporale.
+   Scegliere un percorso DB protetto coerente con l'architettura, documentarlo
+   e mantenere i percorsi autorizzati coach/admin e gli eventi manuali.
+5. Effettuare la verifica finale dello stato/tempo al salvataggio, evitando
+   che un evento diventato scaduto durante la richiesta venga accettato.
+6. Restituire errori di dominio comprensibili e non dettagli SQL interni.
+
+**Accettazione:** un atleta non può anticipare RSVP ordinari o modificare
+eventi scaduti del nuovo flusso neppure chiamando direttamente API/Data API.
+
+**Verifiche:** test endpoint e prove DB con ruoli reali personale, familiare
+autorizzato/non autorizzato, altro atleta, coach/admin; nessun test con service
+role spacciato per verifica RLS; confronto deadline al momento della scrittura.
+
+**Completato il 13/09/2026.** La route usa `resolveAttendanceAvailability` di R4
+per ogni risposta, inclusi ordine globale multi-squadra, evento iniziato,
+deadline assente o superata, risposta già registrata e delega autorizzata.
+La scrittura usa il RPC `public.record_athlete_attendance`, esplicitamente
+service-only, dopo la risoluzione dell'account/subject: il client autenticato
+(`subject.dataClient`) resta il client di lettura/autorizzazione, mentre il
+client privilegiato è usato solo per la mutation protetta. Il RPC rifà in una
+singola transazione il controllo membership, stato, ordine e tempo con
+`clock_timestamp()`, preserva `profile_id`, `responded_by_auth_user_id`,
+`response_source` e `responded_at`, e mantiene gli eventi manuali compatibili.
+
+Aggiunta migrazione `20260913120000_r5_protect_automatic_attendance_writes.sql`:
+trigger DB per bloccare alle Data API INSERT/UPDATE/DELETE su occorrenze
+automatiche non più eleggibili, policy personali che impediscono di falsificare
+l'attore e revoca delle execute del RPC a `public`, `anon` e `authenticated`.
+Coach/admin restano sul percorso autorizzato esistente; eventi manuali non sono
+vincolati dal guard automatico. Gli errori SQL non vengono restituiti al client,
+ma convertiti in errori di dominio.
+
+Test eseguiti: Route Handler + resolver R4 8/8, `npx tsc --noEmit` e
+`git diff --check`. Prove DB con ruoli reali non eseguibili in questa sessione:
+Postgres locale non risponde su `127.0.0.1:54322` e `supabase status` fallisce
+prima del controllo per un errore EPERM sul telemetry file del CLI; da ripetere
+su staging/host con DB attivo, senza service role come evidenza RLS.
+
+### R6 — UI con un solo RSVP completo e aggiornamento temporale
+
+**Obiettivo:** allineare dashboard, calendario e dettaglio senza filtri locali
+che possano cambiare l'evento selezionato dal server.
+
+File: `src/components/athlete/AthleteDashboard.tsx`, `AthleteAgenda.tsx`,
+`AthleteCalendarManager.tsx`, `AttendanceControl.tsx`,
+`src/components/shared/EventDetailModal.tsx`, tipi e test correlati.
+
+Attività:
+
+1. Consumare le capacità R4 invece di usare soltanto `requires_confirmation`.
+   Mostrare i tre pulsanti solo sul prossimo evento autorizzato.
+2. Conservare tutti gli eventi nel calendario; per quelli successivi non
+   mostrare una richiesta ordinaria. Lo storico mostra lo stato in sola lettura.
+3. Dopo la risposta aggiornare lo stato senza avanzare al successivo.
+4. Ricaricare al prossimo istante rilevante, al ritorno in primo piano e dopo
+   le mutazioni. Non introdurre polling continuo; pulire timer e listener.
+5. Invalidare richieste obsolete al cambio subject; gestire offline e gli
+   errori server quando l'evento scade mentre la schermata resta aperta.
+6. Preservare le superfici coach/admin che riutilizzano il dettaglio condiviso.
+
+**Accettazione:** mai più di un RSVP completo per atleta; il passaggio
+lunedì→martedì avviene senza richiedere logout o riapertura dell'app.
+
+**Verifiche:** test componenti con timer controllato, cambio subject/filtro,
+focus, risposta e scadenza; smoke mobile e dettaglio condiviso coach/admin.
+
+#### Registro R6 — chiusura 13/09/2026
+
+Completato. Dashboard, agenda, calendario e dettaglio condividono ora
+`attendance_availability` del resolver R4: i tre pulsanti RSVP compaiono solo
+quando `actions.respond` è autorizzato dal server; gli eventi successivi e lo
+storico restano visibili con stato in sola lettura. La risposta aggiorna lo
+stato dell'evento corrente e ricarica i dati senza avanzare localmente.
+
+Il calendario e la dashboard ricaricano al focus/ritorno online e al prossimo
+`next_recalculation_at`, senza polling continuo; timer, listener e richieste di
+mutation vengono puliti/abortiti al cambio subject. Gli errori offline e le
+risposte 409 di scadenza restano visibili tramite il controllo esistente, con
+rollback dello stato ottimistico. Il dettaglio condiviso mantiene il contratto
+compatibile per coach/admin.
+
+File principali: `src/components/athlete/AthleteDashboard.tsx`,
+`AthleteAgenda.tsx`, `AthleteCalendarManager.tsx`, `AttendanceControl.tsx`,
+`src/components/shared/EventDetailModal.tsx` e il test del controllo RSVP.
+
+Verifiche eseguite: test mirati componenti 27/27, `npx tsc --noEmit`, ESLint sui
+file modificati e `git diff --check`. Smoke E2E mobile e dettaglio coach/admin
+non eseguiti in questo ambiente.
+
+### R7 — API assenze anticipate e revoca
+
+**Obiettivo:** gestire singole e multiple assenze con autorizzazione per evento.
+
+Punti di ingresso: `src/app/api/athlete/events/`,
+`src/lib/validation/events.ts`, servizi R4/R5 e `event_attendances`.
+
+Attività:
+
+1. Definire un endpoint/servizio esplicito per segnalare o revocare l'assenza.
+   Il payload contiene ID evento selezionati e nota facoltativa (massimo 1000
+   caratteri, coerente con validazione esistente), mai un profilo non verificato.
+2. Supportare uno o più ID deduplicati con limite esplicito documentato;
+   verificare su ogni evento futuro origine, RSVP, deadline e appartenenza.
+3. Salvare `declined`, indicatore di assenza anticipata e autore corretto;
+   aggiornare senza duplicati. La revoca può eliminare soltanto la relativa
+   assenza anticipata ancora valida, non una diversa risposta concorrente.
+4. Rendere l'operazione multipla atomica: se un evento selezionato non è più
+   valido, non salvare nessun elemento e chiedere di aggiornare il riepilogo.
+   Usare lo stesso percorso DB protetto di R5, senza un ciclo client di richieste.
+5. Aggiungere il recupero degli eventi selezionabili per periodo sul subject
+   autorizzato; gestire paginazione senza troncamenti silenziosi. Il salvataggio
+   riceve gli ID confermati, senza espandere nuovamente tutto il periodo.
+6. Verificare i report coach/admin esistenti e la comparsa di `declined` senza
+   una seconda tabella RSVP; non modificare le convocazioni di campionato.
+
+**Accettazione:** assenze registrabili sui futuri eventi anche non prossimi;
+nessun RSVP completo anticipato, nessuna scrittura parziale o revoca estranea.
+
+**Verifiche:** singolo/multiplo, richiesta ripetuta, ID duplicati, payload
+misto autorizzato/non autorizzato, scadenza durante invio, rollback, revoca
+concorrente, familiari e Data API diretta; report conteggi coerenti.
+
+**Completato il 13/09/2026.** Aggiunto `/api/athlete/events/early-absence` con
+`GET` per il recupero per periodo e paginazione esplicita (`limit` massimo 100,
+`offset`, `has_more`, `next_offset`, `total`), `POST` per segnalare e `DELETE`
+per revocare. I payload accettano ID deduplicati, massimo 100 eventi distinti e
+nota opzionale trim/max 1000; il subject viene sempre risolto server-side con
+`confirm_attendance`, inclusi i familiari autorizzati.
+
+Il resolver R4 ora separa RSVP completo (solo prossimo evento) da assenza
+anticipata (ogni futuro evento automatico RSVP autorizzato), mantenendo deadline,
+origine, appartenenza e risposta già presente. Le nuove RPC service-only
+`record_athlete_early_absence` e `revoke_athlete_early_absence` nella migrazione
+`20260913130000_r7_early_absence_mutations.sql` ripetono i controlli con lock
+sugli eventi e validano tutto prima di scrivere: il bulk è atomico, idempotente
+e la revoca cancella solo la riga ancora marcata `is_early_absence=true`.
+Le policy Data API impediscono di creare/promuovere direttamente un’assenza
+anticipata; report coach/admin continuano a contare `declined` da
+`event_attendances`, senza tabella RSVP aggiuntiva e senza modifiche alle
+convocazioni.
+
+File principali: `src/app/api/athlete/events/early-absence/route.ts` e test,
+`src/lib/validation/early-absence.ts`, `src/server/events/early-absence.ts`,
+resolver R4 e migrazione R7. Verifiche: 3 suite mirate / 13 test, ESLint sui
+file modificati, `npx tsc --noEmit`, `npm run build` e `git diff --check`.
+La migrazione è stata applicata in modo mirato al DB locale e al progetto
+staging `csromawebapp-staging` il 13/09/2026; la history di entrambi è stata
+allineata a `20260913130000`. Il comando `supabase migration new` iniziale era
+fallito per `EPERM` su `~/.supabase/telemetry.json`, quindi il file timestampato
+è stato creato manualmente. Nessun deploy e nessuna modifica alle convocazioni.
+
+### R8 — UI assenza anticipata del singolo allenamento
+
+**Obiettivo:** consentire segnalazione e revoca dal dettaglio evento.
+
+File: `src/components/shared/EventDetailModal.tsx`,
+`src/components/athlete/AthleteCalendarManager.tsx`, `AthleteDashboard.tsx`,
+`AttendanceControl.tsx` e componenti specifici soltanto se necessari.
+
+Attività:
+
+1. Aggiungere «Segnala assenza» agli eventi eleggibili usando le capacità R4;
+   mostrare squadra/data/orario e campo nota facoltativo prima dell'invio R7.
+2. Mostrare stato salvato e «Revoca assenza» dove consentito; revocare
+   ripristina «Da confermare», mai automaticamente «Partecipo».
+3. Quando diventa il prossimo evento, mantenere il messaggio «Hai già
+   comunicato che non parteciperai»; offrire la modifica volontaria entro
+   scadenza, senza una nuova richiesta automatica né avanzamento anticipato.
+4. Aggiornare lista, dettaglio e dashboard; gestire loading, errori, offline,
+   chiusura e cambio subject senza applicare risultati al profilo sbagliato.
+
+**Accettazione:** flusso completo singolo evento, revoca e passaggio a prossimo
+evento usabili da atleta e familiare autorizzato, inaccessibili dopo scadenza.
+
+**Verifiche:** test UI e mutation integrata, nota, doppio invio, errore,
+revoca, cambio subject e conservazione dello stato dopo riapertura.
+
+**Completato il 13/09/2026.** Integrato il flusso singolo in `AttendanceControl`,
+riusato da dettaglio evento, agenda calendario e dashboard atleta/familiare.
+Gli eventi eleggibili mostrano riepilogo squadra/data/orario, nota facoltativa,
+loading/error/offline, stato «Hai già comunicato che non parteciperai» e revoca
+entro deadline. La revoca torna a «Da confermare» e abilita solo una modifica
+volontaria; non seleziona automaticamente «Partecipo». Le chiamate usano
+`/api/athlete/events/early-absence` con `subjectProfileId`, abort/guardie di
+contesto già presenti e refresh del subject per evitare aggiornamenti incrociati.
+Esteso il payload calendario/dashboard con `is_early_absence`.
+
+File principali: `src/components/athlete/AttendanceControl.tsx`,
+`src/components/shared/EventDetailModal.tsx`, `src/components/athlete/AthleteAgenda.tsx`,
+`src/components/athlete/AthleteCalendarManager.tsx`,
+`src/components/athlete/AthleteDashboard.tsx` e contratti/API di lettura.
+Verifiche: 5 suite mirate / 31 test, suite completa 70/264, `npx tsc --noEmit`, `npm run build` e
+`git diff --check` superati. Non eseguita una nuova sessione browser E2E in
+questo goal; le mutation server-side e i test R7 restano il riferimento integrato.
+Fix post-deploy: corretto il richiamo del metodo Supabase `rpc` nella route di
+mutation. L'estrazione del metodo (`const rpc = client.rpc`) perdeva il contesto
+interno del client e causava un 500 prima della richiesta POST verso Supabase;
+la chiamata ora resta legata all'istanza (`client.rpc(...)`). Verificati route
+test, typecheck, lint e `git diff --check`.
+Diagnostica post-deploy: il 409 ora registra nei log Vercel solo codice, messaggio,
+dettagli e hint restituiti da Supabase e mappa le cause R7 in messaggi distinti,
+senza esporre dettagli interni o segreti al client.
+Fix database R8: il trigger R5 applicava erroneamente `attendance_event_not_next`
+anche alle RPC R7 quando la Service Role moderna non propagava il claim JWT al
+trigger. La migration `20260913150000_r8_allow_early_absence_non_next.sql` usa un
+flag transazionale dedicato alle sole RPC R7, mantenendo il vincolo sul normale
+RSVP e sulle scritture dirette. Applicata e verificata su staging Supabase e DB
+locale; il locale segnala soltanto un warning preesistente sulla versione della
+collation.
+
+### R9 — UI assenza per periodo e selezione multipla
+
+**Obiettivo:** comunicare più assenze con un riepilogo esplicito.
+
+File: `src/components/athlete/AthleteCalendarManager.tsx`, nuovo componente
+dedicato al flusso «Comunica assenza», API R7 e relativi test.
+
+Attività:
+
+1. Aggiungere «Comunica assenza» nel calendario solo con permesso di risposta.
+2. Richiedere data iniziale/finale, caricare gli eventi eleggibili del periodo
+   su tutte le squadre autorizzate e mostrare squadra, giorno, ora e stato.
+   Dichiarare l'ambito multi-squadra anche se il calendario era filtrato.
+3. Consentire selezione singola/tutti, nota comune facoltativa e riepilogo
+   con conteggio prima di confermare. Non includere eventi nascosti non caricati.
+4. Mostrare vuoto autentico, periodo non valido, caricamento e paginazione;
+   trattare gli eventi già assenti chiaramente, senza inviti duplicati.
+5. Inviare soltanto gli ID confermati. Se il server rifiuta perché un evento
+   non è più valido, conservare il contesto e aggiornare l'elenco per una nuova
+   conferma; nessun messaggio di successo parziale.
+6. Usare i pattern dialog/sheet esistenti, focus corretto e touch target;
+   al cambio subject chiudere e azzerare periodo/selezione/note.
+
+**Accettazione:** assenza di una settimana selettiva tra U14/U16 salvata in
+un solo flusso, visibile nei singoli eventi; nuovi eventi del periodo esclusi.
+
+**Verifiche:** selezione parziale/totale, due squadre, range su cambio mese
+e ora legale, paginazione, errore atomico, cambio subject, uso a 320/375 px
+e desktop, tastiera e offline.
+
+**Completato il 13/09/2026.** Aggiunto `EarlyAbsencePeriodModal.tsx` e
+integrato in `AthleteCalendarManager.tsx`: la CTA è presente solo con
+`confirm_attendance`; il flusso richiede intervallo locale inclusivo, dichiara
+l'ambito tutte le squadre autorizzate indipendentemente dal filtro calendario,
+carica pagine R7, mostra squadra/data/ora/stato, permette selezione singola o
+di tutti gli eventi caricati, nota comune e riepilogo esplicito. Gli eventi già
+in assenza non vengono riproposti dal contratto R7 e il vuoto lo dichiara.
+L'invio usa esclusivamente gli ID selezionati; su rifiuto `409` mantiene aperto
+il contesto, azzera la selezione, aggiorna l'elenco e non mostra successo
+parziale. Offline, loading, periodo invalido, focus/ESC del pattern `Modal`,
+touch target minimi e reset completo al cambio subject sono coperti.
+Test aggiunti in `src/components/athlete/EarlyAbsencePeriodModal.test.tsx`;
+10 test mirati passati, `npx tsc --noEmit`, `npm run build` e `git diff --check`
+passati. Restano da eseguire solo le verifiche browser/E2E reali della matrice
+R10 (inclusi viewport 320/375, cambio DST e offline interattivo).
+
+**Remediation 13/09/2026.** Corretto il rendering del payload R7 quando l'evento
+contiene `team_ids` ma non il campo legacy `teams`: la UI usa ora un fallback
+tipizzato per visualizzare la squadra senza eccezioni client-side. Aggiunta
+regressione dedicata; test mirato e typecheck passati.
+
+### R10 — Gate integrato RSVP e assenze
+
+**Obiettivo:** chiudere la funzionalità con evidenze riproducibili.
+
+Attività e scenari obbligatori:
+
+1. Creare una squadra con due giorni e RSVP attivo; verificare calendario e
+   report con un atleta iniziale e un atleta aggiunto dopo la generazione.
+2. Atleta U14 lunedì/U16 martedì: un solo RSVP in dashboard/calendario/dettaglio;
+   rispondere a lunedì non anticipa martedì; il passaggio temporale lo abilita.
+3. Registrare assenza singola e multipla; verificarla lato coach, riaprire la
+   sessione atleta, revocarla e controllare che non sia diventata «Partecipo».
+4. Portare un evento già assente a prossimo: nessuna richiesta duplicata;
+   evento passato/scaduto senza azioni, anche via chiamate dirette.
+5. Ripetere con familiare autorizzato e con sola lettura; cambiare subject
+   durante caricamento/invio e verificare isolamento dei dati.
+6. Modificare squadra/orari, disattivare RSVP, rimuovere tutti gli orari,
+   ritentare un salvataggio: nessuna perdita di storico/risposte o duplicato.
+7. Controllare casi legacy/manuali e convocazioni senza regressioni; verificare
+   tutti i percorsi DB con credenziali di ruolo adeguate e senza esporre segreti.
+8. Eseguire test mirati finali, suite Jest completa, `npx tsc --noEmit`,
+   `npm run build`, ESLint pertinente e `git diff --check`; prova browser
+   atleta/famiglia/coach su mobile e desktop. Distinguere mock da verifiche DB.
+9. Registrare migrazioni applicate, ambiente usato, risultati e limitazioni.
+   Nessun goal è completo se i controlli necessari sono solo descritti.
+
+**Accettazione:** tutti gli scenari superati o impedimenti dichiarati con
+goal lasciato parziale; piano aggiornato senza note di implementazione perse.
+La pubblicazione rimane un'attività successiva esplicitamente richiesta.
+
+### Prompt riutilizzabile per eseguire un goal
+
+> Esegui soltanto il goal R[N] della sezione «Goal operativi RSVP» in
+> `implementation_plan_redesign.md`. Leggi prima `AGENTS.md`, `re_design.md`,
+> il piano e lo stato Git. Verifica che i prerequisiti siano completati e usa
+> i contratti già registrati dai goal precedenti. Implementa tutte le attività
+> di R[N], esegui le verifiche previste e aggiorna il piano con stato, file,
+> migrazioni, test reali e note residue. Non avviare il goal successivo,
+> non fare deploy e non intervenire sui dati legacy fuori dall'ambito previsto.
+
+Registro della scomposizione: modificato soltanto questo documento;
+nessuna implementazione o modifica DB; `git diff --check` eseguito.
+
+## Valutazione proposta — gestione delle sole assenze — 14/09/2026
+
+**Stato: analisi completata; proposta da discutere, non implementata né
+approvata come implementazione.** Non sostituisce ancora le regole confermate
+di R1–R10 o di `re_design.md`. **Ambito indicato dall'utente durante l'analisi:
+«allenamenti e partite»**, superando l'ipotesi iniziale limitata agli allenamenti
+automatici. Includere quindi allenamenti automatici/manuali e partite; altri
+tipi di evento restano fuori dall'estensione.
+
+**Chiarimento dell'utente del 14/09/2026:** per le partite la priorità è
+raccogliere le assenze **prima della convocazione**, così il coach può scegliere
+sapendo chi non potrà esserci. La gestione successiva alla convocazione è
+rimandata a una fase due. Obiettivo di adozione: portare la comunicazione delle
+assenze nell'app, invece che a voce. Questa decisione definisce l'ambito di
+prodotto, senza avviare l'implementazione.
+
+### Stato effettivo rilevato
+
+- R1–R9 hanno implementazione presente; ultimo goal funzionale registrato R9,
+  seguito dalle correzioni per ricerca personale, payload squadre e titoli.
+  R10 è aperto. R5 è descritto come completato nel proprio registro ma ha
+  checkbox vuota e prove DB con ruoli reali ancora da documentare: verificare
+  la chiusura nel gate, senza ripetere l'implementazione.
+- `AttendanceControl.tsx` concentra i tre pulsanti RSVP e il flusso singolo
+  di assenza. Quest'ultimo richiede attualmente apertura del form e conferma:
+  non è ancora un'azione a un clic.
+- R7/R8 salvano già `declined` + `is_early_absence=true` nella tabella
+  `event_attendances`, anche su eventi futuri non prossimi; la revoca elimina
+  la riga. R9 riusa lo stesso endpoint per selezioni multiple atomiche.
+- Resolver e RPC rifiutano un'assenza se esiste una risposta ordinaria.
+  Eliminare soltanto i pulsanti lascerebbe quindi bloccati alcuni atleti.
+- Coach/admin ricavano già i destinatari dalla rosa corrente deduplicata,
+  dividendoli in `going`, `maybe`, `declined`, `no_response`; il report coach
+  e quello admin non leggono ancora una modalità di gestione dall'evento.
+- Le partite di campionato hanno già `championship_matches.event_id`
+  (nullable nel contratto TypeScript), riutilizzabile per le assenze. Le
+  convocazioni sono separate, in `championship_match_convocations` e
+  `championship_match_convocation_members`; il flusso letto non contiene una
+  risposta di partecipazione sul membro convocato. L'RPC R7/R8 oggi esclude
+  partite e allenamenti manuali perché richiede `generated_from_schedule_id`.
+  La sincronizzazione DB delle partite va verificata su staging: il repository
+  ne cita la funzione `sync_championship_match_event` ma non ne contiene qui
+  la definizione nelle migrazioni analizzate.
+
+### Comportamento UX proposto
+
+- Atleta/familiare: «Segnala solo se non puoi esserci», un pulsante
+  «Segnala assenza» con salvataggio immediato e feedback «Assenza comunicata»;
+  successiva azione «Annulla assenza». La nota rimane facoltativa e non deve
+  aggiungere un passaggio obbligatorio. Nel bulk resta il riepilogo esplicito.
+- Nessuna azione per chi partecipa, nessuna etichetta «Da confermare» per gli
+  eventi in questa modalità. Assenza comunicabile/revocabile su ogni evento
+  futuro eleggibile; mantenere deadline e chiusura all'inizio come primo default.
+- Coach: «Attesi 15 su 18 · Assenti 3», con entrambi gli elenchi e spiegazione
+  «Gli attesi sono gli atleti della rosa senza un'assenza comunicata».
+  Non chiamarli presenze confermate o effettivamente rilevate. Lo zero assenti
+  significa nessuna assenza comunicata, non verifica della partecipazione.
+- Partite, fase uno: «Disponibili» = rosa meno assenze comunicate, con dicitura
+  che chiarisce il criterio e lista degli assenti. L'atleta può segnalare
+  l'assenza quando la partita è già in calendario, senza attendere una
+  convocazione. Il coach consulta l'indisponibilità nel momento della scelta
+  dei convocati. Nessun conteggio basato sui convocati e nessuna conferma
+  successiva richiesti in questa fase.
+- Adozione proposta: stesso comando «Segnala assenza» per allenamento e partita,
+  accessibile da dashboard/calendario/dettaglio, senza nota o conferma obbligatoria;
+  conservare l'assenza per periodo anche per le partite eleggibili. Copy breve:
+  «Non puoi esserci? Segnala l'assenza qui: il coach la vedrà nell'app».
+  L'organizzazione accompagna il rilascio con una regola condivisa tra coach,
+  atleti e familiari: le assenze vanno registrate nell'app. Nessun messaggio
+  viene inviato da questa analisi; promemoria/push non fanno parte della fase uno.
+- Rimandare il post-convocazione non introduce automaticamente una chiusura
+  delle segnalazioni al salvataggio della convocazione. La prima fase conserva
+  il limite temporale dell'evento/deadline, senza dipendere dallo stato della
+  convocazione; eventuali regole speciali successive appartengono alla fase due.
+- Design system invariato: token, font, componenti e responsive esistenti;
+  stato neutro per assenza non segnalata, stato testuale per assenza comunicata,
+  focus visibile, target almeno 44 px, pending/error/offline espliciti.
+
+### Intervento tecnico minimo consigliato
+
+1. **Riutilizzare dati e percorsi R7–R9.** Nessuna nuova tabella presenze,
+   nessuna creazione preventiva di righe `going`, nessun cron o push.
+   Conservare i nomi tecnici e il permesso familiare `confirm_attendance`
+   per ridurre propagazione e migrazioni; aggiornare il copy di
+   `TeamModal` a «Abilita segnalazione assenze agli allenamenti».
+2. **Distinguere stabilmente la modalità dell'evento.** Per conservare il
+   significato dello storico e degli RSVP manuali, proposta di una piccola
+   colonna evento `attendance_mode` (`rsvp` / `absence_only`, nomi da validare
+   nell'implementazione), con default compatibile. Il generatore assegna la
+   nuova modalità alle occorrenze previste; attivazione mirata per allenamenti
+   e partite futuri già presenti, senza riscrivere eventi passati. Includere
+   form evento manuale e sincronizzazione partita→evento per i nuovi eventi.
+   Riutilizzare la preferenza squadra esistente, senza aggiungere un secondo
+   selettore di modalità. Deducendo tutto dalla sola origine si risparmierebbe
+   la colonna, ma si reinterpretarebbe anche lo storico: non è il default
+   consigliato. Una migrazione delle funzioni/protezioni DB serve comunque.
+3. **Allineare resolver, API, RPC e scritture dirette.** Per `absence_only`
+   disabilitare le risposte ordinarie e mantenere segnalazione/revoca su tutti
+   gli eventi aperti. La regola «un solo prossimo RSVP» non serve in questa
+   modalità; conservare il prossimo evento per la dashboard e i ricalcoli
+   temporali per inizio/deadline. Adeguare anche gli aggiornamenti locali dopo
+   revoca: oggi possono riabilitare `respond` prima del refresh.
+   Generalizzare l'eleggibilità R7/R8 alla modalità dell'evento, superando il
+   requisito dell'origine automatica; estendere gli stessi controlli DB a
+   partite e allenamenti manuali, preservando la verifica delle squadre.
+4. **Definire la transizione dei dati già risposti.** Inventariare su staging
+   le risposte future degli eventi interessati prima di migrare. Preservare
+   tutte le righe storiche; non convertire automaticamente `maybe` in una
+   conferma esplicita. Negli eventi convertiti gli attesi sono per definizione
+   tutti i membri senza `declined`; le precedenti risposte non devono impedire
+   di comunicare un'assenza. Una precedente `declined` ordinaria deve restare
+   visibile come assenza e avere una regola esplicita di revoca; preservare
+   provenienza e distinguere eventuali registrazioni dello staff. Resolver e
+   RPC vanno adeguati insieme, senza cancellazioni massive delle risposte.
+5. **Calcolare i report sul server.** Aggiungere modalità, rosa totale,
+   elenco/conteggio attesi e assenti, preservando il contratto RSVP per gli
+   altri eventi. Formula: membri unici nell'ambito autorizzato meno membri
+   con `status='declined'` per quell'evento. Sottrarre solo atleti ancora
+   appartenenti alla rosa considerata; rispettare filtri e assegnazioni coach.
+   Riutilizzare il calcolo tra coach e admin per evitare divergenze.
+   Per le partite collegare `event_id`, partita e club-team autorizzato;
+   calcolare disponibilità e assenze sulla rosa della squadra, anche senza
+   alcuna convocazione salvata. Non occorre un resolver dei partecipanti
+   convocati per il conteggio di fase uno.
+6. **Aggiornare tutte le superfici interessate.** Controllo condiviso, dashboard
+   e calendario atleta/famiglia, dettaglio evento, dashboard/report coach,
+   report admin e testi di configurazione. Non basta cambiare una sola label.
+   Nel campionato atleta riusare il controllo di assenza sull'evento collegato;
+   nella selezione convocati coach mostrare l'indisponibilità già comunicata
+   accanto al nome, distinguendo chiaramente gli assenti dai disponibili.
+   Caricare dati aggiornati all'apertura della selezione; non imporre un nuovo
+   passaggio di conferma e non modificare automaticamente convocazioni salvate.
+   Non creare un secondo sistema di risposte sulle righe di convocazione.
+
+Punti di ingresso verificati: `src/types/attendance.ts`,
+`src/server/events/attendance-availability.ts`, `src/server/events/early-absence.ts`,
+`src/app/api/athlete/events/{attendance,early-absence}/route.ts`,
+`src/components/athlete/{AttendanceControl,AthleteDashboard,AthleteAgenda,AthleteCalendarManager,EarlyAbsencePeriodModal}.tsx`,
+`src/components/shared/EventDetailModal.tsx`,
+`src/app/api/{coach,admin}/events/attendance/route.ts`,
+`src/components/coach/{CoachDashboard,CoachCalendarManager}.tsx`,
+`src/components/admin/{TeamModal,EventsManager}.tsx`,
+`src/server/trainings/training-schedule-reconciliation.ts`, contratti API
+dashboard/calendario/dettaglio, `src/components/championship/types.ts`,
+`src/components/championship/useChampionshipConvocations.ts`,
+`src/components/championship/ChampionshipConvocationModal.tsx`,
+`src/components/athlete/ChampionshipsManager.tsx`,
+`src/app/api/athlete/championships/route.ts`, form evento manuale,
+sincronizzazione DB delle partite, nuove migrazioni e test pertinenti.
+
+### Ordine proposto e verifiche residue
+
+Impatto stimato qualitativamente **medio per allenamenti e partite**: riuso
+consistente del lavoro R1–R9, con modifiche trasversali necessarie alla semantica
+del dato. Il chiarimento pre-convocazione riduce l'ambito: serve mostrare le
+assenze della rosa durante la scelta, senza introdurre presenze dei convocati
+o un flusso di risposta successivo.
+Non è una riscrittura e non è una sola modifica visuale.
+
+Prima di eseguire R10 sul vecchio comportamento, aggiornare requisiti/piano
+secondo l'ambito chiarito. Poi procedere con tre interventi sequenziali:
+contratto e protezioni DB/API con transizione; UI e report; R10 aggiornato.
+Non avviare questi interventi senza una richiesta di implementazione.
+
+Gate: rosa 18/assenze 3/attesi 15, zero comunicazioni, nuovo atleta, atleta
+rimosso, atleta multi-team contato una volta, filtro coach autorizzato,
+segnalazione/revoca singola e multipla, vecchie risposte `going/maybe/declined`,
+deadline e evento iniziato, famiglia con/senza permesso, cambio subject durante
+invio, errore/offline, scritture dirette, storico e altri eventi invariati,
+allenamento manuale, assenza partita senza convocazione esistente, elenco
+disponibili/assenti nella scelta convocati, revoca visibile al coach, nessuna
+modifica automatica alle convocazioni salvate, `event_id` mancante,
+partita annullata o riprogrammata e
+rigenerazione senza perdita di dati. Eseguire prove DB con ruoli reali e gate
+tecnici/browser previsti da R10.
+
+Note emerse dalla lettura da includere nel gate: il selettore R7 per periodo
+filtra `report_early_absence`, che oggi resta vero anche per assenze già
+registrate, mentre il copy R9 dichiara di escluderle; verificare e allineare
+query/payload/UI. Il report coach senza filtro usa tutte le squadre dell'evento
+dopo avere verificato almeno un'assegnazione: verificare l'ambito autorizzato
+prima di riusare questo insieme nel nuovo conteggio. I report usano la rosa
+corrente e non una fotografia storica: il nuovo conteggio non va presentato
+come registro delle presenze effettive passate.
+
+**Registro di questa analisi:** modificato soltanto
+`implementation_plan_redesign.md`; letti requisiti, piano, stato/history Git,
+componenti, route, resolver, generatore e migrazioni R1/R5/R7/R8. Nessuna
+modifica applicativa o DB, nessun accesso staging, nessun deploy. Test
+applicativi non eseguiti (analisi/documentazione); `git diff --check` eseguito.
+Restano da concordare trattamento delle risposte future già presenti,
+attivazione della gestione
+assenze sugli eventi con l'opzione oggi disattivata e conferma del limite
+temporale per comunicare/revocare assenze.
+
+**Fase due, esclusa dall'intervento iniziale:** riepilogo attesi sui soli
+convocati, gestione dedicata delle indisponibilità successive alla convocazione,
+eventuali avvisi al coach o sostituzioni. La presenza effettiva all'evento è
+un concetto distinto e non viene dedotta dall'assenza di segnalazioni.
+
+**Registro del chiarimento:** aggiornata soltanto questa sezione del piano
+con priorità pre-convocazione, adozione del canale app e rinvio della fase due;
+nessuna modifica applicativa/DB. Verifica: `git diff --check`.
+
+### Implementazione fase uno — 14/09/2026
+
+Implementata la gestione **sole assenze** per gli eventi configurati, con
+compatibilità RSVP e storico preservati:
+
+- nuova migrazione `20260914120000_absence_only_attendance_mode.sql`: modalità
+  esplicita `events.attendance_mode` (`rsvp`/`absence_only`), conversione dei
+  soli eventi futuri già configurati di tipo allenamento/partita, protezioni
+  DB per impedire RSVP ordinari nella nuova modalità e conservazione del valore
+  RSVP precedente durante una temporanea segnalazione di assenza;
+- il resolver, le API atleta e il controllo condiviso distinguono le due
+  modalità: in `absence_only` resta soltanto “Segnala assenza” immediato e
+  “Revoca assenza”, con nota facoltativa, deadline/inizio evento, contesto
+  familiare e verifiche server-side invariati;
+- allenamenti automatici generati dalla preferenza di squadra e nuovi eventi
+  manuali allenamento/partita configurati da coach/admin usano `absence_only`;
+  gli altri eventi e i dati storici rimangono RSVP;
+- report coach/admin centralizzati: `Attesi = rosa corrente − assenti`, con
+  elenco di attesi e assenti, testo che esclude l’interpretazione come presenza
+  effettiva e restrizione del report coach alle sole squadre assegnate;
+- dashboard coach aggiornata con disponibilità della rosa per il prossimo
+  allenamento/partita configurato.
+
+Limite esplicito: la fase due post-convocazione resta esclusa. Il dettaglio
+campionato continua a usare il suo flusso esistente; non sono state introdotte
+risposte sulle righe di convocazione né modifiche automatiche alle convocazioni
+salvate. Per esporre il controllo direttamente nella schermata campionato è
+necessario completare prima la verifica staging della sincronizzazione
+`championship_matches.event_id` descritta nell’analisi.
+
+Verifiche reali: migrazione applicata solo al Supabase locale con ruolo
+`supabase_admin` (colonna, vincoli e funzioni verificati; 147 eventi futuri
+configurati convertiti), test mirati 8 suite/36 test, suite completa Jest 72
+suite/272 test, `npx tsc --noEmit`, `npm run build` e `git diff --check`
+superati. Il primo tentativo locale come `postgres` è stato rollback completo
+per permessi sullo schema `private`; è presente un warning preesistente di
+collation del database locale. Nessun accesso a staging, produzione o deploy.
+
+**Handoff repository/staging — 14/09/2026.** Il commit locale
+`46b3786` (`feat(attendance): add absence-only mode`) contiene implementazione,
+migrazione, test e questo registro. Il push verso `origin/redesign` e
+l'applicazione staging restano in attesa: il dry-run del progetto collegato
+`csromawebapp-staging` ha rilevato una history divergente, con
+`20260913113243` e `20260913164229` presenti solo sul remoto e
+`20260913150000` presente solo in locale. Non è stata eseguita alcuna repair
+della history, né alcuna scrittura su staging o produzione; servono i file SQL
+mancanti o una decisione esplicita e verificata sulla riconciliazione prima di
+applicare la migration `20260914120000` in sicurezza.
+
+**Recupero migration history staging — 14/09/2026.** Il dump di sola lettura
+del catalogo `supabase_migrations.schema_migrations` ha consentito di recuperare
+in locale, byte-per-byte rispetto agli statement remoti, i file
+`20260913113243_r7_early_absence_mutations.sql` e
+`20260913164229_r8_allow_early_absence_non_next.sql`. Il dry-run non può ancora
+proseguire: staging non registra i file locali `20251007152643` (master legacy),
+`20260806133634` (hardening esplicitamente preparato ma non applicato) e
+`20260913150000`. Quest'ultimo non coincide con l'R8 remoto delle 16:42 e va
+quindi trattato come un vero aggiornamento successivo, con timestamp corretto.
+Non usare `--include-all`: rieseguirebbe anche il master e l'hardening. La
+verifica successiva ha stabilito che quei due file devono restare nel percorso
+delle migrazioni perché sono già registrati in produzione. Staging presenta gli
+oggetti essenziali che essi creano (tabelle, funzioni, trigger e policy), ma
+non le rispettive righe di history: dopo una verifica completa possono quindi
+essere marcati **applied** soltanto su staging, senza rieseguire SQL. L'R8
+locale va invece rinumerato come migrazione forward successiva a
+`20260913164229`, poi applicato normalmente. Nessuna modifica è stata eseguita
+su staging.
+
+**Verifica produzione — 14/09/2026.** Il connettore Supabase read-only ha
+confermato che il progetto produzione `csromawebapp` (`qyiholnatsrvpoqoplje`)
+è fermo a `20260819130000_allow_coach_message_reads`: non contiene R1/R5/R7/R8
+né la modalità sole assenze. Registra invece `20251007152643_master_migration_fixed`
+e `20260806133634_prod_rls_hardening`, assenti solo dalla history di staging.
+Produzione può quindi ricevere, in ordine, le migrazioni dal
+`20260910133219` in avanti tramite il medesimo commit dopo la prova su staging;
+non richiede alcuna repair per i due artefatti storici. Le query al catalogo
+produzione hanno confermato inoltre l'assenza delle funzioni/RPC attendance
+R5–R8 e delle colonne `attendance_mode`/assenza anticipata. Nessuna scrittura
+è stata effettuata su staging o produzione.
+
+**Scope di rilascio corrente — 14/09/2026.** Produzione resta espressamente
+fuori dallo scope: nessuna migration, repair della history, deploy o modifica
+di configurazione sarà eseguita sul progetto `csromawebapp`. Le informazioni
+read-only raccolte su produzione servono soltanto a progettare una promozione
+successiva. L'obiettivo operativo corrente è ripristinare la history di
+**staging**, rinumerare l'R8 locale come migrazione forward e applicare/verificare
+solo le migrazioni richieste su `csromawebapp-staging`.
+
+**Applicazione staging — 14/09/2026.** Dopo avere verificato gli oggetti
+storici nello schema, la history di `csromawebapp-staging` è stata riconciliata
+senza eseguire SQL per `20251007152643` e `20260806133634`. L'aggiornamento R8
+prima locale-only è stato rinumerato da `20260913150000` a
+`20260913170000` per renderlo una migrazione forward rispetto al R8 remoto.
+Il dry-run ha proposto esclusivamente `20260913170000` e `20260914120000` e
+`supabase db push --linked` le ha applicate con successo. Query post-deploy:
+colonne e vincoli `attendance_mode`/pre-assenza presenti, RPC attendance
+presenti e zero eventi futuri configurati di allenamento/partita fuori dalla
+modalità `absence_only`. Il catalogo staging registra entrambe le versioni.
+Il security advisor continua a segnalare tre tabelle RLS senza policy, due
+funzioni `SECURITY DEFINER` eseguibili da authenticated e la leaked-password
+protection disabilitata; nessun finding è relativo alle due migrazioni
+applicate e il loro trattamento resta fuori da questo scope. Produzione non è
+stata modificata.
+
+**Diagnosi preview staging — 14/09/2026.** L'errore storico
+`attendance_event_not_next` del 13/09 proveniva dal guard R8 precedente: la
+migrazione forward `20260913170000` ora imposta il flag transazionale
+`private.early_absence_mutation` nell'RPC e il guard lo accetta, quindi la
+segnalazione assenze non è più limitata al solo prossimo evento. Per il `500`
+di `/api/me/accessible-profiles`, la query RLS su `account_roles` è stata
+riprodotta in sola lettura su staging con lo stesso subject JWT e ruolo
+`authenticated`: restituisce correttamente `athlete`; account attivo e ruolo
+coerenti. Il `401` successivo indica invece che la preview non riceve più una
+sessione valida lato server. Non sono state apportate correzioni applicative:
+per attribuire il 500 storico con certezza servirebbe il payload/stack Vercel
+di quella richiesta, mentre lo stato attuale del database non lo riproduce.
+
+## Analisi layout dashboard atleta — 14/09/2026
+
+Richiesta: proporre soluzioni di sola composizione visuale usando i componenti
+esistenti, prendendo i due mockup allegati come riferimenti e non come nuove
+specifiche funzionali. Analisi completata; implementazione non richiesta.
+
+Riscontri: `AthleteDashboard` presenta cinque Panel di peso simile e tratta
+il primo evento come gli altri due; il CSS di `AppHeader` nasconde il nome
+CSRoma sotto 1024 px. Foundation e G2 risultano già completati: questa proposta
+è un affinamento visuale, non una ripetizione di quei goal.
+
+Direzione consigliata: header con marchio esistente leggibile anche su mobile,
+saluto compatto, primo impegno dominante con ora/data/titolo/luogo/squadre e
+controllo attendance esistente, due eventi successivi in righe compatte,
+partita secondaria, messaggi con preview esistenti, quota e membership con
+separatori leggeri. Alternativa: stessa gerarchia su superficie chiara, con
+accento rosso contenuto. Riutilizzare Panel, ListRow, EventKindBadge,
+StatusBadge, AttendanceControl, MessagePreviewRow e MembershipRow; mantenere
+token, dati, selezione degli eventi, filtri, permessi, route e modali attuali.
+Non introdurre da mockup PagoPA, conteggi confermati, informazioni sportive
+non disponibili o RSVP per gli eventi in modalità sole assenze.
+
+File modificati in questa analisi: solo `implementation_plan_redesign.md`,
+preservando le note preesistenti. Verifica: `git diff --check`; test applicativi
+e browser non eseguiti perché non sono state apportate modifiche UI.
+Residui per l'eventuale implementazione: scelta della direzione, verifica
+responsive 320/375/768/1440, contrasto e dark mode, testi lunghi, multi-team,
+stati vuoti/errore/offline e assenze; limitare al contesto atleta eventuali
+modifiche ai componenti condivisi.
+
+# 21-bis. Dashboard atleta — gerarchia e identità CSRoma
+
+**Piano richiesto il 14/09/2026. Esecutore previsto: Luna, ragionamento Medio.**
+Direzione di riferimento: soluzione A dell'analisi precedente, prossimo impegno
+su superficie scura, marchio leggibile e sezioni secondarie leggere.
+La fase è in corso: DA.1 e DA.2 sono completati; i goal successivi restano
+non avviati.
+G2 e le successive modifiche attendance sono già completati e non vanno rifatti.
+
+## Registro della fase
+
+| Goal | Stato | Dipende da | Risultato |
+|---|---|---|---|
+| DA.1 Struttura e isolamento del layout | [x] | — | Completato il 14/09/2026; radice e regioni responsive dedicate alla dashboard atleta, ordine/ID/condizioni e comportamento invariati; typecheck, test atleta/famiglia mirati e diff check superati |
+| DA.2 Header e identità CSRoma | [x] | DA.1 | Completato il 14/09/2026; marchio leggibile su mobile, introduzione personale compatta, altre shell invariate |
+| DA.3 Prossimo impegno dominante | [x] | DA.2 | Completato il 14/09/2026; primo evento dominante con dati completi, dettaglio e attendance preservati |
+| DA.4 Agenda e prossima partita | [x] | DA.3 | Completato il 14/09/2026; agenda secondaria compatta e partita subordinata al protagonista |
+| DA.5 Messaggi, quota e squadre | [x] | DA.4 | Completato il 14/09/2026; servizi compatti, quota separata per importo/stato e membership preservate |
+| DA.6 Responsive, temi e stati | [~] | DA.5 | Composizione responsive 1 colonna/2:1 implementata; gate browser e screenshot ancora aperti |
+| DA.6.R1 Verifica evento attivo | [ ] | DA.6 | Chiarire “in corso”/terminato prima di modificare la gerarchia del protagonista |
+| DA.6.R2 Header mobile contestuale | [-] | DA.6.R1 | Implementato e verificato visivamente a 400 px in tema chiaro/scuro; restano da documentare 320/375/768 e tastiera/focus |
+| DA.6.R3 Protagonista senza contenitore superfluo | [-] | DA.6.R2 | Implementazione completata il 14/09/2026; sul solo dashboard personale mobile rimosso il wrapper visivo del Panel, “Poi in agenda” resa sezione autonoma con gutter 16 px, padding 20 px e spazio 20 px; famiglia e desktop invariati. Gate screenshot/overflow ancora aperto per blocco browser |
+| DA.6.R4 Stato attendance compatto | [x] | DA.6.R3 | Completato il 14/09/2026; stato chiuso integrato con separatore discreto, RSVP e sole assenze distinti, azioni aperte preservate |
+| DA.6.R5 Agenda non ridondante | [x] | DA.6.R4 | Completato il 15/09/2026; righe compatte con data/ora relativa, tipo, squadre aggregate, luogo e affordance unica; titolo completo conservato nel dettaglio/accessibilità; test 0/1/3 eventi, multi-team, titolo lungo e apertura dettaglio superati |
+| DA.6.R6 Prossima partita sportiva | [x] | DA.6.R5 | Completato il 15/09/2026; riepilogo nascosto solo con legame esplicito evento-partita, nessun matching euristico; dati incompleti/amichevoli restano visibili |
+| DA.6.R7 Servizi secondari mobile | [x] | DA.6.R6 | Completato il 15/09/2026; massimo due preview messaggi su mobile con conteggio nel titolo e stato non duplicato, quota con composizione stabile/importo italiano e stato paid/urgenza preservati, membership con titolo “Le tue squadre” e nome/numero sulla stessa riga |
+| DA.6.R8 Identità atleta e floating action | [x] | DA.6.R7 | Completato il 15/09/2026; navigazione atleta uniformata a “Oggi”, label home dell’header resa non amministrativa, indicatore di aggiornamento spostato in-flow con stato accessibile e decorazione campo molto discreta limitata alla scheda protagonista scura. Typecheck, 3 suite mirate/30 test e `git diff --check` superati; screenshot/browser test non eseguiti su richiesta, restano nel gate DA.6/DA.7. |
+| DA.7 Gate finale e handoff | [ ] | DA.6.R1–DA.6.R8 | Evidenze visive e funzionali, esito esplicito |
+
+## Contratto comune ai sette goal
+
+- Eseguire un goal alla volta, in ordine, fermandosi alla sua conclusione.
+  Non avviare altri goal o agenti automaticamente.
+- Prima di ogni goal leggere `re_design.md`, questa fase, `AGENTS.md`, lo
+  stato Git e i diff pertinenti; preservare modifiche preesistenti.
+- Ambito: presentazione della dashboard personale atleta. La dashboard famiglia
+  riusa `AthleteDashboard`: preservare il suo layout attraverso il contesto
+  già disponibile; se serve un'opzione di presentazione, renderla esplicita e
+  mantenere il comportamento attuale per i consumatori non coinvolti.
+  Non duplicare l'intera dashboard, il caricamento dati o i controlli operativi.
+- Riutilizzare `Panel`, `ListRow`, `EventKindBadge`, `StatusBadge`,
+  `AttendanceControl`, `MessagePreviewRow`, `MembershipRow`, header e modali
+  esistenti. Non introdurre librerie, asset generati, nuove funzionalità o
+  un secondo design system. Le classi visuali della fase devono essere
+  circoscritte alla dashboard atleta; nessuna ridefinizione globale delle primitive.
+- Consentiti: wrapper, griglia, posizione, spaziatura, tipografia, bordi,
+  superfici usando token esistenti, brevi titoli di sezione coerenti.
+  Vietati: modifiche ad API/DB/auth, selezione/ordinamento degli eventi,
+  filtri, conteggi, mutazioni, politica di lettura messaggi o flussi di pagamento.
+- Conservare massimo tre eventi e tre preview messaggi, la quota più urgente,
+  tutte le membership visibili, ID delle sezioni, collegamenti, modali e filtri.
+  Il protagonista è il primo evento già selezionato dal codice: non forzare
+  il tipo allenamento e non riordinare secondo nuove regole di urgenza.
+- I mockup sono riferimenti visuali: non importare dati dimostrativi, PagoPA,
+  classifiche, conteggi confermati, nuove notifiche o la scritta “dal 1984”.
+- Mantenere la semantica corrente di `absence_only` e RSVP, i permessi delegati,
+  deadline, pending, errori, revoca e blocchi offline. Non ripristinare i tre
+  pulsanti della prima immagine negli eventi in modalità sole assenze.
+- Design: canvas caldo, superfici e colori semantici esistenti; un solo blocco
+  dominante scuro; rosso per marchio/accenti secondo token; badge tipo evento
+  con mapping canonico. Font attuale, nessuna ombra decorativa aggiuntiva.
+  Gutter mobile 16 px, distanze 16/24 px, ora del protagonista 40–48 px
+  responsive, testo informativo almeno 13 px, touch target almeno 44 px.
+- A ogni chiusura aggiornare registro e goal con data, file, verifiche realmente
+  eseguite e note. Un gate non verificato resta esplicitamente aperto.
+
+## DA.1 — Struttura e isolamento del layout
+
+**Obiettivo:** predisporre regioni di pagina ordinate, senza ancora ridisegnare
+il contenuto dei singoli pannelli.
+
+**File di ingresso:** `src/components/athlete/AthleteDashboard.tsx`,
+`src/components/family/FamilyMemberDashboard.tsx`, `src/app/globals.css`.
+Leggere il consumer familiare; modificarlo solo se indispensabile per
+un'opzione esplicita di presentazione.
+
+**Task:**
+- Individuare il contesto personale/familiare effettivo prima di aggiungere classi.
+- Aggiungere una radice visuale dedicata al layout atleta e regioni per
+  introduzione, sport (eventi/partita) e servizi (messaggi/quota/membership).
+- Mantenere l'ordine DOM: introduzione → eventi → partita → messaggi → quota
+  → squadre. Una colonna su mobile; preparare i wrapper per DA.6.
+- Lasciare feedback globali e modali nelle posizioni funzionali appropriate,
+  senza cambiare hook, effetti o callback.
+
+**Accettazione:** stessi contenuti/azioni prima e dopo; nessuna perdita degli
+ID delle sezioni; famiglia e altre pagine conservano presentazione e comportamento.
+**Verifiche:** `npx tsc --noEmit`, test dashboard atleta e famiglia esistenti,
+`git diff --check`; confronto visivo mobile prima/dopo se runtime disponibile.
+
+**Esito DA.1 — 14/09/2026**
+
+- Aggiunta la radice `.cs-athlete-dashboard` con attributo di contesto
+  `personal`/`family`, senza cambiare il consumer `FamilyMemberDashboard`.
+  Inserite le regioni presentazionali `intro`, `sport` (eventi/partita) e
+  `services` (messaggi/quote/squadre), mantenendo l'ordine DOM richiesto e gli
+  ID `athlete-events`, `athlete-messages`, `athlete-fees` e `athlete-teams`.
+- Aggiunte solo regole CSS circoscritte alla dashboard per mantenere una
+  colonna, min-width sicure e spaziatura coerente; nessuna primitiva globale,
+  API, filtro, permesso, callback, route, attendance/RSVP o modal è stata
+  modificata.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati
+  `AthleteDashboard.test.tsx` e `FamilyMemberDashboard.test.tsx` — 2 suite,
+  4 test superati; `git diff --check`.
+- Verifica browser/confronto visivo mobile non eseguita: in questo goal non è
+  stato avviato un runtime locale autenticato; resta da verificare nei goal
+  responsive successivi. DA.2 non avviato; nessun deploy o modifica DB.
+
+## DA.2 — Header e identità CSRoma
+
+**Obiettivo:** rendere riconoscibile la società senza consumare troppo spazio.
+
+**File di ingresso:** `src/components/navigation/AppHeader.tsx`,
+`src/components/navigation/LayoutShell.tsx`, `AthleteDashboard.tsx`, `globals.css`.
+
+**Task:**
+- Esaminare i rami effettivi della shell e attivare la presentazione soltanto
+  per la dashboard atleta personale; niente controlli sul solo ruolo legacy.
+- Mostrare logo originale e nome CSRoma anche su mobile. Consentita una prop
+  visuale opzionale su AppHeader con default invariato per gli altri usi.
+- Nel trattamento dedicato omettere il sottotitolo generico “Control Center”;
+  eliminare l'eyebrow “Area atleta” dall'introduzione della dashboard personale.
+- Conservare “Oggi, Nome” e stagione in una breve introduzione. Non duplicare
+  nome società o selettore squadra nella pagina. Conservare tutte le utility,
+  menu, notifiche e selettori senza inventare badge o nuovi handler.
+
+**Accettazione:** marchio leggibile a 320/375 px; nessun controllo nascosto
+per farlo entrare; nomi lunghi e selettori non causano overflow; altre shell invariate.
+**Verifiche:** typecheck, test pertinenti shell/dashboard, build per la modifica
+della shell, diff check; smoke header a 320/375/768 px e confronto famiglia/coach.
+
+**Esito DA.2 — 14/09/2026**
+
+- Aggiunto ad `AppHeader` il trattamento visuale opt-in
+  `athlete-dashboard`: mantiene logo originale e nome `CSRoma` leggibili anche
+  su mobile e omette soltanto in questo trattamento il sottotitolo generico
+  `Control Center`; il default degli altri consumer resta invariato.
+- `LayoutShell` attiva il trattamento esclusivamente su `/dashboard` quando il
+  ruolo risolto dall’account è `athlete`, l’area è `personal` e non è presente
+  un soggetto delegato. Non sono stati usati controlli sul ruolo legacy del
+  profilo.
+- Rimossa soltanto l’eyebrow `Area atleta` dall’introduzione personale di
+  `AthleteDashboard`; sono conservati `Oggi, Nome`, stagione, contesto
+  familiare, selettori, utility, menu e notifiche. Nessun dato, filtro,
+  permesso, callback, route, modalità attendance/RSVP o altro consumer è stato
+  modificato.
+- File modificati: `src/components/navigation/AppHeader.tsx`,
+  `src/components/navigation/LayoutShell.tsx`,
+  `src/components/athlete/AthleteDashboard.tsx`, `src/app/globals.css`,
+  `src/components/navigation/AppHeader.test.tsx`,
+  `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati AppHeader, dashboard
+  atleta e dashboard famiglia — 3 suite, 6 test superati; `npm run build`
+  completato; `git diff --check` superato.
+- Smoke browser autenticato a 320/375/768 px e confronto visuale famiglia/coach
+  non eseguiti: non è disponibile in questo ambiente un runtime autenticato;
+  il gate visuale resta aperto per le verifiche responsive previste. Nessun
+  deploy e nessuna modifica al database.
+
+## DA.3 — Prossimo impegno dominante
+
+**Obiettivo:** distinguere nettamente il primo evento dagli altri contenuti.
+
+**File di ingresso:** `AthleteDashboard.tsx`, `globals.css`;
+`AttendanceControl.tsx` e `EventKindBadge.tsx` da leggere per compatibilità.
+
+**Task:**
+- Valorizzare soltanto `visibleEvents[0]` con il Panel esistente: superficie
+  scura da token, padding mobile 20 px, accento rosso sottile, ora in evidenza.
+- Presentare tipo, ora, titolo, data completa, luogo e tutte le squadre già
+  disponibili; nessuna altezza fissa, nessuna immagine di sfondo.
+- Tenere l'apertura del dettaglio nel controllo interattivo esistente e
+  AttendanceControl in un'area distinta dello stesso blocco, senza annidare
+  pulsanti dentro link/pulsanti. Usare una superficie interna chiara se serve
+  a preservare leggibilità del controllo, senza modificarne la logica.
+- Conservare tutte le props e callback attendance, le condizioni di rendering
+  e lo stato “Assenza comunicata”. Nessun countdown relativo nuovo.
+- Gli eventi successivi restano accessibili; la loro rifinitura appartiene a DA.4.
+
+**Accettazione:** primo evento chiaramente dominante; tipo corretto anche per
+partita/riunione; dati lunghi vanno a capo; dettagli e assenza/revoca operativi;
+quando non ci sono eventi usare lo stato vuoto reale senza un grande blocco scuro vuoto.
+**Verifiche:** typecheck, suite AthleteDashboard e AttendanceControl, diff check;
+smoke mobile primo evento/dettaglio e contrasto anche nello stato hover/focus.
+Adeguare test solo per regressioni comportamentali significative, non per classi CSS.
+
+**Esito DA.3 — 14/09/2026**
+
+- Valorizzato esclusivamente `visibleEvents[0]` dentro il Panel esistente:
+  superficie scura con token `--cs-navy`, bordo/accento CSRoma rosso, padding
+  mobile da 20 px e ora prominente responsive. Gli eventi successivi conservano
+  il rendering e l’accesso al dettaglio attuali, in attesa di DA.4.
+- Il protagonista mostra il badge `EventKindBadge` canonico, ora, data completa,
+  titolo, luogo e tutte le squadre già presenti nei dati. Non sono state
+  aggiunte altezze fisse, immagini, countdown o dati dimostrativi.
+- `ListRow` resta l’unico controllo interattivo per aprire il dettaglio;
+  `AttendanceControl` è in una superficie distinta dello stesso blocco, senza
+  annidamento di controlli. Props, callback, condizioni delegated/permission,
+  modalità `absence_only`, RSVP, deadline, assenza comunicata, revoca, errori e
+  stato offline sono invariati.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati
+  `AthleteDashboard.test.tsx` e `AttendanceControl.test.tsx` — 2 suite,
+  18 test superati; `git diff --check` superato.
+- Smoke browser mobile su primo evento/dettaglio e verifica visuale reale di
+  contrasto hover/focus non eseguiti: l’ambiente non dispone di un runtime
+  autenticato/dati autorizzati per la dashboard. Il gate visuale resta aperto
+  per i goal responsive successivi; non sono stati modificati auth, DB o deploy.
+
+## DA.4 — Agenda compatta e prossima partita
+
+**Obiettivo:** far emergere ciò che segue senza creare un secondo protagonista.
+
+**File di ingresso:** `AthleteDashboard.tsx`, `globals.css`.
+
+**Task:**
+- Presentare gli eventi già visibili di indice 1 e 2 come “Poi in agenda”,
+  usando ListRow con data, ora, titolo, luogo, badge tipo e squadre esistenti.
+- Non duplicare il primo evento nella lista; omettere il titolo della lista
+  se manca un secondo evento. Conservare un accesso chiaro al calendario.
+- Alleggerire il Panel partita: squadre/avversario centrali nella lettura,
+  poi data/ora/luogo/giornata e casa/trasferta. Conservare link al campionato.
+- Nessun nuovo confronto tra API per deduplicare partita/evento e nessun
+  nuovo flusso convocazioni. Mantenere gli stati dati mancanti e filtro vuoto.
+
+**Accettazione:** con uno/due/tre eventi la composizione non lascia buchi;
+nessun evento perso o duplicato dalla ristrutturazione; partita meno dominante
+del primo impegno e leggibile con nomi lunghi.
+**Verifiche:** typecheck, suite AthleteDashboard, diff check; controllo visivo
+mobile con 1/3 eventi, partita presente/assente e filtro squadra.
+
+**Esito DA.4 — 14/09/2026**
+
+- Separato il primo evento già filtrato dal codice dalla lista secondaria:
+  gli indici 1 e 2 sono presentati una sola volta sotto “Poi in agenda” con
+  `ListRow`, data, ora, titolo, luogo, `EventKindBadge` e squadre disponibili.
+  Il titolo non appare con un solo evento e il link al calendario resta nella
+  testata “Prossimo impegno”.
+- Alleggerito il blocco “Prossima partita” senza cambiare il payload o il
+  filtro: squadre/avversario sono la prima informazione, seguiti da ora,
+  luogo, giornata e badge casa/trasferta. Restano link al campionato, fallback
+  per dati mancanti e stato di filtro vuoto.
+- Non sono stati introdotti confronti API, deduplicazioni, convocazioni,
+  dati nuovi, modifiche a permessi, attendance/RSVP, callback, route o altri
+  consumer. La dashboard familiare continua a riusare lo stesso componente.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirato
+  `AthleteDashboard.test.tsx` — 1 suite, 3 test superati; `git diff --check`
+  superato.
+- Controllo visivo mobile con 1/3 eventi, partita presente/assente e filtro
+  squadra non eseguito: non è disponibile un runtime autenticato con dati
+  autorizzati. Il gate visivo responsive resta aperto per DA.6; nessun deploy,
+  agente successivo o modifica DB avviati.
+
+## DA.5 — Messaggi, quota e appartenenza alla squadra
+
+**Obiettivo:** ridurre il peso dei servizi preservando contenuti e azioni.
+
+**File di ingresso:** `AthleteDashboard.tsx`, `globals.css`; leggere
+`MessagePreviewRow.tsx`, `MembershipRow.tsx` e `ListRow.tsx`.
+
+**Task:**
+- Alleggerire gli involucri delle tre sezioni: separatori, nessuna elevazione,
+  titoli secondari; non cambiare il CSS globale di Panel o ListRow.
+- Conservare fino a tre MessagePreviewRow con mittente, anteprima, squadre,
+  stato lettura e apertura dettaglio; non sostituirle con un semplice contatore.
+- Comporre quota con descrizione/scadenza/squadra a sinistra e importo/stato
+  a destra quando c'è spazio, impilandoli sui viewport stretti.
+- Conservare MembershipRow e numeri per squadra, leggibili ma subordinati
+  all'impegno. Nessun numero unico nel saluto in presenza di più squadre.
+- Se indispensabile, aggiungere solo un'opzione visuale minima alle righe
+  condivise, con default invariato; preferire composizione e CSS circoscritto.
+
+**Accettazione:** messaggi e quota non competono con il protagonista; quota
+scaduta resta riconoscibile tramite badge/testo; nessun “Paga” nuovo; informazioni
+e link esistenti rimangono raggiungibili; nessuna regressione sui consumer condivisi.
+**Verifiche:** typecheck, test dashboard/MessagePreviewRow/MembershipRow,
+diff check; smoke apertura messaggio e squadra e navigazione quote.
+
+**Esito DA.5 — 14/09/2026**
+
+- Alleggeriti i tre servizi con classi circoscritte alla dashboard atleta:
+  superfici trasparenti senza elevazione, titoli secondari e separatori interni;
+  `Panel` e `ListRow` condivisi non sono stati modificati.
+- Conservate fino a tre `MessagePreviewRow` con mittente, anteprima, squadre,
+  stato lettura e apertura del dettaglio. La quota mantiene descrizione, rata,
+  squadra, attività/codice e scadenza; importo e `StatusBadge` sono composti a
+  destra sui viewport ampi e restano impilabili sui viewport stretti.
+- `MembershipRow` e tutti i numeri di maglia per squadra restano visibili e
+  subordinati ai servizi; non sono stati aggiunti pagamenti, dati, filtri,
+  permessi, callback, route, modifiche attendance/RSVP o cambi ai consumer
+  famiglia/altri ruoli.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati dashboard,
+  `MessagePreviewRow` e `MembershipRow` — 3 suite, 8 test superati;
+  `git diff --check` superato.
+- Smoke browser per apertura messaggio, dettaglio squadra e navigazione quote
+  non eseguito: non è disponibile un runtime autenticato con dati autorizzati.
+  Il gate browser/responsive resta aperto per DA.6; nessun deploy, modifica DB
+  o avvio di DA.6 eseguiti.
+
+## DA.6 — Responsive, temi e stati reali
+
+**Obiettivo:** consolidare la composizione completa senza aggiungere funzionalità.
+
+**File:** quelli della fase; evitare ulteriori estrazioni o refactor.
+
+**Task:**
+- Una colonna sotto 1024 px; da 1024 px griglia principale circa 2:1 con
+  sport a sinistra e servizi a destra, gap 24 px e contenuto massimo 1080 px.
+  Introduzione e feedback globali attraversano entrambe le colonne.
+- Conservare ordine DOM e tastiera coerenti; niente duplicazione DOM per
+  mobile/desktop, sezioni sticky o modifica della bottom navigation.
+- Verificare 320, 375, 768 e 1440 px; safe area e ultimo elemento raggiungibile
+  sopra la bottom bar. Non imporre altezze che tagliano testo o feedback.
+- Verificare tema chiaro/scuro, hover/focus, contrasto testo ordinario 4.5:1,
+  testo grande 3:1, focus visibile e controlli almeno 44 px; zoom 200%.
+- Gestire senza vuoti sproporzionati: loading, errore, offline, refresh,
+  nessun evento, filtro senza risultati, zero messaggi, quota pagata/scaduta,
+  più squadre e titoli lunghi. Non cambiare il significato degli stati.
+
+**Accettazione:** nessun overflow orizzontale/taglio di controlli; priorità
+visiva costante nei due temi; famiglia/coach/admin e altre pagine atleta invariati.
+**Verifiche:** typecheck, test mirati se cambiano JSX/condizioni, diff check;
+controlli browser sui viewport/temi elencati con screenshot locali del risultato.
+Se l'autenticazione impedisce il browser, registrare il blocco e non dichiarare
+il goal completamente verificato; non intervenire su auth/DB per sbloccarlo.
+
+**Esito DA.6 — 14/09/2026 (parziale)**
+
+- Consolidata la presentazione esistente con una sola griglia DOM: sotto 1024 px
+  una colonna; da 1024 px sport a sinistra e servizi a destra in rapporto 2:1,
+  gap 24 px e larghezza massima 1080 px. Introduzione, feedback globali, ordine
+  DOM, tastiera, bottom navigation e safe-area esistenti restano invariati.
+- Non sono stati cambiati dati, filtri, selezione/ordinamento, permessi,
+  attendance/RSVP, callback, route, stati o consumer famiglia/altri ruoli; non
+  sono state aggiunte altezze fisse, sticky section, estrazioni o refactor.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, `implementation_plan_redesign.md`.
+- Verifiche eseguite: `npx tsc --noEmit` superato; test mirato
+  `AthleteDashboard.test.tsx` — 1 suite, 3 test superati; `git diff --check`
+  superato.
+- E2E `athlete-dashboard.spec.ts` eseguito ma non superato: entrambe le prove
+  si arrestano sull’asserzione legacy `p.cs-eyebrow` “Area atleta”, rimossa da
+  DA.2. Non sono quindi verificati browser 320/375/768/1440, temi, contrasto,
+  focus, zoom 200%, safe-area o screenshot locali; il gate responsive/visuale
+  resta aperto. Nessun deploy, modifica DB o avvio di DA.7.
+
+**Rifiniture rilevate prima di DA.7 — 14/09/2026**
+
+- Rendere leggibile il valore del selettore squadra nell’header mobile a 400 px,
+  senza cambiare selezione, dati o callback.
+- Aumentare il contrasto del trailing `Dettagli` nel protagonista, includendo
+  hover e focus e mantenendo il trattamento coerente nei due temi.
+- Dare più respiro all’azione `Apri` nelle preview messaggi sui viewport stretti,
+  senza modificare il componente condiviso o il suo comportamento.
+- Aggiornare esclusivamente l’asserzione E2E obsoleta che cerca `Area atleta`
+  con un selettore stabile già presente, così da poter eseguire le verifiche
+  responsive reali prima del gate DA.7.
+- La schermata di loading con spazio verticale ampio è un miglioramento
+  opzionale, non un blocco funzionale per DA.7.
+
+**Esito rifiniture pre-DA.7 — 14/09/2026**
+
+- Ridotto il brand copy dell’header atleta solo tra 376 e 479 px e ottimizzato
+  il selettore mobile, lasciando invariati selezione, dati e callback.
+- Reso esplicito il contrasto di `Dettagli` nel protagonista con trattamento
+  coerente su stato normale, hover e focus nei due temi.
+- Aggiunto respiro all’azione `Apri` nelle preview messaggi tramite CSS
+  circoscritto alla dashboard, senza modificare `MessagePreviewRow`.
+- Aggiornato il solo locator E2E obsoleto da `Area atleta` al contesto stabile
+  `data-dashboard-context="personal"`.
+- File modificati: `src/app/globals.css`,
+  `src/components/athlete/AthleteDashboard.tsx`,
+  `tests/e2e/athlete-dashboard.spec.ts`, questo piano.
+
+## Azioni operative derivate dall’analisi visuale — 14/09/2026
+
+Queste azioni trasformano l’analisi ricevuta in sotto-goal eseguibili dopo la
+chiusura del gate browser di DA.6 e prima di DA.7. Restano nel perimetro della
+presentazione atleta/famiglia: nessuna modifica a API, DB, auth, permessi,
+filtri, ordinamento autorevole, attendance/RSVP o comportamento dei componenti
+condivisi. Eseguire un solo sotto-goal alla volta e aggiornare il registro con
+file, test e note reali.
+
+### DA.6.R1 — Verifica dell’evento effettivamente attivo
+
+- Confrontare `start_time` e `end_time` del primo evento già selezionato dal
+  codice con l’orario corrente e con gli eventi successivi.
+- Definire soltanto la resa visuale dello stato `In corso` quando l’intervallo
+  è attivo; se l’evento è terminato, documentare la discrepanza senza introdurre
+  un nuovo ordinamento client-side.
+- Acceptance: il protagonista rappresenta l’evento corretto secondo il
+  contratto dati esistente, con stato esplicito e senza alterare payload o API.
+- Verifiche: test su evento futuro, in corso, terminato, assente e titoli lunghi.
+
+**Esito DA.6.R1 — 14/09/2026**
+
+- Mantenuta la selezione esistente `visibleEvents[0]`: non è stato introdotto
+  alcun ordinamento o riordino client-side e non sono stati modificati payload,
+  API, filtri o consumer famiglia.
+- Aggiunta in `AthleteDashboard` la classificazione visuale dell’intervallo
+  dell’evento già selezionato: `Prossimo` prima di `start_time`, `In corso`
+  da `start_time` incluso fino a `end_time` escluso, `Terminato` da `end_time`
+  incluso. Timing non valido/assente produce `Stato non disponibile`.
+- Discrepanza documentata: se il contratto consegna come primo evento un
+  impegno già terminato mentre esiste un evento successivo, il protagonista
+  resta quello fornito dal contratto e mostra `Terminato`; la UI non promuove
+  il successivo, perché ciò altererebbe l’ordinamento autorevole.
+- Stato reso come testo accessibile e titolo lungo lasciato libero di andare a
+  capo, con stile circoscritto alla scheda protagonista.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`, `src/app/globals.css`.
+- Verifiche eseguite: test mirato `AthleteDashboard.test.tsx` — 1 suite, 9
+  test superati; `npx tsc --noEmit`; `git diff --check`.
+
+### DA.6.R2 — Header mobile contestuale
+
+- Progettare il layout sotto 480 px con logo, menu/campanella e selettore
+  squadra leggibile sotto il saluto o nel contesto immediatamente associato. Verifica se la campanella ha una qualche funzionalità, se nessuna va eliminata per avere più spazio.
+- Valutare lo spostamento di tema e `Esci` nel Profilo solo se il percorso è già
+  disponibile; non rimuovere destinazioni necessarie dal menu.
+- Acceptance: a 400 px sono leggibili `Tutte le squadre`, `Under 17` e `Under 15`,
+  senza overflow e senza cambiare selezione, persistenza o callback.
+- Verifiche: viewport 320/375/400/768, tastiera, focus, tema chiaro/scuro.
+
+**Esito implementazione DA.6.R2 — 14/09/2026**
+
+- Sotto 480 px l’header mantiene la prima riga per menu, logo e azioni, mentre
+  il contesto va su una seconda riga a larghezza piena. Il selettore mobile usa
+  quindi lo spazio disponibile e conserva label, valore, selezione, persistenza
+  e callback esistenti; non è stato duplicato il DOM dei dati.
+- Verificato il codice della campanella: era un bottone senza handler, stato o
+  destinazione. È stata rimossa dall’`AppHeader`; le notifiche push operative
+  restano nel Profilo già raggiungibile. Tema resta disponibile nell’header e
+  `Esci` resta nel menu mobile esistente, senza rimuovere destinazioni.
+- Aggiunti test per l’assenza dell’azione notifiche non operativa e per la
+  presenza dei valori `Tutte le squadre`, `Under 17` e `Under 15` nel selettore
+  mobile.
+- File modificati: `src/app/globals.css`,
+  `src/components/navigation/AppHeader.tsx`,
+  `src/components/navigation/AppHeader.test.tsx`,
+  `src/components/navigation/TeamSwitcher.test.tsx`,
+  `tests/e2e/athlete-fees-profile.spec.ts`,
+  `tests/e2e/athlete-dashboard.spec.ts`, questo piano.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati AppHeader, TeamSwitcher,
+  AthleteDashboard e FamilyMemberDashboard — 4 suite, 16 test superati;
+  `npm run build` superato; `git diff --check` superato. Estesa la matrice E2E
+  al viewport 400 con controllo dei tre valori e focus sul select.
+- Verifica browser Playwright ancora non disponibile: il server su
+  `localhost:3001` parte, ma Chromium headless termina con `SIGTRAP` in
+  `global-setup.ts` prima dell’esecuzione dei test. Restano aperti il
+  controllo reale a 320/375/400/768 px, tastiera/focus e tema chiaro/scuro;
+  non vengono dichiarati superati né modificati auth/DB per aggirare il blocco.
+
+**Evidenza screenshot manuali — 14/09/2026**
+
+- Ricevuti tre screenshot da staging a 400 px: tema chiaro, tema scuro e
+  scroll della dashboard.
+- Confermati visivamente selettore su riga dedicata sotto il brand, valori
+  `Tutte le squadre`, `Under 17` e `Under 15` leggibili, assenza di overflow
+  orizzontale e composizione coerente nei due temi.
+- Gli screenshot non provano da soli tastiera/focus né i viewport 320/375/768;
+  il goal resta parziale fino a quella verifica esplicita.
+
+### DA.6.R3 — Protagonista senza contenitore superfluo
+
+**Esito implementazione DA.6.R3 — 14/09/2026**
+
+- Sul dashboard personale sotto 768 px il `Panel` esterno di “Prossimo impegno”
+  non disegna più una seconda superficie: la scheda navy resta il blocco
+  dominante e mantiene il proprio padding interno di 20 px.
+- “Poi in agenda” è ora una sezione semantica autonoma, con superficie,
+  bordo, radius e padding interno di 20 px; il gutter della pagina resta 16 px
+  e la distanza dalla scheda protagonista è 20 px. Le righe mantengono tutto il
+  contenuto e i dettagli, senza altezze fisse.
+- La regola è limitata a `data-dashboard-context="personal"`: famiglia e
+  desktop non cambiano. Nessun dato, ordinamento, permesso, callback, route o
+  contenuto è stato duplicato o rimosso.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/app/globals.css`, questo piano.
+- Verifiche: `npx tsc --noEmit`, test dashboard atleta/famiglia (2 suite, 10
+  test) e `git diff --check` superati. Le cinque catture ricevute il
+  14/09/2026 (`Screenshot 2026-09-14 alle 19.44.18.png`, `19.44.24.png`,
+  `19.44.33.png`, `19.45.32.png`, `19.45.39.png`) mostrano il dashboard
+  personale a 400×905 in tema chiaro e scuro: scheda navy dominante, agenda
+  autonoma, gutter coerente, nessun contenuto perso/duplicato o overflow
+  orizzontale visibile. Il test E2E dashboard non è avviabile in
+  questa sandbox perché il web server riceve `listen EPERM` su
+  `0.0.0.0:3000`. Secondo tentativo su `localhost:3001`: Next si avvia, ma
+  Chromium headless termina con `SIGTRAP` in `global-setup.ts`; anche il
+  browser interattivo non è disponibile perché il kernel Computer Use si
+  resetta all’avvio. Screenshot/overflow 320/375/400/768/1440 restano quindi
+  parte del gate browser DA.6.
+
+- Eliminare sul mobile un solo livello di wrapper attorno a “Prossimo impegno”
+  e agenda, mantenendo la scheda scura come superficie dominante.
+- Rendere “Poi in agenda” una sezione autonoma; usare gutter 16 px, padding
+  interno 20 px e 20–24 px tra sezioni, senza altezze fisse.
+- Acceptance: nessun contenuto perso o duplicato; famiglia e desktop non cambiano
+  senza una motivazione verificata.
+- Verifiche: screenshot e overflow su 320/375/400/768/1440.
+
+### DA.6.R4 — Stato attendance compatto
+
+- Per risposta chiusa mostrare uno stato breve, ad esempio “Hai risposto:
+  Partecipo” e “Risposte chiuse”, integrato nella scheda con separatore discreto.
+- Conservare controlli, deadline, pending, errore, revoca, `absence_only` e
+  permessi delegati quando la risposta è ancora disponibile.
+- Acceptance: lo stato bloccato non occupa un riquadro autonomo e l’azione aperta
+  resta prominente; nessuna mutazione o callback cambia.
+- Verifiche: test RSVP/sole assenze, read-only, delega, offline e focus.
+
+**Esito DA.6.R4 — 14/09/2026**
+
+- `AttendanceControl` ora presenta una risposta RSVP chiusa in forma compatta
+  (“Hai risposto: … · Risposte chiuse”) nello stesso flusso del controllo, con
+  motivazione secondaria ancora disponibile per deadline, evento iniziato,
+  delega, evento successivo e stato offline. Non viene usato un riquadro
+  autonomo di feedback e i tre controlli RSVP restano invariati quando la
+  risposta è aperta.
+- La modalità `absence_only` è stata allineata esplicitamente alla semantica
+  corrente: non mostra mai controlli “Partecipo/Forse/Non partecipo”, mantiene
+  “Segnala assenza” e “Revoca assenza” quando le azioni sono autorizzate e
+  presenta “Segnalazione assenza · Segnalazioni chiuse” solo quando la
+  segnalazione è davvero chiusa per deadline, offline o permessi. Lo stato di
+  assenza comunicata resta leggibile e revocabile dove previsto.
+- Nessuna mutazione, callback, route, permesso o contratto dati è cambiato.
+- File modificati: `src/components/athlete/AttendanceControl.tsx`,
+  `src/components/athlete/AttendanceControl.test.tsx` e questo piano.
+- Verifiche eseguite: suite mirata `AttendanceControl.test.tsx` e
+  `AthleteCalendarManager.test.tsx` — 2 suite, 23 test superati;
+  `npx tsc --noEmit` superato; `git diff --check` superato. La verifica
+  browser/screenshot resta nel gate DA.6/DA.7 e non è stata simulata.
+
+### DA.6.R5 — Agenda non ridondante
+
+- Ridurre ogni riga a data/ora, tipo e squadra una sola volta, luogo e affordance
+  di apertura; evitare badge che ripetono informazioni già nel titolo.
+- Conservare massimo tre eventi, separatori singoli, ordine corrente e dettaglio
+  completo al tocco dell’intera riga.
+- Acceptance: “Oggi · 20:00 / Allenamento · Under 17 / Cardarelli” e formato
+  analogo per date future risultano leggibili senza duplicazioni.
+- Verifiche: 0/1/3 eventi, multi-team, titoli lunghi, tastiera e modal dettaglio.
+
+**Esito DA.6.R5 — 15/09/2026**
+
+- La preview “Poi in agenda” della dashboard usa una riga unica e compatta:
+  data/ora relativa (“Oggi”, “Domani” o data futura), tipo, squadre aggregate,
+  luogo e “Apri dettagli”. Il titolo lungo non viene ripetuto visivamente
+  insieme al tipo/squadra, ma resta nel nome accessibile della riga e nel modal
+  completo già esistente.
+- Conservati `visibleEvents.slice(1, 3)`, ordine corrente, filtro squadra,
+  callback e apertura del `EventDetailModal`; rimossi solo il wrapper e il
+  `divide-y` che aggiungevano un secondo separatore rispetto al bordo di
+  `ListRow`. Nessuna modifica a dati, autorizzazioni, mutazioni o route.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`, `src/app/globals.css` e
+  questo piano.
+- Verifiche eseguite: `npm test -- --runInBand
+  src/components/athlete/AthleteDashboard.test.tsx` — 1 suite, 18 test
+  superati, inclusi 0/1/3 eventi e focus + Invio sulla riga; `npx tsc --noEmit` superato;
+  `git diff --check` superato.
+  La verifica browser/screenshot responsive resta nel gate DA.6/DA.7.
+
+### DA.6.R6 — Prossima partita con gerarchia sportiva
+
+- Presentare squadra CSRoma, avversario, data/ora, casa o trasferta e località
+  breve; lasciare l’indirizzo completo al dettaglio esistente.
+- Applicare lo stesso linguaggio di superfici/radius, con richiamo rosso
+  subordinato al protagonista e senza inventare dati mancanti.
+- Acceptance: la partita è riconoscibile come sportiva ma non supera il primo
+  impegno; filtro squadra e link al campionato restano invariati.
+- Verifiche: casa/trasferta, orario/località mancanti, filtro vuoto e dark mode.
+
+**Esito DA.6.R6 — 15/09/2026**
+
+- `AthleteDashboard` considera il primo evento già filtrato la fonte primaria:
+  il riepilogo campionato viene omesso soltanto quando il payload contiene un
+  `event_id` esplicito uguale all’evento protagonista.
+- La route dashboard attuale non seleziona `event_id` da `championship_matches`;
+  per il payload reale il fallback conservativo mantiene quindi il riepilogo
+  visibile, come richiesto quando la corrispondenza non è dimostrabile senza
+  modificare l’API.
+- Non sono stati aggiunti confronti per titolo, data, orario o squadre e non
+  sono state modificate API, database, callback, mutazioni, permessi o route.
+  In assenza del legame esplicito il riepilogo resta visibile, preservando
+  informazione per amichevoli, partite non collegate e dati incompleti.
+- Il dettaglio del primo evento, attendance, filtro squadra, `/athlete/campionati`
+  e il riuso nel profilo familiare/read-only restano invariati.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`,
+  `implementation_plan_redesign.md`.
+- Verifiche: `npx jest src/components/athlete/AthleteDashboard.test.tsx --runInBand`
+  — 14 test superati; `npx tsc --noEmit`; `npm run build`; `git diff --check`.
+  I test coprono primo evento partita, allenamento seguito da partita, partita
+  amichevole/non collegata, dati incompleti e consumer familiare/read-only.
+
+**Decisione pianificata — evitare la duplicazione tra evento e partita**
+
+- La partita è già un tipo di evento (`event_kind: 'match'`) e il primo evento
+  visibile resta la fonte primaria per gerarchia, apertura dettaglio e
+  attendance.
+- Se il primo evento è una partita, non mostrare anche il pannello riepilogativo
+  separato “Prossima partita”: la gara è già rappresentata nel protagonista.
+- Mostrare il riepilogo “Prossima partita” solo quando il primo evento non è una
+  partita e il riepilogo campionato aggiunge informazione utile.
+- Non introdurre nella prima iterazione matching euristico tra titolo, data,
+  orario o squadre e non modificare API, database, callback, mutazioni, permessi
+  o route. Una partita amichevole/non collegata al campionato non deve causare
+  perdita di informazione: il riepilogo resta visibile se non è possibile
+  stabilire una corrispondenza certa.
+- Conservare l’accesso a `/athlete/campionati`, i filtri squadra, i profili
+  delegati/read-only e il dettaglio evento. Verificare esplicitamente primo
+  evento partita, allenamento seguito da partita, partita amichevole, dati
+  incompleti e profilo familiare.
+
+### DA.6.R7 — Servizi secondari mobile
+
+- Messaggi: massimo due preview sul mobile e conteggio totale nel titolo, senza
+  duplicare lo stato “Non letto” se il contesto lo rende già esplicito.
+- Quote: mantenere descrizione, rata, squadra, scadenza, importo e stato in una
+  composizione stabile; usare la formattazione italiana `120,00 €` solo se
+  compatibile con il formatter esistente.
+- Squadre: titolo “Le tue squadre”, nome e numero di maglia sulla stessa riga;
+  conservare una riga per membership e il numero autorevole per squadra.
+- Acceptance: nessuna azione, informazione, route o consumer condiviso viene
+  rimosso; stati scaduta/in scadenza restano prioritari.
+- Verifiche: zero/due/tre messaggi, quota pagata/scaduta, più squadre e mobile.
+
+**Esito DA.6.R7 — 15/09/2026**
+
+- La dashboard usa il conteggio autorevole `unreadMessageCount` nel titolo dei
+  messaggi (fallback compatibile ai dati legacy), mantiene fino a tre righe su
+  desktop e nasconde soltanto la terza sotto 768 px. Nella dashboard il titolo
+  esplicita già il contesto “non letti”, quindi le righe non duplicano il badge;
+  `MessagePreviewRow` conserva il default precedente per gli altri consumer.
+- La quota mantiene nome/descrizione disponibile, rata, squadra, attività,
+  codice, scadenza, importo e stato; l’importo usa lo stesso `Intl.NumberFormat`
+  `it-IT` già usato dalle quote. Scaduta, in scadenza e parziale conservano la
+  priorità esistente; una quota pagata resta visibile quando non ci sono rate
+  non pagate.
+- La sezione è intitolata “Le tue squadre”; ogni `MembershipRow` conserva una
+  riga per membership e rende nome e numero autorevole per squadra sulla stessa
+  riga, senza alterare il dettaglio o la modalità read-only delegata.
+- File modificati: `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/MessagePreviewRow.tsx`,
+  `src/components/athlete/MembershipRow.tsx`,
+  `src/components/athlete/AthleteDashboard.test.tsx`, `src/app/globals.css`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati dashboard, messaggi,
+  membership e quote — 4 suite, 31 test superati; suite completa Jest — 73
+  suite, 299 test superati; `npm run build`; `git diff --check`.
+- Smoke browser autenticato e screenshot mobile non eseguiti perché questo
+  ambiente non dispone di un runtime autenticato/dati autorizzati; il gate
+  visuale responsive resta aperto per DA.6/DA.7. Nessuna route, azione,
+  informazione, autorizzazione, consumer condiviso o modifica DB è stata
+  rimossa.
+
+### DA.6.R8 — Identità atleta e floating action
+
+- Sostituire il copy amministrativo della vista atleta con testo operativo
+  (“Allenamenti, partite e comunicazioni”) o rimuoverlo se ridondante; uniformare
+  “Dashboard” a “Oggi” dove è solo una label di navigazione.
+- Valutare una decorazione campo molto discreta esclusivamente sulla scheda
+  scura e riposizionare il pulsante flottante per non coprire contenuti o CTA.
+- Acceptance: identità coerente, contrasto e focus preservati, nessun overlay su
+  testi/comandi e nessuna nuova funzione introdotta.
+- Verifiche: viewport mobile, safe-area, tastiera, zoom 200%, reduced motion e
+  tema chiaro/scuro.
+
+**Esito DA.6.R8 — 15/09/2026**
+
+- La voce atleta della sidebar usa “Oggi”; il bottom navigation era già coerente.
+- Il link del marchio usa un nome accessibile operativo (“Vai alla home”) senza
+  copy “Dashboard” amministrativo.
+- L’indicatore di aggiornamento della dashboard non è più flottante/fixed: è uno
+  stato in-flow con `role="status"`, `aria-live="polite"`, contrasto da token e
+  animazione disattivata con `prefers-reduced-motion`.
+- La scheda protagonista navy mantiene il contrasto esistente e riceve soltanto
+  una decorazione campo a bassa opacità, non interattiva e senza impatto sul
+  layout; il tema chiaro non riceve decorazioni aggiuntive.
+- File modificati: `src/components/navigation/RoleSidebar.tsx`,
+  `src/components/navigation/AppHeader.tsx`, `src/app/dashboard/page.tsx`,
+  `src/app/globals.css`.
+- Verifiche eseguite: `npx tsc --noEmit`; test mirati atleta/header/bottom
+  navigation — 3 suite, 30 test; suite Jest completa — 73 suite, 299 test;
+  `npm run build`; `git diff --check`.
+- Screenshot, browser smoke, zoom reale 200% e verifica tastiera su viewport
+  multipli non eseguiti in questo ambiente; restano nel gate DA.6/DA.7. Nessuna
+  nuova funzione, route, autorizzazione o modifica dati introdotta.
+
+## DA.7 — Gate finale e handoff
+
+**Obiettivo:** verificare il risultato cumulativo e chiudere la fase con evidenze.
+
+**Task:**
+- Rivedere il diff cumulativo DA.1–DA.6, non soltanto l'ultimo diff: nessuna
+  modifica involontaria a logica, API, attendance, permessi o componenti globali.
+- Eseguire `npx tsc --noEmit`, `npm test -- --runInBand`, `npm run build`,
+  `git diff --check` e l'E2E dashboard esistente con configurazione locale
+  verificata. Lo script `next lint` presente non va dichiarato un gate valido
+  senza verificarne l'effettiva compatibilità.
+- Smoke reale: dettaglio primo/secondo evento, assenza e revoca su dati di test
+  autorizzati, messaggio e stato lettura, quote, squadra, cambio filtro;
+  verificare i blocchi offline senza promettere accodamento.
+- Controllare famiglia con/senza permessi per accertare che il riuso dei
+  componenti non abbia esteso azioni o alterato la presentazione fuori scope.
+- Salvare screenshot del risultato in `docs/redesign-dashboard-layout/2026-09-14/`
+  per mobile e desktop nei due temi, evitando credenziali o dati sensibili.
+  Registrare viewport, dati di test e percorsi. Non committare screenshot con
+  informazioni personali reali né generare fixture in produzione.
+- Sono consentite correzioni locali per difetti emersi dal gate; ripetere solo
+  le verifiche interessate. Problemi fuori scope vanno annotati separatamente.
+
+**Accettazione:** evidenze che primo impegno domina, marchio è leggibile e servizi
+sono secondari; flussi preservati; risultati tecnici e limiti riportati con precisione.
+Non marcare completato il gate se mancano prove essenziali. Nessun deploy,
+push o modifica database incluso nella fase.
+
+## Prompt da assegnare a Luna Medio
+
+Sostituire esclusivamente l'ID a ogni esecuzione. Non lanciare tutta la fase
+con un unico prompt. Se il goal precedente non è completo, risolverne prima
+le note bloccanti nel suo ambito.
+
+```text
+Esegui esclusivamente il goal DA.1 della sezione “Dashboard atleta — gerarchia
+e identità CSRoma” in implementation_plan_redesign.md.
+Leggi AGENTS.md, re_design.md, il contratto comune della fase e il goal completo.
+Controlla stato Git, prerequisiti e modifiche già presenti; non rifare goal chiusi.
+Segui la soluzione A documentata, riutilizzando componenti e token esistenti.
+Modifica soltanto la presentazione autorizzata: preserva dati, filtri, permessi,
+modalità sole assenze/RSVP, callback, route e gli altri consumer dei componenti.
+Esegui le verifiche richieste e documenta quelle non eseguibili senza inventare esiti.
+Aggiorna registro e sezione del goal con file, test e note. Fermati alla fine
+di questo goal, senza avviare quello successivo, fare deploy o modificare il DB.
+```
+
+**Registro pianificazione — 14/09/2026:** aggiunti DA.1–DA.7 e prompt operativo;
+modificato solo `implementation_plan_redesign.md`, preservando le note già presenti.
+Check documentale: `git diff --check`. Nessun test applicativo necessario per
+questa modifica documentale; nessun goal avviato né impostazione del modello cambiata.
+
+**Esito DA.7 — 15/09/2026 — PASS WITH ISSUES**
+
+- Corretto il vincolo funzionale esplicito della richiesta: nella dashboard,
+  agenda, calendario e dettaglio atleta, gli eventi `training` e `match` usano
+  sempre il percorso sola-assenza; non vengono più mostrati i controlli
+  “Partecipo”, “Forse” o “Non partecipo”. Restano disponibili motivazione,
+  invio, feedback di errore, stato “Assenza segnalata” e “Annulla segnalazione”
+  quando le capacità server-side lo consentono. Rimossa anche la label
+  “Da confermare” dalla tabella calendario atleta.
+- File modificati in questo intervento: `src/components/athlete/AttendanceControl.tsx`,
+  `src/components/athlete/AttendanceControl.test.tsx`,
+  `src/components/athlete/AthleteDashboard.tsx`,
+  `src/components/athlete/AthleteAgenda.tsx`,
+  `src/components/athlete/AthleteCalendarManager.tsx`,
+  `src/components/athlete/AthleteCalendarManager.test.tsx`,
+  `src/components/shared/EventDetailModal.tsx`.
+- Verifiche eseguite: test mirati 3 suite/49 test; suite Jest completa 73
+  suite/301 test; `npm run build`; `npx tsc --noEmit`; `git diff --check`.
+  Il primo typecheck lanciato in parallelo al build ha prodotto soltanto errori
+  transitori di file `.next/types` mancanti; ripetuto serialmente dopo il build,
+  è passato.
+- Non completati: smoke browser autenticato, verifica su dati autorizzati di
+  assenza/revoca, viewport 360/400/1440, entrambi i temi, zoom/tastiera reale e
+  screenshot in `docs/redesign-dashboard-layout/2026-09-14/`. Il tentativo E2E
+  con le credenziali locali configurate ha avviato il server su `localhost:3001`,
+  ma Playwright Chromium termina con `SIGTRAP`; il tentativo di bind automatico
+  sulla porta 3000 fallisce con `listen EPERM`. È stata provata anche Firefox
+  headless, che termina con `SIGABRT`, mentre il browser nativo CUA non è
+  disponibile in questo ambiente. Il gate visuale DA.7 resta aperto. Nessun
+  deploy, push o modifica database eseguiti.
+
+**Follow-up screenshot deploy preview — 15/09/2026**
+
+- Gli screenshot forniti dall’utente a 400×905 mostrano correttamente entrambe
+  le varianti light/dark, il protagonista, l’agenda compatta, la bottom
+  navigation e la floating accessibility control; la console visibile non
+  riporta errori.
+- Sono stati rilevati due difetti reali del payload deployato: il wrapper
+  dell’assenza restava vuoto quando `requires_confirmation` era falso e la
+  partita campionato poteva duplicare il prossimo impegno perché la dashboard
+  API non selezionava `championship_matches.event_id`.
+- Correzioni applicate: render del controllo solo con conferma effettivamente
+  prevista e propagazione dell’`event_id` reale per la deduplicazione
+  conservativa. Verifiche dopo la correzione: dashboard mirata 24 test,
+  suite completa 73 suite/301 test, typecheck, build e diff check superati.
+
+**Follow-up card messaggi mobile — 15/09/2026**
+
+- Lo screenshot mobile fornito dall’utente mostrava i messaggi non letti come
+  sezione libera, mentre “Poi in agenda” era racchiusa nella card canonica.
+- Aggiunta la stessa card responsive al pannello `#athlete-messages` della
+  dashboard atleta personale: superficie, bordo, raggio e padding coerenti;
+  le righe mantengono il contenuto e i divisori esistenti. Desktop e dashboard
+  familiare/delegata restano invariati.
+- Verifiche: test dashboard mirato, typecheck e `git diff --check` superati.
+
+**Evidenze screenshot e stato genitore — 15/09/2026**
+
+- Gli screenshot allegati dall’utente a 400×905 vengono acquisiti come
+  evidenza visuale valida per il momento: dashboard atleta personale in light
+  e dark, card messaggi mobile, prossimi eventi, stati di assenza, selezione
+  profilo familiare e dashboard con profili atleta collegati.
+- I controlli aggiuntivi indicati nel gate (viewport 320/375/768/1440,
+  tastiera/focus, smoke test autenticati completi, verifica offline e ulteriori
+  prove cross-role) **non verranno eseguiti in questa fase**, salvo nuove
+  indicazioni. Restano quindi documentati come non verificati, non come falliti.
+- Gli errori `401 Unauthorized` visibili nella console degli screenshot sono
+  esclusi dalla valutazione: l’utente ha chiarito che dipendono dalla password
+  errata usata nel test.
+- Rilievo risolto il 15/09/2026: entrando come genitore e selezionando un
+  atleta, la dashboard delegata usa ora la stessa gerarchia mobile della vista
+  atleta (protagonista navy, agenda separata e servizi coerenti), mantenendo
+  l’etichetta “Area familiare”, il profilo selezionato e i permessi read-only.
+- File modificato: `src/app/globals.css`. Nessuna modifica a dati, API,
+  autorizzazioni o azioni di presenza.
+- Verifiche: `src/components/athlete/AthleteDashboard.test.tsx` (24 test),
+  `npx tsc --noEmit` e `git diff --check` superati.
+
+# 22. Fase 12 — Rollover stagione 2026/2027 e selezione profili
+
+## Obiettivo della fase
+
+Creare la stagione `Stagione 2026/2027` con periodo `2026-09-01` →
+`2027-06-30`, permettere all'amministratore di scegliere quali atleti e
+collaboratori iscrivere nella nuova stagione e assegnare ogni persona a zero,
+una o più squadre della nuova stagione. Il workflow consente inoltre di copiare
+selettivamente le anagrafiche di palestre e attività; per le squadre crea bozze
+minime da riconfigurare prima dell'uso operativo.
+
+La `Stagione 2025/2026` diventa archiviata esclusivamente nel senso operativo
+di `is_active = false`: non viene eliminata e nessuna sua iscrizione,
+appartenenza, quota, rata, evento, documento, messaggio, presenza, campionato o
+convocazione viene spostata o cancellata.
+
+Una persona esclusa dal rollover:
+
+- conserva la riga globale in `profiles` e gli eventuali dati specializzati in
+  `athlete_profiles`/`coach_profiles`;
+- conserva account, ruoli account e relazioni familiari;
+- conserva `season_profiles` e `team_members` riferiti alla 2025/2026;
+- non riceve alcuna riga `season_profiles` o `team_members` nella 2026/2027.
+
+Una persona inclusa riceve nuove relazioni stagionali nella 2026/2027 senza
+modificare quelle storiche. Il rollover non duplica mai `profiles`, account o
+relazioni familiari.
+
+I genitori/familiari non sono iscrizioni stagionali da duplicare: profilo,
+account, ruoli account e `profile_relationships` restano globali. Il wizard li
+mostra solo come informazione derivata accanto agli atleti collegati. Se almeno
+un atleta collegato viene incluso nella 2026/2027, il familiare continua ad
+accedere a quel subject secondo i permessi esistenti; se nessun atleta collegato
+viene incluso, l'account resta valido ma non dispone di subject nella stagione
+attiva. Non creare `season_profiles` con tipo `family_member`.
+
+## Contratto funzionale vincolante
+
+### Identità e storia
+
+- `profiles` rappresenta la persona ed è indipendente dalla stagione.
+- `season_profiles` rappresenta la partecipazione della persona a una stagione.
+- `team_members`/`team_coaches` rappresentano l'assegnazione a squadre che,
+  tramite `activities`, appartengono a una sola stagione.
+- “Resta nella stessa squadra” significa assegnare il profilo alla nuova squadra
+  2026/2027 mappata dalla squadra 2025/2026; non significa riutilizzare il
+  vecchio `team_id`.
+- “Passa a un'altra squadra” significa scegliere esplicitamente una o più
+  squadre della 2026/2027 compatibili con il tipo di profilo.
+- Una persona può essere inclusa senza squadra quando il dominio lo consente
+  (per esempio staff/admin); per atleta o coach mostrare un warning esplicito,
+  senza inventare una squadra.
+- Numero di maglia e ruolo nella squadra sono valori della nuova membership:
+  possono essere proposti dalla sorgente ma devono essere confermabili o
+  modificabili per ogni squadra target.
+- Palestre e attività sono record stagionali: quelle confermate vengono copiate
+  con nuovi ID e mantengono soltanto i campi anagrafici approvati.
+- Una squadra target è sempre un nuovo record 2026/2027 o un record target già
+  esistente. Non eredita automaticamente orari, palestra, quote, coach,
+  campionati o altre configurazioni della squadra source.
+
+### Cosa non viene copiato automaticamente
+
+Il rollover profili non copia quote, rate, pagamenti, eventi, presenze, assenze,
+messaggi, read state, push subscription, documenti, campionati, partite,
+convocazioni o orari di allenamento. Questi dati rimangono storici nella
+2025/2026 oppure vengono configurati separatamente nella nuova stagione.
+
+Il catalogo minimo di palestre, attività e squadre target deve essere preparato
+prima di assegnare i profili. Può essere creato manualmente o mediante le copie
+controllate di G12.3–G12.4, ma ogni record creato nella target ha un nuovo ID. I
+codici squadra devono rispettare i vincoli reali del database; nessuna
+collisione va risolta sovrascrivendo la squadra sorgente.
+
+### Stati e sicurezza
+
+- La nuova stagione nasce sempre inattiva.
+- Creazione bozza, preparazione strutture e selezione profili sono ripetibili e
+  idempotenti; un retry non duplica iscrizioni o membership.
+- Solo un admin verificato server-side può leggere preview o eseguire rollover.
+- Il client non usa mai `service_role` e non decide autonomamente appartenenze o
+  compatibilità delle squadre.
+- L'esecuzione finale delle iscrizioni è atomica: errore su una persona o
+  membership annulla l'intero batch.
+- L'attivazione della 2026/2027 e la disattivazione della 2025/2026 sono una
+  singola operazione atomica distinta dal salvataggio della bozza.
+- Nessuna cancellazione fisica di stagione fa parte della fase. Il comando
+  `Elimina` deve essere rimosso o bloccato per stagioni con dati, privilegiando
+  `Archivia`.
+- Prima dell'attivazione devono essere disponibili preview e conteggi: inclusi,
+  esclusi, senza squadra, stessa squadra, altra squadra e warning.
+- Audit: registrare attore, source/target, conteggi e timestamp; non inserire
+  dati personali completi nei log applicativi.
+
+## G12.1 — Contratto rollover e invarianti database
+
+**Obiettivo:** rendere esplicite e versionate le garanzie prima di costruire il
+workflow.
+
+**Task singolo:**
+
+- Ispezionare schema locale e migrazioni applicate per `seasons`,
+  `season_profiles`, `gyms`, `activities`, `teams`, `team_members`,
+  `team_coaches`, `team_training_schedules`, `membership_fees` e relative
+  foreign key.
+- Creare la migration con `supabase migration new`; non inventare manualmente il
+  timestamp.
+- Portare nelle migrazioni versionate l'unicità parziale di una sola stagione
+  attiva se il DB la possiede ma il repository no.
+- Aggiungere i soli vincoli/indici necessari all'idempotenza del rollover. Non
+  cambiare `ON DELETE RESTRICT` di `season_profiles` e non introdurre cascade da
+  stagione a profilo.
+- Definire tipi e schema Zod condivisi per source season, target season, scelta
+  palestra/attività, bozza/mapping team e selezione profili. Input esterno sempre
+  validato.
+- Documentare con test/query che archiviare significa aggiornare `is_active`,
+  non eliminare la stagione.
+- Verificare RLS, grant ed eventuali funzioni privilegiate con gli advisor
+  disponibili. Una funzione `SECURITY DEFINER`, se realmente necessaria, deve
+  avere `search_path` esplicito, verifica `auth.uid()`/ruolo admin, revoke da
+  `PUBLIC`/`anon` e grant minimo.
+
+**Acceptance:** lo schema impedisce due stagioni attive e preserva la FK
+`season_profiles → seasons ON DELETE RESTRICT`; migrazione applicabile da zero e
+su DB esistente; nessun dato applicativo modificato.
+
+**Verifiche:** migration list/diff locale, query catalogo vincoli e indici,
+advisors, test degli schema Zod, `npx tsc --noEmit`, `git diff --check`.
+
+**Registro esecuzione — 15/09/2026:** aggiunti
+`supabase/migrations/20260915112357_season_rollover_invariants.sql`, generata
+con `supabase migration new`, e
+`src/lib/validation/seasonRollover.ts` con relativi test. La migration aggiunge
+soltanto l'indice unico parziale `seasons_single_active_idx` su
+`is_active = true`; sul DB locale era già presente l'equivalente
+`unique_active_season`, che la migration riconosce senza duplicare. L'idempotenza delle iscrizioni resta affidata alle
+unicità già presenti (`season_profiles` PK composta e `team_members`
+`UNIQUE(profile_id, team_id)`). Non sono stati introdotti cascade, hard delete,
+funzioni privilegiate o modifiche ai dati.
+
+Check eseguiti: test Zod 3/3, `npx tsc --noEmit`, `supabase migration
+list --local`, `supabase db advisors --local --type security --level warn` (nessun
+problema), `git diff --check`. Come baseline tecnica dell'opzione 1 è stato
+generato il dump schema-only `public` in
+`/private/tmp/csroma-g12-1-schema.sql`; il blocco idempotente della migration è
+stato eseguito sul DB locale esistente e la query successiva ha confermato un
+solo indice equivalente (`unique_active_season`). `supabase db diff --local` non completabile:
+la shadow database fallisce sulla baseline preesistente
+`20251007152643_master_migration_fixed.sql` con errore di sintassi presso
+`CREATE`. Il catalogo locale è stato comunque verificato via
+`supabase db query --local`: esiste `unique_active_season`, la FK
+`season_profiles → seasons` è `ON DELETE RESTRICT`, le unicità di
+`season_profiles`, `team_members` e `team_coaches` sono presenti e tutte le
+tabelle richieste hanno RLS abilitato; policy e grant sono stati ispezionati.
+La migration riconosce l'indice locale equivalente senza duplicarlo. Nessun
+database applicativo, staging o produzione è stato mutato. Il goal resta
+bloccato solo sulla prova di applicabilità da zero finché la baseline non è
+resa eseguibile in un goal autorizzato. Questa opzione chiude la verifica sullo
+schema corrente, ma non dimostra l'applicabilità dell'intera catena da zero;
+G12.1 resta quindi `[!]` secondo l'Acceptance originale.
+
+**Verifica staging — 15/09/2026:** sul progetto collegato
+`csromawebapp-staging`, `supabase migration list --linked` mostra history
+allineata fino a `20260914120000`; `supabase db push --linked --dry-run`
+propone esclusivamente `20260915112357_season_rollover_invariants.sql` e non
+esegue modifiche. Query catalogo read-only hanno confermato l'indice unico
+parziale `unique_active_season`, la PK e la FK `season_profiles.season_id`
+con `ON DELETE RESTRICT`, le unicità di `team_members`/`team_coaches` e RLS
+abilitato su tutte le tabelle richieste. `supabase db diff --linked` non è
+conclusivo perché la shadow database fallisce sulla baseline storica invalida.
+Gli advisor security staging riportano warning già presenti su
+`check_gym_schedule_conflicts`, `refresh_championship_standings` e leaked
+password protection; nessuno riguarda la migration G12.1.
+
+**Applicazione staging — 15/09/2026:** eseguito `supabase db push --linked`
+con la sola migration G12.1, dopo il dry-run e la conferma esplicita
+dell'utente. Verificata la presenza della versione
+`20260915112357` in `supabase_migrations.schema_migrations`, l'indice unico
+parziale esistente e il commento su `seasons.is_active`. La CLI ha riportato
+un warning non bloccante durante la cache pg-delta per un certificato locale
+assente; l'applicazione della migration è terminata con successo.
+
+**Bootstrap isolato — 22/09/2026 — SUPERATO:** il primo tentativo di replay
+della history ha confermato il difetto della baseline storica: la migration di
+hardening `20260723140557_local_rls_hardening.sql` fa riferimento a tabelle
+campionato non create a quel punto della history. La modifica esplorativa alla
+baseline non e' stata mantenuta. Per decisione esplicita e' stata adottata una
+baseline canonica schema-only, non una riscrittura silenziosa della history:
+`supabase/bootstrap/canonical-staging-schema.sql`. Il suo import e' riuscito
+due volte da database Docker disposable vuoto (`csroma-canonical-bootstrap`),
+inclusa una riesecuzione dal file locale; il controllo
+`supabase/bootstrap/verify-canonical-bootstrap.sql` ha confermato 46 tabelle
+pubbliche con RLS, 26 funzioni pubbliche, 29 private, RPC e mappe del rollover,
+indice unico parziale della stagione attiva e FK `season_profiles` con
+`ON DELETE RESTRICT`. Il dump dello schema reimportato differisce da staging
+solo per normalizzazione di `pg_dump` (una CHECK equivalente, revoke esplicito
+del privilegio schema `PUBLIC` e righe vuote), non per oggetti applicativi.
+Nessun database locale esistente, staging o produzione e' stato modificato.
+G12.1 resta `[!]` finche' non viene formalmente accettata questa baseline come
+metodo supportato di bootstrap e definito il processo di rigenerazione per ogni
+futura modifica schema.
+
+**Controlli baseline canonica — 22/09/2026:** `npx tsc --noEmit` e' passato.
+Sono passati anche 5 suite / 11 test mirati al rollover e alla stagione attiva
+(`seasonRollover`, rollover profili/team/batch e `active-season`). Gli advisor
+security Supabase sul progetto Docker isolato non hanno riportato issue. Il
+tentativo degli advisor tramite `--db-url` ha fallito per un limite di
+connessione della CLI; il controllo equivalente `--local` sul progetto isolato
+ha completato correttamente. Gli artefatti di bootstrap
+(`canonical-staging-schema.sql`, README e verifica SQL) restano locali e non
+versionati: contengono struttura, policy, grant e funzioni private di staging.
+Prima di condividerli con il team va definita una sede protetta e una procedura
+di rigenerazione con checksum.
+
+**Inventario history — 22/09/2026:** l'analisi dello schema staging rispetto
+alle DDL presenti nelle migration ha rilevato 15 tabelle di dominio non create
+dalla history versionata: `athlete_profiles`, `coach_profiles`,
+`team_coaches`, `team_training_schedules`, `event_attendances`,
+`document_recipients`, `message_attachments` e le otto relazioni campionato.
+La migration di hardening del 23/07/2026 presuppone già alcuni di tali oggetti,
+funzioni e view. Non sono state aggiunte guardie `IF EXISTS` indiscriminate:
+avrebbero potuto far passare il bootstrap lasciando un modello meno sicuro o
+diverso da staging. La chiusura di G12.1 richiede quindi una strategia
+autorizzata di baseline canonica/squash, ricostruita e comparata con staging,
+oppure il recupero delle migration storiche originali mancanti.
+
+**Decisione baseline canonica — 24/09/2026:** scelta esplicitamente la
+baseline schema-only locale come metodo supportato. La migration storica
+`20251007152643_master_migration_fixed.sql` non viene riscritta: oltre ai
+terminatori SQL mancanti, la history non crea 15 tabelle richieste dai
+successivi hardening, quindi una modifica puntuale sarebbe incompleta e
+altererebbe una migration già presente nella storia remota.
+
+Il database Docker isolato `csroma-canonical-bootstrap` (porta locale 54522)
+è stato riportato due volte allo schema applicativo vuoto (`public` e
+`private`), importando ogni volta
+`supabase/bootstrap/canonical-staging-schema.sql` e poi
+`verify-canonical-bootstrap.sql`. Entrambi i replay sono riusciti: 46 tabelle
+pubbliche con RLS, 26 funzioni pubbliche, 29 private, mappe/RPC rollover,
+indice parziale unico della stagione attiva e FK `season_profiles → seasons`
+con `ON DELETE RESTRICT`. Lo snapshot resta fuori da Git perché include
+policy, grant e funzioni private; checksum SHA-256 registrato:
+`f2cbc205a94aa4c1c622670e7a8a70fbd889d814d84e6823e4a0153fcd235e10`.
+Per ogni futura modifica schema: applicare prima la migration nell’ambiente
+autorizzato, rigenerare lo snapshot nella sede protetta, aggiornare checksum e
+ripetere i due replay Docker; non usare lo snapshot con `db push`, staging o
+produzione.
+
+**Warning security — 24/09/2026:** advisor staging in sola lettura ha
+confermato due RPC `SECURITY DEFINER` eseguibili da `authenticated` e la
+protezione password compromesse disattivata. `check_gym_schedule_conflicts`
+e' una lettura che non richiede privilegi elevati: preparata la migration
+locale `20260924070909_g12_1_security_definer_hardening.sql` che la rende
+`SECURITY INVOKER`, conservando il grant a `authenticated`/`service_role` e
+quindi applicando RLS. `refresh_championship_standings` e' solo funzione
+trigger: la stessa migration revoca l'esecuzione a `PUBLIC`, `anon` e
+`authenticated`, mantenendola al solo `service_role`. Applicata e verificata
+esclusivamente sul Docker canonico: catalogo finale senza `SECURITY DEFINER`
+per la prima funzione e senza grant `authenticated` per la seconda. L’advisor
+CLI via `--db-url` non si connette al Docker, quindi questa parte e' validata
+dal catalogo PostgreSQL, non dall’advisor. La migration non e' stata applicata
+a staging/produzione e lo snapshot non e' stato rigenerato; resta inoltre una
+decisione amministrativa separata sull’abilitazione della protezione password
+compromesse nel pannello Supabase.
+
+**Applicazione staging e rigenerazione — 24/09/2026:** prima del deploy è
+stata riconciliata la history locale con i quattro timestamp già assegnati a
+staging (`20260915123220`, `20260915141842`, `20260915153331`,
+`20260917094411`): sole rinomine Git, senza modifiche SQL né history remota.
+Il nuovo dry-run ha proposto esclusivamente
+`20260924070909_g12_1_security_definer_hardening.sql`; la migration è stata
+applicata a staging con successo. Il warning successivo della cache locale
+`pg-delta` per un certificato assente non ha impedito l’applicazione, confermata
+dalla history remota allineata.
+
+Gli advisor security post-deploy segnalano ora soltanto `Leaked Password
+Protection Disabled`: nessuna delle due RPC `SECURITY DEFINER` è più eseguibile
+da `authenticated`. Lo snapshot `public,private` schema-only è stato
+rigenerato direttamente da staging senza `INSERT` o `COPY`, con checksum
+SHA-256 `628b781bb2352d42c90cc8e29c5d1da92263819ab9901c18c8e5999d22a3303e`.
+I due replay consecutivi sul Docker canonico con lo snapshot aggiornato hanno
+entrambi superato la verifica (46 tabelle pubbliche/RLS, 26 funzioni pubbliche,
+29 private, indice e FK richiesti); il catalogo locale conferma inoltre
+`check_gym_schedule_conflicts` `SECURITY INVOKER` e nessun grant
+`authenticated` su `refresh_championship_standings`.
+
+**Decisione leaked password protection — 24/09/2026:** non abilitabile sul
+piano Supabase gratuito in uso; il proprietario ha scelto consapevolmente di
+lasciarla disabilitata. Il warning e' quindi classificato come limite di
+piattaforma accettato, da rivalutare in caso di passaggio a piano Pro o
+superiore. Verifiche 24/09: 5 suite / 11 test rollover-stagione,
+`npx tsc --noEmit` e `git diff --check` superati. Con questa decisione G12.1
+e' `[x]`; non è stata eseguita alcuna mutazione produzione.
+
+## G12.2 — API per creare la bozza 2026/2027
+
+**Obiettivo:** sostituire l'insert diretto dal browser con un confine server
+validato e con errori visibili.
+
+**Task singolo:**
+
+- Aggiungere un Route Handler admin per creare o recuperare idempotentemente la
+  stagione con nome `Stagione 2026/2027`, inizio `2026-09-01`, fine
+  `2027-06-30` e `is_active = false`.
+- Verificare `requireGlobalRole('admin')` prima di usare l'admin client.
+- Rifiutare date invertite, target sovrapposto ambiguo, nome/date discordanti e
+  tentativo di creazione già attiva.
+- Se esiste già una target con gli stessi identificatori, restituirla senza
+  duplicarla; se esiste con dati incompatibili, restituire conflitto esplicito.
+- Instradare la creazione da `SeasonsManager` al Route Handler; il modal resta
+  aperto durante pending/failure e mostra success/error comprensibili.
+- Non disattivare la 2025/2026 e non creare ancora profili, team o altre entità.
+
+**Acceptance:** un admin ottiene una sola bozza inattiva 2026/2027; retry
+identico; non-admin 403; errore DB visibile; zero mutazioni fuori `seasons`.
+
+**Verifiche:** test Route Handler auth/validation/idempotenza/conflitto, test
+manager pending/error/success, `npx tsc --noEmit`, suite mirata, build e diff
+check.
+
+**Registro esecuzione G12.2 — 15/09/2026:** aggiunto
+`src/app/api/admin/seasons/route.ts` come confine server per la creazione o il
+recupero idempotente della sola bozza `Stagione 2026/2027`, con periodo
+`2026-09-01` → `2027-06-30` e `is_active = false`. Il controllo
+`requireGlobalRole('admin')` precede la creazione dell'admin client. Il payload
+è validato server-side; date invertite, nome/periodo discordanti, target già
+attiva, sovrapposizioni e collisioni vengono rifiutati con errori espliciti.
+Un target inattivo già esistente viene restituito senza insert. L'endpoint non
+tocca `profiles`, account, relazioni, `season_profiles`, team o la stagione
+2025/2026.
+
+`SeasonsManager` usa ora il Route Handler per la creazione; il modal resta
+aperto durante pending/failure, mostra l'errore restituito e si chiude solo su
+successo. Non è stata eseguita alcuna mutazione su staging/produzione e non è
+stata introdotta alcuna migration o attivazione.
+
+File modificati: `src/app/api/admin/seasons/route.ts`,
+`src/app/api/admin/seasons/route.test.ts`,
+`src/components/admin/SeasonsManager.tsx`,
+`src/components/admin/SeasonsManager.test.tsx`,
+`src/components/admin/SeasonsModal.tsx` e questo piano.
+
+Verifiche eseguite: suite mirata Route Handler/manager — 2 suite, 11 test
+superati; `npx tsc --noEmit`; `npm run build`; `git diff --check`.
+La verifica runtime autenticata nel browser e una query DB post-creazione non
+sono state eseguite perché avrebbero richiesto una mutazione o credenziali
+operative; non vengono dichiarati esiti per queste verifiche.
+
+## G12.3 — Copia selettiva di palestre e attività
+
+**Obiettivo:** preparare le anagrafiche riutilizzabili della 2026/2027 senza
+trascinare configurazioni operative della stagione precedente.
+
+**Task singolo:**
+
+- Aggiungere preview server-side delle palestre e attività della 2025/2026,
+  includendo lo stato di un'eventuale corrispondenza già presente nella target.
+- Permettere una scelta esplicita per ogni elemento: `Copia`, `Collega a target
+  esistente`, `Non portare`.
+- Per una palestra copiare soltanto `name`, `address`, `contact_info`, `city`,
+  `capacity` e `is_active`, con nuovo ID e `season_id` della 2026/2027.
+- Per un'attività copiare soltanto `name`, `description` e `is_active`, con nuovo
+  ID e `season_id` della 2026/2027.
+- Non copiare eventi, pagamenti, team, schedule, associazioni palestra-team,
+  quote, documenti, campionati o altre dipendenze.
+- Validare server-side source e target, impedire mapping cross-season e rendere
+  copia/mapping idempotenti. Una collisione o corrispondenza ambigua richiede
+  scelta dell'admin e non deve aggiornare la source.
+- Mostrare elementi creati, collegati, esclusi e in conflitto, mantenendo la
+  bozza 2026/2027 inattiva.
+
+**Acceptance:** la target contiene esattamente le palestre e attività approvate
+come nuovi record o mapping espliciti; source e dipendenze sono invariate; retry
+senza duplicati.
+
+**Verifiche:** test Route Handler/servizio per copia, mapping esistente,
+esclusione, collisione, ID cross-season, retry e non-admin; query differenziale
+source/target su fixture transazionale; typecheck, build e diff check.
+
+**Registro esecuzione G12.3 — 15/09/2026 — PASS WITH LIMITS:** aggiunti il
+Route Handler admin `GET/POST /api/admin/season-structures` e il servizio
+server `src/server/admin/season-rollover-structures.ts`. La preview legge
+source e target server-side, espone le corrispondenze per nome e i mapping già
+persistiti; il POST accetta per ogni palestra/attività `copy`, `link` o `skip`,
+con validazione Zod, IDs UUID e autorizzazione `requireGlobalRole('admin')`
+prima di ogni client privilegiato. La nuova migration
+`20260915120307_season_rollover_structures.sql` aggiunge solo le colonne
+anagrafiche richieste mancanti (`city`, `capacity`, `is_active`), una tabella di
+mapping source/target e la funzione PostgreSQL transazionale
+`rollover_structures_batch`. La funzione verifica source/target e target
+inattiva, impedisce mapping cross-season, copia soltanto i campi approvati con
+nuovi UUID, non tocca dipendenze operative o la source, usa un lock sulla
+target e rende i retry idempotenti. Nessuna modifica a `profiles`, account,
+relazioni familiari, team, eventi, pagamenti o dati della 2025/2026.
+
+File modificati: `supabase/migrations/20260915120307_season_rollover_structures.sql`,
+`src/server/admin/season-rollover-structures.ts`,
+`src/app/api/admin/season-structures/route.ts`, relativo test e questo piano.
+
+Verifiche eseguite: test mirati Route Handler/contratti — 2 suite, 7 test
+superati; `npx tsc --noEmit`; `npm run build`; `git diff --check`.
+Non eseguite: query differenziale source/target, fixture transazionale,
+collisione/retry reali, advisors e verifica runtime della RPC, perché la
+migration non è stata applicata a database locale, staging o produzione. La
+CLI Supabase non ha consentito `supabase status` per `EPERM` sulla telemetria
+in `~/.supabase`; non viene dichiarato alcun esito DB. Nessun deploy,
+attivazione o mutazione su staging/produzione eseguita. G12.4 e goal successivi
+non avviati.
+
+**Follow-up staging — 15/09/2026:** su richiesta esplicita dell'utente, la
+migration è stata applicata esclusivamente al progetto Supabase
+`csromawebapp-staging` tramite plugin. Il plugin ha registrato la versione
+remota `20260915123220_season_rollover_structures` (versione assegnata dal
+servizio, diversa dal timestamp del file locale). Verificati migration history,
+presenza di `season_rollover_structure_maps`, presenza della RPC
+`rollover_structures_batch(uuid,uuid,jsonb,jsonb)`, colonne strutturali e ACL:
+la RPC è `SECURITY DEFINER` ma eseguibile solo da `postgres` e `service_role`;
+`anon` e `authenticated` non hanno execute. Il mapping resta vuoto e non sono
+state eseguite copie, link, creazioni di stagione o altre mutazioni dati.
+Staging contiene una sola stagione di test attiva (`Stagione RLS Test`) e non
+una fixture 2025/2026/2026-2027, quindi non è stato eseguito il batch.
+
+Advisors security post-migration: informazione sulla nuova tabella RLS senza
+policy (intenzionale, tabella interna non esposta) e gli stessi warning
+preesistenti su tre tabelle audit, due funzioni `SECURITY DEFINER` già esposte
+e leaked-password protection. Nessun advisor relativo alla nuova RPC come
+eseguibile da utenti autenticati. Produzione invariata.
+
+**Fixture transazionale locale — 22/09/2026 — COMPLETATA:** sul database
+Docker isolato `csroma-canonical-bootstrap` e' stata eseguita una fixture entro
+un'unica transazione poi annullata con `ROLLBACK`. Tre palestre e tre attivita'
+source, una palestra e una attivita' target preesistenti hanno verificato le
+tre scelte: `copy` ha creato nuovi record target mantenendo esclusivamente i
+campi ammessi, `link` ha creato mapping espliciti e `skip` non ha creato
+record. La prima esecuzione e il retry hanno restituito rispettivamente
+`copied=1`, `linked=1`, `skipped=1` per entrambe le tipologie; i conteggi
+persistiti nella transazione erano source 3/3, target 2/2 e quattro mapping.
+Una collisione di mapping target ha sollevato `unique_violation` e non ha
+alterato conteggi o mapping, dimostrando l'atomicita' del batch. La query dopo
+`ROLLBACK` ha confermato zero righe fixture residue. Sono passati i test
+Route Handler/wizard 2 suite, 8 test, `npx tsc --noEmit`, `npm run build` e
+`git diff --check`.
+
+**Evidenza staging — 22/09/2026 — PRIMA DELL'AUTORIZZAZIONE:** nessuna fixture source /
+target e' stata creata su staging, perche' sarebbe una mutazione persistente
+che richiede autorizzazione esplicita. La query read-only via CLI e' terminata
+senza errore ma la versione installata non ha restituito il result set, quindi
+non viene usata come prova di conteggi. Restano valide le verifiche staging del
+15/09 su migration, schema e ACL; per chiudere G12.3 serve una fixture staging
+dedicata oppure l'autorizzazione a eseguire il batch su una coppia di stagioni
+reali idonea, seguita da conteggi pre/post e cleanup concordato.
+
+**Fixture staging — 22/09/2026 — COMPLETATA:** su autorizzazione esplicita e
+senza creare un terzo progetto Supabase, e' stata eseguita sullo staging
+esistente una fixture con due stagioni inattive e record isolati da UUID e nomi
+dedicati. Il batch ha verificato copy/link/skip per tre palestre e tre attivita'
+source, mantenendo i soli campi consentiti; le asserzioni SQL hanno confermato
+i conteggi 3/3 source, 2/2 target e quattro mapping, il retry senza duplicati
+e il rollback atomico della collisione di mapping. Il cleanup ha cancellato
+mapping, strutture e stagioni della fixture; una seconda query read-only ha
+confermato zero residui e gli ACL invariati della RPC (solo `service_role`, non
+`anon`/`authenticated`). Produzione non toccata.
+
+## G12.4 — Bozze e mappa squadre target
+
+**Obiettivo:** creare l'identità minima delle squadre 2026/2027 lasciando vuota
+la configurazione che può cambiare tra stagioni.
+
+**Task singolo:**
+
+- Aggiungere preview server-side delle squadre 2025/2026 e delle squadre già
+  presenti nella target, usando la mappa attività approvata in G12.3.
+- Per ogni squadra offrire tre scelte esplicite:
+  `Crea bozza 2026/2027`, `Collega a squadra target esistente`, `Non ricreare`.
+- La bozza copia soltanto il nome come proposta e il riferimento alla nuova
+  attività; crea un nuovo ID, `is_active = true` e un nuovo codice globale
+  modificabile, proponendo un suffisso riconoscibile come `-2627`.
+- Non copiare `coach_id`, `team_coaches`, `team_members`,
+  `training_rsvp_enabled`, giorni/orari, palestre di allenamento, quote/rate,
+  eventi, documenti, messaggi, campionati, partite o convocazioni. Questi valori
+  ripartono vuoti/default e vengono configurati separatamente.
+- Consentire rinomina e cambio attività prima della creazione per casi come
+  cambio categoria. Una collisione di codice blocca la singola proposta e non
+  modifica la squadra source.
+- Persistire o ricostruire in modo idempotente una mappa
+  `source_team_id → target_team_id`; validare che il target appartenga alla
+  2026/2027. Consentire più source verso un target per fusioni; non usare la
+  mappa come assegnazione automatica irreversibile, perché i singoli profili
+  possono essere distribuiti su team target diversi nel passo successivo.
+- Mostrare con chiarezza bozze create, target collegati, squadre non ricreate e
+  configurazioni rimaste intenzionalmente vuote.
+
+**Acceptance:** ogni team selezionabile per i profili appartiene alla
+2026/2027; le squadre 2025/2026 e tutte le dipendenze restano intatte; nessun
+orario, palestra, quota o staff viene ereditato implicitamente.
+
+**Verifiche:** test per tre scelte, cambio nome/attività, codice proposto e
+collisione, fusione, target cross-season, retry e non-admin; query DB di
+conteggio su fixture transazionale; typecheck, build e diff check.
+
+**Registro esecuzione G12.4 — 15/09/2026 — PASS:** aggiunti la
+migration generata con `supabase migration new`
+`supabase/migrations/20260915140047_season_rollover_teams.sql`, il servizio
+server `src/server/admin/season-rollover-teams.ts`, il Route Handler admin
+`src/app/api/admin/season-teams/route.ts` e i test associati. La migration
+aggiunge soltanto `teams.is_active` (default `true`), la mappa
+`source_team_id → target_team_id` con vincoli di stagione e la RPC
+transazionale `rollover_teams_batch`; la mappa consente fusioni, non riusa ID
+source e non tocca membership, staff, orari, palestre, quote, eventi,
+documenti, campionati o altri dati operativi. La RPC crea solo nome, codice,
+attività target e `is_active = true`, verifica source/target e collisioni del
+codice, supporta retry idempotenti e ha `EXECUTE` revocato a `PUBLIC`, `anon`
+e `authenticated`, con grant al solo `service_role`. L'endpoint esegue il
+controllo admin server-side prima del servizio privilegiato; preview e batch
+non espongono né duplicano profiles/account/relazioni e non introducono hard
+delete.
+
+File modificati: `supabase/migrations/20260915140047_season_rollover_teams.sql`,
+`src/server/admin/season-rollover-teams.ts`,
+`src/app/api/admin/season-teams/route.ts`,
+`src/app/api/admin/season-teams/route.test.ts` e questo piano.
+
+Verifiche eseguite: test G12.4 di Route Handler e servizio — 2 suite, 6 test
+superati; `npx tsc --noEmit`; `npm run build`; `git diff --check` superati. La migration
+è stata eseguita in due fixture PostgreSQL locali transazionali terminate con
+`ROLLBACK`: la prima ha verificato create/link/skip, due source verso lo stesso
+target, retry senza duplicati, collisione del codice e conteggi (`created=1`,
+`linked=2`, `skipped=1`); la seconda ha verificato il rifiuto del target
+cross-season. Il controllo read-only post-rollback ha confermato assenza della
+tabella, della RPC e delle righe fixture. La migration non è stata applicata
+persistentemente al database locale. `supabase migration list --local` e
+`supabase db push --local --dry-run` restano non eseguibili per l'errore
+preesistente `EPERM` sulla scrittura di `~/.supabase/telemetry.json.tmp`; non
+viene dichiarato un esito di advisor o di migration history CLI. È rimasto solo
+il warning preesistente di collation PostgreSQL locale. Nessun accesso o
+mutazione su staging/produzione, deploy, attivazione della stagione o goal
+successivo è stato eseguito. G12.5 resta non avviato.
+
+**Valutazione staging via plugin Supabase — 15/09/2026:** il progetto
+`csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`) è `ACTIVE_HEALTHY`; la history
+remota è allineata fino a `20260915123220_season_rollover_structures` e la
+la migration `20260915140047` era pending. Le query read-only hanno confermato che
+`season_rollover_team_maps` e `rollover_teams_batch` non esistevano ancora,
+mentre `teams.is_active` esiste già con default `true` e nessun team con valore
+NULL. Staging contiene una sola stagione attiva di test, nessuna
+`Stagione 2025/2026` o `Stagione 2026/2027`, 6 squadre, 7 membership e 7
+assegnazioni coach; la mappa strutture è vuota. Gli advisor security mostrano
+solo warning/info già presenti, inclusi le tabelle interne RLS senza policy, due
+funzioni `SECURITY DEFINER` legacy esposte e leaked-password protection.
+
+La migration è stata valutata safe per l'applicazione schema-only in staging:
+è additiva, non esegue insert/update/delete di dati applicativi e non può
+creare la stagione o copiare squadre. Il plugin non espone un dry-run DDL; non è
+stata applicata perché questa verifica non costituiva autorizzazione alla
+scrittura. Non eseguire il batch dopo l'applicazione: staging non contiene una
+fixture source/target valida.
+
+**Applicazione staging G12.4 — 15/09/2026:** su conferma esplicita
+dell’utente, la migration è stata applicata esclusivamente al progetto
+`csromawebapp-staging` tramite plugin Supabase. Il servizio ha registrato la
+versione remota `20260915141842_season_rollover_teams`. Verificati con query
+read-only la presenza di `season_rollover_team_maps` e
+`rollover_teams_batch(uuid,uuid,jsonb)`, i vincoli FK source/target con
+`ON DELETE RESTRICT` e l’ACL della RPC: `SECURITY DEFINER`, eseguibile solo da
+`postgres` e `service_role`; `anon` e `authenticated` non hanno `EXECUTE`.
+I conteggi restano 1 stagione (1 attiva), 6 squadre e 0 mappe; non sono state
+create stagioni, squadre, mappe o relazioni e non è stato eseguito alcun batch.
+Gli advisor post-migration riportano solo warning/info preesistenti e il nuovo
+rilievo informativo atteso per la tabella interna RLS senza policy; nessun
+warning riguarda la RPC come eseguibile da utenti autenticati. Produzione
+invariata.
+
+## G12.5 — Preview read-only dei profili candidati
+
+**Obiettivo:** costruire la lista autorevole sulla quale l'admin effettua la
+scelta.
+
+**Task singolo:**
+
+- Aggiungere un servizio server e un endpoint admin read-only che carichino i
+  `season_profiles` della 2025/2026 con dati anagrafici minimi, `profile_type`,
+  stato, squadre sorgente, jersey/ruolo squadra e mapping target disponibile.
+- Separare atleti e collaboratori, mantenendo supporto per una persona con più
+  squadre e senza deduplicarla in modo distruttivo.
+- Per ogni atleta mostrare soltanto come contesto i familiari con relazione
+  attiva e i permessi pertinenti, senza inserirli tra i candidati stagionali e
+  senza esporre dati personali non necessari.
+- Includere l'eventuale stato target già presente per rendere sicuri resume e
+  retry.
+- Non restituire note personali, dati medici, credenziali, auth user ID o altri
+  campi non necessari alla selezione.
+- Produrre warning tipizzati: mapping mancante, target già iscritto, nessuna
+  squadra, profilo inattivo o classificazione incoerente.
+- Non eseguire insert/update/delete.
+
+**Acceptance:** la preview rappresenta ogni candidato una sola volta con tutte
+le sue membership sorgente e sole squadre target autorizzate; una persona non
+presente nella source non può essere iniettata via ID client.
+
+**Verifiche:** test servizio/route con atleta stessa squadra, cambio squadra,
+multi-team, collaboratore senza team, familiare collegato, già migrato, escluso
+e ID estraneo; privacy del payload, auth admin, typecheck e diff check.
+
+**Registro esecuzione G12.5 — 15/09/2026 — PASS:** aggiunti il servizio
+server `src/server/admin/season-rollover-profiles.ts` e il Route Handler
+read-only `GET /api/admin/season-profiles`. La preview legge esclusivamente
+`season_profiles` della source e deduplica per persona, separando atleti e
+collaboratori; conserva tutte le membership source multi-team con
+`jersey_number`/ruolo, deriva solo i target presenti nella mappa autorizzata
+G12.4 e riporta lo stato target già esistente senza proporre assegnazioni come
+persistite. I familiari compaiono soltanto come contesto per atleti, con
+relazione attiva e nomi dei permessi abilitati; non sono candidati stagionali.
+Il payload non include email, note personali, dati medici, credenziali o auth
+user ID. Warning e classificazione sono tipizzati; ID estranei non possono
+iniettare candidati perché la sorgente della lista è server-side.
+
+File modificati: `src/server/admin/season-rollover-profiles.ts`,
+`src/server/admin/season-rollover-profiles.test.ts`,
+`src/app/api/admin/season-profiles/route.ts`,
+`src/app/api/admin/season-profiles/route.test.ts` e questo piano.
+
+Verifiche eseguite: test servizio/Route Handler — 2 suite, 5 test superati;
+coperti multi-team, mapping mancante, collaboratore senza squadra, stato
+inattivo, familiare/permessi, stato target, privacy del payload, validazione ID
+e 403 non-admin; `npx tsc --noEmit`; `git diff --check`. Non eseguiti build,
+E2E, query DB runtime o advisor: non richiesti dal goal e non necessari per un
+endpoint read-only; non viene dichiarato alcun esito per tali verifiche.
+Nessuna migration, insert/update/delete, deploy, attivazione o accesso a
+staging/produzione eseguito. G12.6 e goal successivi non avviati.
+
+## G12.6 — Esecuzione atomica delle iscrizioni selezionate
+
+**Obiettivo:** applicare la scelta senza alterare la stagione sorgente.
+
+**Task singolo:**
+
+- Implementare una singola operazione DB transazionale per il batch confermato.
+- Per ogni incluso, upsert idempotente di `season_profiles` nella target con
+  `profile_type`, stato e source audit coerenti.
+- Creare soltanto le nuove `team_members`/`team_coaches` target selezionate,
+  dopo aver verificato appartenenza del profilo alla source, stagione dei team,
+  compatibilità del ruolo e assenza di ID non autorizzati.
+- Per ogni escluso non effettuare alcuna mutazione: non impostare il profilo
+  globale inattivo e non rimuovere righe source.
+- Non creare iscrizioni stagionali per i familiari: account e
+  `profile_relationships` restano invariati e l'accesso deriva dai subject
+  inclusi nella target.
+- Non aggiornare né cancellare membership 2025/2026.
+- Un errore su una riga annulla l'intero batch. Retry dello stesso payload non
+  crea duplicati e non modifica dati non inclusi.
+- Restituire conteggi autorevoli e warning, senza dettagli sensibili nei log.
+- Registrare un audit del batch con attore, source/target e conteggi.
+
+**Acceptance:** fixture mista con inclusi/esclusi, stessa/altra squadra e
+multi-team produce esattamente le relazioni target richieste; checksum/conteggi
+source identici prima e dopo; errore intenzionale dimostra rollback completo.
+
+**Verifiche:** test DB transazionali di successo, retry, rollback, non-admin,
+team cross-season e profilo estraneo; query differenziale source; advisors,
+typecheck, test route e diff check.
+
+**Registro esecuzione — 15/09/2026:** aggiunti
+`supabase/migrations/20260915144045_season_rollover_profiles_batch.sql`,
+`src/server/admin/season-rollover-profile-batch.ts`, il Route Handler
+`src/app/api/admin/season-profile-batch/route.ts` e i test del servizio/Route
+Handler. La migration crea la tabella audit append-only interna e la RPC
+`rollover_profiles_batch`, eseguibile solo da `service_role`; la route verifica
+`requireGlobalRole('admin')` prima di usare il client privilegiato. Il payload
+è validato con Zod, la RPC deriva tipo/stato e appartenenza dalla source,
+accetta solo team target della stagione inattiva e ruoli compatibili, non crea
+`season_profiles` per familiari e non esegue alcuna delete o update della
+2025/2026. La batch key e la PK/unique esistenti rendono il retry idempotente;
+l'audit conserva actor, source/target e conteggi senza dati personali completi.
+
+Verifiche eseguite: test servizio/Route Handler — 2 suite, 5 test superati;
+fixture transazionale locale con inclusi/esclusi, atleta e coach, atleta
+multi-team su due squadre target, retry
+(`replayed=true`), audit singolo, team cross-season e profilo estraneo;
+rollback intenzionale senza righe target parziali; query differenziale source
+con conteggi/checksum invariati (`season_profiles 50`, `team_members 69`,
+`team_coaches 4`); advisor security locale — nessun problema; `npx tsc
+--noEmit`; `git diff --check`. La migration è stata applicata soltanto al DB
+locale per la verifica ed è stata usata dentro fixture rollback-safe; non è
+stata registrata/applicata su staging o produzione. Il comando CLI
+`supabase migration new` è riuscito con telemetria disabilitata; la migration
+è sotto `/supabase/` ignorato dal `.gitignore` locale, ma il file è presente
+nel workspace. Nessun deploy, attivazione o mutazione staging/produzione;
+G12.7 e successivi non avviati.
+
+**Applicazione staging autorizzata — 15/09/2026:** su conferma esplicita
+dell'utente, la migration è stata applicata esclusivamente al progetto
+Supabase `csromawebapp-staging` tramite plugin, con versione remota
+`20260915153331_season_rollover_profiles_batch`. Verificati migration history,
+presenza della tabella audit con RLS, presenza della RPC e ACL: `anon` e
+`authenticated` non hanno `EXECUTE`, `service_role` sì; l'audit è vuoto. Non
+sono state eseguite iscrizioni, creazioni di stagione, mutazioni dati,
+attivazioni o modifiche a produzione.
+
+## G12.7 — Wizard admin per selezione profili e squadre
+
+**Obiettivo:** consentire la decisione operativa persona per persona senza
+nascondere l'impatto.
+
+**Task singolo:**
+
+- Integrare in `/admin/seasons` un wizard responsive con passi:
+  `Stagione` → `Palestre e attività` → `Squadre` → `Profili` →
+  `Assegnazioni` → `Riepilogo`.
+- Nel passo strutture rendere esplicite le tre scelte definite in G12.3 e G12.4
+  e segnalare che le squadre create sono bozze senza orari, palestre, quote o
+  staff ereditati.
+- Nella lista profili offrire ricerca, filtro atleta/collaboratore/squadra e
+  scelta esplicita `Porta nella nuova stagione` / `Non portare`.
+- Non preselezionare tutti in modo silenzioso. È consentito “seleziona tutti i
+  risultati filtrati” solo come azione esplicita, reversibile e con conteggio.
+- Per gli inclusi proporre il mapping della stessa squadra quando univoco e
+  permettere altra squadra, più squadre o nessuna squadra con warning.
+- Rendere jersey e ruolo target modificabili dove applicabile.
+- Mostrare gli esclusi nel riepilogo con copy: “Resteranno nella 2025/2026 e non
+  saranno iscritti alla 2026/2027”.
+- Mostrare i genitori collegati come conseguenza della scelta sull'atleta, non
+  come checkbox di migrazione: relazione e permessi restano invariati.
+- Prima dell'invio mostrare conteggi inclusi/esclusi/senza squadra e richiedere
+  conferma esplicita; bloccare doppio submit, cambio pagina accidentale e
+  chiusura con modifiche non salvate.
+- Stati loading, empty, denied, offline, validation error e unexpected error
+  devono essere distinti. Nessuna mutation offline o aggiornamento ottimistico.
+
+**Acceptance:** l'admin può rappresentare nella stessa bozza atleta confermato
+nella stessa squadra, atleta spostato, collaboratore multi-team e persona
+esclusa; il payload inviato coincide con il riepilogo visibile.
+
+**Verifiche:** test componenti per filtri/selezione/mapping/warning/riepilogo,
+focus trap e tastiera, viewport 320/390/768/1440, offline e failure/retry;
+typecheck, suite mirata, build e diff check.
+
+**Registro esecuzione — 15/09/2026:** aggiunti
+`src/components/admin/SeasonRolloverWizard.tsx` e
+`src/components/admin/SeasonRolloverWizard.test.tsx`; integrato l'avvio del
+wizard in `src/components/admin/SeasonsManager.tsx` quando sono presenti
+2025/2026 e la bozza inattiva 2026/2027. Il wizard mantiene tutte le scelte
+locali fino alla conferma, non preseleziona i profili, consente inclusione
+esplicita dei risultati filtrati, propone la stessa squadra solo quando il
+mapping è univoco, rende modificabili ruolo/numero di maglia e prepara il
+payload completo di inclusi ed esclusi per la RPC batch di G12.6. Il passo di
+riepilogo espone l'impatto sui familiari senza trattarli come iscrizioni; il
+submit è disabilitato senza conferma, protetto dal doppio invio e non esegue
+attivazione della stagione. Loading, offline, errore server, retry, empty e
+success sono distinti; il browser warning protegge le modifiche non salvate.
+
+Verifiche eseguite: suite mirata wizard/manager — 2 suite e 7 test superati;
+`npx tsc --noEmit`; `npm run build`; `git diff --check`.
+La suite copre opt-in, filtri, mapping, riepilogo/payload, failure/retry e
+offline. Non eseguite E2E o smoke manuale autenticato, focus trap reale e
+verifica visuale ai quattro viewport richiesti; non eseguite query DB,
+mutazioni staging/produzione, deploy o attivazione. Nessun file di dati,
+profilo, account, relazione o migration è stato modificato; G12.8 e G12.9
+non avviati.
+
+## G12.8 — Isolamento delle letture sulla stagione attiva
+
+**Obiettivo:** dopo l'attivazione impedire che dashboard e autorizzazioni
+combinino la stagione 2026/2027 con team o iscrizioni 2025/2026.
+
+**Task singolo:**
+
+- Centralizzare la risoluzione della singola stagione attiva e gestire
+  esplicitamente zero o più risultati senza affidarsi a errori `.single()` non
+  interpretati.
+- Correggere i resolver atleta e subject delegato: l'iscrizione `active` deve
+  appartenere alla stagione globalmente attiva, non a una stagione qualunque.
+- Filtrare `team_members`, `team_coaches`, quote, eventi, campionati e altri dati
+  operativi tramite team/attività della stagione attiva dove la schermata è
+  dichiarata corrente.
+- Mantenere le schermate storiche admin esplicitamente filtrabili per stagione;
+  non cancellare né rendere irraggiungibile la 2025/2026 agli amministratori.
+- Al cambio stagione invalidare cache/context subject-team e impedire che
+  risposte asincrone della source vengano applicate alla target.
+- Non cambiare ruoli account o permessi familiari globali; l'accesso operativo
+  dipende anche dalla membership nella stagione corrente.
+- Per un familiare calcolare i subject disponibili nella stagione attiva: il
+  genitore resta autenticabile anche quando nessun atleta collegato è stato
+  incluso, ma l'area familiare deve mostrare uno stato vuoto/esplicito e non dati
+  storici della source.
+
+**Acceptance:** incluso vede solo team/dati 2026/2027; escluso non accede alle
+superfici operative della nuova stagione ma resta consultabile nello storico
+admin; nessun dato della source compare sotto l'etichetta target.
+
+**Verifiche:** test personali e familiari per incluso/escluso, stessa/altra
+squadra, coach multi-team, zero/doppia stagione attiva, cambio subject e race;
+test admin storico; typecheck, suite interessate, build e diff check.
+
+**Registro esecuzione — 15/09/2026 — PASS:** aggiunto
+`src/server/seasons/active-season.ts`, che risolve la stagione operativa con
+`limit(2)` e gestisce esplicitamente nessuna stagione e configurazione con più
+stagioni attive, senza usare `.single()` come controllo implicito. Il resolver
+restituisce inoltre gli ID delle squadre derivate da attività della stagione.
+
+`requireSubjectAthleteContext` ora richiede la `season_profiles` attiva della
+stagione globalmente attiva e rende disponibili stagione/squadre correnti al
+runtime. L’endpoint dei profili accessibili familiari espone soltanto soggetti
+iscritti nella stagione attiva; quando non ce ne sono, l’account familiare
+resta autenticabile ma riceve una lista vuota esplicita. Le superfici atleta e familiare filtrano membership, calendario,
+eventi/dettagli, presenze, disponibilità RSVP, messaggi, profilo, quote e
+campionati per le squadre della stagione attiva. Le superfici coach filtrano
+team, calendario/eventi, messaggi, pagamenti, report presenze e mutazioni
+campionati allo stesso confine. Un coach o atleta escluso dalla target non può
+quindi usare le superfici operative della nuova stagione; account e relazioni
+familiari globali non vengono modificati. Il contesto client esistente mantiene
+già abort/guard sulle risposte asincrone al cambio subject. `TeamContext` ora
+ricarica le squadre coach su focus/visibility con abort della richiesta
+precedente, così una stagione attivata altrove invalida il team selezionato
+locale senza applicare una risposta obsoleta.
+
+File modificati: resolver stagione e test dedicato; resolver auth/soggetto,
+disponibilità presenze e campionati; route operative atleta, famiglia, coach e
+admin (inclusi calendario admin e KPI incassi), test route e questo piano.
+
+Verifiche eseguite: `npx tsc --noEmit`; suite mirata con resolver stagione,
+disponibilità presenze, campionati, route atleta, coach, calendario admin e
+context — 13 suite, 43 test superati; `npm run build`; `git diff --check`. Il test del resolver copre zero
+stagioni attive e doppia stagione attiva.
+
+Alla verifica del 15/09 non erano ancora eseguiti test dedicato della route
+profili familiari e KPI admin, query catalogo/fixture Supabase, verifica con
+dati reali di incluso/escluso e coach multi-team, E2E/manuali di cambio
+stagione, race reale nel browser e test storico admin dedicato. Gli esiti
+aggiunti il 22/09 sono registrati nell'appendice successiva. Nessuna migration, insert/update/delete, hard delete,
+modifica di profiles/account/relazioni, accesso o mutazione staging/produzione,
+deploy o attivazione eseguiti. Il controllo repository-only delle migrazioni ha
+confermato la presenza degli invarianti e delle migration G12.1/G12.3/G12.4/
+G12.6; `supabase migration list --local` non è eseguibile in questo ambiente
+per `EPERM` sulla telemetria in `~/.supabase/telemetry.json.tmp`, quindi non si
+attribuisce alcun esito alla migration history runtime. G12.9 non avviato.
+
+### G12.8 — Evidenze runtime staging — 22/09/2026
+
+Completate le evidenze che non richiedono una mutazione di rollout. Aggiunti i
+test dedicati della route `GET /api/me/accessible-profiles` e di
+`GET /api/admin/incassi/kpi`: il primo restituisce solo i soggetti familiari
+con `season_profiles.status = active` nella stagione attiva e conserva la lista
+vuota esplicita per il familiare senza soggetti inclusi; il secondo calcola i
+KPI predefiniti soltanto dalle quote collegate alle squadre della stagione
+attiva. Insieme ai test esistenti del resolver stagione e dei pagamenti coach,
+le 4 suite / 7 test sono superate.
+
+La query in sola lettura su staging ha confermato una sola stagione attiva
+(`Stagione 2026/2027`), una stagione storica, 1 attività e 4 squadre attive,
+6 iscrizioni stagionali attive e 3 membership di squadra correnti. Il catalogo
+di incassi attivo non contiene ancora quote/rate atleta, quindi i KPI sono
+correttamente vuoti e non mescolano dati storici. Sono presenti 2 coach con
+più squadre attive (massimo 2 squadre per coach), coprendo il caso multi-team.
+Tra 5 relazioni familiari valide, 4 puntano a un soggetto iscritto nella
+stagione attiva e 1 viene esclusa dal contesto operativo: riscontro coerente
+con il filtro della route. Il codice admin conserva lo storico tramite
+`season_id=all` e selettori espliciti, verificati staticamente su incassi e
+gestione squadre.
+
+Verifiche: `npm test -- --runInBand` sulle 4 suite indicate; `npx tsc --noEmit`;
+`npm run build`; `git diff --check`. La query staging ha restituito esclusivamente
+conteggi aggregati e non ha mutato dati. Non eseguito il solo smoke manuale UI
+autenticato di selezione/cambio stagione, perché richiede una sessione admin e
+un eventuale cambio della stagione attiva rientra nel gate mutativo G12.9;
+nessun esito è attribuito a tale passaggio.
+
+### G12.8 — Smoke autenticato e remediation storico admin — 24/09/2026
+
+Lo smoke autenticato ha confermato che atleta, familiare e coach non recuperano
+un contesto 2025/2026 dopo refresh o ritorno in focus. Il familiare vede solo
+gli atleti inclusi; senza alcun atleta incluso resta autenticato con lo stato
+vuoto esplicito “Nessun profilo collegato”. Il coach multi-squadra vede entrambe
+le squadre 2026/2027 e nessuna non rinnovata. Per messaggi admin/coach, i
+messaggi di squadra restano stagionali; la comparsa in entrambe le viste di un
+messaggio diretto a un profilo presente in entrambe le stagioni e' il limite
+gia' accettato del modello indiretto, non una perdita di isolamento.
+
+Lo smoke ha inoltre individuato due difetti amministrativi, entrambi corretti
+localmente: `season_id=all` di `/admin/incassi` trasformava l'aggregato in una
+lista squadre vuota e quindi non mostrava rate; `/admin/calendar` non
+posizionava ne' ricaricava in modo esplicito la finestra della stagione storica
+selezionata. La route incassi ora distingue l'aggregato da una stagione senza
+squadre. Il calendario ancora il mese alla data iniziale della stagione, invia
+esplicitamente `season_id` nella richiesta di cambio e include la stagione
+nella chiave di deduplicazione del range; il reset passa esplicitamente alla
+stagione attiva.
+
+Verifiche della remediation: query locale read-only su snapshot canonico (151
+eventi 2025/2026 con tutti gli intervalli `start_date`/`end_date` valorizzati),
+test route admin eventi e rate 6/6, ESLint sui file modificati, `npm run build`
+e `git diff --check` superati. Nessun deploy o mutazione staging/produzione in
+questa remediation; dopo il deploy resta da ripetere il brevissimo smoke admin
+su “Tutte le stagioni” degli incassi e sulla griglia 2025/2026.
+
+**Remediation logout — 24/09/2026:** lo smoke successivo ha rilevato richieste
+`GET /api/admin/events` ancora in volo dopo la revoca sessione, correttamente
+risposte `401` ma stampate ripetutamente nella console. `EventsManager` ora
+annulla la richiesta precedente e quella al dismount, ignora risposte obsolete
+e non segnala come errore applicativo il `401` previsto durante logout; gli
+altri errori restano registrati. ESLint sul componente, `npm run build` e
+`git diff --check` superati. Nessuna mutazione database o deploy.
+
+**Remediation catalogo campionati admin — 24/09/2026:** lo smoke ha rilevato
+che `/admin/campionati` caricava il catalogo senza vincolo `season_id`,
+esponendo anche i campionati della stagione precedente. Il catalogo admin ora
+risolve una sola stagione attiva come default e filtra la query per tale
+stagione; il nuovo selettore consente di scegliere esplicitamente una stagione
+storica. Il form di creazione eredita la stagione selezionata e mostra soltanto
+le relative attivita'. Verifiche: test catalogo 6/6, ESLint sui file modificati,
+`npm run build` e `git diff --check` superati. Nessuna mutazione database,
+deploy o attivazione.
+
+**Remediation dettagli campionato obsoleti — 24/09/2026:** passando dalla
+stagione storica a quella attiva senza campionati, il catalogo veniva svuotato
+ma una risposta asincrona del girone storico poteva ancora popolare prossima
+partita, elenco partite e classifica. `useChampionshipGroupDetails` ora
+memorizza e annulla la richiesta corrente, passa il segnale anche alla richiesta
+classifica e ignora ogni risposta non piu' corrente. Aggiunto il test di
+regressione sul reset del girone con risposta storica tardiva. Verifiche: test
+catalogo/dettagli 7/7, ESLint sui file modificati, `npm run build` e `git diff
+--check` superati. Nessuna mutazione database, deploy o attivazione.
+
+### G12.8a — Audit cataloghi squadra admin — 22/09/2026
+
+L'audit ha classificato i cataloghi squadra operativi di atleti, collaboratori,
+quote, incassi, pagamenti, messaggi e calendario come gia' filtrati dalla
+stagione selezionata o attiva, con verifica server-side nei flussi di
+assegnazione e creazione pertinenti. Gli orari e le presenze restano cataloghi
+subordinati alla squadra padre, quindi non presentano un selettore stagionale
+indipendente.
+
+Correzioni residue completate: `TeamsManager` carica per default la stagione
+attiva, offre "Tutte le stagioni" solo per storico e impedisce la creazione
+senza una stagione scelta; `BulkGenerateModal` per documenti riceve il catalogo
+attivo gia' autorizzato da `DocumentsManager`; la route di generazione rifiuta
+una squadra target fuori stagione attiva; i modali squadra campionato ricevono
+solo team la cui attivita' appartiene alla stagione del campionato selezionato.
+
+File modificati: `TeamsManager`, `BulkGenerateModal`, `DocumentsManager`, route
+e test documenti, catalogo/tipi campionati, manager campionati e questo piano.
+Verifiche: 3 suite/9 test mirati, `npx tsc --noEmit`, `npm run build` e
+`git diff --check` superati. Nessun dato staging o produzione e' stato mutato.
+
+## G12.8g — Rollover stagionale riutilizzabile
+
+**Obiettivo:** rendere il workflow riutilizzabile dopo il primo passaggio,
+per esempio da 2026/2027 a 2027/2028, senza dipendenze hard-coded dalla coppia
+iniziale 2025/2026 → 2026/2027.
+
+**Task singolo:**
+
+- Derivare la source dalla sola stagione attiva e proporre come target la bozza
+  inattiva futura piu' vicina; quando sono disponibili piu' bozze future,
+  permettere all'admin di selezionare esplicitamente il target prima di iniziare
+  il wizard.
+- Sostituire nelle UI, nei messaggi di conferma e nei prerequisiti tutte le
+  etichette statiche con nome e periodo reali di source e target.
+- Rendere generica la creazione di una bozza inattiva: validare dati, ordine
+  delle date, idempotenza e sovrapposizioni, senza vincolare nome o periodo al
+  solo 2026/2027.
+- Derivare il suffisso proposto del codice squadra dagli anni della target
+  (ad esempio `-2728` per una target 2027/2028), mantenendo i limiti e le
+  collisioni gia' controllati dalla procedura transazionale.
+- Conservare i contratti delle route/RPC basati sugli ID, l'autorizzazione
+  server-side, l'inattivita' del target e il divieto di attivazione nel wizard.
+  Non eseguire copy, batch, attivazioni o altre mutazioni su staging/produzione.
+
+**Acceptance:** con una source attiva 2026/2027 e una bozza inattiva
+2027/2028, il wizard usa soltanto quei due ID in tutte le chiamate, mostra le
+relative etichette/date, propone codici squadra `*-2728` e non espone il
+precedente 2025/2026 come contesto operativo. Il passaggio 2025/2026 →
+2026/2027 resta compatibile.
+
+**Verifiche:** regressioni del wizard e del manager stagioni sulla coppia
+2026/2027 → 2027/2028, test route di creazione bozza e servizio squadre,
+`npx tsc --noEmit`, test Jest mirati, `npm run build` e `git diff --check`.
+
+**Registro esecuzione — 24/09/2026 — PASS:** aggiunto il resolver condiviso
+`src/lib/seasons/rollover.ts`. Il manager propone il rollover soltanto quando
+esiste una sola source attiva e una bozza futura inattiva, scegliendo di default
+la piu' vicina; il wizard permette di scegliere un'altra bozza futura prima di
+iniziare e propaga esclusivamente gli ID selezionati a tutte le route esistenti.
+Titoli, prerequisiti, conferme e testi di riepilogo derivano ora dai nomi e
+dalle date reali. `POST /api/admin/seasons` accetta una bozza generica inattiva
+con le stesse garanzie di ordine date, idempotenza e non sovrapposizione; non
+vincola piu' il payload a 2026/2027. Il servizio squadre ricava il suffisso dal
+periodo target (`-2728` per 2027/2028) e convalida che la source sia attiva e
+la target sia futura e inattiva. Aggiunte regressioni sul contesto stagionale,
+sul manager, sul wizard con target selezionato e sulle route/servizi; 6 suite,
+28 test passati, `npx tsc --noEmit`, ESLint, `npm run build` e `git diff
+--check` superati. Durante il typecheck e' stata anche corretta la tipizzazione
+dei mock della precedente regressione dettagli campionato, senza variazioni
+runtime. Nessun accesso mutativo, copy, batch, deploy, attivazione o modifica
+su staging/produzione.
+
+**Remediation suffisso codice squadra — 24/09/2026:** lo smoke visuale del
+wizard 2026/2027 → 2027/2028 ha mostrato che il codice proposto concatenava il
+suffisso della source gia' stagionalizzato (`U17-2627-2728`). Il generatore ora
+rimuove uno o piu' suffissi terminali `-NNNN` prima di applicare quello derivato
+dalla target, quindi propone `U17-2728`, `AMA-2728` e `U15-2728`. Test mirati
+su helper, servizio squadre e wizard 3 suite/9 test, `npx tsc --noEmit`, ESLint,
+`npm run build` e `git diff --check` superati. Nessuna mutazione staging o
+produzione; la bozza 2027/2028 resta invariata.
+
+## G12.9 — Dry-run, esecuzione 2026/2027, attivazione e gate
+
+**Obiettivo:** eseguire il passaggio reale solo con evidenze, backup e conferma
+dell'utente.
+
+**Task singolo:**
+
+- Eseguire prima su database locale/staging una fixture rappresentativa e il
+  dry-run completo; non usare profili reali in screenshot o log committati.
+- Prima di qualsiasi mutazione sull'ambiente indicato dall'utente, acquisire un
+  backup/ripristino verificabile o confermare il meccanismo di recovery
+  disponibile e salvare conteggi/checksum non sensibili della 2025/2026.
+- Mostrare all'utente il riepilogo finale delle scelte e ottenere conferma
+  esplicita per l'esecuzione reale e, separatamente, per l'attivazione.
+- Creare/verificare la bozza `Stagione 2026/2027` (`2026-09-01` →
+  `2027-06-30`), applicare struttura e profili selezionati, quindi confrontare
+  i conteggi attesi con quelli persistiti.
+- Attivare la target e archiviare la source con una sola operazione atomica.
+  Non eseguire hard delete.
+- Verificare post-run: una sola stagione attiva, source invariata, target con i
+  soli inclusi, membership target corrette, esclusi assenti dalla target,
+  palestre/attività selezionate, squadre come bozze senza configurazioni
+  ereditate, login/area atleta/famiglia/coach coerenti e storico admin
+  consultabile.
+- In caso di scostamento non tentare correzioni distruttive automatiche:
+  fermarsi, mantenere evidenze e usare il recovery concordato.
+
+**Acceptance:** 2026/2027 attiva e 2025/2026 inattiva; nessuna riga storica
+persa; inclusi ed esclusi coincidono con il riepilogo approvato; controlli
+cross-role superati. Il goal non può essere marcato completo con il solo test
+locale se l'esecuzione reale era parte dell'incarico.
+
+**Verifiche:** query pre/post e checksum source, test DB, `npx tsc --noEmit`,
+suite Jest completa, `npm run build`, `git diff --check`, E2E admin/atleta/
+famiglia/coach e smoke manuale del wizard. Registrare ambiente e limiti senza
+salvare credenziali o dati personali.
+
+### Preparazione G12.9 — attivazione atomica locale — 28/09/2026
+
+Aggiunta la migration `20260928092236_season_activation_atomic.sql`. La RPC
+`activate_season_atomically` blocca source e target in ordine stabile, richiede
+source attiva, target inattiva e temporalmente successiva, archivia la source e
+attiva la target nella medesima transazione. Usa una chiave di attivazione
+idempotente e registra soltanto attore, source, target e timestamp in audit
+append-only. L'esecuzione resta riservata al `service_role`; la nuova route admin
+autorizza l'account prima di invocarla. Rimossi i pulsanti client che eseguivano
+due aggiornamenti separati delle stagioni: l'attivazione verrà esposta solo dal
+gate finale con riepilogo e conferma separata.
+
+Verifiche locali: migration applicata soltanto al Docker canonico; fixture
+transazionale con rollback superata per attivazione, replay idempotente, chiave
+riusata, source inattiva e target non successiva. Controllato il catalogo: RPC
+`SECURITY DEFINER` eseguibile solo da `service_role`; zero righe fixture residue.
+Superati i 3 test Jest mirati (9 test), `npx tsc --noEmit`, `npm run build` e
+`git diff --check`. Nessun accesso o mutazione staging/produzione, nessuna
+creazione di stagioni reali e nessuna attivazione. G12.9 resta aperto.
+
+### Preflight G12.9 — staging e produzione — 28/09/2026
+
+Controlli esclusivamente read-only completati sui progetti attesi:
+`csromawebapp-staging` (`kibtvkuiedoxgppnnxkf`) e `csromawebapp`
+(`qyiholnatsrvpoqoplje`), entrambi `ACTIVE_HEALTHY`. Staging ha history
+allineata fino a `20260924070909`; il suo dry-run propone soltanto
+`20260928092236_season_activation_atomic.sql`. L'unico warning advisor e'
+la protezione password compromesse disattivata, limite gia' noto.
+
+Produzione mantiene una sola stagione attiva `2025/2026`, senza target
+`2026/2027`, con 45 iscrizioni stagionali attive. La fotografia aggregata
+della source e': 2 palestre, 2 attivita', 3 squadre, 67 membership, 4
+assegnazioni coach, 93 eventi e 9 quote. Nessuna RPC rollover o attivazione
+atomica e' presente. Gli advisor produzione segnalano inoltre le due RPC
+`SECURITY DEFINER` che la migration `20260924070909` corregge e la protezione
+password compromesse disattivata.
+
+Il preflight produzione e' stato completato dopo il reset della password DB:
+il dry-run si autentica correttamente al pooler. La password non e' registrata
+in questo piano. Una directory di rilascio isolata esclude le quattro migration
+locali di luglio gia' inglobate nella baseline remota
+(`20260723140557`, `20260723152000`, `20260725162041`, `20260729170829`),
+senza usare `--include-all`. Il dry-run propone esattamente 14 migration,
+da `20260910133219_r1_training_rsvp_data_contract.sql` a
+`20260928092236_season_activation_atomic.sql`, incluse le 12 di settembre
+preesistenti, l'hardening `20260924070909` e l'attivazione atomica. Nessuna
+migration e' stata applicata e nessun dato e' stato modificato.
+
+### Backup G12.9 — produzione — 28/09/2026
+
+Creato un dump logico locale di produzione, cifrato e ignorato da Git, con tre
+artefatti separati per ruoli, schema e dati. Ciascun artefatto usa AES-256-CBC
+con salt e PBKDF2 (600000 iterazioni); la chiave di recovery locale e tutti gli
+artefatti hanno permessi `0600`. Il manifest conserva checksum SHA-256,
+progetto di origine e procedura di recovery, senza credenziali o contenuto dei
+dati. La decrittazione di tutti e tre i file, il confronto delle dimensioni e i
+controlli SQL su schema e dati sono riusciti; non sono rimasti dump in chiaro
+nelle directory temporanee. Il backup e la chiave sono nella directory locale
+`backups/g12-9-production-2026-09-28T17-25-21-220Z/`.
+
+Credenziali locali separate: `.env.local` usa `SUPABASE_DB_PASSWORD` per
+produzione e `SUPABASE_DB_PASSWORD_STAGING` per staging. Il dry-run finale,
+ripetuto dopo la separazione, conferma le stesse 14 migration candidate.
+
+### Applicazione DB G12.9 — produzione — 28/09/2026
+
+Applicate dal candidato isolato, senza `--include-all`, le 14 migration da
+`20260910133219` a `20260928092236`. I `NOTICE` del database indicano oggetti
+preesistenti gestiti in modo idempotente; il warning CLI successivo riguarda
+solo la cache del catalogo locale e non l'applicazione SQL, confermata come
+completata. La history remota registra tutte e 14 le versioni attese.
+
+Post-check read-only: una sola stagione (`2025/2026`) resta attiva, non esiste
+`2026/2027`, l'audit dell'attivazione e' vuoto e i conteggi invarianti sono
+45 iscrizioni stagionali attive, 2 palestre, 2 attivita', 3 squadre, 67
+membership, 4 assegnazioni coach, 93 eventi associati ad attivita' e 9 quote.
+La RPC atomica esiste, ha RLS sull'audit e solo `service_role` puo' eseguirla.
+`check_gym_schedule_conflicts` resta chiamabile da `authenticated` per il
+client admin, ma e' ora `SECURITY INVOKER` con search path fisso; la funzione
+trigger `refresh_championship_standings` e' `SECURITY DEFINER` ma eseguibile
+solo dal service role. L'advisor security segnala soltanto la protezione delle
+password compromesse disabilitata, limite gia' noto.
+
+Nessun rollover, creazione o attivazione di stagione e' stato eseguito.
+
+### PR rilascio codice G12.9 — 28/09/2026
+
+Creato il commit `3ed5496` su `redesign` con migration, RPC atomica, route
+admin, test e runbook. Test mirati: 3 suite/9 test; `npx tsc --noEmit`,
+`npm run build` e `git diff --check` superati. Aperta la PR
+[#2 — Release redesign e attivazione stagione atomica](https://github.com/testxbusiness/csromawebapp/pull/2)
+verso `main`. La PR non e' stata ancora mergiata e non e' stato effettuato
+alcun deploy. Il prossimo gate e' il tag dell'attuale `main`, seguito dal merge
+controllato, build del merge commit e deploy con rollback sul tag predisposto.
+
+## Prompt da assegnare a Luna Medio
+
+Usare un'esecuzione separata per ciascun ID, in ordine da G12.1 a G12.9. Non
+assegnare l'intera fase in un singolo prompt. G12.9 richiede conferma umana per
+le mutazioni reali e non deve essere avviato come automazione non presidiata.
+
+```text
+Esegui esclusivamente il goal G12.2 della sezione “Rollover stagione 2026/2027
+e selezione profili” in implementation_plan_redesign.md.
+Leggi AGENTS.md, re_design.md, il contratto completo della Fase 12 e il goal.
+Controlla stato Git, schema/migrazioni Supabase e prerequisiti; non rifare goal
+chiusi e non iniziare goal successivi.
+Preserva integralmente dati e relazioni della Stagione 2025/2026. Non duplicare
+profiles/account/relazioni, non riusare team ID storici e non introdurre hard
+delete. Mantieni autorizzazione server-side, TypeScript strict e operazioni
+idempotenti; usa una transazione per i batch indicati dal goal.
+Esegui soltanto le verifiche richieste e documenta quelle non eseguibili senza
+inventare esiti. Aggiorna registro e sezione del goal con file, test e note.
+Fermati alla fine del goal senza deploy, attivazione o mutazioni su staging/
+produzione, salvo che il goal G12.9 e l'utente le abbiano autorizzate
+esplicitamente.
+```
+
+Sostituire soltanto `G12.2` con l'ID successivo. Prima di ogni esecuzione,
+risolvere eventuali note bloccanti del goal precedente nel loro ambito.
+
+**Registro pianificazione — 15/09/2026:** aggiunta la Fase 12 G12.1–G12.9 per
+la creazione controllata della stagione 2026/2027, la copia selettiva di
+palestre/attività, le squadre target come bozze minime, la selezione granulare
+di atleti/collaboratori, la continuità derivata dei genitori e la conservazione
+integrale della 2025/2026. Modificato solo
+`implementation_plan_redesign.md`; nessuna migration, mutation DB o creazione
+stagione eseguita durante la pianificazione.
+
+# 23. Criterio finale di successo
+
+Il redesign è riuscito solo se l'app:
+
+- appare coerente tra atleta, famiglia, coach e admin;
+- distingue sempre chi è autenticato, chi si sta visualizzando e quale team sta filtrando;
+- gestisce realmente multi-team e multi-subject;
+- non sacrifica l'autorizzazione alla semplicità UI;
+- mantiene le route storiche;
+- funziona bene come PWA senza promettere offline inesistente;
+- è accessibile e responsive;
+- usa dati reali e non assunzioni basate sui mockup;
+- può essere mantenuta ed estesa senza creare quattro design system separati.
+
+La fedeltà al redesign non si misura dalla somiglianza pixel-perfect con i mockup, ma dalla corretta applicazione della grammatica visuale e comportamentale definita in `re_design.md`.

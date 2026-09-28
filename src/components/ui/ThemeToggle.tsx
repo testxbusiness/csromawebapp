@@ -1,43 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useTheme } from '@/hooks/useTheme'
 
 interface ThemeToggleProps {
   className?: string
 }
 
 export default function ThemeToggle({ className }: ThemeToggleProps) {
-  const [isDark, setIsDark] = useState(false)
+  const { theme, toggleTheme: toggleAppTheme } = useTheme()
+  const isDark = theme === 'dark'
   const [isPulsing, setIsPulsing] = useState(false)
-
-  useEffect(() => {
-    // Check for saved theme preference or default to light
-    const savedTheme = localStorage.getItem('csroma-theme')
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-
-    const initialTheme = savedTheme === 'dark' || (!savedTheme && prefersDark)
-    setIsDark(initialTheme)
-
-    if (initialTheme) {
-      document.documentElement.classList.add('theme-dark')
-    } else {
-      document.documentElement.classList.remove('theme-dark')
-    }
-  }, [])
 
   const toggleTheme = () => {
     setIsPulsing(true)
-
-    const newTheme = !isDark
-    setIsDark(newTheme)
-
-    if (newTheme) {
-      document.documentElement.classList.add('theme-dark')
-      localStorage.setItem('csroma-theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('theme-dark')
-      localStorage.setItem('csroma-theme', 'light')
-    }
+    toggleAppTheme()
 
     setTimeout(() => setIsPulsing(false), 300)
   }
@@ -47,6 +24,8 @@ export default function ThemeToggle({ className }: ThemeToggleProps) {
       className={`cs-theme-toggle ${isPulsing ? 'is-pulsing' : ''} ${className || ''}`}
       onClick={toggleTheme}
       aria-label={isDark ? 'Attiva tema chiaro' : 'Attiva tema scuro'}
+      aria-pressed={isDark}
+      type="button"
     >
       <div className="cs-theme-toggle__svg">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

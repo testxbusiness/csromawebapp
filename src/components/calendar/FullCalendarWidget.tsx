@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -25,6 +25,7 @@ export default function FullCalendarWidget({
   onViewChange,
   onEventClick,
   onSelectSlot,
+  onVisibleRangeChange,
 }: {
   initialDate: Date
   view: View
@@ -33,6 +34,7 @@ export default function FullCalendarWidget({
   onViewChange: (view: View) => void
   onEventClick?: (id: string) => void
   onSelectSlot?: (start: Date, end: Date) => void
+  onVisibleRangeChange?: (start: Date, end: Date) => void
 }) {
   const calendarRef = useRef<FullCalendar | null>(null)
 
@@ -46,6 +48,22 @@ export default function FullCalendarWidget({
 
   const initialView = view === 'month' ? 'dayGridMonth' : 'timeGridWeek'
 
+  // FullCalendar treats initialDate as an initialization option. Keep the
+  // mounted calendar in sync with the parent so the shared "Oggi" action
+  // also works after the first render.
+  useEffect(() => {
+    const api = calendarRef.current?.getApi()
+    if (!api) return
+
+    const current = api.getDate()
+    const target = new Date(initialDate)
+    const sameDay = current.getFullYear() === target.getFullYear()
+      && current.getMonth() === target.getMonth()
+      && current.getDate() === target.getDate()
+
+    if (!sameDay) api.gotoDate(target)
+  }, [initialDate])
+
   return (
     <div className="calendar-responsive">
       <div className="fc cs-card cs-card--primary p-2">
@@ -57,9 +75,19 @@ export default function FullCalendarWidget({
         initialView={initialView}
         initialDate={initialDate}
         headerToolbar={{
-          left: 'today,prev,next',
+          left: 'csToday,csPrev,csNext',
           center: 'title',
           right: 'dayGridMonth,timeGridWeek',
+        }}
+        customButtons={{
+          csToday: { text: 'Oggi', click: () => onNavigate('today') },
+          csPrev: { text: '‹', click: () => onNavigate('prev') },
+          csNext: { text: '›', click: () => onNavigate('next') },
+        }}
+        buttonText={{
+          today: 'Oggi',
+          month: 'Mese',
+          week: 'Settimana',
         }}
         height="auto"
         events={fcEvents}
@@ -75,6 +103,7 @@ export default function FullCalendarWidget({
         datesSet={(arg) => {
           const newView = arg.view.type === 'timeGridWeek' ? 'week' : 'month'
           onViewChange(newView)
+          onVisibleRangeChange?.(new Date(arg.start), new Date(arg.end.getTime() - 1))
         }}
       />
       </div>

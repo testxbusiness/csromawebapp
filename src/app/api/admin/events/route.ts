@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { eventCreateSchema, eventUpdateSchema } from '@/lib/validation/eventCrud'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
 export async function POST(request: NextRequest) {
   try {
@@ -117,6 +118,7 @@ export async function POST(request: NextRequest) {
           event_type: event_type || 'one_time',
           event_kind: event_kind || 'training',
           requires_confirmation: !!requires_confirmation,
+          attendance_mode: requires_confirmation && ['training', 'match'].includes(event_kind || 'training') ? 'absence_only' : 'rsvp',
           confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
           created_by: account.ownerProfileId,
           // Legacy required fields
@@ -197,7 +199,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const teamId = searchParams.get('team_id')
     const teamIdsParam = searchParams.get('team_ids')
-    const teamIds = Array.from(
+    let teamIds = Array.from(
       new Set(
         (teamIdsParam ? teamIdsParam.split(',') : [])
           .map((id) => id.trim())
@@ -209,8 +211,32 @@ export async function GET(request: NextRequest) {
     }
     const from = searchParams.get('from') // ISO string
     const to = searchParams.get('to') // ISO string
-    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '200'), 1), 5000) // Max 5000
+    const visible = searchParams.get('visible') === '1'
+    const parsedFrom = from ? new Date(from) : null
+    const parsedTo = to ? new Date(to) : null
+    if ((from && (!parsedFrom || Number.isNaN(parsedFrom.getTime()))) || (to && (!parsedTo || Number.isNaN(parsedTo.getTime())))) {
+      return NextResponse.json({ error: 'Intervallo calendario non valido' }, { status: 400 })
+    }
+    if (parsedFrom && parsedTo && parsedFrom > parsedTo) {
+      return NextResponse.json({ error: 'L\'inizio dell\'intervallo deve precedere la fine' }, { status: 400 })
+    }
+    if (visible && parsedFrom && parsedTo && parsedTo.getTime() - parsedFrom.getTime() > 62 * 24 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: 'Intervallo calendario troppo esteso' }, { status: 400 })
+    }
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '200'), 1), visible ? 500 : 5000)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
+
+    const requestedSeasonId = searchParams.get('season_id')
+    const activeSeason = requestedSeasonId
+      ? null
+      : await resolveActiveSeason(adminClient)
+    const operationalSeasonId = requestedSeasonId ?? activeSeason?.id
+    if (!operationalSeasonId) return NextResponse.json({ events: [], total: 0 })
+    const seasonTeamIds = new Set(await resolveActiveSeasonTeamIds(adminClient, operationalSeasonId))
+    teamIds = teamIds.length > 0
+      ? teamIds.filter((id) => seasonTeamIds.has(id))
+      : [...seasonTeamIds]
+    if (teamIds.length === 0) return NextResponse.json({ events: [], total: 0 })
 
     // Se filtriamo per squadra, recupera gli event_ids prima con batching
     let eventIds: string[] | null = null
@@ -239,10 +265,17 @@ export async function GET(request: NextRequest) {
         const batchedEvents = []
         for (let i = 0; i < eventIds.length; i += 100) {
           const batch = eventIds.slice(i, i + 100)
-          const { data } = await adminClient
+          let batchQuery = adminClient
             .from('events')
             .select('*')
             .in('id', batch)
+          if (parsedFrom && parsedTo && visible) {
+            batchQuery = batchQuery.lte('start_date', parsedTo.toISOString()).gte('end_date', parsedFrom.toISOString())
+          } else {
+            if (from) batchQuery = batchQuery.gte('start_date', from)
+            if (to) batchQuery = batchQuery.lte('start_date', to)
+          }
+          const { data } = await batchQuery
           batchedEvents.push(...(data || []))
         }
         // Ordina e applica paginazione manualmente
@@ -258,8 +291,13 @@ export async function GET(request: NextRequest) {
       query = query.in('id', eventIds)
     }
 
-    if (from) query = query.gte('start_date', from)
-    if (to) query = query.lte('start_date', to)
+    if (parsedFrom && parsedTo && visible) {
+      // The mobile grid must also include events crossing its first/last day.
+      query = query.lte('start_date', parsedTo.toISOString()).gte('end_date', parsedFrom.toISOString())
+    } else {
+      if (from) query = query.gte('start_date', from)
+      if (to) query = query.lte('start_date', to)
+    }
 
     const { data: eventsData, error, count } = await query
       .order('start_date', { ascending: true })
@@ -391,6 +429,7 @@ export async function PUT(request: NextRequest) {
         event_type,
         event_kind: event_kind || 'training',
         requires_confirmation: !!requires_confirmation,
+        attendance_mode: requires_confirmation && ['training', 'match'].includes(event_kind || 'training') ? 'absence_only' : 'rsvp',
         confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
         // Legacy fields kept in sync
         name: title,
@@ -414,6 +453,7 @@ export async function PUT(request: NextRequest) {
           activity_id: activity_id || null,
           event_type,
           requires_confirmation: !!requires_confirmation,
+          attendance_mode: requires_confirmation && ['training', 'match'].includes(event_kind || 'training') ? 'absence_only' : 'rsvp',
           confirmation_deadline: requires_confirmation && confirmation_deadline ? confirmation_deadline : null,
           // Legacy fields kept in sync
           name: title,

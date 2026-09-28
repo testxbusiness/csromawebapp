@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { resolveActiveSeason } from '@/server/seasons/active-season'
 
 export type AccountRole = 'admin' | 'coach' | 'staff' | 'athlete' | 'family_member'
 export type AccountStatus = 'invited' | 'active' | 'suspended' | 'disabled'
@@ -17,7 +18,7 @@ export type AccountContext = {
 export class AccountContextError extends Error {
   constructor(
     message: string,
-    public readonly status: 401 | 403 | 500
+    public readonly status: 400 | 401 | 403 | 404 | 500
   ) {
     super(message)
     this.name = 'AccountContextError'
@@ -90,6 +91,7 @@ export async function requireAthleteContext(
     throw new AccountContextError('Ruolo atleta non abilitato', 403)
   }
 
+  const activeSeason = await resolveActiveSeason(supabase)
   const [{ data: athleteProfile }, { data: seasonMembership }] = await Promise.all([
     supabase
       .from('athlete_profiles')
@@ -100,6 +102,7 @@ export async function requireAthleteContext(
       .from('season_profiles')
       .select('profile_id')
       .eq('profile_id', context.ownerProfileId)
+      .eq('season_id', activeSeason?.id ?? '')
       .eq('status', 'active')
       .limit(1)
       .maybeSingle(),

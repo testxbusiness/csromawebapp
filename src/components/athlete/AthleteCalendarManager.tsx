@@ -1,70 +1,89 @@
 // src/components/athlete/AthleteCalendarManager.tsx
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import DetailsDrawer from '@/components/shared/DetailsDrawer'
-import EventDetailModal, { AttendanceStatus, type EventDetailData } from '@/components/shared/EventDetailModal'
-import SimpleCalendar, { CalEvent } from '@/components/calendar/SimpleCalendar'
-import FullCalendarWidget from '@/components/calendar/FullCalendarWidget'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import EventDetailModal, { type EventDetailData } from '@/components/shared/EventDetailModal'
+import MonthlyMobileCalendar, { type MonthlyCalendarEvent } from '@/components/calendar/MonthlyMobileCalendar'
+import FullCalendarWidget, { type CalEvent } from '@/components/calendar/FullCalendarWidget'
+import AthleteAgenda from '@/components/athlete/AthleteAgenda'
+import type { AthleteCalendarEvent } from '@/types/athlete-calendar'
 import { useAuth } from '@/hooks/useAuth'
 import { exportEvents } from '@/lib/utils/excelExport'
-import { EmptyState, LoadingState } from '@/components/ui'
-import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import { EmptyState, ErrorState, EventKindBadge, LoadingState, OfflineState } from '@/components/ui'
+import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
+import { useTeamContext } from '@/context/TeamContext'
+import { filterCalendarEvents, type CalendarEventKindFilter } from '@/lib/athlete/calendar-filters'
+import { markCalendarConflicts } from '@/lib/athlete/calendar-conflicts'
+import { canConfirmAthleteAttendance } from '@/lib/athlete/calendar-permissions'
+import AttendanceControl from '@/components/athlete/AttendanceControl'
+import type { AttendanceStatus } from '@/types/attendance'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
+import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
+import EarlyAbsencePeriodModal from '@/components/athlete/EarlyAbsencePeriodModal'
 
-type EventKind = 'training'|'match'|'meeting'|'other'
-
-interface Event {
-  id: string
-  title: string
-  description?: string
-  location?: string
-  start_time: string
-  end_time: string
-  is_recurring: boolean
-  teams: string[]         // team names
-  event_kind?: EventKind
-}
+type Event = AthleteCalendarEvent
+type CalendarLoadState = 'loading' | 'ready' | 'error' | 'offline'
 
 interface TeamLite { id: string; name: string; code: string }
 
-function kindColor(kind?: string) {
-  switch (kind) {
-    case 'training': return '#16a34a'
-    case 'match':    return '#dc2626'
-    case 'meeting':  return '#2563eb'
-    default:         return '#6b7280'
-  }
-}
-
 export default function AthleteCalendarManager() {
   const { user, role, loading: authLoading, profileLoading } = useAuth()
-  const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
+  const { selectedProfileId, selectedProfile, activeArea } = useAccessibleProfiles()
+  const { selectedTeamId, setTeams } = useTeamContext()
   const userId = user?.id || null
 
   const [events, setEvents] = useState<Event[]>([])
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<CalendarLoadState>('loading')
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [teamMemberships, setTeamMemberships] = useState<TeamLite[]>([])
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [earlyAbsenceOpen, setEarlyAbsenceOpen] = useState(false)
 
   const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
+  const [mobileViewMode, setMobileViewMode] = useState<'agenda'|'calendar'>('calendar')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
-  const [filterEventKind, setFilterEventKind] = useState<string>('')
+  const [filterEventKind, setFilterEventKind] = useState<CalendarEventKindFilter>('')
 
   const fetchControllerRef = useRef<AbortController | null>(null)
+  const attendanceRequestRef = useRef<AbortController | null>(null)
+  const subjectContextRef = useRef<string | null>(selectedProfileId)
+  const nextRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const handleSubjectChange = (event: globalThis.Event) => {
+      const nextSubject = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? null
+      subjectContextRef.current = nextSubject
+      fetchControllerRef.current?.abort()
+      attendanceRequestRef.current?.abort()
+      setEvents([])
+      setTeamMemberships([])
+      setSelectedEvent(null)
+      setEarlyAbsenceOpen(false)
+      setAccessDenied(false)
+      setLoadState('loading')
+    }
+    window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+    return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
+  }, [])
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
-    if (role === 'family_member' && (!selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
+    subjectContextRef.current = selectedProfileId
+    if (activeArea === 'family' && (!selectedProfileId || !selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
       setAccessDenied(true)
       setEvents([])
       setTeamMemberships([])
-      setLoading(false)
+      setLoadState('ready')
       return
     }
-    setLoading(true)
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setLoadState('offline')
+      setLoadError(null)
+      return
+    }
+    setLoadState('loading')
+    setLoadError(null)
     setAccessDenied(false)
     try {
       const response = await fetch(appendSubjectProfile('/api/athlete/calendar', selectedProfileId), { signal })
@@ -73,33 +92,45 @@ export default function AthleteCalendarManager() {
           setAccessDenied(true)
           setEvents([])
           setTeamMemberships([])
+          setLoadState('ready')
           return
         }
         console.error('Error loading athlete calendar:', response.statusText)
         setEvents([])
         setTeamMemberships([])
+        setLoadError('Il calendario non è disponibile al momento. Riprova tra poco.')
+        setLoadState('error')
         return
       }
 
-      const result = await response.json()
-      setTeamMemberships(result.teams || [])
+      const result = await response.json() as { teams?: TeamLite[]; events?: Event[] }
+      if (signal?.aborted || subjectContextRef.current !== selectedProfileId) return
+      const authorizedTeams = result.teams || []
+      setTeamMemberships(authorizedTeams)
+      setTeams(authorizedTeams)
       setEvents(result.events || [])
-    } catch (error: any) {
-      if (error?.name === 'AbortError') return
+      setLoadState('ready')
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
       console.error('Error loading athlete calendar:', error)
       setEvents([])
       setTeamMemberships([])
-    } finally {
-      setLoading(false)
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setLoadError(null)
+        setLoadState('offline')
+      } else {
+        setLoadError('Il calendario non è disponibile al momento. Riprova tra poco.')
+        setLoadState('error')
+      }
     }
-  }, [role, selectedProfile, selectedProfileId])
+  }, [activeArea, selectedProfile, selectedProfileId, setTeams])
 
   useEffect(() => {
     if (authLoading || profileLoading) return
     if (!userId) {
       setEvents([])
       setTeamMemberships([])
-      setLoading(false)
+      setLoadState('ready')
       fetchControllerRef.current?.abort()
       fetchControllerRef.current = null
       return
@@ -116,24 +147,195 @@ export default function AthleteCalendarManager() {
   }, [authLoading, profileLoading, userId, loadData])
 
   useEffect(() => {
-    let filtered = events
-    if (filterEventKind) {
-      filtered = filtered.filter(e => e.event_kind === filterEventKind)
+    const onFocus = () => { if (document.visibilityState === 'visible') void loadData() }
+    const onOnline = () => void loadData()
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('online', onOnline)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('online', onOnline)
     }
-    setFilteredEvents(filtered)
-  }, [events, filterEventKind])
+  }, [loadData])
 
-  if (loading) {
+  useEffect(() => {
+    if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+    const nextAt = events
+      .map((event) => event.attendance_availability?.next_recalculation_at)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((value) => Number.isFinite(value) && value > Date.now())
+      .sort((a, b) => a - b)[0]
+    if (!nextAt) return
+    nextRefreshTimerRef.current = setTimeout(() => void loadData(), Math.max(0, nextAt - Date.now() + 25))
+    return () => {
+      if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
+      nextRefreshTimerRef.current = null
+    }
+  }, [events, loadData])
+
+  const filteredEvents = useMemo(
+    () => markCalendarConflicts(filterCalendarEvents(events, filterEventKind, selectedTeamId)),
+    [events, filterEventKind, selectedTeamId],
+  )
+  const hasActiveFilters = Boolean(filterEventKind || selectedTeamId)
+  const filteredEmptyTitle = hasActiveFilters ? 'Nessun evento corrisponde ai filtri' : 'Nessun evento trovato'
+  const canConfirmAttendance = canConfirmAthleteAttendance(
+    role,
+    activeArea,
+    selectedProfileId,
+    selectedProfile?.relationship.permissions.confirm_attendance,
+  )
+
+  const saveAttendance = useCallback(async (eventId: string, status: AttendanceStatus) => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('Sei offline: la risposta non è disponibile')
+    }
+
+    const controller = new AbortController()
+    attendanceRequestRef.current?.abort()
+    attendanceRequestRef.current = controller
+    try {
+      const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_id: eventId, status }),
+        signal: controller.signal,
+      })
+      const result = await response.json().catch(() => null) as { error?: string } | null
+      if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
+      if (controller.signal.aborted || subjectContextRef.current !== selectedProfileId) return
+
+      const respondedAt = new Date().toISOString()
+      setEvents((currentEvents) => currentEvents.map((event) => (
+        event.id === eventId
+          ? { ...event, my_attendance: { status, responded_at: respondedAt } }
+          : event
+      )))
+      void loadData()
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      throw error
+    } finally {
+      if (attendanceRequestRef.current === controller) attendanceRequestRef.current = null
+    }
+  }, [loadData, selectedProfileId])
+
+  const mutateEarlyAbsence = useCallback(async (eventId: string, revoke = false, note?: string) => {
+    if (!navigator.onLine) throw new Error('Sei offline: l’assenza non può essere salvata')
+    const response = await fetch(appendSubjectProfile('/api/athlete/events/early-absence', selectedProfileId), {
+      method: revoke ? 'DELETE' : 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_ids: [eventId], ...(revoke ? {} : { note }) }),
+    })
+    const result = await response.json().catch(() => null) as { error?: string } | null
+    if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
+    if (subjectContextRef.current !== selectedProfileId) return
+    setEvents((currentEvents) => currentEvents.map((event) => {
+      if (event.id !== eventId) return event
+      const currentAvailability = event.attendance_availability
+      if (!currentAvailability) return event
+      const isNext = currentAvailability.next_event?.id === eventId
+      return {
+        ...event,
+        my_attendance: revoke
+          ? null
+          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+        attendance_availability: {
+          ...currentAvailability,
+          can_respond_now: revoke ? isNext : false,
+          can_report_early_absence: !revoke,
+          can_revoke_early_absence: revoke,
+          actions: {
+            respond: revoke ? isNext : false,
+            report_early_absence: !revoke,
+            revoke_early_absence: revoke,
+          },
+          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
+        },
+      }
+    }))
+    void loadData()
+  }, [loadData, selectedProfileId])
+
+  const retryLoad = () => { void loadData() }
+
+  const mobileMonthEvents: MonthlyCalendarEvent[] = filteredEvents.map((event) => ({
+    id: event.id,
+    title: event.title,
+    start: event.start_time,
+    end: event.end_time,
+    eventKind: event.event_kind,
+    location: event.location,
+  }))
+
+  const renderMobileMonthEvent = (monthEvent: MonthlyCalendarEvent) => {
+    const event = filteredEvents.find((item) => item.id === monthEvent.id)
+    if (!event) return null
+
+    return (
+      <div className="bg-[color:var(--cs-surface-1)] px-3 py-3">
+        <div className="flex items-start gap-3">
+          <span className="w-12 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-secondary">
+            {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{event.title}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-secondary">
+              <EventKindBadge kind={event.event_kind} />
+              {event.teams.length > 0 && <span>{event.teams.join(', ')}</span>}
+              {event.has_conflict && <span role="status" className="font-semibold text-[color:var(--cs-danger-canonical)]">⚠ Conflitto di orario</span>}
+            </div>
+          </div>
+          <button type="button" className="cs-btn cs-btn--ghost cs-btn--sm shrink-0" onClick={() => setSelectedEvent(event)}>
+            Dettagli
+          </button>
+        </div>
+        <AttendanceControl
+          requiresConfirmation={event.requires_confirmation}
+          eventKind={event.event_kind ?? undefined}
+          attendanceMode={event.attendance_mode}
+          confirmationDeadline={event.confirmation_deadline}
+          initialStatus={event.my_attendance?.status ?? null}
+          canRespond={canConfirmAttendance}
+          onChange={(status) => saveAttendance(event.id, status)}
+          availability={event.attendance_availability}
+          eventContext={{ teams: event.teams, start: event.start_time, end: event.end_time }}
+          initialEarlyAbsence={event.my_attendance?.is_early_absence === true}
+          onEarlyAbsence={(note) => mutateEarlyAbsence(event.id, false, note)}
+          onRevokeEarlyAbsence={() => mutateEarlyAbsence(event.id, true)}
+        />
+      </div>
+    )
+  }
+
+  if (loadState === 'loading') {
     return <LoadingState label="Caricamento calendario..." />
   }
   if (accessDenied) return <DelegatedAccessDenied section="il calendario" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
+  if (loadState === 'offline') {
+    return (
+      <OfflineState
+        title="Calendario non disponibile offline"
+        description="I dati del calendario richiedono una connessione. Quando torni online, riprova."
+        action={<button type="button" className="cs-btn cs-btn--outline" onClick={retryLoad}>Riprova</button>}
+      />
+    )
+  }
+  if (loadState === 'error') {
+    return (
+      <ErrorState
+        title="Impossibile caricare il calendario"
+        description={loadError ?? 'Riprova tra poco.'}
+        action={<button type="button" className="cs-btn cs-btn--outline" onClick={retryLoad}>Riprova</button>}
+      />
+    )
+  }
 
   const calEvents: CalEvent[] = (filteredEvents||[]).map((e)=>({
     id: e.id,
-    title: e.title,
+    title: e.has_conflict ? `⚠ ${e.title}` : e.title,
     start: new Date(e.start_time),
     end: new Date(e.end_time),
-    color: kindColor(e.event_kind)
+    color: eventKindVisual(e.event_kind)?.colorToken
   }))
 
   return (
@@ -142,37 +344,95 @@ export default function AthleteCalendarManager() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
           <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            {canConfirmAttendance && (
+              <button type="button" onClick={() => setEarlyAbsenceOpen(true)} className="cs-btn cs-btn--primary min-h-11">
+                Comunica assenza
+              </button>
+            )}
             <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--success">
               Esporta Excel
             </button>
-            <button
-              onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-              className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--accent'}`}
-            >
-              {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
-            </button>
+            <div className="hidden md:block">
+              <button
+                onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
+                className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--accent'}`}
+              >
+                {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Filtri */}
-        <div className="mb-4 flex flex-col sm:flex-row gap-3">
+        <div className="mb-4 flex items-center gap-2 md:hidden" aria-label="Vista calendario mobile">
+          <button
+            type="button"
+            onClick={() => setMobileViewMode('agenda')}
+            aria-pressed={mobileViewMode === 'agenda'}
+            className={`cs-btn cs-btn--sm ${mobileViewMode === 'agenda' ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+          >
+            Agenda
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileViewMode('calendar')}
+            aria-pressed={mobileViewMode === 'calendar'}
+            className={`cs-btn cs-btn--sm ${mobileViewMode === 'calendar' ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+          >
+            Mese
+          </button>
+        </div>
+
+        {/* Filtri: restringono esclusivamente il payload già autorizzato dal server. */}
+        <div className="mb-4 flex flex-col gap-3">
           <div className="flex-1">
-            <label className="cs-field__label">Tipo Evento</label>
-            <select
-              className="cs-select"
-              value={filterEventKind}
-              onChange={(e) => setFilterEventKind(e.target.value)}
-            >
-              <option value="">Tutti i tipi</option>
-              <option value="training">Allenamento</option>
-              <option value="match">Partita</option>
-              <option value="meeting">Riunione</option>
-              <option value="other">Altro</option>
-            </select>
+            <span className="cs-field__label">Tipo evento</span>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtra per tipo evento">
+              {[{ value: '', label: 'Tutti' }, ...EVENT_KIND_OPTIONS].map(({ value, label }) => (
+                <button
+                  key={value || 'all'}
+                  type="button"
+                  aria-pressed={filterEventKind === value}
+                  onClick={() => setFilterEventKind(value as CalendarEventKindFilter)}
+                  className={`cs-btn cs-btn--sm ${filterEventKind === value ? 'cs-btn--primary' : 'cs-btn--outline'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {viewMode === 'calendar' ? (
+        <div className="md:hidden">
+          {teamMemberships.length === 0 ? (
+            <EmptyState title="Non sei iscritto a nessuna squadra" description="Contatta l'amministratore per essere aggiunto a una squadra" />
+          ) : filteredEvents.length === 0 ? (
+            <EmptyState title={filteredEmptyTitle} />
+          ) : mobileViewMode === 'agenda' ? (
+            <AthleteAgenda events={filteredEvents} canRespond={canConfirmAttendance} onAttendanceChange={saveAttendance} onEarlyAbsence={(id, note) => mutateEarlyAbsence(id, false, note)} onRevokeEarlyAbsence={(id) => mutateEarlyAbsence(id, true)} onEventClick={(id) => {
+                const event = filteredEvents.find((item) => item.id === id)
+                if (event) setSelectedEvent(event)
+              }} />
+            ) : (
+              <MonthlyMobileCalendar
+                currentDate={currentDate}
+                events={mobileMonthEvents}
+                onNavigate={(action) => {
+                  const nextDate = action === 'today' ? new Date() : new Date(currentDate)
+                  if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
+                  else if (action === 'next') nextDate.setMonth(nextDate.getMonth() + 1)
+                  setCurrentDate(nextDate)
+                }}
+                onEventClick={(id) => {
+                  const event = filteredEvents.find((item) => item.id === id)
+                  if (event) setSelectedEvent(event)
+                }}
+                renderAgendaEvent={renderMobileMonthEvent}
+              />
+          )}
+        </div>
+
+        <div className="hidden md:block">
+          {viewMode === 'calendar' ? (
           <FullCalendarWidget
             initialDate={currentDate}
             view={calView}
@@ -192,7 +452,7 @@ export default function AthleteCalendarManager() {
         ) : teamMemberships.length === 0 ? (
           <EmptyState title="Non sei iscritto a nessuna squadra" description="Contatta l'amministratore per essere aggiunto a una squadra" />
         ) : filteredEvents.length === 0 ? (
-          <EmptyState title="Nessun evento trovato" />
+          <EmptyState title={filteredEmptyTitle} />
         ) : (
           <>
             {/* Desktop Table View */}
@@ -205,6 +465,7 @@ export default function AthleteCalendarManager() {
                     <th>Luogo</th>
                     <th>Squadre</th>
                     <th>Tipo</th>
+                    <th>Stato</th>
                     <th>Azioni</th>
                   </tr>
                 </thead>
@@ -214,6 +475,7 @@ export default function AthleteCalendarManager() {
                       <td>
                         <div>
                           <div className="font-semibold">{event.title}</div>
+                          {event.has_conflict && <div role="status" className="text-sm font-semibold text-[color:var(--cs-danger-canonical)]">⚠ Conflitto di orario</div>}
                           {event.description && (
                             <div className="text-sm text-secondary">{event.description}</div>
                           )}
@@ -235,17 +497,12 @@ export default function AthleteCalendarManager() {
                         {event.teams.length > 0 ? event.teams.join(', ') : <span className="text-secondary">N/D</span>}
                       </td>
                       <td>
-                        <span className={`cs-badge ${
-                          event.event_kind === 'training' ? 'cs-badge--primary' :
-                          event.event_kind === 'match' ? 'cs-badge--danger' :
-                          event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                          'cs-badge--neutral'
-                        }`}>
-                          {event.event_kind === 'training' ? 'Allenamento' :
-                           event.event_kind === 'match' ? 'Partita' :
-                           event.event_kind === 'meeting' ? 'Riunione' :
-                           event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                        </span>
+                        <EventKindBadge kind={event.event_kind} />
+                      </td>
+                      <td>
+                        {event.my_attendance?.is_early_absence
+                          ? <span className="cs-badge cs-badge--warning" role="status">Assenza segnalata</span>
+                          : <span className="text-sm text-secondary">Nessuna assenza segnalata</span>}
                       </td>
                       <td>
                         <button
@@ -261,83 +518,89 @@ export default function AthleteCalendarManager() {
               </table>
             </div>
 
-            {/* Mobile Cards View */}
-            <div className="block md:hidden space-y-3">
-              {filteredEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="cs-card cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setSelectedEvent(event)}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-semibold text-lg flex-1">{event.title}</h3>
-                    <span className={`cs-badge ${
-                      event.event_kind === 'training' ? 'cs-badge--primary' :
-                      event.event_kind === 'match' ? 'cs-badge--danger' :
-                      event.event_kind === 'meeting' ? 'cs-badge--accent' :
-                      'cs-badge--neutral'
-                    }`}>
-                      {event.event_kind === 'training' ? 'Allenamento' :
-                       event.event_kind === 'match' ? 'Partita' :
-                       event.event_kind === 'meeting' ? 'Riunione' :
-                       event.event_kind === 'other' ? 'Altro' : 'N/D'}
-                    </span>
-                  </div>
-                  {event.description && (
-                    <p className="text-secondary text-sm mb-3">{event.description}</p>
-                  )}
-                  <div className="text-sm text-secondary space-y-1">
-                    <div>
-                      📅 {new Date(event.start_time).toLocaleDateString('it-IT')} dalle{' '}
-                      {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} alle{' '}
-                      {new Date(event.end_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    {event.location && <div>📍 {event.location}</div>}
-                    {!!event.teams.length && <div>👥 {event.teams.join(', ')}</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
           </>
-        )}
+          )}
+        </div>
       </div>
 
       {selectedEvent && (
-        <EventDetails id={selectedEvent.id} onClose={() => setSelectedEvent(null)} selectedProfileId={selectedProfileId} />
+        <EventDetails
+          id={selectedEvent.id}
+          onClose={() => setSelectedEvent(null)}
+          selectedProfileId={selectedProfileId}
+          canRespond={canConfirmAttendance}
+          onAttendanceChange={(status) => saveAttendance(selectedEvent.id, status)}
+          onEarlyAbsence={(note) => mutateEarlyAbsence(selectedEvent.id, false, note)}
+          onRevokeEarlyAbsence={() => mutateEarlyAbsence(selectedEvent.id, true)}
+        />
+      )}
+      {canConfirmAttendance && (
+        <EarlyAbsencePeriodModal
+          open={earlyAbsenceOpen}
+          subjectProfileId={selectedProfileId}
+          onClose={() => setEarlyAbsenceOpen(false)}
+          onSaved={() => void loadData()}
+        />
       )}
     </>
   )
 }
 
-function EventDetails({ id, onClose, selectedProfileId }: { id: string; onClose: () => void; selectedProfileId: string | null }) {
+function EventDetails({
+  id,
+  onClose,
+  selectedProfileId,
+  canRespond,
+  onAttendanceChange,
+  onEarlyAbsence,
+  onRevokeEarlyAbsence,
+}: {
+  id: string
+  onClose: () => void
+  selectedProfileId: string | null
+  canRespond: boolean
+  onAttendanceChange: (status: AttendanceStatus) => Promise<void>
+  onEarlyAbsence: (note: string) => Promise<void>
+  onRevokeEarlyAbsence: () => Promise<void>
+}) {
   const [data, setData] = useState<EventDetailData | null>(null)
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(appendSubjectProfile(`/api/athlete/events/detail?id=${id}`, selectedProfileId))
-        const json = await res.json()
-        if (res.ok) setData(json)
-      } catch {}
-    })()
+  const [error, setError] = useState<string | null>(null)
+  const [retryToken, setRetryToken] = useState(0)
+  const loadDetail = useCallback(async (signal: AbortSignal) => {
+    setData(null)
+    setError(null)
+    try {
+      const res = await fetch(appendSubjectProfile(`/api/athlete/events/detail?id=${id}`, selectedProfileId), { signal })
+      const json = await res.json().catch(() => null) as unknown
+      const responseError = json && typeof json === 'object' && 'error' in json && typeof json.error === 'string'
+        ? json.error
+        : 'Il dettaglio non è disponibile al momento.'
+      if (!res.ok) throw new Error(responseError)
+      if (!json || typeof json !== 'object' || 'error' in json) throw new Error(responseError)
+      setData(json as EventDetailData)
+    } catch (cause: unknown) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') return
+      setError(cause instanceof Error ? cause.message : 'Il dettaglio non è disponibile al momento.')
+    }
   }, [id, selectedProfileId])
 
-  const saveAttendance = async (status: AttendanceStatus) => {
-    const response = await fetch(appendSubjectProfile('/api/athlete/events/attendance', selectedProfileId), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event_id: id, status }),
-    })
-    const result = await response.json().catch(() => null)
-    if (!response.ok) {
-      throw new Error(result?.error || 'Impossibile salvare la risposta')
-    }
-    setData((current) => current ? {
-      ...current,
-      my_attendance: { status, responded_at: new Date().toISOString() },
-    } : current)
-  }
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadDetail(controller.signal)
+    return () => controller.abort()
+  }, [loadDetail, retryToken])
 
   return (
-    <EventDetailModal open={true} onClose={onClose} data={data} onAttendanceChange={saveAttendance} />
+    <EventDetailModal
+      open
+      onClose={onClose}
+      data={data}
+      error={error}
+      onRetry={() => setRetryToken((current) => current + 1)}
+      canRespond={canRespond}
+      onAttendanceChange={onAttendanceChange}
+      onEarlyAbsence={onEarlyAbsence}
+      onRevokeEarlyAbsence={onRevokeEarlyAbsence}
+    />
   )
 }
