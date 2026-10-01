@@ -60,7 +60,7 @@ export interface Season {
 
 export interface BulkOperation {
   id: string
-  type: 'assign_to_team' | 'remove_from_team' | 'update_jersey' | 'update_medical_expiry'
+  type: 'assign_to_team' | 'remove_from_team' | 'update_jersey' | 'update_medical_expiry' | 'set_enrollment_application_delivered'
   target_athletes: string[]
   parameters: Record<string, any>
   status: 'pending' | 'processing' | 'completed' | 'failed'

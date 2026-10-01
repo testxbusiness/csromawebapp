@@ -62,7 +62,22 @@ describe('POST /api/admin/athletes/bulk enrollment application', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 
-  it('uses the atomic RPC for the whole selected season and returns its affected count', async () => {
+  it('rejects a bulk request that attempts to mark enrollment applications as not delivered', async () => {
+    const rpc = jest.fn()
+    createAdminClientMock.mockReturnValue({ rpc } as unknown as ReturnType<typeof createAdminClient>)
+
+    const response = await POST(request({
+      operation: 'set_enrollment_application_delivered',
+      athleteIds: [athleteId],
+      parameters: { seasonId, delivered: false },
+    }))
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Parametri non validi' })
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('uses the atomic RPC to mark the whole selected season as delivered and returns its affected count', async () => {
     const query = seasonQuery()
     const rpc = jest.fn().mockResolvedValue({ data: 1, error: null })
     const from = jest.fn().mockReturnValue({ select: query.select })
@@ -71,16 +86,16 @@ describe('POST /api/admin/athletes/bulk enrollment application', () => {
     const response = await POST(request({
       operation: 'set_enrollment_application_delivered',
       athleteIds: [athleteId],
-      parameters: { seasonId, delivered: false },
+      parameters: { seasonId, delivered: true },
     }))
 
     expect(rpc).toHaveBeenCalledWith('set_athlete_enrollment_application_delivered_atomically', {
       p_season_id: seasonId,
       p_athlete_ids: [athleteId],
-      p_delivered: false,
+      p_delivered: true,
     })
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ affected: 1, delivered: false, seasonId })
+    expect(await response.json()).toMatchObject({ affected: 1, delivered: true, seasonId })
   })
 
   it('does not attempt a fallback update when atomic validation rejects one athlete outside the season', async () => {

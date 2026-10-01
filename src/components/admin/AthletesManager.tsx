@@ -11,7 +11,6 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import AthleteCreateModal from './AthleteCreateModal'
 import AthleteImportModal from './AthleteImportModal'
 import CollaboratorAccountActions from './CollaboratorAccountActions'
-import EnrollmentApplicationBulkModal from './EnrollmentApplicationBulkModal'
 import { getCertificateStatus, type CertificateStatus } from '@/lib/admin/certificate-status'
 
 interface AthleteWithDetails extends Athlete {
@@ -39,7 +38,6 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
   const [showImportModal, setShowImportModal] = useState(false)
   const [editingAthlete, setEditingAthlete] = useState<AthleteCreateData | null>(null)
   const [createSubmitting, setCreateSubmitting] = useState(false)
-  const [enrollmentBulkDelivered, setEnrollmentBulkDelivered] = useState<boolean | null>(null)
 
   const [showDetails, setShowDetails] = useState(false)
   const [detailsAthlete, setDetailsAthlete] = useState<AthleteWithDetails | null>(null)
@@ -270,7 +268,15 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
   }
 
   const handleBulkModalConfirm = (operation: string, parameters: Record<string, unknown>) => {
-    handleBulkOperation(operation, parameters)
+    if (operation === 'set_enrollment_application_delivered') {
+      if (!selectedSeason || selectedSeason === 'all') {
+        toast.error('Seleziona una stagione prima di segnare le domande consegnate')
+        return
+      }
+      handleBulkOperation(operation, { seasonId: selectedSeason, delivered: true })
+    } else {
+      handleBulkOperation(operation, parameters)
+    }
     setShowBulkModal(false)
   }
 
@@ -299,36 +305,6 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       return
     }
     setShowBulkModal(true)
-  }
-
-  const handleEnrollmentBulkConfirm = async () => {
-    if (enrollmentBulkDelivered === null || !selectedSeason) return
-    setBulkLoading(true)
-    try {
-      const response = await fetch('/api/admin/athletes/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          operation: 'set_enrollment_application_delivered',
-          athleteIds: Array.from(selectedAthletes),
-          parameters: { seasonId: selectedSeason, delivered: enrollmentBulkDelivered },
-        }),
-      })
-      const result = await response.json()
-      if (!response.ok) {
-        toast.error(result.error || 'Impossibile aggiornare la domanda di iscrizione')
-        return
-      }
-      toast.success(result.message)
-      setSelectedAthletes(new Set())
-      setEnrollmentBulkDelivered(null)
-      await loadAthletes(selectedSeason)
-    } catch (error) {
-      console.error('Errore aggiornamento massivo domanda:', error)
-      toast.error('Errore durante l’aggiornamento della domanda di iscrizione')
-    } finally {
-      setBulkLoading(false)
-    }
   }
 
   const handleCreateAthlete = async (data: AthleteCreateData) => {
@@ -810,12 +786,6 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
             <button onClick={handleOpenBulkModal} disabled={bulkLoading} className="cs-btn cs-btn--primary cs-btn--sm disabled:opacity-50">
               {bulkLoading ? 'Caricamento...' : 'Operazioni Massive'}
             </button>
-            <button onClick={() => setEnrollmentBulkDelivered(true)} disabled={bulkLoading} className="cs-btn cs-btn--outline cs-btn--sm disabled:opacity-50">
-              Segna consegnata
-            </button>
-            <button onClick={() => setEnrollmentBulkDelivered(false)} disabled={bulkLoading} className="cs-btn cs-btn--outline cs-btn--sm disabled:opacity-50">
-              Segna non consegnata
-            </button>
           </div>
         </div>
       )}
@@ -828,6 +798,9 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
         onTeamAssignmentRequest={handleTeamAssignmentRequest}
         selectedCount={selectedAthletes.size}
         userType="athletes"
+        enrollmentApplicationSeasonName={selectedSeason && selectedSeason !== 'all'
+          ? seasons.find((season) => season.id === selectedSeason)?.name
+          : undefined}
         loading={bulkLoading}
         selectedUsers={filteredAthletes.filter(athlete => selectedAthletes.has(athlete.id))}
       />
@@ -844,15 +817,6 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
         teams={selectableTeams}
         loading={bulkLoading}
         userType="athletes"
-      />
-      <EnrollmentApplicationBulkModal
-        isOpen={enrollmentBulkDelivered !== null}
-        delivered={enrollmentBulkDelivered}
-        isSubmitting={bulkLoading}
-        onClose={() => setEnrollmentBulkDelivered(null)}
-        onConfirm={() => void handleEnrollmentBulkConfirm()}
-        selectedCount={selectedAthletes.size}
-        seasonName={seasons.find((season) => season.id === selectedSeason)?.name || 'stagione selezionata'}
       />
     </div>
   )

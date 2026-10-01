@@ -7,7 +7,6 @@ jest.mock('./AdminModal', () => ({
   __esModule: true,
   default: ({ isOpen, title, children, footer }: { isOpen: boolean; title: string; children: React.ReactNode; footer?: React.ReactNode }) => isOpen ? <div role="dialog" aria-label={title}>{children}{footer}</div> : null,
 }))
-jest.mock('./BulkOperationsModal', () => ({ __esModule: true, default: () => null }))
 jest.mock('./TeamAssignmentModal', () => ({ __esModule: true, default: () => null }))
 jest.mock('./AthleteImportModal', () => ({ __esModule: true, default: () => null }))
 jest.mock('./CollaboratorAccountActions', () => ({ __esModule: true, default: () => null }))
@@ -80,24 +79,25 @@ describe('AthletesManager enrollment application controls', () => {
     })
   })
 
-  it.each([
-    ['Segna consegnata', true],
-    ['Segna non consegnata', false],
-  ] as const)('confirms and sends bulk enrollment state %s for the selected season', async (buttonName, delivered) => {
+  it('marks selected enrollment applications as delivered from the shared bulk operations modal', async () => {
     render(<AthletesManager embedded />)
     await screen.findAllByText('Giulia Bianchi')
     fireEvent.click(screen.getAllByRole('checkbox').at(-1)!)
-    fireEvent.click(screen.getByRole('button', { name: buttonName }))
+    fireEvent.click(screen.getByRole('button', { name: 'Operazioni Massive' }))
+    fireEvent.change(screen.getByLabelText('Tipo di Operazione'), {
+      target: { value: 'set_enrollment_application_delivered' },
+    })
 
-    expect(screen.getByRole('dialog', { name: 'Conferma aggiornamento domanda' })).toHaveTextContent('1 atleta nella stagione Stagione 2026/2027')
-    fireEvent.click(screen.getAllByRole('button', { name: buttonName }).at(-1)!)
+    expect(screen.getByRole('dialog', { name: 'Operazione Massiva - 1 atleti selezionati' })).toHaveTextContent('domanda come consegnata per 1 atleta nella stagione Stagione 2026/2027')
+    expect(screen.queryByText('Segna non consegnata')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma Operazione' }))
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/admin/athletes/bulk', expect.objectContaining({ method: 'POST' })))
     const bulkCall = (global.fetch as jest.Mock).mock.calls.find((call) => call[0] === '/api/admin/athletes/bulk')
     expect(JSON.parse(bulkCall[1].body)).toEqual({
       operation: 'set_enrollment_application_delivered',
       athleteIds: [athlete.id],
-      parameters: { seasonId: season.id, delivered },
+      parameters: { seasonId: season.id, delivered: true },
     })
   })
 

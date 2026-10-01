@@ -10,6 +10,7 @@ interface BulkOperationsModalProps {
   onTeamAssignmentRequest?: () => void
   selectedCount: number
   userType: 'athletes' | 'coaches'
+  enrollmentApplicationSeasonName?: string
   loading?: boolean
   selectedUsers?: Array<{
     id: string
@@ -27,6 +28,7 @@ export default function BulkOperationsModal({
   onTeamAssignmentRequest,
   selectedCount,
   userType,
+  enrollmentApplicationSeasonName,
   loading = false,
   selectedUsers = []
 }: BulkOperationsModalProps) {
@@ -42,7 +44,10 @@ export default function BulkOperationsModal({
     { value: 'assign_to_team', label: 'Assegna a Squadra' },
     { value: 'remove_from_team', label: 'Rimuovi da Squadra' },
     { value: 'update_jersey', label: 'Aggiorna Numero Maglia' },
-    { value: 'update_medical_expiry', label: 'Aggiorna Scadenza Certificato' }
+    { value: 'update_medical_expiry', label: 'Aggiorna Scadenza Certificato' },
+    ...(enrollmentApplicationSeasonName
+      ? [{ value: 'set_enrollment_application_delivered', label: 'Domanda consegnata' }]
+      : []),
   ] : [
     { value: 'assign_to_team', label: 'Assegna a Squadra' },
     { value: 'remove_from_team', label: 'Rimuovi da Squadra' },
@@ -227,6 +232,14 @@ export default function BulkOperationsModal({
           </div>
         )
 
+      case 'set_enrollment_application_delivered':
+        return (
+          <div className="cs-alert cs-alert--neutral text-sm">
+            Segnerai la domanda come <strong>consegnata</strong> per <strong>{selectedCount}</strong> atlet{selectedCount === 1 ? 'a' : 'i'} nella stagione <strong>{enrollmentApplicationSeasonName}</strong>.
+            Eventuali correzioni sono disponibili nella modifica del singolo atleta.
+          </div>
+        )
+
       case 'update_staff_role':
         return (
           <div>
@@ -277,8 +290,9 @@ export default function BulkOperationsModal({
     >
       <div className="space-y-6">
         <div>
-          <label className="cs-field__label">Tipo di Operazione</label>
+          <label htmlFor="bulk-operation-type" className="cs-field__label">Tipo di Operazione</label>
           <select
+            id="bulk-operation-type"
             value={selectedOperation}
             onChange={(e) => handleOperationSelect(e.target.value)}
             className="cs-select"
