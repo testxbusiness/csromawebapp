@@ -51,7 +51,7 @@ describe('BottomNavigation', () => {
     expect(screen.getByRole('link', { name: 'Oggi' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Calendario' })).toBeTruthy()
     expect(screen.getByRole('link', { name: /Messaggi/ })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: 'Quote' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Amministrazione' })).toBeNull()
     expect(screen.getByRole('link', { name: 'Campionato' })).toBeTruthy()
     expect(screen.getByRole('navigation').getAttribute('data-item-count')).toBe('5')
   })

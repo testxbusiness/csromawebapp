@@ -7,22 +7,11 @@ import { usePush } from '@/hooks/usePush'
 import { EmptyState, ErrorState, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
 import InstallPwaButton from '@/components/pwa/InstallPwaButton'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
-import type { AthleteProfileContract, MedicalStatus } from '@/types/athlete-profile'
-
-const MEDICAL_COPY: Record<Exclude<MedicalStatus, 'hidden'>, string> = {
-  missing: 'Non presente', valid: 'Valido', expiring: 'In scadenza', expired: 'Scaduto',
-}
+import type { AthleteProfileContract } from '@/types/athlete-profile'
 type ProfileLoadState = 'loading' | 'ready' | 'error' | 'offline' | 'denied'
 
 function initials(profile: AthleteProfileContract['subject']): string {
   return `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase()
-}
-
-function medicalVariant(status: Exclude<MedicalStatus, 'hidden'>): 'success' | 'warning' | 'danger' | 'neutral' {
-  if (status === 'valid') return 'success'
-  if (status === 'expiring') return 'warning'
-  if (status === 'expired') return 'danger'
-  return 'neutral'
 }
 
 function formatDate(value: string): string {
@@ -167,8 +156,6 @@ export default function AthleteProfileManager() {
       </div>
 
       <Panel><div className="flex items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-[color:var(--cs-text-secondary)]">Appartenenze</p><h2 className="mt-1 text-lg font-bold">Squadre e numeri di maglia</h2></div><span className="text-sm text-[color:var(--cs-text-secondary)]">{memberships.length} {memberships.length === 1 ? 'squadra' : 'squadre'}</span></div>{memberships.length === 0 ? <p className="mt-4 text-sm text-[color:var(--cs-text-secondary)]">Nessuna squadra assegnata.</p> : <div className="mt-4 divide-y divide-[color:var(--cs-border-canonical)]">{memberships.map((membership) => <div key={membership.id} className="flex min-h-16 items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate font-semibold">{membership.team.name} <span className="font-normal text-[color:var(--cs-text-secondary)]">({membership.team.code})</span></p><p className="truncate text-sm text-[color:var(--cs-text-secondary)]">{membership.team.activity.name}</p></div><span className="shrink-0 font-variant-numeric tabular-nums font-semibold">{membership.jersey_number == null ? 'Numero non assegnato' : `#${membership.jersey_number}`}</span></div>)}</div>}</Panel>
-
-      <Panel><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-[color:var(--cs-text-secondary)]">Informazioni sensibili</p><h2 className="mt-1 text-lg font-bold">Certificato medico</h2></div>{permissions.view_medical_status && athlete.medical.status !== 'hidden' ? <StatusBadge status={medicalVariant(athlete.medical.status)} label={MEDICAL_COPY[athlete.medical.status]} /> : <StatusBadge status="neutral" label="Non disponibile" />}</div>{permissions.view_medical_status && athlete.medical.status !== 'hidden' ? <p className="mt-3 text-sm text-[color:var(--cs-text-secondary)]">{athlete.medical.expires_at ? `Scadenza ${formatDate(athlete.medical.expires_at)}` : 'Lo stato è disponibile; la data non è visibile in questo contesto.'}</p> : <p className="mt-3 text-sm text-[color:var(--cs-text-secondary)]">Non hai il permesso per visualizzare lo stato medico.</p>}</Panel>
 
       {permissions.view_documents ? <Panel><div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-[color:var(--cs-text-secondary)]">Documenti autorizzati</p><h2 className="mt-1 text-lg font-bold">Documenti</h2></div><span className="text-sm text-[color:var(--cs-text-secondary)]">{athlete.documents.items.length} {athlete.documents.items.length === 1 ? 'elemento' : 'elementi'}</span></div>{athlete.documents.items.length === 0 ? <p className="mt-4 text-sm text-[color:var(--cs-text-secondary)]">Nessun documento disponibile per questo profilo.</p> : <ul className="mt-4 divide-y divide-[color:var(--cs-border-canonical)]">{athlete.documents.items.map((document) => <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div><p className="font-medium">{document.title}</p><p className="text-sm text-[color:var(--cs-text-secondary)]">{document.status}{document.file_name ? ' · File disponibile' : ' · File non ancora disponibile'}</p></div></li>)}</ul>}</Panel> : null}
 

@@ -108,7 +108,7 @@ const athleteItems: NavItem[] = [
   { href: '/athlete/campionati', label: 'Campionati', icon: Trophy },
   { href: '/athlete/calendar', label: 'Calendario', icon: CalendarClock },
   { href: '/athlete/messages', label: 'Messaggi', icon: Mail },
-  { href: '/athlete/fees', label: 'Quote Associative', icon: Wallet2 },
+  { href: '/athlete/fees', label: 'Amministrazione', icon: Wallet2 },
   { href: '/athlete/profile', label: 'Profilo', icon: UserCog },
 ]
 
@@ -119,7 +119,7 @@ const getItemsForRole = (role: Role | undefined, selectedProfile: ReturnType<typ
     const navigation = resolveFamilyNavigation(selectedProfile)
     return navigation.items.map((item) => ({
       href: item.href,
-      label: item.key === 'dashboard' ? 'Oggi' : item.label === 'Quote' ? 'Quote Associative' : item.label,
+      label: item.key === 'dashboard' ? 'Oggi' : item.label,
       icon: item.key === 'dashboard' ? LineChart : item.key === 'calendar' ? CalendarClock : item.key === 'championship' ? Trophy : item.key === 'messages' ? Mail : item.key === 'fees' ? Wallet2 : UserCog,
     }))
   }
