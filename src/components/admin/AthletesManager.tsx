@@ -11,6 +11,7 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import AthleteCreateModal from './AthleteCreateModal'
 import AthleteImportModal from './AthleteImportModal'
 import CollaboratorAccountActions from './CollaboratorAccountActions'
+import EnrollmentApplicationBulkModal from './EnrollmentApplicationBulkModal'
 import { getCertificateStatus, type CertificateStatus } from '@/lib/admin/certificate-status'
 
 interface AthleteWithDetails extends Athlete {
@@ -38,6 +39,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
   const [showImportModal, setShowImportModal] = useState(false)
   const [editingAthlete, setEditingAthlete] = useState<AthleteCreateData | null>(null)
   const [createSubmitting, setCreateSubmitting] = useState(false)
+  const [enrollmentBulkDelivered, setEnrollmentBulkDelivered] = useState<boolean | null>(null)
 
   const [showDetails, setShowDetails] = useState(false)
   const [detailsAthlete, setDetailsAthlete] = useState<AthleteWithDetails | null>(null)
@@ -50,7 +52,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
   const supabase = createClient()
 
   // Filtri di contesto
-  const [selectedSeason, setSelectedSeason] = useState<string>('all')
+  const [selectedSeason, setSelectedSeason] = useState<string>('')
   const [selectedActivity, setSelectedActivity] = useState<string>('all')
   const [selectedTeam, setSelectedTeam] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
@@ -59,6 +61,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
     const value = searchParams.get('certificateStatus')
     return value === 'attention' || value === 'missing' || value === 'expired' || value === 'expiring' || value === 'valid' ? value : 'all'
   })
+  const [enrollmentApplicationFilter, setEnrollmentApplicationFilter] = useState<'all' | 'delivered' | 'pending'>('all')
   const teamsForSelectedSeason = useCallback(<T extends { season_id?: string }>(teamList: T[] | undefined) => {
     const teams = teamList ?? []
     return selectedSeason === 'all' ? teams : teams.filter((team) => team.season_id === selectedSeason)
@@ -85,10 +88,10 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
     return { withoutCertificate, expiredCertificate, expiringCertificate }
   }, [athletes])
 
-  const loadAthletes = useCallback(async () => {
+  const loadAthletes = useCallback(async (seasonId: string) => {
     try {
       // Carica atleti con dettagli completi
-      const response = await fetch('/api/admin/athletes')
+      const response = await fetch(`/api/admin/athletes?seasonId=${encodeURIComponent(seasonId)}`)
       const result = await response.json()
 
       if (!response.ok) {
@@ -134,7 +137,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       setSeasons(seasonsData || [])
       const activeSeason = seasonsData?.find((season) => season.is_active)
       if (activeSeason) {
-        setSelectedSeason((current) => current === 'all' ? activeSeason.id : current)
+        setSelectedSeason((current) => current || activeSeason.id)
       }
       setActivities(activitiesData || [])
       setTeams(teamsData || [])
@@ -143,10 +146,10 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
     }
   }, [supabase])
 
+  useEffect(() => { loadContextData() }, [loadContextData])
   useEffect(() => {
-    loadAthletes()
-    loadContextData()
-  }, [loadAthletes, loadContextData])
+    if (selectedSeason) void loadAthletes(selectedSeason)
+  }, [loadAthletes, selectedSeason])
 
   // Filtra atleti in base al contesto
   const filteredAthletes = useMemo(() => {
@@ -187,9 +190,12 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       if (certificateFilter === 'attention' && certificateStatus === 'valid') return false
       if (certificateFilter !== 'all' && certificateFilter !== 'attention' && certificateStatus !== certificateFilter) return false
 
+      if (enrollmentApplicationFilter === 'delivered' && !athlete.enrollment_application_delivered) return false
+      if (enrollmentApplicationFilter === 'pending' && athlete.enrollment_application_delivered) return false
+
       return true
     })
-  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities, certificateFilter, teamsForSelectedSeason])
+  }, [athletes, selectedSeason, selectedActivity, selectedTeam, searchTerm, activities, certificateFilter, enrollmentApplicationFilter, teamsForSelectedSeason])
 
   // Gestione selezione multipla
   const toggleAthleteSelection = (athleteId: string) => {
@@ -239,7 +245,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       toast.success(result.message)
 
       // Ricarica i dati per aggiornare la UI
-      await loadAthletes()
+      await loadAthletes(selectedSeason)
 
       // Reset selezione
       setSelectedAthletes(new Set())
@@ -295,6 +301,36 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
     setShowBulkModal(true)
   }
 
+  const handleEnrollmentBulkConfirm = async () => {
+    if (enrollmentBulkDelivered === null || !selectedSeason) return
+    setBulkLoading(true)
+    try {
+      const response = await fetch('/api/admin/athletes/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'set_enrollment_application_delivered',
+          athleteIds: Array.from(selectedAthletes),
+          parameters: { seasonId: selectedSeason, delivered: enrollmentBulkDelivered },
+        }),
+      })
+      const result = await response.json()
+      if (!response.ok) {
+        toast.error(result.error || 'Impossibile aggiornare la domanda di iscrizione')
+        return
+      }
+      toast.success(result.message)
+      setSelectedAthletes(new Set())
+      setEnrollmentBulkDelivered(null)
+      await loadAthletes(selectedSeason)
+    } catch (error) {
+      console.error('Errore aggiornamento massivo domanda:', error)
+      toast.error('Errore durante l’aggiornamento della domanda di iscrizione')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
   const handleCreateAthlete = async (data: AthleteCreateData) => {
     setCreateSubmitting(true)
     try {
@@ -313,7 +349,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       toast.success(editingAthlete ? 'Atleta aggiornato' : 'Atleta creato nella stagione selezionata')
       setShowCreateModal(false)
       setEditingAthlete(null)
-      await loadAthletes()
+      await loadAthletes(selectedSeason)
     } catch (error) {
       console.error('Errore creazione atleta:', error)
       toast.error('Errore di rete')
@@ -337,6 +373,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       membership_number: athlete.membership_number || null,
       medical_certificate_expiry: athlete.medical_certificate_expiry || null,
       personal_notes: athlete.personal_notes || null,
+      enrollment_application_delivered: athlete.enrollment_application_delivered ?? false,
       team_ids: seasonTeams.map((team) => team.id),
       jersey_numbers: Object.fromEntries(seasonTeams.map((team) => [team.id, team.jersey_number == null ? null : Number(team.jersey_number)])),
     })
@@ -360,7 +397,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       return
     }
     toast.success('Iscrizione rimossa dalla stagione')
-    await loadAthletes()
+    await loadAthletes(selectedSeason)
   }
 
   if (loading) {
@@ -430,7 +467,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       <AthleteImportModal
         isOpen={showImportModal}
         seasons={seasons}
-        onComplete={() => { void loadAthletes() }}
+        onComplete={() => { if (selectedSeason) void loadAthletes(selectedSeason) }}
         onClose={() => setShowImportModal(false)}
       />
 
@@ -516,13 +553,13 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
       <section className="cs-card cs-card--primary p-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
-            <label className="cs-field__label">Stagione</label>
+            <label htmlFor="athlete-season-filter" className="cs-field__label">Stagione</label>
             <select
+              id="athlete-season-filter"
               value={selectedSeason}
               onChange={(e) => setSelectedSeason(e.target.value)}
               className="cs-select"
             >
-              <option value="all">Tutte le stagioni</option>
               {seasons.map(season => (
                 <option key={season.id} value={season.id}>
                   {season.name} {season.is_active && '(Attiva)'}
@@ -581,6 +618,20 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
           </div>
 
           <div>
+            <label htmlFor="enrollment-application-filter" className="cs-field__label">Domanda di iscrizione</label>
+            <select
+              id="enrollment-application-filter"
+              value={enrollmentApplicationFilter}
+              onChange={(event) => setEnrollmentApplicationFilter(event.target.value as 'all' | 'delivered' | 'pending')}
+              className="cs-select"
+            >
+              <option value="all">Tutte</option>
+              <option value="delivered">Consegnata</option>
+              <option value="pending">Da consegnare</option>
+            </select>
+          </div>
+
+          <div>
             <label className="cs-field__label">Cerca</label>
             <input
               type="text"
@@ -626,6 +677,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
                 <th className="p-4 text-left text-sm font-medium">Atleta</th>
                 <th className="p-4 text-left text-sm font-medium">Squadre</th>
                 <th className="p-4 text-left text-sm font-medium">Tessera</th>
+                <th className="p-4 text-left text-sm font-medium">Domanda</th>
                 <th className="p-4 text-left text-sm font-medium">Certificato</th>
                 <th className="p-4 text-left text-sm font-medium">Azioni</th>
               </tr>
@@ -662,6 +714,11 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
                     {athlete.membership_number || '-'}
                   </td>
                   <td className="p-4 text-sm">
+                    <span className={`cs-badge ${athlete.enrollment_application_delivered ? 'cs-badge--success' : 'cs-badge--warning'}`}>
+                      {athlete.enrollment_application_delivered ? 'Consegnata' : 'Da consegnare'}
+                    </span>
+                  </td>
+                  <td className="p-4 text-sm">
                     {athlete.medical_certificate_expiry
                       ? new Date(athlete.medical_certificate_expiry).toLocaleDateString('it-IT')
                       : '-'}
@@ -685,7 +742,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
                         email={athlete.email}
                         account={athlete.account ?? null}
                         role="athlete"
-                        onChanged={() => void loadAthletes()}
+                        onChanged={() => { if (selectedSeason) void loadAthletes(selectedSeason) }}
                       />
                     </span>
                   </td>
@@ -720,6 +777,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
                     </div>
                     <div><strong>Tessera:</strong> {athlete.membership_number || '-'}</div>
                     <div><strong>Certificato:</strong> {athlete.medical_certificate_expiry ? new Date(athlete.medical_certificate_expiry).toLocaleDateString('it-IT') : '-'}</div>
+                    <div><strong>Domanda:</strong> {athlete.enrollment_application_delivered ? 'Consegnata' : 'Da consegnare'}</div>
                   </div>
                 </div>
               </div>
@@ -733,7 +791,7 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
                   email={athlete.email}
                   account={athlete.account ?? null}
                   role="athlete"
-                  onChanged={() => void loadAthletes()}
+                  onChanged={() => { if (selectedSeason) void loadAthletes(selectedSeason) }}
                 />
               </div>
             </div>
@@ -751,6 +809,12 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
             </span>
             <button onClick={handleOpenBulkModal} disabled={bulkLoading} className="cs-btn cs-btn--primary cs-btn--sm disabled:opacity-50">
               {bulkLoading ? 'Caricamento...' : 'Operazioni Massive'}
+            </button>
+            <button onClick={() => setEnrollmentBulkDelivered(true)} disabled={bulkLoading} className="cs-btn cs-btn--outline cs-btn--sm disabled:opacity-50">
+              Segna consegnata
+            </button>
+            <button onClick={() => setEnrollmentBulkDelivered(false)} disabled={bulkLoading} className="cs-btn cs-btn--outline cs-btn--sm disabled:opacity-50">
+              Segna non consegnata
             </button>
           </div>
         </div>
@@ -780,6 +844,15 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
         teams={selectableTeams}
         loading={bulkLoading}
         userType="athletes"
+      />
+      <EnrollmentApplicationBulkModal
+        isOpen={enrollmentBulkDelivered !== null}
+        delivered={enrollmentBulkDelivered}
+        isSubmitting={bulkLoading}
+        onClose={() => setEnrollmentBulkDelivered(null)}
+        onConfirm={() => void handleEnrollmentBulkConfirm()}
+        selectedCount={selectedAthletes.size}
+        seasonName={seasons.find((season) => season.id === selectedSeason)?.name || 'stagione selezionata'}
       />
     </div>
   )

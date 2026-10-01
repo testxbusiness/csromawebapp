@@ -24,6 +24,11 @@ interface MedicalExpiryParameters {
   expiryDate: string
 }
 
+interface EnrollmentApplicationParameters {
+  seasonId: string
+  delivered: boolean
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -48,6 +53,9 @@ export async function POST(request: NextRequest) {
       case 'update_medical_expiry':
         return await handleMedicalExpiryUpdate(adminClient, athleteIds, parameters, dryRun)
 
+      case 'set_enrollment_application_delivered':
+        return await handleEnrollmentApplicationUpdate(adminClient, athleteIds, parameters, dryRun)
+
       default:
         return NextResponse.json({ error: 'Operazione non supportata' }, { status: 400 })
     }
@@ -58,6 +66,46 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
+}
+
+async function handleEnrollmentApplicationUpdate(
+  adminClient: ReturnType<typeof createAdminClient>,
+  athleteIds: string[],
+  parameters: EnrollmentApplicationParameters,
+  dryRun: boolean
+) {
+  const { seasonId, delivered } = parameters
+
+  const { data: season } = await adminClient.from('seasons').select('id, name').eq('id', seasonId).maybeSingle()
+  if (!season) return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
+
+  const stateLabel = delivered ? 'consegnata' : 'non consegnata'
+  if (dryRun) {
+    return NextResponse.json({
+      message: `DRY RUN: ${athleteIds.length} atleti verrebbero segnati con domanda ${stateLabel} per ${season.name}`,
+      operation: 'set_enrollment_application_delivered',
+      affected: athleteIds.length,
+      seasonId,
+      delivered,
+    })
+  }
+
+  const { data: affected, error } = await adminClient.rpc('set_athlete_enrollment_application_delivered_atomically', {
+    p_season_id: seasonId,
+    p_athlete_ids: athleteIds,
+    p_delivered: delivered,
+  })
+  if (error) {
+    return NextResponse.json({ error: 'La selezione contiene atleti non iscritti alla stagione selezionata' }, { status: 400 })
+  }
+
+  return NextResponse.json({
+    message: `${affected ?? athleteIds.length} atleti segnati con domanda ${stateLabel} per ${season.name}`,
+    operation: 'set_enrollment_application_delivered',
+    affected: affected ?? athleteIds.length,
+    seasonId,
+    delivered,
+  })
 }
 
 // Funzioni helper per operazioni massive

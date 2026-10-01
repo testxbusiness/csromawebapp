@@ -43,6 +43,7 @@ export type AthleteCreatePayload = z.infer<typeof athleteCreateSchema>
 export const athleteUpdateSchema = athleteCreateSchema.partial().extend({
   id: z.string().uuid('Atleta non valido'),
   season_id: z.string().uuid('Stagione non valida'),
+  enrollment_application_delivered: z.boolean().optional(),
 }).strict()
 
 const optionalNullableImportText = (max: number) =>
