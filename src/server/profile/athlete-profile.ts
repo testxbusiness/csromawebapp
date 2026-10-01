@@ -1,6 +1,7 @@
 import type { AccountContext } from '@/server/auth/require-account-context'
 import type { SubjectPermissions } from '@/server/auth/require-subject-profile'
 import type { AthleteProfileContract, MedicalStatus } from '@/types/athlete-profile'
+import { getCertificateStatus } from '@/lib/athlete/certificate-status'
 
 type RawProfile = {
   id: string
@@ -22,16 +23,6 @@ type RawTeam = { id: string; name: string; code: string; activity_id: string }
 type RawActivity = { id: string; name: string }
 type RawDocument = { id: string; title: string; status: string; file_name?: string | null; created_at?: string | null }
 
-function medicalStatus(expiry: string | null, now: Date): MedicalStatus {
-  if (!expiry) return 'missing'
-  const today = new Date(`${now.toISOString().slice(0, 10)}T00:00:00Z`)
-  const expiryDate = new Date(`${expiry}T00:00:00Z`)
-  if (expiryDate < today) return 'expired'
-  const expiringAt = new Date(today)
-  expiringAt.setUTCDate(expiringAt.getUTCDate() + 30)
-  return expiryDate <= expiringAt ? 'expiring' : 'valid'
-}
-
 export type AthleteProfileBuildInput = {
   account: AccountContext
   subject: { profileId: string; delegated: boolean; permissions: SubjectPermissions }
@@ -50,7 +41,7 @@ export function buildAthleteProfileContract(input: AthleteProfileBuildInput): At
   const expiry = athleteProfile?.medical_certificate_expiry ?? null
   const medical: AthleteProfileContract['athlete']['medical'] = canViewMedicalStatus
     ? {
-        status: medicalStatus(expiry, input.now ?? new Date()),
+        status: getCertificateStatus(expiry, input.now ?? new Date()) as MedicalStatus,
         // A delegated relationship grants the medical status, not the detailed date.
         expires_at: subject.delegated ? null : expiry,
       }
