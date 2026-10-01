@@ -149,7 +149,7 @@ export async function notifyMessageRecipients({
     title: 'Nuovo messaggio',
     body: subject,
     url,
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
+    icon: '/icons/icon-192-v2.png',
+    badge: '/icons/icon-192-v2.png',
   })))
 }

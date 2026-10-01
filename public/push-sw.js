@@ -25,8 +25,8 @@ self.addEventListener('push', (event) => {
     const title = data.title || 'CSRoma'
     const options = {
       body: data.body || '',
-      icon: data.icon || '/icons/icon-192.png',
-      badge: data.badge || '/icons/icon-192.png',
+      icon: data.icon || '/icons/icon-192-v2.png',
+      badge: data.badge || '/icons/icon-192-v2.png',
       data: { url: safeNotificationUrl(data.url) },
     }
     event.waitUntil(self.registration.showNotification(title, options))
