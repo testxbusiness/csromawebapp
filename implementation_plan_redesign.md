@@ -282,6 +282,10 @@ Per un goal `[x]` aggiungere sempre:
 | G12.8f Cataloghi modal eventi admin per stagione | [x] | G12.8e | Completato il 21/09/2026; `/admin/calendar` ora ricarica squadre, attività e palestre in base alla stagione selezionata, con default sulla stagione attiva e pulizia immediata delle opzioni precedenti durante il cambio filtro. Il modal di creazione/modifica non propone più squadre della stagione storica; lo storico del calendario resta consultabile selezionando esplicitamente la stagione. Coach invariato perché già usa il catalogo autorizzato della stagione attiva. Test API/calendario 8/8, typecheck, build e diff check superati. |
 | G12.8g Rollover stagionale riutilizzabile | [x] | G12.7,G12.8 | Completato il 24/09/2026: source attiva e target inattiva futura sono risolti dal catalogo, target selezionabile, etichette/date dinamiche, creazione bozza generica e suffisso squadra derivato dalla target. Regressioni 2026/2027 → 2027/2028, typecheck, test mirati, lint, build e diff check superati. Verifica staging successiva: eliminata con cleanup transazionale la sola bozza test `2027/2028` (1 palestra, 1 attività, 3 squadre, 2 mapping strutture e 3 mapping squadre), dopo controlli con zero dati operativi, profili o audit; `2025/2026` è rimasta inattiva e `2026/2027` attiva. |
 | G12.9 Dry-run, esecuzione 2026/2027 e gate | [-] | G12.1–G12.8g | Backup ed evidenze DB completati; migration produzione applicata e verificata. Rollover, attivazione e gate finale restano da eseguire separatamente. |
+| G13.1 Contratto amministrativo stagionale atleta | [ ] | G12.8 | Nuovo: stato domanda di iscrizione per atleta/stagione, contratto unico per certificato e riepilogo quote, con autorizzazioni per sezione. |
+| G13.2 Gestione admin domanda di iscrizione | [ ] | G13.1 | Nuovo: stato individuale e massivo nel catalogo Atleti, contestuale alla stagione selezionata. |
+| G13.3 Pagina atleta “Amministrazione” | [ ] | G13.1,G13.2 | Nuovo: riunisce Domanda di iscrizione, Certificato medico e Quote associative preservando route e permessi. |
+| G13.4 Alert amministrativi in Oggi | [ ] | G13.3 | Nuovo: al massimo due alert, certificato e quote, visibili solo quando richiedono attenzione. |
 
 ---
 
@@ -8212,7 +8216,245 @@ integrale della 2025/2026. Modificato solo
 `implementation_plan_redesign.md`; nessuna migration, mutation DB o creazione
 stagione eseguita durante la pianificazione.
 
-# 23. Criterio finale di successo
+# 23. Fase 13 — Amministrazione atleta e alert di regolarità
+
+## 23.1 Obiettivo e decisioni di prodotto
+
+L'area atleta attualmente denominata **Quote associative** diventa
+**Amministrazione**. Riunisce, in questo preciso ordine visivo:
+
+1. **Domanda di iscrizione**;
+2. **Certificato medico**;
+3. **Quote associative**.
+
+L'atleta e il familiare consultano soltanto lo stato. L'admin resta l'unico
+ruolo che registra un pagamento, inserisce/aggiorna la scadenza del certificato
+o segna una domanda come consegnata. La UI atleta non deve presentare azioni
+come pagamento, caricamento certificato o consegna della domanda quando tali
+flussi non esistono.
+
+La domanda di iscrizione è una condizione dell'atleta **nella singola
+stagione**, non dell'anagrafica permanente e non della squadra: un atleta in
+più squadre della stessa stagione possiede un solo stato. Il suo valore iniziale
+è `non consegnata`; un nuovo `season_profiles` creato dal rollover deve quindi
+partire da `false`, senza copiare il valore della stagione source.
+
+La Home “Oggi” mantiene al massimo due alert amministrativi:
+
+| Area | Stato che genera l'alert | Copy Home | Destinazione `Dettagli` |
+|---|---|---|---|
+| Certificato medico | `missing` | Certificato medico da consegnare | Amministrazione, sezione Certificato medico |
+| Certificato medico | `expired` | Certificato medico scaduto | Amministrazione, sezione Certificato medico |
+| Certificato medico | `expiring` | Certificato medico in scadenza | Amministrazione, sezione Certificato medico |
+| Quote associative | almeno una rata `overdue` | Quota associativa scaduta | Amministrazione, sezione Quote associative |
+| Quote associative | nessuna rata `overdue` e almeno una `due_soon` | Quota associativa in scadenza | Amministrazione, sezione Quote associative |
+
+Gli alert non mostrano countdown, importi, nomi delle rate o date. Il dettaglio
+resta nella sezione di destinazione. Gli stati `valid` del certificato e le
+quote prive di rate `overdue`/`due_soon` non producono card, badge o messaggi
+positivi nella Home. La domanda di iscrizione è visibile in Amministrazione e
+non genera un terzo alert in Home.
+
+Il certificato usa gli stessi quattro stati ovunque: `missing`, `expired`,
+`expiring`, `valid`, con soglia di 30 giorni e data di scadenza valida fino alla
+fine del proprio giorno locale. Il riepilogo quote riusa il calcolo già
+autorevole di `buildAthleteFeesContract`; non introduce una seconda definizione
+di rata scaduta o in scadenza.
+
+Per il profilo delegato, le tre sezioni restano indipendenti:
+
+- quote solo con `view_payments`;
+- certificato solo con `view_medical_status`;
+- domanda di iscrizione solo con `view_documents`.
+
+La data esatta del certificato rimane nascosta al delegato, anche con
+`view_medical_status`, come previsto dal contratto attuale. La voce di
+navigazione familiare “Amministrazione” deve essere disponibile quando almeno
+una delle tre sezioni è autorizzata; la pagina mostra soltanto quelle
+autorizzate. L'account atleta personale conserva l'accesso ai propri dati
+secondo le regole di autorizzazione esistenti.
+
+La route storica `/athlete/fees` resta valida per bookmark, deep link e push.
+La pagina e le voci di navigazione assumono il nome “Amministrazione”. I link
+dagli alert possono usare un parametro di sezione stabile, per esempio
+`/athlete/fees?section=certificate`, senza duplicare pagine o route.
+
+## G13.1 — Contratto amministrativo stagionale atleta
+
+**Obiettivo:** aggiungere lo stato stagionale della domanda e rendere univoci i
+contratti read-only di certificato, quote e autorizzazioni necessari alla nuova
+area e agli alert.
+
+**Task:**
+
+- Aggiungere a `season_profiles` la colonna booleana
+  `enrollment_application_delivered`, `NOT NULL DEFAULT false`, con migration
+  versionata, commento esplicativo e RLS invariata. La migration deve lasciare
+  tutte le righe storiche a `false` come richiesto.
+- Verificare ogni inserimento/upsert di `season_profiles`, incluso il batch di
+  rollover: la nuova riga target deve usare il default e non copiare il flag
+  source. Nessun profilo, account, relazione o team deve essere duplicato.
+- Estrarre o consolidare un classificatore certificato condiviso, così admin,
+  profilo atleta, Amministrazione e Home hanno la medesima semantica su data
+  mancante, giorno di scadenza, soglia 30 giorni e data valida.
+- Definire un contratto server-side read-only per l'area Amministrazione. Ogni
+  sezione deve essere esposta e autorizzata separatamente: domanda con
+  `view_documents`, certificato con `view_medical_status`, quote con
+  `view_payments`. Non affidare al client la decisione di mostrare dati non
+  autorizzati.
+- Riutilizzare il contratto quote esistente per il suo riepilogo di attenzione;
+  non introdurre query o soglie divergenti. Per delega, il contratto del
+  certificato può restituire lo stato ma non la data precisa.
+
+**Acceptance:** per la stagione attiva un atleta possiede un solo flag domanda;
+una nuova relazione atleta-stagione parte sempre `false`; gli stati certificato
+sono identici nei consumatori; un familiare con uno solo dei tre permessi riceve
+solo quella sezione e nessun campo delle altre. Il contratto non muta dati.
+
+**Verifiche:** migration applicata su database locale canonico e fixture
+rollback; test del rollover che prova il default target; test unitari sul
+classificatore alle soglie; test servizio/Route Handler per atleta personale e
+per ciascuna combinazione delegata rilevante; `npx tsc --noEmit`, Jest mirato,
+`npm run build` e `git diff --check`.
+
+## G13.2 — Gestione admin domanda di iscrizione
+
+**Obiettivo:** consentire all'admin di registrare lo stato della domanda per
+singolo atleta o selezione massiva, sempre nella stagione scelta.
+
+**Task:**
+
+- Estendere il catalogo Atleti e il suo contratto admin con il flag della
+  domanda relativo alla stagione selezionata, senza derivarlo da altra
+  stagione, da una squadra o da `athlete_profiles`.
+- Aggiungere nel dettaglio/modifica atleta un controllo accessibile sì/no con
+  label “Domanda di iscrizione consegnata”. Il valore assente in una nuova
+  relazione equivale a `false` solo a livello di compatibilità della migration;
+  dopo il deploy il contratto espone sempre un booleano.
+- Aggiungere filtro `Tutte` / `Consegnata` / `Da consegnare`, colonna di stato
+  e due operazioni bulk esplicite: “Segna consegnata” e “Segna non consegnata”.
+  Entrambe mostrano prima il numero di atleti e la stagione coinvolti.
+- Validare lato server ruolo admin, selezione non vuota, ID atleta univoci e
+  appartenenza di ogni riga alla stagione selezionata. Le mutation bulk devono
+  essere atomiche: un ID fuori perimetro non produce aggiornamenti parziali.
+- Non introdurre upload, firma, pagamento, notifiche o automazioni.
+
+**Acceptance:** un admin può modificare un atleta o una selezione della
+stagione attiva o storica autorizzata; il flag resta isolato tra stagioni; le
+azioni bulk non aggiornano atleti esterni alla selezione o alla stagione. Un
+nuovo atleta stagionale appare “Da consegnare”.
+
+**Verifiche:** test Route Handler di autorizzazione, validazione e atomicità;
+test manager per filtro, singolo toggle, bulk `true` e bulk `false`; test di
+regressione su due stagioni dello stesso atleta; `npx tsc --noEmit`, Jest
+mirato, `npm run build` e `git diff --check`.
+
+## G13.3 — Pagina atleta “Amministrazione”
+
+**Obiettivo:** trasformare la pagina oggi chiamata Quote associative nella
+pagina informativa amministrativa dell'atleta e del familiare.
+
+**Task:**
+
+- Conservare la route `/athlete/fees` e rinominare titoli, sidebar, navigazione
+  familiare e ogni label utente in “Amministrazione”. Preservare la posizione
+  attuale nell'area Altro/mobile, deep link e active state.
+- Comporre le sezioni nell'ordine stabilito: Domanda di iscrizione, Certificato
+  medico, Quote associative. Ogni sezione mantiene i propri loading, errore,
+  offline, empty e denied state senza bloccare le sezioni permesse rimanenti.
+- Domanda: mostrare esclusivamente “Consegnata” o “Da consegnare”. Certificato:
+  mostrare stato e, per il solo atleta personale, la data quando disponibile.
+  Quote: mantenere registro, gruppi, filtri e dati economici già esistenti.
+- Rimuovere dal Profilo la card di consultazione del certificato una volta che
+  la sezione Amministrazione è disponibile; il Profilo mantiene identità,
+  tesseramento, squadre, documenti e preferenze account.
+- Adeguare la navigazione familiare al criterio “almeno un permesso” e verificare
+  che una pagina Amministrazione con accesso parziale non riveli titoli, stati,
+  date o rate delle sezioni negate.
+- Supportare `section=certificate` e `section=fees` come focus/ancora
+  accessibile dei link Home, ignorando valori sconosciuti senza side effect.
+
+**Acceptance:** per l'atleta personale la pagina visualizza tre sezioni nel
+nuovo ordine; un familiare vede solo le sezioni autorizzate; gli URL precedenti
+continuano a funzionare; nessuna visualizzazione invita l'utente a compiere
+azioni riservate all'admin.
+
+**Verifiche:** test UI su tutte le sezioni, focus da query string e stati
+loading/error/offline; matrice atleta/famiglia con permessi indipendenti; test
+navigazione desktop/mobile e regressione deep link `/athlete/fees`; `npx tsc
+--noEmit`, Jest mirato, `npm run build` e `git diff --check`.
+
+## G13.4 — Alert amministrativi in Oggi
+
+**Obiettivo:** rendere visibili in Home solo gli stati amministrativi che
+richiedono attenzione, senza allontanare il focus dal prossimo impegno.
+
+**Task:**
+
+- Estendere il contratto della dashboard tramite il solo servizio server-side
+  autorizzato, esponendo un massimo di due alert indipendenti: certificato e
+  quote. Non fare una seconda fetch client per ricostruire lo stato.
+- Certificato: usare il classificatore G13.1 e mostrare l'alert solo per
+  `missing`, `expired` o `expiring`. Quote: usare gli stati esistenti delle
+  rate, con precedenza `overdue`, altrimenti `due_soon`; `partially_paid` resta
+  consultabile nella pagina Amministrazione e non crea un terzo caso Home.
+- Usare copy e livelli visivi definiti in 23.1: rosso per certificato o rata
+  scaduti, ambra per stati in scadenza. La Home non mostra giorni residui,
+  date, importi, rate, badge “tutto regolare” o alert domanda di iscrizione.
+- Ogni alert ha il solo link `Dettagli`, che porta alla sezione pertinente di
+  Amministrazione. Il link deve preservare il `subjectProfileId` quando il
+  contesto è familiare e il server deve rieseguire l'autorizzazione nella pagina
+  di arrivo.
+- Limitare i cambiamenti alla dashboard atleta/famiglia; nessun alert analogo è
+  aggiunto a coach o admin in questo goal.
+
+**Acceptance:** Home priva di alert quando certificato e rate sono regolari;
+certificato e quote possono comparire insieme, per un massimo di due card; il
+familiare non riceve alert di una sezione negata; ogni `Dettagli` raggiunge la
+sezione giusta senza leakage di contesto o dati.
+
+**Verifiche:** test contratto dashboard per tutti gli stati certificato, le
+precedenze rate e l'assenza di alert; test componente per massimo due card,
+copy, link e cambio subject; test Route Handler sui permessi; `npx tsc
+--noEmit`, Jest mirato, `npm run build` e `git diff --check`.
+
+## Prompt da assegnare a Terra Medio
+
+Usare un'esecuzione separata per ciascun goal G13.1–G13.4, nell'ordine
+indicato. Non assegnare la fase completa in un singolo prompt e non avviare
+G12.9 durante questi task.
+
+```text
+Esegui esclusivamente il goal G13.X della sezione “Fase 13 — Amministrazione
+atleta e alert di regolarità” in implementation_plan_redesign.md.
+
+Leggi AGENTS.md, re_design.md, la sezione 23 completa e il goal indicato.
+Controlla stato Git, contratti esistenti e migration Supabase prima di
+modificare codice. Non rifare goal chiusi e non iniziare goal successivi.
+
+Mantieni Next.js App Router, TypeScript strict, autorizzazione server-side e
+le route esistenti. La domanda di iscrizione è per atleta e stagione, con
+default false; non duplicare dati tra stagioni e non copiare il suo valore nel
+rollover. Quote, certificato e domanda sono autorizzati separatamente nel
+contesto familiare. Non introdurre flussi di pagamento, upload, firma o
+notifiche non esistenti.
+
+Esegui soltanto le verifiche indicate dal goal, documenta con precisione quelle
+non eseguibili e aggiorna il registro di avanzamento con file, test e note.
+Fermati alla fine del solo G13.X: non creare branch, non fare deploy, non
+eseguire rollout o attivazione stagione e non modificare staging/produzione.
+```
+
+Sostituire soltanto `G13.X` con il goal assegnato. La pianificazione non
+costituisce autorizzazione a eseguire i goal.
+
+**Registro pianificazione — 01/10/2026:** aggiunta la Fase 13 G13.1–G13.4 per
+lo stato stagionale della domanda di iscrizione, la gestione admin individuale
+e massiva, la pagina atleta “Amministrazione” e i due alert Home concordati.
+Modificato solo `implementation_plan_redesign.md`; nessuna migration, codice,
+mutation DB, branch, deploy o rollout è stato eseguito.
+
+# 24. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
 
