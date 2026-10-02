@@ -7,7 +7,7 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import MessageDetailModal, { type MessageReadState } from '@/components/shared/MessageDetailModal'
 import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
-import { EventKindBadge, FeedbackState, ListRow, LoadingState, Panel, StatusBadge } from '@/components/ui'
+import { Alert, EventKindBadge, FeedbackState, ListRow, LoadingState, Panel, StatusBadge } from '@/components/ui'
 import AttendanceControl from './AttendanceControl'
 import { MessagePreviewRow } from './MessagePreviewRow'
 import { MembershipRow } from './MembershipRow'
@@ -18,6 +18,7 @@ import { useTeamContext } from '@/context/TeamContext'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { useAuth } from '@/hooks/useAuth'
 import type { AttendanceAvailabilityContract } from '@/types/attendance'
+import type { AthleteDashboardAdministrativeAlert } from '@/types/athlete-dashboard'
 
 interface User {
   id: string
@@ -217,6 +218,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
   const [unreadMessageCount, setUnreadMessageCount] = useState<number | null>(null)
   const [feeInstallments, setFeeInstallments] = useState<FeeInstallment[]>([])
+  const [administrativeAlerts, setAdministrativeAlerts] = useState<AthleteDashboardAdministrativeAlert[]>([])
   const [nextChampionshipMatch, setNextChampionshipMatch] = useState<ChampionshipMatch | null>(null)
   const [dashboardStatus, setDashboardStatus] = useState<DashboardStatus>('loading')
   const [dashboardError, setDashboardError] = useState<string | null>(null)
@@ -250,6 +252,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setUnreadMessages([])
       setUnreadMessageCount(null)
       setFeeInstallments([])
+      setAdministrativeAlerts([])
       setNextChampionshipMatch(null)
       setSelectedEvent(null)
       setSelectedMessage(null)
@@ -386,6 +389,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setUnreadMessages([])
       setUnreadMessageCount(null)
       setFeeInstallments([])
+      setAdministrativeAlerts([])
       resetTeam()
     }
 
@@ -393,6 +397,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     const canAccessDelegatedDashboard = Boolean(
       delegatedPermissions?.view_schedule ||
       delegatedPermissions?.view_payments ||
+      delegatedPermissions?.view_medical_status ||
       delegatedPermissions?.receive_messages
     )
     if (accountRole === 'family_member' && (!selectedProfile || !canAccessDelegatedDashboard)) {
@@ -442,6 +447,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setUnreadMessages(result.unreadMessages || [])
       setUnreadMessageCount(typeof result.unreadMessageCount === 'number' ? result.unreadMessageCount : null)
       setFeeInstallments(result.feeInstallments || [])
+      setAdministrativeAlerts(Array.isArray(result.administrativeAlerts) ? result.administrativeAlerts.slice(0, 2) : [])
       setTeams((result.teams || []).map((team: { id: string; name: string; code?: string; activity?: { name?: string } | null }) => ({
         id: team.id,
         name: team.name,
@@ -1016,6 +1022,14 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       </div>
 
       <div className="cs-athlete-dashboard__services">
+      {administrativeAlerts.map((alert) => (
+        <Alert key={alert.area} variant={alert.tone} className="flex items-center justify-between gap-3">
+          <p className="font-medium">{alert.message}</p>
+          <Link href={appendSubjectProfile(alert.href, selectedProfileId)} className="cs-btn cs-btn--ghost cs-btn--sm shrink-0">
+            Dettagli
+          </Link>
+        </Alert>
+      ))}
       {canReceiveMessages && (
         <Panel id="athlete-messages" className="cs-athlete-dashboard__service-panel space-y-3">
           <SectionHeading title={`Messaggi non letti (${messageTitleCount})`} href="/athlete/messages" />

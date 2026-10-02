@@ -1,7 +1,10 @@
 import type {
+  AthleteDashboardAdministrativeAlert,
   AthleteDashboardContract,
   AthleteDashboardTeam,
 } from '@/types/athlete-dashboard'
+import type { AthleteFeesContract } from '@/types/athlete-fees'
+import type { CertificateStatus } from '@/lib/athlete/certificate-status'
 
 type RawTeam = {
   id: string
@@ -141,6 +144,46 @@ export function buildDashboardFees(
       },
     }]
   })
+}
+
+/**
+ * Produces the deliberately small Home summary from the already-authorized
+ * administration data. No enrollment-application state belongs on Home.
+ */
+export function buildDashboardAdministrativeAlerts(input: {
+  certificateStatus: CertificateStatus | null
+  fees: AthleteFeesContract | null
+}): AthleteDashboardAdministrativeAlert[] {
+  const alerts: AthleteDashboardAdministrativeAlert[] = []
+
+  if (input.certificateStatus && input.certificateStatus !== 'valid') {
+    alerts.push({
+      area: 'certificate',
+      tone: input.certificateStatus === 'expiring' ? 'warning' : 'danger',
+      message: input.certificateStatus === 'missing'
+        ? 'Certificato medico da consegnare'
+        : input.certificateStatus === 'expired'
+          ? 'Certificato medico scaduto'
+          : 'Certificato medico in scadenza',
+      href: '/athlete/fees?section=certificate',
+    })
+  }
+
+  const feeStatus = input.fees?.installments.some((installment) => installment.status === 'overdue')
+    ? 'overdue'
+    : input.fees?.installments.some((installment) => installment.status === 'due_soon')
+      ? 'due_soon'
+      : null
+  if (feeStatus) {
+    alerts.push({
+      area: 'fees',
+      tone: feeStatus === 'overdue' ? 'danger' : 'warning',
+      message: feeStatus === 'overdue' ? 'Quota associativa scaduta' : 'Quota associativa in scadenza',
+      href: '/athlete/fees?section=fees',
+    })
+  }
+
+  return alerts
 }
 
 export function buildUnreadMessages(

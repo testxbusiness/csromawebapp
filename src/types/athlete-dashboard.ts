@@ -11,6 +11,13 @@ export interface AthleteDashboardEventTeam extends AthleteDashboardTeam {}
 
 export interface AthleteDashboardMessageTeam extends AthleteDashboardTeam {}
 
+export type AthleteDashboardAdministrativeAlert = {
+  area: 'certificate' | 'fees'
+  tone: 'danger' | 'warning'
+  message: string
+  href: '/athlete/fees?section=certificate' | '/athlete/fees?section=fees'
+}
+
 export interface AthleteDashboardContract {
   teamMemberships: unknown[]
   upcomingEvents: unknown[]
@@ -23,4 +30,6 @@ export interface AthleteDashboardContract {
   unreadMessageCount: number
   /** Additive next-RSVP contract; legacy dashboard consumers can ignore it. */
   attendance_availability?: AttendanceAvailabilityContract | null
+  /** At most one alert per authorized administrative area. */
+  administrativeAlerts?: AthleteDashboardAdministrativeAlert[]
 }

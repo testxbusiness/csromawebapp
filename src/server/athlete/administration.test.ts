@@ -1,4 +1,4 @@
-import { buildAthleteAdministrationContract, loadAthleteAdministrationContract } from './administration'
+import { buildAthleteAdministrationContract, loadAthleteAdministrationContract, loadAthleteDashboardAdministrativeAlerts } from './administration'
 import { loadAthleteFeesContract } from './fees'
 import type { SubjectAthleteContext, SubjectPermissions } from '@/server/auth/require-subject-profile'
 
@@ -101,5 +101,27 @@ describe('athlete administration service', () => {
     })
     expect(feesMock).toHaveBeenCalledWith(subject.dataClient, 'subject-1', ['team-1'])
     expect(subject.dataClient.from).not.toHaveBeenCalled()
+  })
+
+  it('builds Home alerts from only the independently authorized certificate and fee sections', async () => {
+    const subject = subjectFor({ view_medical_status: true, view_payments: true }, {
+      athlete_profiles: { medical_certificate_expiry: null },
+    })
+    feesMock.mockResolvedValue({ installments: [{ id: 'late', status: 'overdue' }] } as never)
+
+    await expect(loadAthleteDashboardAdministrativeAlerts(subject)).resolves.toEqual([
+      { area: 'certificate', tone: 'danger', message: 'Certificato medico da consegnare', href: '/athlete/fees?section=certificate' },
+      { area: 'fees', tone: 'danger', message: 'Quota associativa scaduta', href: '/athlete/fees?section=fees' },
+    ])
+    expect((subject.dataClient.from as jest.Mock).mock.calls.map(([table]) => table)).toEqual(['athlete_profiles'])
+    expect(feesMock).toHaveBeenCalledWith(subject.dataClient, 'subject-1', ['team-1'])
+  })
+
+  it('does not query or disclose administrative alert data when both permissions are denied', async () => {
+    const subject = subjectFor({}, {})
+
+    await expect(loadAthleteDashboardAdministrativeAlerts(subject)).resolves.toEqual([])
+    expect(subject.dataClient.from).not.toHaveBeenCalled()
+    expect(feesMock).not.toHaveBeenCalled()
   })
 })

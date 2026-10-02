@@ -13,6 +13,7 @@ export { Badge } from './Badge'
 export { EventKindBadge } from './EventKindBadge'
 export { StatusBadge } from './StatusBadge'
 export type { AttendanceStatus, StatusBadgeStatus } from './StatusBadge'
+export { Alert } from './Alert'
 export { 
   Dialog,
   DialogTrigger,
