@@ -57,6 +57,18 @@ describe('AthleteFeesManager', () => {
     expect(screen.getByText('Nessuna rata per questo filtro')).toBeTruthy()
   })
 
+  it('provides a compact rate-status selector for mobile layouts', async () => {
+    render(<AthleteFeesManager />)
+    await waitFor(() => expect(screen.getByText('Situazione economica')).toBeTruthy())
+
+    const select = screen.getByLabelText('Filtra rate')
+    expect(select).toHaveValue('all')
+    fireEvent.change(select, { target: { value: 'paid' } })
+    expect(select).toHaveValue('paid')
+    expect(screen.getByText('U18')).toBeTruthy()
+    expect(screen.queryByText('U16')).toBeNull()
+  })
+
   it('renders an honest empty state when the authorized athlete has no fees', async () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ installments: [] }) }) as jest.Mock
     render(<AthleteFeesManager />)

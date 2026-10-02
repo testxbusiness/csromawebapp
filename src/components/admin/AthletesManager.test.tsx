@@ -88,9 +88,10 @@ describe('AthletesManager enrollment application controls', () => {
       target: { value: 'set_enrollment_application_delivered' },
     })
 
-    expect(screen.getByRole('dialog', { name: 'Operazione Massiva - 1 atleti selezionati' })).toHaveTextContent('domanda come consegnata per 1 atleta nella stagione Stagione 2026/2027')
+    expect(screen.getByRole('dialog', { name: 'Operazione Massiva - 1 atleti selezionati' })).toHaveTextContent('domanda di iscrizione sarà segnata come consegnata per 1 atleta nella stagione Stagione 2026/2027')
+    expect(screen.queryByText(/Eventuali correzioni/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Segna non consegnata')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Conferma Operazione' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Conferma domanda' }))
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/admin/athletes/bulk', expect.objectContaining({ method: 'POST' })))
     const bulkCall = (global.fetch as jest.Mock).mock.calls.find((call) => call[0] === '/api/admin/athletes/bulk')

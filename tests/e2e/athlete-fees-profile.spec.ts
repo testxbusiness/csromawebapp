@@ -81,15 +81,22 @@ test.describe('athlete Amministrazione e Profilo responsive smoke', () => {
       await expect(page.getByRole('heading', { name: 'Certificato medico' })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByRole('heading', { name: 'Situazione economica' })).toBeVisible({ timeout: 30_000 })
 
-      const filterGroup = page.getByRole('group', { name: 'Filtra quote' })
-      await expect(filterGroup).toBeVisible()
-      await expectTouchTargets(filterGroup.getByRole('button'))
+      if (viewport.width < 640) {
+        const mobileFilter = page.getByLabel('Filtra rate')
+        await expect(mobileFilter).toBeVisible()
+        await mobileFilter.selectOption('pending')
+        await expect(mobileFilter).toHaveValue('pending')
+      } else {
+        const filterGroup = page.getByRole('group', { name: 'Filtra quote' })
+        await expect(filterGroup).toBeVisible()
+        await expectTouchTargets(filterGroup.getByRole('button'))
 
-      const pendingFilter = filterGroup.getByRole('button', { name: /Da pagare/ })
-      await pendingFilter.focus()
-      await expect(pendingFilter).toBeFocused()
-      await page.keyboard.press('Space')
-      await expect(pendingFilter).toHaveAttribute('aria-pressed', 'true')
+        const pendingFilter = filterGroup.getByRole('button', { name: /Da pagare/ })
+        await pendingFilter.focus()
+        await expect(pendingFilter).toBeFocused()
+        await page.keyboard.press('Space')
+        await expect(pendingFilter).toHaveAttribute('aria-pressed', 'true')
+      }
       await expectNoHorizontalOverflow(page)
     }
   })

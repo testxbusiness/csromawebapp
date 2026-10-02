@@ -63,7 +63,13 @@ export function AthleteFeesContent({ installments, sectionId }: { installments: 
         </div>
       </Panel>
 
-      <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtra quote">
+      <div className="sm:hidden">
+        <label className="sr-only" htmlFor="fees-filter">Filtra rate</label>
+        <select id="fees-filter" value={filter} onChange={(event) => setFilter(event.target.value as FeeFilter)} className="cs-select min-h-11 w-full">
+          {FILTERS.map(({ value, label }) => <option key={value} value={value}>{label} ({filterCount(value)})</option>)}
+        </select>
+      </div>
+      <div className="hidden gap-2 overflow-x-auto pb-1 sm:flex" role="group" aria-label="Filtra quote">
         {FILTERS.map(({ value, label }) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`cs-btn cs-btn--sm min-h-11 shrink-0 ${filter === value ? 'cs-btn--warm' : 'cs-btn--outline'}`}>{label} <span className="ml-1 tabular-nums">{filterCount(value)}</span></button>)}
       </div>
 

@@ -234,9 +234,8 @@ export default function BulkOperationsModal({
 
       case 'set_enrollment_application_delivered':
         return (
-          <div className="cs-alert cs-alert--neutral text-sm">
-            Segnerai la domanda come <strong>consegnata</strong> per <strong>{selectedCount}</strong> atlet{selectedCount === 1 ? 'a' : 'i'} nella stagione <strong>{enrollmentApplicationSeasonName}</strong>.
-            Eventuali correzioni sono disponibili nella modifica del singolo atleta.
+          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] bg-[color:var(--cs-surface-muted)] p-4 text-sm text-[color:var(--cs-text)]">
+            La domanda di iscrizione sarà segnata come <strong>consegnata</strong> per <strong>{selectedCount}</strong> atlet{selectedCount === 1 ? 'a' : 'i'} nella stagione <strong>{enrollmentApplicationSeasonName}</strong>.
           </div>
         )
 
@@ -275,7 +274,7 @@ export default function BulkOperationsModal({
         disabled={!selectedOperation || loading}
         className="cs-btn cs-btn--primary"
       >
-        {loading ? 'Caricamento...' : 'Conferma Operazione'}
+        {loading ? 'Caricamento...' : selectedOperation === 'set_enrollment_application_delivered' ? 'Conferma domanda' : 'Conferma Operazione'}
       </button>
     </div>
   )
@@ -308,14 +307,14 @@ export default function BulkOperationsModal({
 
         {selectedOperation && (
           <div>
-            <h4 className="text-sm font-medium mb-3">Parametri Operazione</h4>
+            <h4 className="mb-3 text-sm font-medium">{selectedOperation === 'set_enrollment_application_delivered' ? 'Conferma operazione' : 'Parametri Operazione'}</h4>
             {renderOperationForm()}
           </div>
         )}
 
-        <div className="cs-alert cs-alert--warning text-sm">
+        {selectedOperation !== 'set_enrollment_application_delivered' ? <div className="cs-alert cs-alert--warning text-sm">
           <strong>Attenzione:</strong> Questa operazione verrà applicata a tutti i {selectedCount} {userType === 'athletes' ? 'atleti' : 'collaboratori'} selezionati.
-        </div>
+        </div> : null}
       </div>
     </AdminModal>
   )
