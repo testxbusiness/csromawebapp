@@ -102,6 +102,31 @@ describe('AthletesManager enrollment application controls', () => {
     })
   })
 
+  it('lists only the selected season teams when removing an athlete from a team', async () => {
+    const athleteWithCurrentAndHistoricalTeams = {
+      ...athlete,
+      teams: [
+        { id: 'team-current', name: 'Under 17', season_id: season.id },
+        { id: 'team-historical', name: 'Under 17', season_id: historicalSeason.id },
+        { id: 'team-historical-u15', name: 'Under 15', season_id: historicalSeason.id },
+      ],
+    }
+    global.fetch = jest.fn().mockResolvedValue(response({ athletes: [athleteWithCurrentAndHistoricalTeams] })) as jest.MockedFunction<typeof fetch>
+
+    render(<AthletesManager embedded />)
+    await screen.findAllByText('Giulia Bianchi')
+    fireEvent.click(screen.getAllByRole('checkbox').at(-1)!)
+    fireEvent.click(screen.getByRole('button', { name: 'Operazioni Massive' }))
+    fireEvent.change(screen.getByLabelText('Tipo di Operazione'), {
+      target: { value: 'remove_from_team' },
+    })
+
+    const teamSelect = screen.getByDisplayValue('Seleziona una squadra')
+    expect(teamSelect).toHaveTextContent('Under 17')
+    expect(screen.getAllByRole('option', { name: 'Under 17' })).toHaveLength(1)
+    expect(screen.queryByRole('option', { name: 'Under 15' })).not.toBeInTheDocument()
+  })
+
   it('keeps the enrollment status isolated when switching the same athlete to a historical season', async () => {
     const order = (table: string) => jest.fn().mockResolvedValue({
       data: table === 'seasons' ? [season, historicalSeason] : [],

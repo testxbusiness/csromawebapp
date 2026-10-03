@@ -802,7 +802,12 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
           ? seasons.find((season) => season.id === selectedSeason)?.name
           : undefined}
         loading={bulkLoading}
-        selectedUsers={filteredAthletes.filter(athlete => selectedAthletes.has(athlete.id))}
+        selectedUsers={filteredAthletes
+          .filter((athlete) => selectedAthletes.has(athlete.id))
+          .map((athlete) => ({
+            ...athlete,
+            teams: teamsForSelectedSeason(athlete.teams),
+          }))}
       />
 
       {/* Modal Assegnazione Squadra con Piano Pagamento */}
