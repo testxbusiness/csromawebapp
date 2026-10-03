@@ -150,20 +150,13 @@ const NavItem = memo(
         href={href}
         onClick={onNavigate}
         aria-current={active ? 'page' : undefined}
-        className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-150 ${
-          active
-            ? 'bg-[color:var(--cs-primary)]/10 text-[color:var(--cs-primary)] shadow-[0_12px_26px_rgba(15,28,63,0.08)]'
-            : 'text-[color:var(--cs-text-secondary)] hover:bg-white/70 hover:text-[color:var(--cs-primary)]'
-        }`}
+        className={`cs-navigation-item group ${active ? 'is-active' : ''}`}
       >
         <Icon
-          className={`h-4 w-4 ${
-            active
-              ? 'text-[color:var(--cs-primary)]'
-              : 'text-[color:var(--cs-text-tertiary)] group-hover:text-[color:var(--cs-primary)]'
-          }`}
+          className="cs-navigation-item__icon"
+          aria-hidden="true"
         />
-        <span className="truncate">{label}</span>
+        <span className="cs-navigation-item__label">{label}</span>
       </Link>
     )
   }
