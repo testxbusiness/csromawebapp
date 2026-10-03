@@ -11,7 +11,6 @@ import { Alert, EventKindBadge, FeedbackState, ListRow, LoadingState, Panel, Sta
 import AttendanceControl from './AttendanceControl'
 import { MessagePreviewRow } from './MessagePreviewRow'
 import { MembershipRow } from './MembershipRow'
-import { feeStatusLabel, selectMostUrgentFee } from '@/lib/athlete/fee-preview'
 import { hasDashboardData, isDashboardDataCurrent, type DashboardStatus } from '@/lib/athlete/dashboard-state'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
@@ -100,24 +99,6 @@ interface Message {
   team_ids?: string[]
 }
 
-interface FeeInstallment {
-  id: string
-  installment_number: number
-  due_date: string
-  amount: number
-  status: 'not_due' | 'due_soon' | 'overdue' | 'paid' | 'partially_paid'
-  membership_fee: {
-    name: string
-    description?: string | null
-    team: {
-      id?: string
-      name: string
-      code?: string
-      activity?: { name: string } | null
-    }
-  }
-}
-
 interface AthleteDashboardProps {
   user: User
   profile: Profile
@@ -151,10 +132,6 @@ function formatEventDate(value: string) {
     month: 'long',
     year: 'numeric',
   })
-}
-
-function formatFeeAmount(value: number | null | undefined): string {
-  return value == null ? '—' : new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(value)
 }
 
 export function formatAgendaDateTime(value: string, now = new Date()) {
@@ -217,7 +194,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
   const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
   const [unreadMessageCount, setUnreadMessageCount] = useState<number | null>(null)
-  const [feeInstallments, setFeeInstallments] = useState<FeeInstallment[]>([])
   const [administrativeAlerts, setAdministrativeAlerts] = useState<AthleteDashboardAdministrativeAlert[]>([])
   const [nextChampionshipMatch, setNextChampionshipMatch] = useState<ChampionshipMatch | null>(null)
   const [dashboardStatus, setDashboardStatus] = useState<DashboardStatus>('loading')
@@ -251,7 +227,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setUpcomingEvents([])
       setUnreadMessages([])
       setUnreadMessageCount(null)
-      setFeeInstallments([])
       setAdministrativeAlerts([])
       setNextChampionshipMatch(null)
       setSelectedEvent(null)
@@ -388,7 +363,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setNextChampionshipMatch(null)
       setUnreadMessages([])
       setUnreadMessageCount(null)
-      setFeeInstallments([])
       setAdministrativeAlerts([])
       resetTeam()
     }
@@ -446,7 +420,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       setNextChampionshipMatch(result.nextChampionshipMatch || null)
       setUnreadMessages(result.unreadMessages || [])
       setUnreadMessageCount(typeof result.unreadMessageCount === 'number' ? result.unreadMessageCount : null)
-      setFeeInstallments(result.feeInstallments || [])
       setAdministrativeAlerts(Array.isArray(result.administrativeAlerts) ? result.administrativeAlerts.slice(0, 2) : [])
       setTeams((result.teams || []).map((team: { id: string; name: string; code?: string; activity?: { name?: string } | null }) => ({
         id: team.id,
@@ -829,8 +802,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const permissions = isDelegatedProfile ? selectedProfile?.relationship.permissions : null
   const canViewSchedule = !isDelegatedProfile || permissions?.view_schedule === true
   const canReceiveMessages = !isDelegatedProfile || permissions?.receive_messages === true
-  const canViewPayments = !isDelegatedProfile || permissions?.view_payments === true
-  const mostUrgentFee = selectMostUrgentFee(feeInstallments)
 
   useEffect(() => {
     if (!canViewSchedule) {
@@ -848,19 +819,15 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     teamCount: teamMemberships.length,
     eventCount: upcomingEvents.length,
     messageCount: unreadMessages.length,
-    feeCount: feeInstallments.length,
     hasNextMatch: Boolean(nextChampionshipMatch),
   })
   const subjectDataIsCurrent = isDashboardDataCurrent(dataSubjectKey, subjectKey)
   const selectedTeamMatches = (teamIds?: string[]) => !activeTeamId || Boolean(teamIds?.includes(activeTeamId))
   const visibleEvents = upcomingEvents.filter((event) => selectedTeamMatches(event.team_ids || event.teams?.map((team) => team.id)))
   const visibleMessages = unreadMessages.filter((message) => selectedTeamMatches(message.team_ids || message.teams?.map((team) => team.id)))
-  const visibleFees = feeInstallments.filter((fee) => selectedTeamMatches(fee.membership_fee.team.id ? [fee.membership_fee.team.id] : undefined))
   const visibleMemberships = teamMemberships.filter((membership) => selectedTeamMatches([membership.team.id]))
   const visibleMatch = nextChampionshipMatch && selectedTeamMatches(nextChampionshipMatch.team_ids) ? nextChampionshipMatch : null
   const showNextChampionshipMatch = shouldShowNextChampionshipMatchSummary(visibleEvents[0], visibleMatch)
-  const mostUrgentVisibleFee = selectMostUrgentFee(visibleFees)
-    ?? (visibleFees.length > 0 && visibleFees.every((fee) => fee.status === 'paid') ? visibleFees[0] : undefined)
   const messageTitleCount = activeTeamId ? visibleMessages.length : unreadMessageCount ?? unreadMessages.length
 
   if (accessDenied || dashboardStatus === 'denied') return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
@@ -1041,30 +1008,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                 </div>
               ))}
             </div>
-          )}
-        </Panel>
-      )}
-
-      {canViewPayments && (
-        <Panel id="athlete-fees" className="cs-athlete-dashboard__service-panel space-y-3">
-          <SectionHeading title="Prossima quota" href="/athlete/fees" />
-          {feeInstallments.length === 0 ? <FeedbackState variant="empty" title="Nessuna quota associativa" className="py-4" /> : visibleFees.length === 0 ? <FeedbackState variant="filtered-empty" title="Nessuna quota per questa squadra" className="py-4" /> : !mostUrgentVisibleFee ? <FeedbackState variant="empty" title="Tutte le rate risultano pagate" className="py-4" /> : (
-            <ListRow className="cs-athlete-dashboard__fee-row" trailing={(
-              <span className="cs-athlete-dashboard__fee-summary">
-                <span className="tabular-nums font-semibold">{formatFeeAmount(mostUrgentVisibleFee.amount)}</span>
-                <StatusBadge status={mostUrgentVisibleFee.status === 'overdue' ? 'danger' : mostUrgentVisibleFee.status === 'due_soon' || mostUrgentVisibleFee.status === 'partially_paid' ? 'warning' : mostUrgentVisibleFee.status === 'paid' ? 'success' : 'neutral'} label={feeStatusLabel(mostUrgentVisibleFee.status)} />
-              </span>
-            )}>
-              <span className="block font-medium" title={mostUrgentVisibleFee.membership_fee.description || undefined}>
-                {mostUrgentVisibleFee.membership_fee.name} · Rata {mostUrgentVisibleFee.installment_number}
-              </span>
-              <span className="mt-1 block text-sm text-secondary">
-                {mostUrgentVisibleFee.membership_fee.team.name}
-                {mostUrgentVisibleFee.membership_fee.team.activity?.name ? ` · ${mostUrgentVisibleFee.membership_fee.team.activity.name}` : ''}
-                {mostUrgentVisibleFee.membership_fee.team.code ? ` · ${mostUrgentVisibleFee.membership_fee.team.code}` : ''}
-                {' · Scadenza '}{new Date(mostUrgentVisibleFee.due_date).toLocaleDateString('it-IT')}
-              </span>
-            </ListRow>
           )}
         </Panel>
       )}

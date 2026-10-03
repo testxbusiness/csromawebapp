@@ -5,7 +5,6 @@ export type DashboardDataPresence = {
   teamCount: number
   eventCount: number
   messageCount: number
-  feeCount: number
   hasNextMatch: boolean
 }
 
@@ -15,7 +14,6 @@ export function hasDashboardData(data: DashboardDataPresence) {
     data.teamCount ||
     data.eventCount ||
     data.messageCount ||
-    data.feeCount ||
     data.hasNextMatch,
   )
 }

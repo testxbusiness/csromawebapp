@@ -366,7 +366,7 @@ describe('dashboard secondary services', () => {
     if (messages.length === 0) expect(screen.getByText('Nessun messaggio non letto')).toBeTruthy()
   })
 
-  it('keeps an overdue fee ahead of a paid fee and formats the amount in Italian', async () => {
+  it('removes the ordinary fee panel while preserving an authorized fee alert', async () => {
     renderFamilyDashboard({
       ...basePayload,
       unreadMessages: [],
@@ -374,22 +374,13 @@ describe('dashboard secondary services', () => {
         { id: 'paid', installment_number: 1, due_date: '2026-09-01', amount: 80, status: 'paid', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } },
         { id: 'overdue', installment_number: 2, due_date: '2026-08-01', amount: 120, status: 'overdue', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } },
       ],
+      administrativeAlerts: [{ area: 'fees', tone: 'danger', message: 'Quota associativa scaduta', href: '/athlete/fees?section=fees' }],
     })
 
-    await waitFor(() => expect(screen.getByText('Scaduta')).toBeTruthy())
-    expect(screen.getByText(/120,00/)).toBeTruthy()
-    expect(screen.queryByText('80,00')).toBeNull()
-  })
-
-  it('shows the paid state when no unpaid installment is available', async () => {
-    renderFamilyDashboard({
-      ...basePayload,
-      unreadMessages: [],
-      feeInstallments: [{ id: 'paid', installment_number: 1, due_date: '2026-09-01', amount: 120, status: 'paid', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } }],
-    })
-
-    await waitFor(() => expect(screen.getByText('Pagata')).toBeTruthy())
-    expect(screen.getByText(/120,00/)).toBeTruthy()
+    expect(await screen.findByText('Quota associativa scaduta')).toBeTruthy()
+    expect(screen.queryByText('Prossima quota')).toBeNull()
+    expect(screen.queryByText('Quota annuale')).toBeNull()
+    expect(screen.queryByText(/120,00/)).toBeNull()
   })
 
   it('keeps each team membership and its authoritative jersey number', async () => {
