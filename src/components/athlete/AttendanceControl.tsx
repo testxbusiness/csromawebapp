@@ -217,13 +217,13 @@ export default function AttendanceControl({
             <span className="font-medium text-[color:var(--cs-text)]">Segnalazione assenza</span>
             <span className="text-secondary">· {isOnline ? 'Segnalazioni chiuse' : 'Non disponibile offline'}</span>
           </div>
-        ) : (
+        ) : !earlyAbsence ? (
           <p className="text-sm text-secondary">
             {canRespond
               ? 'Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.'
               : 'La segnalazione dell’assenza non è disponibile per questo profilo.'}
           </p>
-        )}
+        ) : null}
         <EarlyAbsenceSection {...earlyAbsenceProps} />
       </div>
     )

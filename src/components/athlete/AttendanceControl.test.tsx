@@ -225,6 +225,7 @@ describe('AttendanceControl', () => {
     await user.click(reportButton)
     await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith(''))
     expect(screen.getAllByRole('status', { name: /Assenza segnalata/i })).toHaveLength(1)
+    expect(screen.queryByText('Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.')).toBeNull()
   })
 
   it('uses the warning treatment for revoking an absence-only report', async () => {
