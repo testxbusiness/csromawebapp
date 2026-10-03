@@ -77,7 +77,9 @@ describe('AthleteCalendarManager load states', () => {
 
     await waitFor(() => expect(screen.getByText('Non sei iscritto a nessuna squadra')).toBeTruthy())
     expect(screen.queryByText('Impossibile caricare il calendario')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Vista Elenco' }).parentElement).toHaveClass('hidden', 'md:block')
+    expect(screen.getByRole('button', { name: 'Agenda' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Mese' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.queryByRole('button', { name: /Vista Elenco|Vista Calendario/ })).toBeNull()
   })
 
   it('renders an error state for an HTTP failure instead of empty content', async () => {
@@ -106,7 +108,8 @@ describe('AthleteCalendarManager load states', () => {
   })
 
   it('switches to the shared mobile month while preserving athlete agenda metadata and absence reporting', async () => {
-    const start = new Date(2026, 8, 7, 18, 0, 0)
+    const start = new Date()
+    start.setHours(18, 0, 0, 0)
     const end = new Date(start)
     end.setHours(20, 0, 0, 0)
 
@@ -133,10 +136,11 @@ describe('AthleteCalendarManager load states', () => {
 
     render(<AthleteCalendarManager />)
 
-    await waitFor(() => expect(screen.getByText('Allenamento mese')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText('Allenamento mese').length).toBeGreaterThan(0))
     expect(screen.getByRole('button', { name: /^Mese$/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: /^Agenda$/ })).toHaveAttribute('aria-pressed', 'false')
-    fireEvent.click(screen.getByRole('button', { name: /settembre.*2 eventi/i }))
+    const monthName = start.toLocaleDateString('it-IT', { month: 'long' })
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`${start.getDate()} ${monthName}.*2 eventi`, 'i') }))
 
     expect(screen.getAllByText('U16').length).toBeGreaterThan(0)
     expect(screen.getByText(/Non puoi esserci\?/)).toBeTruthy()
@@ -144,6 +148,11 @@ describe('AthleteCalendarManager load states', () => {
   })
 
   it('loads a family subject calendar with view_schedule while keeping attendance read-only', async () => {
+    const eventDate = new Date()
+    eventDate.setHours(18, 0, 0, 0)
+    const eventDateIso = eventDate.toISOString()
+    const eventEndIso = new Date(eventDate.getTime() + 90 * 60 * 1000).toISOString()
+    const monthName = eventDate.toLocaleDateString('it-IT', { month: 'long' })
     profilesMock.mockReturnValue({
       profiles: [],
       selectedProfileId: 'subject-1',
@@ -169,7 +178,7 @@ describe('AthleteCalendarManager load states', () => {
         teams: [{ id: 'team-1', name: 'U16', code: 'U16' }],
         events: [{
           id: 'event-1', title: 'Allenamento famiglia', description: null, location: null,
-          start_time: '2026-09-01T18:00:00Z', end_time: '2026-09-01T19:30:00Z',
+          start_time: eventDateIso, end_time: eventEndIso,
           is_recurring: false, teams: ['U16'], team_details: [{ id: 'team-1', name: 'U16', code: 'U16' }],
           team_ids: ['team-1'], event_kind: 'training', requires_confirmation: true,
           confirmation_deadline: null, my_attendance: null,
@@ -179,8 +188,8 @@ describe('AthleteCalendarManager load states', () => {
 
     render(<AthleteCalendarManager />)
 
-    await waitFor(() => expect(screen.getByText('Allenamento famiglia')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: /1 settembre.*1 eventi/i }))
+    await waitFor(() => expect(screen.getAllByText('Allenamento famiglia').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(`${eventDate.getDate()} ${monthName}.*1 eventi`, 'i') }))
     expect(screen.getByText(/La segnalazione dell’assenza non è disponibile/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Partecipo' })).toBeNull()
     expect(global.fetch).toHaveBeenCalledWith('/api/athlete/calendar', expect.objectContaining({ signal: expect.any(AbortSignal) }))

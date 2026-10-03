@@ -8564,6 +8564,15 @@ esperienza coerente.
 **Acceptance:** Mese, Agenda e dialog sono utilizzabili a 320px e dark mode;
 dialog viewport-safe con focus corretto; export, filtri e conferma distinguibili.
 
+**Follow-up UI autorizzato — 03/10/2026:** rimosso il toggle desktop “Vista
+Elenco/Vista Calendario”; Agenda e Mese sono ora il selettore unico e realmente
+condiviso tra desktop e mobile. Agenda usa `AthleteAgenda` a tutte le
+larghezze, mentre Mese mantiene il calendario mensile mobile e FullCalendar
+desktop. Eliminata la tabella desktop duplicata, senza modificare dati, filtri,
+permessi, route o dialog. Aggiornati `AthleteCalendarManager.tsx`, il relativo
+test, e `globals.css`. Verifiche: test calendario/manager e calendario mensile
+12/12, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
+
 ## G14.5 — Messaggi atleta e dettaglio
 
 **Obiettivo:** rendere lista e dettaglio una gerarchia editoriale, non card e

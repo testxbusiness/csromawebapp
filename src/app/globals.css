@@ -1175,7 +1175,7 @@ button.cs-list-row{ font:inherit; }
 .cs-calendar-shell{ overflow:hidden; }
 .cs-calendar-header{ display:flex; align-items:center; justify-content:space-between; gap:var(--cs-sp-4); margin-bottom:var(--cs-sp-6); }
 .cs-calendar-actions{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--cs-sp-2); }
-.cs-calendar-view-switcher{ display:flex; gap:var(--cs-sp-2); margin-bottom:var(--cs-sp-4); }
+.cs-calendar-view-switcher{ display:flex; gap:var(--cs-sp-2); margin-bottom:var(--cs-sp-5); }
 .cs-calendar-filters{ margin-bottom:var(--cs-sp-5); padding:var(--cs-sp-4); border:1px solid var(--cs-border-canonical); border-radius:var(--cs-r-md); background:var(--cs-surface-2); }
 .cs-calendar-filter-group{ display:flex; flex-wrap:wrap; gap:var(--cs-sp-2); }
 .cs-calendar-agenda{ display:flex; flex-direction:column; gap:var(--cs-sp-5); }
