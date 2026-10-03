@@ -179,7 +179,7 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
   return (
     <Modal open={open} onOpenChange={(nextOpen) => { if (!nextOpen && !submitting) onClose() }} title="Comunica assenza" description="Seleziona un periodo. Verranno mostrati gli eventi eleggibili di tutte le tue squadre." size="xl" fullscreenOnMobile>
       <div className="space-y-5">
-        <div className="rounded-lg border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-2)] p-3 text-sm">
+        <div className="cs-absence-scope">
           <strong>Ambito: tutte le squadre autorizzate</strong>
           <p className="mt-1 text-secondary">Il filtro squadra del calendario non limita questa ricerca.</p>
         </div>
@@ -191,7 +191,7 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
         {periodError && <p role="alert" className="text-sm font-semibold text-[color:var(--cs-danger-canonical)]">Il periodo non è valido: la data finale deve essere uguale o successiva a quella iniziale.</p>}
         <div className="flex flex-wrap gap-2">
           <button type="button" className="cs-btn cs-btn--primary min-h-11" onClick={search} disabled={!periodValid || state === 'loading'}>Cerca eventi</button>
-          <button type="button" className="cs-btn cs-btn--ghost min-h-11" onClick={() => { const date = todayLocal(); setFrom(date); setTo(date) }}>Oggi</button>
+          <button type="button" className="cs-btn cs-btn--secondary min-h-11" onClick={() => { const date = todayLocal(); setFrom(date); setTo(date) }}>Oggi</button>
         </div>
 
         {state === 'loading' && <p role="status" aria-live="polite" className="text-sm text-secondary">Caricamento eventi del periodo…</p>}
@@ -204,8 +204,8 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
             <p className="text-sm font-semibold">{events.length} eventi caricati · {selectedEvents.length} selezionati</p>
             <button type="button" className="cs-btn cs-btn--outline cs-btn--sm min-h-11" onClick={toggleAllLoaded}>{allLoadedSelected ? 'Deseleziona tutti' : 'Seleziona tutti gli eventi caricati'}</button>
           </div>
-          <ul className="max-h-[min(42vh,24rem)] space-y-2 overflow-y-auto pr-1">
-            {events.map((event) => <li key={event.id} className="rounded-lg border border-[color:var(--cs-border)] p-3">
+          <ul className="cs-absence-event-list">
+            {events.map((event) => <li key={event.id} className="cs-absence-event">
               <label className="flex min-h-11 cursor-pointer items-start gap-3">
                 <input type="checkbox" className="mt-1 size-5 shrink-0" checked={selectedIds.has(event.id)} onChange={() => toggleEvent(event.id)} aria-label={`Seleziona ${eventLabel(event)}`} />
                 <span className="min-w-0 text-sm"><strong className="block">{eventLabel(event)}</strong><span className="block">Squadra: {eventTeamLabels(event).join(', ') || 'Squadra non indicata'}</span><span className="block capitalize">{formatEventDate(event.start_time)} · {formatEventTime(event.start_time, event.end_time)}</span><span className="block text-secondary">Stato: {event.my_attendance?.is_early_absence ? 'Assenza già comunicata' : 'Eleggibile'}</span></span>
@@ -217,8 +217,8 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
 
         <label className="cs-field block"><span className="cs-field__label">Nota comune (facoltativa)</span><textarea className="cs-input min-h-24 w-full" maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Aggiungi una nota per tutti gli eventi selezionati" /><span className="text-xs text-secondary">{note.length}/1000</span></label>
 
-        <div className="rounded-lg bg-[color:var(--cs-surface-2)] p-4" aria-live="polite"><strong>Riepilogo</strong><p className="mt-1 text-sm">Stai per comunicare l’assenza per <strong>{selectedEvents.length}</strong> {selectedEvents.length === 1 ? 'evento' : 'eventi'}{note.trim() ? ' con la nota comune inserita' : ''}.</p></div>
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><button type="button" className="cs-btn cs-btn--ghost min-h-11" onClick={onClose} disabled={submitting}>Annulla</button><button type="button" className="cs-btn cs-btn--primary min-h-11" onClick={() => void submit()} disabled={selectedEvents.length === 0 || submitting}>{submitting ? 'Salvataggio…' : 'Conferma assenza'}</button></div>
+        <div className="cs-absence-summary" aria-live="polite"><strong>Riepilogo</strong><p className="mt-1 text-sm">Stai per comunicare l’assenza per <strong>{selectedEvents.length}</strong> {selectedEvents.length === 1 ? 'evento' : 'eventi'}{note.trim() ? ' con la nota comune inserita' : ''}.</p></div>
+        <div className="cs-absence-footer"><button type="button" className="cs-btn cs-btn--secondary min-h-11" onClick={onClose} disabled={submitting}>Annulla</button><button type="button" className="cs-btn cs-btn--primary min-h-11" onClick={() => void submit()} disabled={selectedEvents.length === 0 || submitting}>{submitting ? 'Salvataggio…' : 'Conferma assenza'}</button></div>
       </div>
     </Modal>
   )

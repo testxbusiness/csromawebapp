@@ -188,7 +188,7 @@ export default function MonthlyMobileCalendar({
           <span className="text-xs text-secondary">{selectedDay?.events.length ?? 0} eventi</span>
         </div>
         {selectedDay && selectedDay.events.length > 0 ? (
-          <div className="divide-y divide-[color:var(--cs-border-subtle)] overflow-hidden rounded-[var(--cs-radius-md)] border border-[color:var(--cs-border-subtle)]">
+          <div className="cs-calendar-event-list cs-calendar-month-event-list">
             {selectedDay.events.map((event) => {
               if (renderAgendaEvent) return <div key={event.id}>{renderAgendaEvent(event)}</div>
 
@@ -197,7 +197,7 @@ export default function MonthlyMobileCalendar({
                 <button
                   key={event.id}
                   type="button"
-                  className="flex min-h-[60px] w-full items-start gap-3 bg-[color:var(--cs-surface-1)] px-3 py-3 text-left transition-colors hover:bg-[color:var(--cs-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--cs-focus-ring)]"
+                  className="cs-calendar-month-event-row"
                   onClick={() => onEventClick?.(event.id)}
                 >
                   <span className="w-12 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-secondary">{formatTime(event.start)}</span>
@@ -215,7 +215,7 @@ export default function MonthlyMobileCalendar({
             })}
           </div>
         ) : (
-          <div className="rounded-[var(--cs-radius-md)] border border-dashed border-[color:var(--cs-border)] px-3 py-4">
+          <div className="cs-calendar-empty-day">
             <p className="text-sm text-secondary">Nessun evento in questa giornata.</p>
             {onCreateEvent && selectedDay && (
               <button

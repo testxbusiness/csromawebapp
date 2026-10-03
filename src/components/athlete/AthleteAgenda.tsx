@@ -82,16 +82,16 @@ export default function AthleteAgenda({
   const firstEventId = days[0]?.events[0]?.id ?? null
 
   return (
-    <div className="space-y-5" aria-label="Agenda eventi">
+    <div className="cs-calendar-agenda" aria-label="Agenda eventi">
       {days.map((day) => (
         <section key={day.key} aria-labelledby={`agenda-day-${day.key}`}>
           <h3
             id={`agenda-day-${day.key}`}
-            className="mb-2 text-sm font-semibold capitalize text-[color:var(--cs-text-secondary)]"
+            className="cs-calendar-day-heading"
           >
             {formatDay(day.date)}
           </h3>
-          <div className="overflow-hidden rounded-[var(--cs-radius-md)] border border-[color:var(--cs-border-subtle)] bg-[color:var(--cs-surface-1)]">
+          <div className="cs-calendar-event-list">
             {day.events.map((event, index) => (
               <AgendaRow
                 key={event.id}
@@ -134,8 +134,8 @@ function AgendaRow({
   onEventClick: (id: string) => void
 }) {
   return (
-    <details className="group border-b border-[color:var(--cs-border-subtle)] last:border-b-0" open={defaultExpanded}>
-      <summary className="flex min-w-0 cursor-pointer list-none items-start gap-3 px-3 py-3 [&::-webkit-details-marker]:hidden">
+    <details className="cs-calendar-agenda-row group" open={defaultExpanded}>
+      <summary className="cs-calendar-agenda-summary">
         <span className="w-20 shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-[color:var(--cs-text-primary)]">
           {formatTime(event.start_time)}
           <span className="block text-xs font-normal text-[color:var(--cs-text-tertiary)]">

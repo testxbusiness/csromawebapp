@@ -1125,7 +1125,7 @@ button.cs-list-row{ font:inherit; }
 .cs-mobile-month-calendar__weekdays{ margin-bottom:4px; padding:0 2px; color:var(--cs-text-tertiary); font-size:var(--cs-fs-xs); font-weight:700; text-align:center; }
 .cs-mobile-month-calendar__legend{ display:flex; flex-wrap:wrap; gap:8px 14px; margin:0 2px 10px; color:var(--cs-text-secondary); font-size:var(--cs-fs-xs); }
 .cs-mobile-month-calendar__legend span{ display:inline-flex; align-items:center; gap:5px; }
-.cs-mobile-month-calendar__day{ position:relative; display:flex; min-height:64px; flex-direction:column; align-items:flex-start; gap:6px; border:1px solid var(--cs-border-subtle); border-radius:var(--cs-radius-sm); background:var(--cs-surface-1); padding:7px 6px; color:var(--cs-text-primary); text-align:left; transition:background-color .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.cs-mobile-month-calendar__day{ position:relative; display:flex; min-height:64px; flex-direction:column; align-items:flex-start; gap:6px; border:1px solid var(--cs-border-subtle); border-radius:var(--cs-r-sm); background:var(--cs-surface-1); padding:7px 6px; color:var(--cs-text-primary); text-align:left; transition:background-color .15s ease, border-color .15s ease, box-shadow .15s ease; }
 .cs-mobile-month-calendar__day:hover,
 .cs-mobile-month-calendar__day:focus-visible{ background:var(--cs-surface-hover); border-color:var(--cs-border); }
 .cs-mobile-month-calendar__day:focus-visible{ outline:2px solid var(--cs-focus-ring); outline-offset:2px; }
@@ -1147,7 +1147,7 @@ button.cs-list-row{ font:inherit; }
 }
 @media (max-width: 768px){
   .calendar-responsive{ overflow-x:auto; -webkit-overflow-scrolling: touch; }
-  .calendar-responsive .cs-card{ min-width: 620px; }
+.calendar-responsive .cs-card{ min-width: 620px; }
   .fc .fc-toolbar.fc-header-toolbar{
     flex-direction: column;
     align-items: stretch;
@@ -1170,6 +1170,36 @@ button.cs-list-row{ font:inherit; }
     min-width: 0;
   }
 }
+
+/* Calendario atleta: una grammatica condivisa per Mese, Agenda e assenza. */
+.cs-calendar-shell{ overflow:hidden; }
+.cs-calendar-header{ display:flex; align-items:center; justify-content:space-between; gap:var(--cs-sp-4); margin-bottom:var(--cs-sp-6); }
+.cs-calendar-actions{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--cs-sp-2); }
+.cs-calendar-view-switcher{ display:flex; gap:var(--cs-sp-2); margin-bottom:var(--cs-sp-4); }
+.cs-calendar-filters{ margin-bottom:var(--cs-sp-5); padding:var(--cs-sp-4); border:1px solid var(--cs-border-canonical); border-radius:var(--cs-r-md); background:var(--cs-surface-2); }
+.cs-calendar-filter-group{ display:flex; flex-wrap:wrap; gap:var(--cs-sp-2); }
+.cs-calendar-agenda{ display:flex; flex-direction:column; gap:var(--cs-sp-5); }
+.cs-calendar-day-heading{ margin:0 0 var(--cs-sp-2); color:var(--cs-text-secondary); font-size:var(--cs-fs-sm); font-weight:700; text-transform:capitalize; }
+.cs-calendar-event-list{ overflow:hidden; border:1px solid var(--cs-border-canonical); border-radius:var(--cs-r-md); background:var(--cs-surface-1); }
+.cs-calendar-agenda-row{ border-bottom:1px solid var(--cs-border-subtle); }
+.cs-calendar-agenda-row:last-child{ border-bottom:0; }
+.cs-calendar-agenda-summary{ display:flex; min-width:0; cursor:pointer; list-style:none; align-items:flex-start; gap:var(--cs-sp-3); padding:var(--cs-sp-3); }
+.cs-calendar-agenda-summary::-webkit-details-marker{ display:none; }
+.cs-calendar-agenda-summary:focus-visible{ outline:2px solid var(--cs-focus-ring); outline-offset:-2px; }
+.cs-calendar-month-event-list{ margin-top:0; }
+.cs-calendar-month-event-row{ display:flex; min-height:60px; width:100%; align-items:flex-start; gap:var(--cs-sp-3); border-bottom:1px solid var(--cs-border-subtle); background:var(--cs-surface-1); padding:var(--cs-sp-3); text-align:left; transition:background-color .15s ease; }
+.cs-calendar-month-event-row:last-child{ border-bottom:0; }
+.cs-calendar-month-event-row:hover{ background:var(--cs-surface-hover); }
+.cs-calendar-month-event-row:focus-visible{ outline:2px solid var(--cs-focus-ring); outline-offset:-2px; }
+.cs-calendar-empty-day{ border:1px dashed var(--cs-border-canonical); border-radius:var(--cs-r-md); padding:var(--cs-sp-4); }
+.cs-absence-scope,.cs-absence-summary{ border:1px solid var(--cs-border-canonical); border-radius:var(--cs-r-md); background:var(--cs-surface-2); padding:var(--cs-sp-3); font-size:var(--cs-fs-sm); }
+.cs-absence-event-list{ max-height:min(42vh,24rem); display:flex; flex-direction:column; gap:var(--cs-sp-2); overflow-y:auto; padding-right:var(--cs-sp-1); }
+.cs-absence-event{ border:1px solid var(--cs-border-canonical); border-radius:var(--cs-r-md); background:var(--cs-surface-1); padding:var(--cs-sp-3); }
+.cs-absence-event:has(input:focus-visible){ outline:2px solid var(--cs-focus-ring); outline-offset:2px; }
+.cs-absence-footer{ display:flex; flex-direction:column-reverse; gap:var(--cs-sp-2); }
+@media (min-width:640px){ .cs-absence-footer{ flex-direction:row; justify-content:flex-end; } }
+@media (max-width:639px){ .cs-calendar-header{ align-items:stretch; flex-direction:column; margin-bottom:var(--cs-sp-4); } .cs-calendar-actions{ justify-content:stretch; } .cs-calendar-actions > *{ flex:1 1 auto; } }
+@media (prefers-reduced-motion: reduce){ .cs-calendar-month-event-row{ transition:none; } }
 
 /* ----------------------------
    12) Brand utilities / helpers
@@ -1268,7 +1298,7 @@ button.cs-list-row{ font:inherit; }
   }
 
   .cs-modal--fullscreen {
-    width: 100vw; height: 100dvh; max-height: 100dvh; max-width: none; border-radius: 0;
+    width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: calc(100dvh - 16px); max-width: none; border-radius: var(--cs-r-xl);
     display:flex; flex-direction:column; padding: var(--cs-sp-5);
   }
   .cs-modal--fullscreen .cs-modal__footer { margin-top: auto; }

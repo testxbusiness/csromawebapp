@@ -340,10 +340,10 @@ export default function AthleteCalendarManager() {
 
   return (
     <>
-      <div className="cs-card cs-card--primary">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+      <div className="cs-card cs-card--primary cs-calendar-shell">
+        <div className="cs-calendar-header">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
-          <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+          <div className="cs-calendar-actions">
             {canConfirmAttendance && (
               <button type="button" onClick={() => setEarlyAbsenceOpen(true)} className="cs-btn cs-btn--primary min-h-11">
                 Comunica assenza
@@ -355,7 +355,7 @@ export default function AthleteCalendarManager() {
             <div className="hidden md:block">
               <button
                 onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-                className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--primary'}`}
+                className={`cs-btn ${viewMode === 'list' ? 'cs-btn--secondary' : 'cs-btn--primary'}`}
               >
                 {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
               </button>
@@ -363,12 +363,12 @@ export default function AthleteCalendarManager() {
           </div>
         </div>
 
-        <div className="mb-4 flex items-center gap-2 md:hidden" aria-label="Vista calendario mobile">
+        <div className="cs-calendar-view-switcher md:hidden" aria-label="Vista calendario mobile">
           <button
             type="button"
             onClick={() => setMobileViewMode('agenda')}
             aria-pressed={mobileViewMode === 'agenda'}
-            className={`cs-btn cs-btn--sm ${mobileViewMode === 'agenda' ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+            className={`cs-btn cs-btn--sm ${mobileViewMode === 'agenda' ? 'cs-btn--primary' : 'cs-btn--secondary'}`}
           >
             Agenda
           </button>
@@ -376,17 +376,17 @@ export default function AthleteCalendarManager() {
             type="button"
             onClick={() => setMobileViewMode('calendar')}
             aria-pressed={mobileViewMode === 'calendar'}
-            className={`cs-btn cs-btn--sm ${mobileViewMode === 'calendar' ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+            className={`cs-btn cs-btn--sm ${mobileViewMode === 'calendar' ? 'cs-btn--primary' : 'cs-btn--secondary'}`}
           >
             Mese
           </button>
         </div>
 
         {/* Filtri: restringono esclusivamente il payload già autorizzato dal server. */}
-        <div className="mb-4 flex flex-col gap-3">
+        <div className="cs-calendar-filters">
           <div className="flex-1">
             <span className="cs-field__label">Tipo evento</span>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtra per tipo evento">
+            <div className="cs-calendar-filter-group" role="group" aria-label="Filtra per tipo evento">
               {[{ value: '', label: 'Tutti' }, ...EVENT_KIND_OPTIONS].map(({ value, label }) => (
                 <button
                   key={value || 'all'}

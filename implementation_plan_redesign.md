@@ -8644,6 +8644,21 @@ modal assenza, Messaggi e modal, Campionato, Profilo/Amministrazione e gate
 chiaro/scuro. Modificato solo `implementation_plan_redesign.md`; nessun codice,
 migration, mutation DB, deploy o rollout eseguito.
 
+**Registro avanzamento G14.4 — 03/10/2026:** completato il consolidamento UI
+del calendario atleta. Aggiornati `AthleteCalendarManager`, `AthleteAgenda`,
+`MonthlyMobileCalendar`, `EarlyAbsencePeriodModal` e `src/app/globals.css`:
+shell, azioni, switch Mese/Agenda, filtri, righe Agenda/Mese e pannelli del
+modal condividono superfici, bordi, raggi, focus e stati coerenti; export e
+Annulla sono azioni secondarie neutre; Cerca/Conferma restano primarie rosse.
+Nessuna modifica a route, API, autorizzazione, filtri dati o logica assenza.
+Verifiche: `npx tsc --noEmit` ✅, `npm run build` ✅,
+`git diff --check` ✅; test mirati Modal assenza e Calendario mensile ✅.
+Due test esistenti di `AthleteCalendarManager` restano dipendenti dalla data
+reale corrente: usano eventi di settembre e il test runner è in ottobre 2026,
+quindi la vista Mese seleziona una giornata senza quegli eventi. Da rendere
+deterministici nel gate visuale G14.8, senza cambiare il comportamento
+prodotto.
+
 # 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
