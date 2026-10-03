@@ -21,8 +21,8 @@ describe('AthleteChampionshipShell', () => {
     render(<AthleteChampionshipShell {...props} />)
 
     expect(screen.getByRole('heading', { name: 'Campionato' })).toBeTruthy()
-    expect(screen.queryByLabelText('Campionato')).toBeNull()
-    expect(screen.queryByLabelText('Girone')).toBeNull()
+    expect(screen.queryByLabelText('Seleziona un campionato')).toBeNull()
+    expect(screen.queryByLabelText('Seleziona un girone')).toBeNull()
   })
 
   it('shows selectors only for ambiguous resolver paths and emits the selected group', () => {
@@ -30,9 +30,9 @@ describe('AthleteChampionshipShell', () => {
     const onGroupSelected = jest.fn()
     render(<AthleteChampionshipShell {...props} championships={[championship, { ...championship, id: 'championship-2', name: 'U18 Regionale' }]} groups={[group, { ...group, id: 'group-2', name: 'Girone B' }]} onGroupChange={onGroupChange} onGroupSelected={onGroupSelected} />)
 
-    expect(screen.getByLabelText('Campionato')).toBeTruthy()
-    expect(screen.getByLabelText('Girone')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('Girone'), { target: { value: 'group-2' } })
+    expect(screen.getByLabelText('Seleziona un campionato')).toBeTruthy()
+    expect(screen.getByLabelText('Seleziona un girone')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Seleziona un girone'), { target: { value: 'group-2' } })
     expect(onGroupChange).toHaveBeenCalledWith('group-2')
     expect(onGroupSelected).toHaveBeenCalledWith('group-2')
   })

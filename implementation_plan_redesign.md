@@ -291,7 +291,7 @@ Per un goal `[x]` aggiungere sempre:
 | G14.3 Oggi atleta | [x] | G14.1,G14.2 | Completato il 03/10/2026; uniformati alert amministrativi su panel/raggio/bordo condivisi con “Dettagli” secondario e accenti semantici rosso scaduto/ambra in scadenza; mantenuto “Prossimo impegno” come unico protagonista navy con badge tipo evento e CTA “Partecipo” primaria rossa, assenza informativa e revoca warning; rimossi i contenitori-card annidati mobile da agenda e messaggi, con righe/separatori e azioni terziarie coerenti per agenda, messaggi e squadre. Lo stato assenza è una sola copia accessibile con testo informativo inline. Remediation UI 03/10/2026: quando l’assenza è già segnalata, il testo istruttivo “Non puoi esserci?…” non viene più renderizzato; resta il riepilogo e l’annullamento. Modificati `src/components/athlete/AthleteDashboard.tsx`, `src/components/athlete/AttendanceControl.tsx`, relativi test e `src/app/globals.css`. Verifiche: `AttendanceControl.test.tsx` 20/20; test alert dashboard mirato 1/1; suite dashboard completa conserva un solo failure preesistente e data-dipendente sulla fixture “Oggi · 20:00”; `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. Nessuna modifica a route, API, autorizzazioni o dati. |
 | G14.4 Calendario e modal assenza atleta | [ ] | G14.1,G14.2 | Viste Mese/Agenda, filtri, eventi e dialog “Comunica assenza”. |
 | G14.5 Messaggi atleta e dettaglio | [x] | G14.1,G14.2 | Completato il 03/10/2026: lista editoriale con soggetto prioritario, tab/filtri/separatori, unread e team context distinti; dettaglio su ResponsiveDetail comune con bordo rosso, metadati separati e corpo scrollabile. Test messaggi 12/12, typecheck, build e diff check superati. |
-| G14.6 Campionato atleta | [ ] | G14.1,G14.2 | Intro, selettori, empty state e contenuti campionato. |
+| G14.6 Campionato atleta | [x] | G14.1,G14.2 | Completato il 03/10/2026; contesto/titolo e selezioni uniformati, zero-state e stati errore/offline/loading mantenuti leggibili, pannelli campionato rifiniti con righe/separatori e badge semantici, dettaglio convocazione migrato al ResponsiveDetail comune. Test mirati 17/17, typecheck, build e diff check superati. Nessuna modifica a resolver, catalogo, route, API, autorizzazioni o dati; non eseguita verifica browser autenticata cross-viewport/dark mode, prevista in G14.8. |
 | G14.7 Profilo e Amministrazione atleta | [ ] | G14.1,G14.2 | Profilo, preferenze, stati amministrativi e quote/rate. |
 | G14.8 Gate visuale atleta | [ ] | G14.1–G14.7 | Regressione responsive, accessibilità e matrice chiaro/scuro. |
 
@@ -8688,6 +8688,18 @@ offline, titolo/unread, destinatari e contenuto lungo.
 Verifiche: test mirati messaggi 12/12 ✅, `npx tsc --noEmit` ✅,
 `npm run build` ✅, `git diff --check` ✅. Restano le verifiche screenshot
 autenticate cross-viewport/dark mode nel gate G14.8.
+
+**Registro avanzamento G14.6 — 03/10/2026:** completata la rifinitura della
+pagina Campionato atleta. Aggiornati `AthleteChampionshipShell.tsx`,
+`ChampionshipsManager.tsx` e `ChampionshipPanels.tsx`: contesto con badge
+neutri e bordo rosso limitato al contenitore, selettori con etichette esplicite,
+info/risultati/convocazioni con righe e separatori coerenti, contenuti convocati
+leggibili anche in dark mode e dettaglio convocazione su `ResponsiveDetail`
+comune con header/close e corpo scrollabile. Resolver, catalogo autorizzato,
+stati dati, route e contratti API invariati.
+Verifiche: test mirati campionato 17/17 ✅, `npx tsc --noEmit` ✅,
+`npm run build` ✅, `git diff --check` ✅. Restano screenshot autenticati,
+contrasto/focus e verifica cross-viewport nel gate G14.8.
 
 # 25. Criterio finale di successo
 

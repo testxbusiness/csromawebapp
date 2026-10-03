@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { SUBJECT_CONTEXT_CHANGED_EVENT, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
-import { Card, CardTitle, CardMeta, Button, Input, Select, toast, Modal, FeedbackState, EmptyState } from '@/components/ui'
+import { Card, CardTitle, CardMeta, Button, Input, Select, toast, Modal, ResponsiveDetail, FeedbackState, EmptyState } from '@/components/ui'
 import type { RequestState } from '@/lib/http/request-state'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
 import { Clock3, MapPin, Trophy, Users } from 'lucide-react'
@@ -711,7 +711,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   return (
     <div className="space-y-6 pb-4">
       <AthleteChampionshipShell
-        teamLabel={selectedTeamId ? 'Squadra selezionata' : 'Tutte le squadre'}
+        teamLabel={selectedTeamId ? teams.find((team) => team.id === selectedTeamId)?.name || 'Squadra selezionata' : 'Tutte le squadre'}
         championships={visibleChampionships}
         selectedChampionship={selectedChampionship}
         selectedChampionshipId={selectedChampionshipId}
@@ -812,7 +812,10 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         </div>
       </Modal>
 
-      <Modal
+      <ResponsiveDetail
+        centeredOnDesktop
+        centeredOnMobile
+        size="lg"
         fullscreenOnMobile
         open={convocationModalOpen}
         onOpenChange={(open) => {
@@ -948,7 +951,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
             </div>
           </div>
         )}
-      </Modal>
+      </ResponsiveDetail>
 
       {mode !== 'athlete' && loading && (
         <div className="text-center text-slate-500">Caricamento...</div>
