@@ -118,6 +118,23 @@ function SectionHeading({ title, href }: { title: string; href?: string }) {
   )
 }
 
+function AdministrativeAlerts({
+  alerts,
+  subjectProfileId,
+}: {
+  alerts: AthleteDashboardAdministrativeAlert[]
+  subjectProfileId: string | null
+}) {
+  return alerts.map((alert) => (
+    <Alert key={alert.area} variant={alert.tone} className="flex items-center justify-between gap-3">
+      <p className="font-medium">{alert.message}</p>
+      <Link href={appendSubjectProfile(alert.href, subjectProfileId)} className="cs-btn cs-btn--ghost cs-btn--sm shrink-0">
+        Dettagli
+      </Link>
+    </Alert>
+  ))
+}
+
 function formatEventTime(value: string) {
   return new Date(value).toLocaleTimeString('it-IT', {
     hour: '2-digit',
@@ -874,6 +891,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         {activeSeason?.name && <p className="text-sm text-secondary">{activeSeason.name}</p>}
       </header>
 
+      <div className="cs-athlete-dashboard__administrative-alerts">
+        <AdministrativeAlerts alerts={administrativeAlerts} subjectProfileId={selectedProfileId} />
+      </div>
+
       <div className="cs-athlete-dashboard__layout">
       <div className="cs-athlete-dashboard__sport">
       {canViewSchedule && (
@@ -903,7 +924,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
                       <span className="cs-athlete-dashboard__featured-event-date mt-1 block text-sm">{formatEventDate(event.start_time)}</span>
                       {event.location ? <span className="mt-1 block text-sm">{event.location}</span> : null}
                       {event.teams && event.teams.length > 0 && <span className="mt-2 flex flex-wrap gap-1">{event.teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)}</span>}
-                      {event.my_attendance?.is_early_absence && <span className="mt-2 block text-sm font-medium text-[color:var(--cs-text)]" role="status">Assenza segnalata</span>}
                     </ListRow>
                     {(!isDelegatedProfile || permissions?.confirm_attendance === true) && event.requires_confirmation && (
                       <div className="cs-athlete-dashboard__featured-attendance">
@@ -989,14 +1009,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       </div>
 
       <div className="cs-athlete-dashboard__services">
-      {administrativeAlerts.map((alert) => (
-        <Alert key={alert.area} variant={alert.tone} className="flex items-center justify-between gap-3">
-          <p className="font-medium">{alert.message}</p>
-          <Link href={appendSubjectProfile(alert.href, selectedProfileId)} className="cs-btn cs-btn--ghost cs-btn--sm shrink-0">
-            Dettagli
-          </Link>
-        </Alert>
-      ))}
       {canReceiveMessages && (
         <Panel id="athlete-messages" className="cs-athlete-dashboard__service-panel space-y-3">
           <SectionHeading title={`Messaggi non letti (${messageTitleCount})`} href="/athlete/messages" />

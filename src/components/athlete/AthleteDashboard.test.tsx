@@ -130,7 +130,7 @@ describe('AthleteDashboard delegated mode', () => {
     ;(useAccessibleProfiles as jest.Mock).mockReturnValue({
       selectedProfileId: 'child-1',
       selectedProfile: { profile: { id: 'child-1', first_name: 'Luca', last_name: 'Rossi', email: null }, relationship: { permissions: {
-        view_schedule: false, confirm_attendance: false, view_payments: true,
+        view_schedule: true, confirm_attendance: false, view_payments: true,
         view_medical_status: true, view_documents: false, sign_documents: false,
         receive_messages: false,
       } } },
@@ -156,6 +156,9 @@ describe('AthleteDashboard delegated mode', () => {
     expect(details).toHaveLength(2)
     expect(details[0]).toHaveAttribute('href', '/athlete/fees?section=certificate&subjectProfileId=child-1')
     expect(details[1]).toHaveAttribute('href', '/athlete/fees?section=fees&subjectProfileId=child-1')
+    const mobileAlerts = document.querySelector('.cs-athlete-dashboard__administrative-alerts')
+    const upcomingHeading = screen.getByRole('heading', { name: 'Prossimo impegno' })
+    expect((mobileAlerts?.compareDocumentPosition(upcomingHeading) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     window.dispatchEvent(new CustomEvent('csroma:subject-context-changed', { detail: { subjectProfileId: 'child-2' } }))
     await waitFor(() => expect(screen.queryByText('Certificato medico scaduto')).toBeNull())

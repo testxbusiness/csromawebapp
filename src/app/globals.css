@@ -665,6 +665,7 @@ button.cs-list-row{ font:inherit; }
 .cs-athlete-dashboard__intro,
 .cs-athlete-dashboard__sport,
 .cs-athlete-dashboard__services{ min-width:0; }
+.cs-athlete-dashboard__administrative-alerts{ display:flex; flex-direction:column; gap:var(--cs-sp-3); }
 .cs-athlete-dashboard__layout{
   display:grid;
   grid-template-columns:1fr;

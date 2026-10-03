@@ -212,12 +212,7 @@ export default function AttendanceControl({
     )
     return (
       <div className="mt-3 border-t border-[color:var(--cs-border)] pt-3" aria-label="Segnalazione assenza">
-        {earlyAbsence ? (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" role="status">
-            <span>{absenceOnly ? 'Assenza segnalata' : <>Hai segnalato: <span className="font-medium text-[color:var(--cs-text)]">Assenza</span></>}</span>
-            {absenceClosed && <span className="text-secondary">· {isOnline ? 'Segnalazioni chiuse' : 'Non disponibile offline'}</span>}
-          </div>
-        ) : absenceClosed ? (
+        {!earlyAbsence && absenceClosed ? (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" role="status">
             <span className="font-medium text-[color:var(--cs-text)]">Segnalazione assenza</span>
             <span className="text-secondary">· {isOnline ? 'Segnalazioni chiuse' : 'Non disponibile offline'}</span>
@@ -362,14 +357,14 @@ function EarlyAbsenceSection({
     >
       {earlyAbsence ? (
         <>
-          <p className="text-sm font-medium" role="status">{absenceOnly ? 'Assenza segnalata' : 'Hai già comunicato che non parteciperai'}</p>
+          <p className="text-sm font-semibold" role="status">Assenza segnalata</p>
           <p className="mt-1 text-xs text-secondary">
-            Puoi modificare volontariamente la comunicazione entro la scadenza.
+            Puoi modificare la comunicazione entro la scadenza.
           </p>
           {availability.actions.revoke_early_absence && (
             <button
               type="button"
-              className="cs-btn cs-btn--outline cs-btn--sm mt-2"
+              className="cs-btn cs-btn--warning cs-btn--sm mt-2"
               onClick={() => void onRevoke()}
               disabled={pending || !isOnline}
             >
@@ -429,7 +424,7 @@ function EarlyAbsenceSection({
       ) : (
         <button
           type="button"
-          className="cs-btn cs-btn--outline cs-btn--sm"
+          className="cs-btn cs-btn--primary cs-btn--sm"
           onClick={() => { if (absenceOnly) void onReport(); else onOpen() }}
           disabled={!availability.actions.report_early_absence || !isOnline}
         >
