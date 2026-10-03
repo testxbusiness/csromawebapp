@@ -52,7 +52,7 @@ function relativeDate(value: string) {
 
 export function AthleteMessageList({ messages, onOpen }: { messages: AthleteMessageListItem[]; onOpen: (message: AthleteMessageListItem) => void }) {
   return (
-    <ul className="m-0 list-none divide-y divide-[var(--cs-border-canonical)] p-0" aria-label="Lista messaggi">
+    <ul className="cs-athlete-message-list m-0 list-none p-0" aria-label="Lista messaggi">
       {messages.map((message) => {
         const sender = senderName(message)
         const role = message.created_by_profile?.role ? ROLE_LABELS[message.created_by_profile.role] ?? message.created_by_profile.role : 'Ruolo non disponibile'
@@ -63,10 +63,10 @@ export function AthleteMessageList({ messages, onOpen }: { messages: AthleteMess
             <ListRow
               interactive
               onClick={() => onOpen(message)}
-              className="min-h-[76px] gap-3 px-3 py-3 sm:px-4"
+              className={`cs-athlete-message-row min-h-[76px] gap-3 px-3 py-3 sm:px-5 ${!message.is_read ? 'is-unread' : ''}`}
               leading={
-                <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-[var(--cs-surface-selected)] text-xs font-bold text-[var(--cs-primary)]" aria-hidden="true">
-                  {!message.is_read ? <span className="absolute -left-1 top-0 h-2.5 w-2.5 rounded-full bg-[var(--cs-brand-red)]" /> : null}
+                <span className="cs-athlete-message-row__avatar relative flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold" aria-hidden="true">
+                  {!message.is_read ? <span className="cs-athlete-message-row__unread-dot" /> : null}
                   {initials(message)}
                 </span>
               }
@@ -79,17 +79,17 @@ export function AthleteMessageList({ messages, onOpen }: { messages: AthleteMess
               aria-label={`${message.is_read ? 'Letto' : 'Non letto'}: ${message.subject}, ${sender}`}
             >
               <div className="min-w-0">
+                <div className="cs-athlete-message-row__subject truncate font-semibold">{message.subject}</div>
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="truncate font-semibold">{sender}</span>
                   <span className="text-xs text-secondary">{role}</span>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-1" aria-label="Squadre o destinatari pertinenti">
+                <div className="cs-athlete-message-row__preview mt-1 line-clamp-2 text-sm text-secondary">{message.content}</div>
+                <div className="cs-athlete-message-row__teams mt-2 flex flex-wrap gap-1" aria-label="Squadre o destinatari pertinenti">
                   {teams.length > 0
                     ? teams.map((team) => <span key={team.id} className="cs-badge cs-badge--neutral">{team.name}</span>)
                     : <span className="cs-badge cs-badge--neutral">A te</span>}
                 </div>
-                <div className="mt-1 truncate font-medium">{message.subject}</div>
-                <div className="line-clamp-2 text-sm text-secondary">{message.content}</div>
                 {attachmentCount > 0 ? (
                   <span className="mt-1 inline-flex items-center gap-1 text-xs text-secondary">
                     <Paperclip size={14} aria-hidden="true" />

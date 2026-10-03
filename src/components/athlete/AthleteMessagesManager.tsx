@@ -172,23 +172,26 @@ export default function AthleteMessagesManager() {
   const visibleMessages = filterAthleteMessages(messages, readFilter, selectedTeamId)
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="cs-athlete-messages space-y-6">
+      <div className="cs-athlete-messages__heading">
         <div>
-          <h2 className="text-2xl font-bold">Messaggi</h2>
-          <p className="mt-1 text-sm text-secondary">{unreadCount} {unreadCount === 1 ? 'non letto' : 'non letti'}</p>
+          <h2 className="text-2xl font-bold tracking-tight">Messaggi</h2>
+          <p className="mt-1 text-sm text-secondary">Le comunicazioni della società e delle tue squadre</p>
         </div>
+        <span className="cs-athlete-messages__count" aria-live="polite">
+          <span className="font-semibold">{unreadCount}</span> {unreadCount === 1 ? 'non letto' : 'non letti'}
+        </span>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between" aria-label="Filtri messaggi">
-        <div className="flex rounded-md border border-[var(--cs-border-canonical)] p-1" role="group" aria-label="Filtro lettura">
-          <button type="button" className={`min-h-11 rounded px-3 text-sm font-semibold ${readFilter === 'all' ? 'bg-[var(--cs-surface-selected)] text-[var(--cs-primary)]' : ''}`} aria-pressed={readFilter === 'all'} onClick={() => setReadFilter('all')}>Tutti <span className="text-secondary">({messages.length})</span></button>
-          <button type="button" className={`min-h-11 rounded px-3 text-sm font-semibold ${readFilter === 'unread' ? 'bg-[var(--cs-surface-selected)] text-[var(--cs-primary)]' : ''}`} aria-pressed={readFilter === 'unread'} onClick={() => setReadFilter('unread')}>Non letti <span className="text-secondary">({unreadCount})</span></button>
+      <div className="cs-athlete-messages__filters" aria-label="Filtri messaggi">
+        <div className="cs-athlete-messages__tabs" role="group" aria-label="Filtro lettura">
+          <button type="button" className={readFilter === 'all' ? 'is-selected' : ''} aria-pressed={readFilter === 'all'} onClick={() => setReadFilter('all')}>Tutti <span>({messages.length})</span></button>
+          <button type="button" className={readFilter === 'unread' ? 'is-selected' : ''} aria-pressed={readFilter === 'unread'} onClick={() => setReadFilter('unread')}>Non letti <span>({unreadCount})</span></button>
         </div>
         {teams.length > 1 ? (
-          <div className="flex min-w-0 flex-col gap-1">
-            <label htmlFor="athlete-messages-team" className="text-sm font-semibold">Squadra</label>
-            <select id="athlete-messages-team" className="cs-select min-h-11 max-w-full" value={selectedTeamId ?? ''} onChange={(event) => setSelectedTeamId(event.target.value || null)}>
+          <div className="cs-athlete-messages__team-filter">
+            <label htmlFor="athlete-messages-team">Squadra</label>
+            <select id="athlete-messages-team" className="cs-select" value={selectedTeamId ?? ''} onChange={(event) => setSelectedTeamId(event.target.value || null)}>
               <option value="">Tutte le squadre</option>
               {teams.map((team) => <option key={team.id} value={team.id}>{team.name}{team.code ? ` · ${team.code}` : ''}</option>)}
             </select>
@@ -196,7 +199,7 @@ export default function AthleteMessagesManager() {
         ) : null}
       </div>
 
-      <Panel className="overflow-hidden p-0">
+      <Panel className="cs-athlete-messages__panel overflow-hidden p-0">
         {loadState === 'offline' ? <OfflineState title="Messaggi non disponibili offline" description="I messaggi richiedono una connessione. Quando torni online, riprova." className="rounded-none border-0" /> : null}
         {loadState === 'error' ? <ErrorState title="Impossibile caricare i messaggi" description={loadError ?? 'Riprova tra poco.'} action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void loadMessages()}>Riprova</button>} className="rounded-none border-0" /> : null}
         {deepLinkUnavailable ? <FeedbackState variant="error" title="Messaggio non disponibile" description="Il messaggio non è disponibile o non hai accesso a questa comunicazione." className="border-b border-[var(--cs-border-canonical)] text-left" /> : null}

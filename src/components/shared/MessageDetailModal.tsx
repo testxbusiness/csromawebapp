@@ -120,19 +120,21 @@ export default function MessageDetailModal({
       }
       description={<span className="sr-only">Messaggio e destinatari pertinenti</span>}
       centeredOnMobile
+      centeredOnDesktop
       size="md"
+      className="cs-message-detail"
     >
       {!data ? (
         <div className="py-8 text-center text-secondary">Caricamento messaggio...</div>
       ) : (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--cs-border-canonical)] pb-4">
+          <div className="cs-message-detail__status flex flex-wrap items-center gap-2">
             <StatusBadge status={isRead ? 'success' : 'info'} label={isRead ? 'Letto' : 'Non letto'} />
             {readRequest === 'loading' ? <span className="text-sm text-secondary">Salvataggio lettura…</span> : null}
             {readRequest === 'error' ? <span role="alert" className="text-sm text-[var(--cs-danger-canonical)]">Lettura non sincronizzata</span> : null}
           </div>
 
-          <dl className="grid grid-cols-1 gap-4 min-[380px]:grid-cols-2">
+          <dl className="cs-message-detail__meta grid grid-cols-1 gap-4 min-[380px]:grid-cols-2">
             <div>
               <dt className="text-xs font-bold uppercase tracking-wide text-secondary">Mittente</dt>
               <dd className="mt-1 flex items-center gap-2"><UserRound size={17} aria-hidden="true" />{sender}{role ? <span className="text-sm text-secondary">· {role}</span> : null}</dd>
@@ -145,7 +147,7 @@ export default function MessageDetailModal({
           </dl>
 
           {teamNames.length > 0 || userNames.length > 0 ? (
-            <section aria-labelledby="message-detail-recipients-title">
+            <section className="cs-message-detail__section" aria-labelledby="message-detail-recipients-title">
               <h3 id="message-detail-recipients-title" className="text-xs font-bold uppercase tracking-wide text-secondary">Destinatari pertinenti</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {teamNames.map((name) => <span key={`team-${name}`} className="cs-badge cs-badge--neutral">{name}</span>)}
@@ -154,13 +156,13 @@ export default function MessageDetailModal({
             </section>
           ) : null}
 
-          <section aria-labelledby="message-detail-content-title">
+          <section className="cs-message-detail__section" aria-labelledby="message-detail-content-title">
             <h3 id="message-detail-content-title" className="text-xs font-bold uppercase tracking-wide text-secondary">Contenuto</h3>
             <p className="mt-2 whitespace-pre-wrap leading-relaxed">{data.content || 'Nessun contenuto disponibile.'}</p>
           </section>
 
           {data.attachments && data.attachments.length > 0 ? (
-            <section aria-labelledby="message-detail-attachments-title">
+            <section className="cs-message-detail__section" aria-labelledby="message-detail-attachments-title">
               <h3 id="message-detail-attachments-title" className="text-xs font-bold uppercase tracking-wide text-secondary">Allegati</h3>
               <ul className="mt-2 space-y-2">
                 {data.attachments.map((attachment) => {
