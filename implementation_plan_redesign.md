@@ -286,6 +286,14 @@ Per un goal `[x]` aggiungere sempre:
 | G13.2 Gestione admin domanda di iscrizione | [x] | G13.1 | Completato il 01/10/2026: il catalogo Atleti carica il flag `enrollment_application_delivered` esclusivamente dalla `season_profiles` della stagione selezionata; in tale contratto è sempre booleano, con fallback `false` solo di compatibilità per righe legacy. Il dettaglio/modifica espone il controllo accessibile “Domanda di iscrizione consegnata”; la tabella e mobile mostrano stato e filtro Tutte/Consegnata/Da consegnare. Follow-up UI autorizzato il 01/10/2026: “Domanda consegnata” è l’unica nuova opzione nel modal già esistente “Operazione Massiva”, con numero atleti e stagione espliciti; l’azione massiva imposta solo `true`, mentre ogni correzione a “Da consegnare” resta nel modal del singolo atleta. Route Handler valida admin, selezione non vuota e ID univoci, rifiuta `delivered: false`, mentre la RPC `set_athlete_enrollment_application_delivered_atomically` blocca e verifica tutte le sole membership atleta-stagione prima dell’update, impedendo risultati parziali e cross-season. File: `src/app/api/admin/athletes/route.ts`, `src/app/api/admin/athletes/bulk/route.ts`, `src/components/admin/AthletesManager.tsx`, `src/components/admin/BulkOperationsModal.tsx`, `src/components/admin/AthleteCreateModal.tsx`, validation/types e migration `20261001184500_athlete_enrollment_application_bulk.sql`; rimosso l’ormai ridondante `EnrollmentApplicationBulkModal.tsx`. Test: Jest mirato 3 suite/11 test per modal comune, toggle singolo, bulk solo `true`, rifiuto server di `false`, mutation fuori stagione e due stagioni; `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. Follow-up staging precedente: migration applicata a `csromawebapp-staging`; verificata la funzione `set_athlete_enrollment_application_delivered_atomically(uuid, uuid[], boolean)` `SECURITY DEFINER`, con esecuzione limitata a `service_role`. Nessun dato operativo, deploy, rollout o attivazione stagione eseguiti. |
 | G13.3 Pagina atleta “Amministrazione” | [x] | G13.1,G13.2 | Completato il 01/10/2026: la route storica `/athlete/fees` ora presenta “Amministrazione” e compone, tramite il contratto read-only già autorizzato di G13.1, Domanda di iscrizione, Certificato medico e Quote associative nel relativo ordine. Le sezioni negate non sono renderizzate nel contesto familiare; la navigazione familiare espone Amministrazione quando è presente almeno uno tra `view_documents`, `view_medical_status` e `view_payments`. La data del certificato è mostrata soltanto al profilo personale; `section=certificate` e `section=fees` ricevono focus accessibile, mentre parametri sconosciuti sono ignorati. Il registro quote, i gruppi per squadra e i filtri restano riusati senza nuovi flussi di pagamento/upload/firma/notifica; la card certificato è rimossa dal Profilo. Follow-up UI 02/10/2026: la conferma bulk “Domanda consegnata” è ora una sola sintesi chiara, senza testo di revoca manuale; su mobile i filtri rate diventano un `select` accessibile e su tablet/desktop restano pulsanti. File: `src/app/athlete/fees/page.tsx`, `src/components/athlete/AthleteAdministrationManager.tsx`, `src/components/athlete/AthleteFeesManager.tsx`, `src/components/athlete/AthleteProfileManager.tsx`, `src/components/admin/BulkOperationsModal.tsx`, `src/components/navigation/RoleSidebar.tsx`, `src/lib/navigation/family-navigation.ts` e test correlati. Test: Jest mirato 3 suite/17 test, `npx tsc --noEmit`, `npm run build`, smoke Playwright `tests/e2e/athlete-fees-profile.spec.ts` (1 test) e `git diff --check` superati. Nessuna migration nuova, mutazione dati, deploy, rollout, attivazione stagione o modifica staging/produzione. |
 | G13.4 Alert amministrativi in Oggi | [x] | G13.3 | Completato il 02/10/2026: il payload unico `/api/athlete/dashboard` include al massimo due alert server-side, certificato e quote, calcolati dal classificatore certificato condiviso e da `buildAthleteFeesContract`. Certificato `missing`/`expired` è rosso, `expiring` ambra; le quote preferiscono `overdue` a `due_soon`, senza alert per `partially_paid`, regolari o domanda. Permessi familiari sono verificati separatamente: nessuna query o card per sezioni negate; il link Dettagli conserva `subjectProfileId` e punta alla sezione Amministrazione. Follow-up UI autorizzato 02/10/2026: rimossa da Oggi la sezione permanente “Prossima quota” e i suoi importi/date; resta solo l’alert quota quando urgente. Follow-up UI autorizzato 03/10/2026: gli alert amministrativi sono ora prima di “Prossimo impegno”, la CTA “Segnala assenza” usa il rosso primario CSRoma, lo stato assenza è una sola copia “Assenza segnalata / Puoi modificare la comunicazione entro la scadenza” e “Annulla segnalazione” usa il trattamento semantico giallo warning. Il payload Route Handler esistente resta invariato per compatibilità. File: `src/app/api/athlete/dashboard/route.ts`, `src/server/athlete/administration.ts`, `src/lib/athlete/dashboard-contract.ts`, `src/types/athlete-dashboard.ts`, `src/components/athlete/AthleteDashboard.tsx`, `src/components/athlete/AttendanceControl.tsx`, `src/app/globals.css`, `src/lib/athlete/dashboard-state.ts`, test correlati. Test: Jest mirato iniziale 4 suite/22 test e follow-up componente/state 2 suite/5 test; follow-up 03/10 `AttendanceControl.test.tsx` (20 test) e test isolato alert dashboard superati; `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. La suite completa di `AthleteDashboard.test.tsx` ha 1 failure preesistente e data-dipendente sulla fixture del 15/09 (“Oggi · 20:00”); il test nuovo alert passa isolatamente. Nessuna migration nuova, mutazione dati, deploy, rollout, attivazione stagione o modifica staging/produzione. |
+| G14.1 Contratto visivo atleta chiaro/scuro | [x] | G13.4 | Completato il 03/10/2026; consolidati in `src/app/globals.css` i token light/dark per canvas, superfici, azioni, controlli, focus, badge e modal; allineate le primitive esistenti Button, StatusBadge, Card/Panel, ListRow, Tabs, form e ResponsiveDetail mantenendo API e comportamenti. Il modal comune usa ora bordo CSRoma arrotondato e separatore header; export calendario è secondario neutro, vista calendario e filtri quote usano la primaria rossa, senza migrazione coach/admin. Aggiunto `PrimitiveVisualContract.test.tsx`. Verifiche: primitive UI mirate 3 suite/14 test, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. Non eseguiti browser screenshot 400×905/1440×900 in questa sessione; restano al gate G14.8. Nessuna modifica dati, API, route, RLS, migration, deploy o rollout. |
+| G14.2 Shell e navigazione atleta | [ ] | G14.1 | Header, drawer e bottom navigation coerenti nei due temi. |
+| G14.3 Oggi atleta | [ ] | G14.1,G14.2 | Gerarchia, alert, card impegno/agenda/messaggi e CTA presenza. |
+| G14.4 Calendario e modal assenza atleta | [ ] | G14.1,G14.2 | Viste Mese/Agenda, filtri, eventi e dialog “Comunica assenza”. |
+| G14.5 Messaggi atleta e dettaglio | [ ] | G14.1,G14.2 | Lista, filtri, stati non letti e modal di dettaglio. |
+| G14.6 Campionato atleta | [ ] | G14.1,G14.2 | Intro, selettori, empty state e contenuti campionato. |
+| G14.7 Profilo e Amministrazione atleta | [ ] | G14.1,G14.2 | Profilo, preferenze, stati amministrativi e quote/rate. |
+| G14.8 Gate visuale atleta | [ ] | G14.1–G14.7 | Regressione responsive, accessibilità e matrice chiaro/scuro. |
 
 ---
 
@@ -8456,7 +8464,187 @@ e massiva, la pagina atleta “Amministrazione” e i due alert Home concordati.
 Modificato solo `implementation_plan_redesign.md`; nessuna migration, codice,
 mutation DB, branch, deploy o rollout è stato eseguito.
 
-# 24. Criterio finale di successo
+# 24. Fase 14 — Coerenza UI area atleta da audit screenshot
+
+## 24.1 Perimetro e contratto visuale
+
+Questa fase nasce dalla revisione degli screenshot del 03/10/2026 delle sole
+route atleta a 400 px: Oggi, Calendario (Mese e Agenda), Campionato, Messaggi
+(lista e dettaglio), Profilo e Amministrazione/Quote, drawer e modal “Comunica
+assenza”. È una fase **solo UI**: non autorizza modifiche a database, API, RLS,
+contratti, route, logica di presenza, filtri o permessi.
+
+| Oggetto | Regola canonica nei temi chiaro e scuro |
+|---|---|
+| Sfondo e superfici | Un token canvas neutro per tema; header e bottom navigation su superficie elevata, separata da bordo sottile. Panel/card/lista usano background, bordo, raggio e ombra discreta comuni. Mai fondi locali grigi/beige non tokenizzati. |
+| Azioni | Primaria: rosso CSRoma pieno, testo contrastato, altezza/raggio/focus/loading uguali. Secondaria: neutra con bordo. Terziaria: link/ghost. Ambra soltanto warning/revoca assenza; verde soltanto esito positivo; rosso per criticità/distruttive. “Esporta Excel” diventa secondaria neutra. |
+| Selezione e badge | Tab, filtri, segmenti e bottom navigation condividono selected rosso + tint discreta + indicatore coerente. Badge: errore rosso, warning ambra, successo verde, info blu, neutro grigio; label testuale obbligatoria. I token tipo evento restano quelli di §0.3.1. |
+| Form | Label sopra il controllo; stessa altezza/raggio/bordo; focus ring rosso accessibile; errore con bordo e descrizione, non solo colore. Input data, select e textarea sono equivalenti nei due temi. |
+| Modal | Un layout responsive: overlay contrastato, contenitore elevato con **bordo rosso CSRoma arrotondato**, header icona/titolo/chiudi, separatore, corpo scrollabile e footer CTA. Mobile sheet/fullscreen viewport-safe; desktop dialog centrato. Focus trap, ESC e touch target restano dalla primitiva esistente. |
+
+Ogni elemento deve coprire default, hover/focus-visible, active, disabled,
+loading, errore e dark mode. Il tema non deve ridurre contrasto o cambiare la
+semantica dei colori.
+
+## G14.1 — Token e primitive visuali atleta
+
+**Obiettivo:** consolidare il contratto nei token e nelle primitive esistenti,
+senza rifattorizzare feature o migrare coach/admin.
+
+**Task:**
+
+- Inventariare colori, bordi, raggi, ombre, altezze CTA e focus locali dei
+  componenti atleta; sostituire solo i valori coperti dal contratto con token
+  light/dark condivisi.
+- Allineare `Button`, `StatusBadge`, `Panel`/`Card`, `ListRow`, segmenti,
+  campi form e `ResponsiveDetail`, mantenendo compatibili API e comportamenti.
+- Rendere la variante modal con bordo rosso arrotondato il default delle modali
+  atleta; non modificare focus, dimensionamento o semantica già verificati.
+- Eliminare verde come export/azione generica e rosa come primario alternativo,
+  preservando i colori semantici stabiliti.
+
+**Acceptance:** matrice azione/stato → variante unica, contrasto AA per testo,
+CTA, focus, badge e bordi significativi in entrambi i temi.
+
+**Verifiche:** test primitive, tastiera button/segmenti/form/dialog, browser
+400×905 e 1440×900 chiaro/scuro, `npx tsc --noEmit`, Jest mirato, `npm run
+build`, `git diff --check`.
+
+## G14.2 — Shell e navigazione atleta
+
+**Obiettivo:** unificare header, drawer e bottom navigation.
+
+**Task:**
+
+- Uniformare header di Oggi, Calendario, Campionato, Messaggi, Profilo e
+  Amministrazione: altezza, logo, tema, back/menu, Esci, superficie e bordo.
+  Esci resta azione account distinta dalla CTA primaria della pagina.
+- Allineare drawer: canvas, voce attiva, icone, separatori, card account e
+  logout; nessuna concorrenza visuale tra logout e navigazione.
+- Uniformare bottom bar: cinque destinazioni, target touch, label, badge
+  messaggi, active state e safe area; rimuovere box/bordi diversi per route.
+
+**Acceptance:** route attiva, focus e badge leggibili nei due temi; contenuto
+mai coperto dalla shell; nessuna modifica route o resolver.
+
+## G14.3 — Oggi atleta
+
+**Obiettivo:** applicare gerarchia coerente all'home senza togliere priorità ad
+alert amministrativi e prossimo impegno.
+
+**Task:**
+
+- Uniformare alert certificato/quota: stesso panel, bordo/raggio e “Dettagli”
+  secondario; rosso soltanto scaduto, ambra soltanto in scadenza.
+- Rendere “Prossimo impegno” l'unico protagonista: navy evento, badge con
+  token evento, pannello interno leggibile, CTA presenza primaria rossa.
+  “Assenza segnalata” resta informativa; revoca resta warning ambra.
+- Allineare Poi in agenda, messaggi non letti e squadre a righe/separatori e
+  azioni terziarie, eliminando card annidate e CTA eterogenee.
+
+**Acceptance:** ordine visivo alert → impegno → agenda → messaggi → squadre;
+stati zero/errore/offline non alterano la gerarchia.
+
+## G14.4 — Calendario e modal assenza atleta
+
+**Obiettivo:** rendere Mese, Agenda, filtri e “Comunica assenza” una sola
+esperienza coerente.
+
+**Task:**
+
+- Allineare container, intestazione, Comunica assenza, export, Agenda/Mese,
+  filtri tipo, navigazione mese e legenda. Export è secondario neutro; filtri
+  attivi usano selected comune, non verde o rosso del tipo Partita.
+- Rendere card Agenda e celle Mese coerenti in superficie/bordo/raggio/padding,
+  preservando token evento e indicatori testuali di conflitto/assenza.
+- Migrare “Comunica assenza” al modal comune: bordo rosso, close coerente,
+  pannelli neutri, form focus/error uniformi, Cerca/Conferma primarie rosse e
+  Annulla secondaria; disabled non appare come successo rosa.
+
+**Acceptance:** Mese, Agenda e dialog sono utilizzabili a 320px e dark mode;
+dialog viewport-safe con focus corretto; export, filtri e conferma distinguibili.
+
+## G14.5 — Messaggi atleta e dettaglio
+
+**Obiettivo:** rendere lista e dettaglio una gerarchia editoriale, non card e
+badge disomogenei.
+
+**Task:**
+
+- Uniformare titolo, conteggio, tab Tutti/Non letti e lista: selected comune,
+  righe con separatori, avatar/unread distinti, timestamp e badge team neutri.
+  “Non letto” è informativo blu, non CTA.
+- Applicare il modal comune al dettaglio: bordo rosso, header/close, metadati
+  leggibili, separatori e corpo scrollabile; read state e dati restano invariati.
+- Verificare empty/errore/offline, messaggi lunghi e dark mode contro testo o
+  badge con contrasto insufficiente.
+
+**Acceptance:** apertura/chiusura uguale al dialog assenza; una riga lista non
+si confonde con un pulsante; unread/team/stato leggibili anche senza colore.
+
+## G14.6 — Campionato atleta
+
+**Obiettivo:** rendere Campionato coerente nel contesto e nello stato vuoto.
+
+**Task:**
+
+- Allineare intro, titolo, descrizione e contenitore contesto: bordo rosso solo
+  dove previsto, raggi/spaziature comuni, nessun rosso decorativo aggiuntivo.
+- Rendere “Seleziona un campionato” e “Tutte le squadre” secondarie/selettori
+  coerenti; filtri attivi seguono il contratto comune.
+- Ridisegnare empty, loading, errore e contenuti reali (gara, convocazione,
+  classifica, risultati/calendario) con Panel/ListRow e badge canonici, senza
+  modificare resolver o catalogo autorizzato.
+
+**Acceptance:** lo zero state comunica dato mancante e azione possibile senza
+simulare contenuti; chiaro/scuro mantengono stessa gerarchia.
+
+## G14.7 — Profilo e Amministrazione atleta
+
+**Obiettivo:** rendere coerenti le sezioni consultative senza introdurre azioni
+non autorizzate.
+
+**Task:**
+
+- Uniformare identità, contatti, tesseramento, squadre, documenti, sicurezza e
+  preferenze: testata, card, colonne label/valore, empty state e badge. Avatar
+  rosso è identità, non errore.
+- Rendere “Attiva” notifiche una secondaria coerente e separare preferenze
+  account da dati atleta; nessuna nuova azione su documenti/certificato.
+- Allineare Amministrazione: domanda, certificato, riepilogo quote, select e
+  rate usano panel/badge/list-row; importi tabulari; verde pagato, rosso
+  scaduto, blu informativo/non ancora dovuto.
+- Rifinire dettaglio rata espanso con superficie secondaria e separatori,
+  rimuovendo box grigi estranei e troncamenti informativi.
+
+**Acceptance:** Profilo e Amministrazione hanno stesso ritmo tipografico e di
+spaziatura; privacy delegata invariata; stati economici non dipendono dal colore.
+
+## G14.8 — Gate visuale atleta
+
+**Obiettivo:** chiudere la fase con prove ripetibili contro gli screenshot.
+
+**Task:**
+
+- Acquisire screenshot autenticati di tutte le viste sopra nei temi chiaro/scuro
+  a 320×568, 400×905, 768×1024 e 1440×900, includendo drawer, dettaglio
+  messaggio e dialog assenza.
+- Verificare contrasto, focus, tastiera, ESC/focus trap dialog, touch target,
+  zoom 200%, reduced motion, safe area, scroll e overflow orizzontale; coprire
+  loading/errore/empty/offline quando le fixture esistono.
+- Eseguire regressioni per navigazione, tema, filtri, messaggi, assenza, rate e
+  deep link; correggere solo difetti visivi dimostrati e annotare limiti reali.
+
+**Acceptance:** tutte le route atleta degli screenshot rispettano il contratto
+nei due temi senza regressioni di autorizzazione, route, dati o interazioni.
+
+**Registro pianificazione — 03/10/2026:** aggiunta Fase 14 G14.1–G14.8 dopo
+audit screenshot della sola area atleta: primitive, shell, Oggi, Calendario e
+modal assenza, Messaggi e modal, Campionato, Profilo/Amministrazione e gate
+chiaro/scuro. Modificato solo `implementation_plan_redesign.md`; nessun codice,
+migration, mutation DB, deploy o rollout eseguito.
+
+# 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
 

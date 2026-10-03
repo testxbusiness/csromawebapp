@@ -70,7 +70,7 @@ export function AthleteFeesContent({ installments, sectionId }: { installments: 
         </select>
       </div>
       <div className="hidden gap-2 overflow-x-auto pb-1 sm:flex" role="group" aria-label="Filtra quote">
-        {FILTERS.map(({ value, label }) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`cs-btn cs-btn--sm min-h-11 shrink-0 ${filter === value ? 'cs-btn--warm' : 'cs-btn--outline'}`}>{label} <span className="ml-1 tabular-nums">{filterCount(value)}</span></button>)}
+        {FILTERS.map(({ value, label }) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`cs-btn cs-btn--sm min-h-11 shrink-0 ${filter === value ? 'cs-btn--primary' : 'cs-btn--outline'}`}>{label} <span className="ml-1 tabular-nums">{filterCount(value)}</span></button>)}
       </div>
 
       {installments.length === 0 ? <EmptyState title="Nessuna quota associativa trovata" description="Contatta l'amministratore per informazioni sulle quote." /> : filteredInstallments.length === 0 ? <EmptyState filtered title="Nessuna rata per questo filtro" /> : <div className="space-y-4">

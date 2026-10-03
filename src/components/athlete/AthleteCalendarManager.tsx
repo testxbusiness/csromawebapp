@@ -349,13 +349,13 @@ export default function AthleteCalendarManager() {
                 Comunica assenza
               </button>
             )}
-            <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--success">
+            <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--secondary">
               Esporta Excel
             </button>
             <div className="hidden md:block">
               <button
                 onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-                className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--accent'}`}
+                className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--primary'}`}
               >
                 {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
               </button>
