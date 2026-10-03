@@ -8573,6 +8573,13 @@ permessi, route o dialog. Aggiornati `AthleteCalendarManager.tsx`, il relativo
 test, e `globals.css`. Verifiche: test calendario/manager e calendario mensile
 12/12, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati.
 
+**Follow-up UI dark mode autorizzato — 03/10/2026:** corretta la testata dei
+giorni della settimana del FullCalendar desktop: in `.theme-dark` usa ora
+superficie scura, testo chiaro e bordo canonico; il calendario mensile mobile e
+il tema chiaro restano invariati. Modificato `src/app/globals.css`. Verifiche:
+FullCalendar/manager 9/9, `npx tsc --noEmit`, `npm run build` e
+`git diff --check` superati.
+
 ## G14.5 — Messaggi atleta e dettaglio
 
 **Obiettivo:** rendere lista e dettaglio una gerarchia editoriale, non card e

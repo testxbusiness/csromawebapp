@@ -1201,6 +1201,17 @@ button.cs-list-row{ font:inherit; }
 @media (max-width:639px){ .cs-calendar-header{ align-items:stretch; flex-direction:column; margin-bottom:var(--cs-sp-4); } .cs-calendar-actions{ justify-content:stretch; } .cs-calendar-actions > *{ flex:1 1 auto; } }
 @media (prefers-reduced-motion: reduce){ .cs-calendar-month-event-row{ transition:none; } }
 
+/* FullCalendar ships its own light header surface. Keep weekday labels readable
+   when the app switches to the dark theme without affecting mobile calendar. */
+.theme-dark .calendar-responsive .fc .fc-col-header-cell{
+  background:var(--cs-surface-subdued);
+  border-color:var(--cs-border-canonical);
+  color:var(--cs-ink);
+}
+.theme-dark .calendar-responsive .fc .fc-col-header-cell-cushion{
+  color:var(--cs-ink) !important;
+}
+
 /* ----------------------------
    12) Brand utilities / helpers
    ---------------------------- */
