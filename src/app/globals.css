@@ -471,6 +471,21 @@ a{ color:inherit; text-decoration:none }
 .cs-alert--warning { border-color: color-mix(in oklab, var(--cs-warning), white 55%); }
 .cs-alert--danger  { border-color: color-mix(in oklab, var(--cs-danger),  white 55%); }
 
+/* Oggi keeps administrative alerts equal in geometry: tone is carried only
+   by the semantic accent, never by a competing filled surface. */
+.cs-athlete-dashboard__administrative-alert{
+  min-height:56px;
+  border-radius:var(--cs-r-lg);
+  box-shadow:var(--cs-elevation-1);
+}
+.cs-athlete-dashboard__administrative-alert.cs-alert--danger{ border-left:3px solid var(--cs-danger-canonical); }
+.cs-athlete-dashboard__administrative-alert.cs-alert--warning{ border-left:3px solid var(--cs-warning-canonical); }
+.cs-athlete-dashboard__administrative-alert-message{ min-width:0; }
+.cs-athlete-dashboard__administrative-alert .cs-btn--secondary{
+  box-shadow:none;
+  font-size:var(--cs-type-body-small-size);
+}
+
 /* ----------------------------
    4) Cards
    ---------------------------- */
@@ -850,6 +865,10 @@ button.cs-list-row{ font:inherit; }
   .cs-dashboard-refresh-status__indicator{ animation: none; }
 }
 .cs-athlete-dashboard__featured-attendance > [aria-label]{ margin-top: 0; }
+.cs-athlete-dashboard__featured-attendance .cs-btn--primary{
+  background:var(--cs-action-primary);
+  color:#fff;
+}
 .cs-athlete-dashboard__agenda-next{
   border-top: 1px solid var(--cs-border);
   padding-top: var(--cs-sp-4);
@@ -877,21 +896,12 @@ button.cs-list-row{ font:inherit; }
   }
   .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-events .cs-athlete-dashboard__agenda-next{
     margin-top: 20px;
-    padding: 20px;
-    border: 1px solid var(--cs-border-canonical);
-    border-radius: var(--cs-r-lg);
-    background: var(--cs-surface);
-    box-shadow: var(--cs-elevation-0);
   }
   .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-events .cs-athlete-dashboard__agenda-next .cs-list-row{
     padding-inline: 0;
   }
   .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-messages.cs-athlete-dashboard__service-panel{
-    padding: 20px;
-    border: 1px solid var(--cs-border-canonical);
-    border-radius: var(--cs-r-lg);
-    background: var(--cs-surface);
-    box-shadow: var(--cs-elevation-0);
+    padding: 0;
   }
   .cs-athlete-dashboard:is([data-dashboard-context="personal"], [data-dashboard-context="family"]) #athlete-messages .cs-athlete-dashboard__service-list .cs-list-row{
     padding-inline: 0;

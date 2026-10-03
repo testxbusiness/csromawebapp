@@ -297,7 +297,7 @@ export default function AttendanceControl({
             key={nextStatus}
             type="button"
             className={'cs-btn min-h-11 ' + (
-              status === nextStatus ? 'cs-btn--primary' : 'cs-btn--ghost'
+              nextStatus === 'going' || status === nextStatus ? 'cs-btn--primary' : 'cs-btn--ghost'
             )}
             onClick={() => void handleChange(nextStatus)}
             disabled={Boolean(pendingStatus)}
@@ -357,9 +357,8 @@ function EarlyAbsenceSection({
     >
       {earlyAbsence ? (
         <>
-          <p className="text-sm font-semibold" role="status">Assenza segnalata</p>
-          <p className="mt-1 text-xs text-secondary">
-            Puoi modificare la comunicazione entro la scadenza.
+          <p className="text-sm font-semibold" role="status" aria-label="Assenza segnalata">
+            Assenza segnalata <span className="font-normal text-secondary">/ Puoi modificare la comunicazione entro la scadenza.</span>
           </p>
           {availability.actions.revoke_early_absence && (
             <button

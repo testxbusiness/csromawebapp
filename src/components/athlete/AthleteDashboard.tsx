@@ -126,9 +126,9 @@ function AdministrativeAlerts({
   subjectProfileId: string | null
 }) {
   return alerts.map((alert) => (
-    <Alert key={alert.area} variant={alert.tone} className="flex items-center justify-between gap-3">
-      <p className="font-medium">{alert.message}</p>
-      <Link href={appendSubjectProfile(alert.href, subjectProfileId)} className="cs-btn cs-btn--ghost cs-btn--sm shrink-0">
+    <Alert key={alert.area} variant={alert.tone} className="cs-athlete-dashboard__administrative-alert flex items-center justify-between gap-3">
+      <p className="cs-athlete-dashboard__administrative-alert-message font-medium">{alert.message}</p>
+      <Link href={appendSubjectProfile(alert.href, subjectProfileId)} className="cs-btn cs-btn--secondary cs-btn--sm shrink-0">
         Dettagli
       </Link>
     </Alert>

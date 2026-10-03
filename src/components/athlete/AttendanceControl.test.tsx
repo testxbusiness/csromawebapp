@@ -132,6 +132,7 @@ describe('AttendanceControl', () => {
     const onChange = jest.fn().mockResolvedValue(undefined)
     render(<AttendanceControl requiresConfirmation canRespond onChange={onChange} />)
 
+    expect(screen.getByRole('button', { name: 'Partecipo' })).toHaveClass('cs-btn--primary')
     await user.tab()
     await user.keyboard('{Enter}')
 
@@ -204,8 +205,7 @@ describe('AttendanceControl', () => {
     await user.type(screen.getByLabelText(/nota/i), 'Visita medica')
     await user.click(screen.getByRole('button', { name: 'Conferma assenza' }))
     await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith('Visita medica'))
-    expect(screen.getByText('Assenza segnalata')).toBeTruthy()
-    expect(screen.getByText('Puoi modificare la comunicazione entro la scadenza.')).toBeTruthy()
+    expect(screen.getByRole('status', { name: /Assenza segnalata/i })).toHaveTextContent('Puoi modificare la comunicazione entro la scadenza.')
   })
 
   it('revokes early absence and returns to the neutral response state', async () => {
@@ -224,7 +224,7 @@ describe('AttendanceControl', () => {
     expect(reportButton).toHaveClass('cs-btn--primary')
     await user.click(reportButton)
     await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith(''))
-    expect(screen.getAllByText('Assenza segnalata')).toHaveLength(1)
+    expect(screen.getAllByRole('status', { name: /Assenza segnalata/i })).toHaveLength(1)
   })
 
   it('uses the warning treatment for revoking an absence-only report', async () => {
