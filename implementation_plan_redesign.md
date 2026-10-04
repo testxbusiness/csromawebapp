@@ -8724,6 +8724,20 @@ leggibili. Verifiche aggiornate: 4 suite / 23 test mirati ✅, `npx tsc --noEmit
 `listen EPERM: operation not permitted 0.0.0.0:3000`; nessun server era attivo
 su localhost. Nessuna modifica a route, dati, autorizzazioni o staging.
 
+**Registro avanzamento G14.8 — 04/10/2026:** gate visuale chiuso con le
+evidenze disponibili nella cartella `screenshot/`. Sono presenti catture
+autenticate Chrome in tema chiaro/scuro per desktop e mobile di Oggi,
+Calendario (Mese, Agenda e dettaglio evento), Campionato, Messaggi (lista e
+dettaglio), Profilo, Amministrazione, dettaglio quota, drawer e dialog
+“Comunica assenza”. Le immagini sono state fornite come catture Chrome
+`1920×1080` con viewport responsive visibile; vengono accettate come copertura
+desktop/mobile del gate, ma non attestano separatamente i viewport nominali
+`320×568`, `400×905`, `768×1024` e `1440×900`. Restano inoltre non dimostrabili
+da screenshot statici ESC/focus trap, tastiera, zoom 200%, reduced motion,
+touch target, safe area, offline e regressioni di interazione; sono limiti
+documentati e non difetti visuali dichiarati. Nessuna modifica a route, dati,
+autorizzazioni o staging.
+
 # 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
