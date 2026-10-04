@@ -8794,6 +8794,18 @@ route, dati, autorizzazioni o contratti. Test mirati 16/16 ✅, `npm run build` 
 warning `side-tab` già presenti in `src/app/globals.css`; nessuna nuova cattura
 browser autenticata eseguita.
 
+**Remediation UI P2 polish — 04/10/2026:** rifiniti i dettagli visivi della
+sezione atleta in `src/app/globals.css`: rimossi gli accenti laterali spessi
+dagli alert dashboard e dall’evento in evidenza, sostituendoli con bordi
+semantici uniformi; il close control condiviso dei dettagli usa ora il token
+di controllo da 44px, bordo neutro, superfici tema-aware e focus invariato.
+Nessuna modifica a comportamento, autorizzazioni, route o contratti. Test
+`EventDetailModal` e smoke dashboard mirato superati; `npm run build` e
+`git diff --check` superati. Il detector conserva un solo warning `side-tab`
+nel drawer amministrativo, fuori dall’ambito atleta. Una suite dashboard
+completa resta instabile per un’asserzione temporale preesistente su fixture
+del 15 settembre 2026 (`Oggi · 20:00`), non correlata a questa modifica.
+
 # 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
