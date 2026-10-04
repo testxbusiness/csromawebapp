@@ -1234,7 +1234,14 @@ button.cs-list-row{ font:inherit; }
 .cs-calendar-header{ display:flex; align-items:center; justify-content:space-between; gap:var(--cs-sp-4); margin-bottom:var(--cs-sp-6); }
 .cs-calendar-actions{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--cs-sp-2); }
 .cs-calendar-view-switcher{ display:flex; gap:var(--cs-sp-2); margin-bottom:var(--cs-sp-5); }
-.cs-calendar-filters{ margin-bottom:var(--cs-sp-5); padding:var(--cs-sp-4); border:1px solid var(--cs-border-canonical); border-radius:var(--cs-r-md); background:var(--cs-surface-2); }
+.cs-calendar-filters{ margin-bottom:var(--cs-sp-5); padding:var(--cs-sp-3); border:1px solid var(--cs-border-canonical); border-radius:var(--cs-r-md); background:var(--cs-surface-2); }
+.cs-calendar-filters__summary{ display:flex; width:100%; align-items:center; justify-content:space-between; gap:var(--cs-sp-3); border:0; background:transparent; padding:0; color:var(--cs-text-primary); text-align:left; }
+.cs-calendar-filters__summary-label{ display:block; font-size:var(--cs-fs-sm); font-weight:700; }
+.cs-calendar-filters__summary-value{ display:block; margin-top:2px; color:var(--cs-text-secondary); font-size:var(--cs-fs-xs); }
+.cs-calendar-filters__chevron{ color:var(--cs-text-tertiary); font-size:var(--cs-fs-sm); transition:transform .15s ease; }
+.cs-calendar-filters__chevron.is-open{ transform:rotate(180deg); }
+.cs-calendar-filters__body{ display:none; margin-top:var(--cs-sp-3); }
+.cs-calendar-filters__body.is-open{ display:block; }
 .cs-calendar-filter-group{ display:flex; flex-wrap:wrap; gap:var(--cs-sp-2); }
 .cs-calendar-agenda{ display:flex; flex-direction:column; gap:var(--cs-sp-5); }
 .cs-calendar-day-heading{ margin:0 0 var(--cs-sp-2); color:var(--cs-text-secondary); font-size:var(--cs-fs-sm); font-weight:700; text-transform:capitalize; }
@@ -1256,8 +1263,14 @@ button.cs-list-row{ font:inherit; }
 .cs-absence-event:has(input:focus-visible){ outline:2px solid var(--cs-focus-ring); outline-offset:2px; }
 .cs-absence-footer{ display:flex; flex-direction:column-reverse; gap:var(--cs-sp-2); }
 @media (min-width:640px){ .cs-absence-footer{ flex-direction:row; justify-content:flex-end; } }
+@media (min-width:768px){
+  .cs-calendar-filters{ padding:var(--cs-sp-4); }
+  .cs-calendar-filters__summary{ display:none; }
+  .cs-calendar-filters__body,
+  .cs-calendar-filters__body.is-open{ display:block; margin-top:0; }
+}
 @media (max-width:639px){ .cs-calendar-header{ align-items:stretch; flex-direction:column; margin-bottom:var(--cs-sp-4); } .cs-calendar-actions{ justify-content:stretch; } .cs-calendar-actions > *{ flex:1 1 auto; } }
-@media (prefers-reduced-motion: reduce){ .cs-calendar-month-event-row{ transition:none; } }
+@media (prefers-reduced-motion: reduce){ .cs-calendar-month-event-row,.cs-calendar-filters__chevron{ transition:none; } }
 
 /* FullCalendar ships its own light header surface. Keep weekday labels readable
    when the app switches to the dark theme without affecting mobile calendar. */

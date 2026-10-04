@@ -8782,6 +8782,18 @@ false`; la RPC esiste come `SECURITY DEFINER`, con `EXECUTE` negato a `anon` e
 modificato. Gli advisor riportano solo rilievi già presenti nel progetto
 (RLS/info, leaked-password protection e warning performance esistenti).
 
+**Remediation UI P2 distill — 04/10/2026:** ridotta la densità dei controlli
+calendario mobile in `src/components/athlete/AthleteCalendarManager.tsx` e
+`src/app/globals.css`: il filtro “Tipo evento” è ora una disclosure compatta
+chiusa di default, con riepilogo del tipo attivo; le opzioni restano complete,
+accessibili e sempre aperte su desktop. La selezione aggiorna il riepilogo e
+chiude il pannello mobile. Aggiunta copertura in
+`src/components/athlete/AthleteCalendarManager.test.tsx`. Nessuna modifica a
+route, dati, autorizzazioni o contratti. Test mirati 16/16 ✅, `npm run build` ✅,
+`git diff --check` ✅. Il detector Impeccable conserva soltanto i quattro
+warning `side-tab` già presenti in `src/app/globals.css`; nessuna nuova cattura
+browser autenticata eseguita.
+
 # 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

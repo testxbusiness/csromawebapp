@@ -80,6 +80,12 @@ describe('AthleteCalendarManager load states', () => {
     expect(screen.getByRole('button', { name: 'Agenda' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: 'Mese' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('button', { name: /Vista Elenco|Vista Calendario/ })).toBeNull()
+    const filterToggle = screen.getByRole('button', { name: /Filtri.*Tutti i tipi/i })
+    expect(filterToggle).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(filterToggle)
+    expect(filterToggle).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Allenamento' }))
+    expect(screen.getByRole('button', { name: /Filtri.*Allenamento/i })).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('renders an error state for an HTTP failure instead of empty content', async () => {

@@ -44,6 +44,7 @@ export default function AthleteCalendarManager() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const [filterEventKind, setFilterEventKind] = useState<CalendarEventKindFilter>('')
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
   const fetchControllerRef = useRef<AbortController | null>(null)
   const attendanceRequestRef = useRef<AbortController | null>(null)
@@ -177,6 +178,9 @@ export default function AthleteCalendarManager() {
     [events, filterEventKind, selectedTeamId],
   )
   const hasActiveFilters = Boolean(filterEventKind || selectedTeamId)
+  const selectedEventKindLabel = filterEventKind
+    ? EVENT_KIND_OPTIONS.find((option) => option.value === filterEventKind)?.label ?? 'Tipo selezionato'
+    : 'Tutti i tipi'
   const filteredEmptyTitle = hasActiveFilters ? 'Nessun evento corrisponde ai filtri' : 'Nessun evento trovato'
   const canConfirmAttendance = canConfirmAthleteAttendance(
     role,
@@ -375,7 +379,20 @@ export default function AthleteCalendarManager() {
 
         {/* Filtri: restringono esclusivamente il payload già autorizzato dal server. */}
         <div className="cs-calendar-filters">
-          <div className="flex-1">
+          <button
+            type="button"
+            className="cs-calendar-filters__summary"
+            aria-expanded={mobileFiltersOpen}
+            aria-controls="athlete-calendar-event-filters"
+            onClick={() => setMobileFiltersOpen((open) => !open)}
+          >
+            <span>
+              <span className="cs-calendar-filters__summary-label">Filtri</span>
+              <span className="cs-calendar-filters__summary-value">{selectedEventKindLabel}</span>
+            </span>
+            <span aria-hidden="true" className={`cs-calendar-filters__chevron${mobileFiltersOpen ? ' is-open' : ''}`}>⌄</span>
+          </button>
+          <div id="athlete-calendar-event-filters" className={`cs-calendar-filters__body${mobileFiltersOpen ? ' is-open' : ''}`}>
             <span className="cs-field__label">Tipo evento</span>
             <div className="cs-calendar-filter-group" role="group" aria-label="Filtra per tipo evento">
               {[{ value: '', label: 'Tutti' }, ...EVENT_KIND_OPTIONS].map(({ value, label }) => (
@@ -383,7 +400,10 @@ export default function AthleteCalendarManager() {
                   key={value || 'all'}
                   type="button"
                   aria-pressed={filterEventKind === value}
-                  onClick={() => setFilterEventKind(value as CalendarEventKindFilter)}
+                  onClick={() => {
+                    setFilterEventKind(value as CalendarEventKindFilter)
+                    setMobileFiltersOpen(false)
+                  }}
                   className={`cs-btn cs-btn--sm ${filterEventKind === value ? 'cs-btn--primary' : 'cs-btn--outline'}`}
                 >
                   {label}
