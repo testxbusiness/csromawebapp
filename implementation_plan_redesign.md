@@ -8738,6 +8738,50 @@ touch target, safe area, offline e regressioni di interazione; sono limiti
 documentati e non difetti visuali dichiarati. Nessuna modifica a route, dati,
 autorizzazioni o staging.
 
+**Remediation UI P1 adapt — 04/10/2026:** riorganizzate le righe quote in
+`src/components/athlete/FeeRow.tsx` e `src/app/globals.css`: su mobile titolo,
+rata/scadenza e riepilogo economico ora occupano livelli distinti, evitando la
+compressione di nome, importo e stato. Il dettaglio evento in
+`src/components/shared/EventDetailModal.tsx` usa una colonna fino a 479px e due
+colonne soltanto da 480px, con descrizione e presenza a tutta larghezza; il
+close control comune è stato portato a 40px. Route, dati, autorizzazioni e
+contratti invariati. Test mirati FeeRow/EventDetailModal 6/6, `npx tsc
+--noEmit`, `npm run build` e `git diff --check` superati. Il detector
+Impeccable conserva soltanto i warning `side-tab` già presenti sugli accenti
+laterali; non è stata eseguita una nuova cattura browser autenticata dopo la
+modifica.
+
+**Verifica read-only migration staging → produzione — 04/10/2026:** confrontata la
+history remota dei progetti Supabase `csromawebapp-staging`
+(`kibtvkuiedoxgppnnxkf`) e `csromawebapp` (`qyiholnatsrvpoqoplje`). Staging
+contiene due versioni successive assenti in produzione:
+`20261001170700_athlete_administration_enrollment_application` e
+`20261001170720_athlete_enrollment_application_bulk`. Il repository locale usa
+gli stessi contenuti con i nomi
+`20261001160759_athlete_administration_enrollment_application.sql` e
+`20261001184500_athlete_enrollment_application_bulk.sql`; verificare/allineare
+le versioni prima dell'applicazione in produzione. Controllo schema read-only:
+staging ha la colonna `season_profiles.enrollment_application_delivered` e la
+RPC `set_athlete_enrollment_application_delivered_atomically`, produzione non
+ha nessuna delle due. Le versioni staging-only
+`20260723140557`, `20260723152000`, `20260725162041` e `20260729170829` sono
+storiche/local-baseline già documentate nel preflight G12.9 e non sono state
+considerate candidate operative. Nessuna migration applicata e nessun dato
+modificato. File aggiornato: questo piano. Check eseguiti: elenco migration
+remoto e query schema read-only su entrambi i progetti.
+
+**Applicazione produzione migration enrollment — 04/10/2026:** applicate in
+produzione, in ordine, le due migration richieste con `supabase_apply_migration`:
+`athlete_administration_enrollment_application` e
+`athlete_enrollment_application_bulk`. Il catalogo remoto ha registrato le
+versioni generate `20261004115227` e `20261004115239` (non i timestamp delle
+versioni staging), perché il tool assegna la versione al momento
+dell'applicazione. Post-check riuscito: la colonna è `boolean NOT NULL DEFAULT
+false`; la RPC esiste come `SECURITY DEFINER`, con `EXECUTE` negato a `anon` e
+`authenticated` e concesso a `service_role`. Nessun dato applicativo è stato
+modificato. Gli advisor riportano solo rilievi già presenti nel progetto
+(RLS/info, leaked-password protection e warning performance esistenti).
+
 # 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
