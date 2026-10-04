@@ -292,7 +292,7 @@ Per un goal `[x]` aggiungere sempre:
 | G14.4 Calendario e modal assenza atleta | [ ] | G14.1,G14.2 | Viste Mese/Agenda, filtri, eventi e dialog “Comunica assenza”. |
 | G14.5 Messaggi atleta e dettaglio | [x] | G14.1,G14.2 | Completato il 03/10/2026: lista editoriale con soggetto prioritario, tab/filtri/separatori, unread e team context distinti; dettaglio su ResponsiveDetail comune con bordo rosso, metadati separati e corpo scrollabile. Test messaggi 12/12, typecheck, build e diff check superati. |
 | G14.6 Campionato atleta | [x] | G14.1,G14.2 | Completato il 03/10/2026; contesto/titolo e selezioni uniformati, zero-state e stati errore/offline/loading mantenuti leggibili, pannelli campionato rifiniti con righe/separatori e badge semantici, dettaglio convocazione migrato al ResponsiveDetail comune. Test mirati 17/17, typecheck, build e diff check superati. Nessuna modifica a resolver, catalogo, route, API, autorizzazioni o dati; non eseguita verifica browser autenticata cross-viewport/dark mode, prevista in G14.8. |
-| G14.7 Profilo e Amministrazione atleta | [ ] | G14.1,G14.2 | Profilo, preferenze, stati amministrativi e quote/rate. |
+| G14.7 Profilo e Amministrazione atleta | [x] | G14.1,G14.2 | Completato il 04/10/2026; uniformati Profilo, Amministrazione e Quote su testate, Panel, ListRow, label/valore, empty state e badge; preferenze account separate dai dati atleta, “Attiva” notifiche secondaria, stati economici espliciti e dettaglio rata senza troncamenti/box grigi. Le rate usano la primitive ListRow e il gruppo squadra non tronca più i dati. Privacy delegata, route, contratti e azioni documentali/certificato invariati. Test mirati 23/23, typecheck, build e diff check superati. Lo smoke Playwright cross-viewport è stato tentato ma non avviabile in questo host per `listen EPERM` sul bind `0.0.0.0:3000`; resta evidenza da ripetere nel gate G14.8. |
 | G14.8 Gate visuale atleta | [ ] | G14.1–G14.7 | Regressione responsive, accessibilità e matrice chiaro/scuro. |
 
 ---
@@ -8700,6 +8700,29 @@ stati dati, route e contratti API invariati.
 Verifiche: test mirati campionato 17/17 ✅, `npx tsc --noEmit` ✅,
 `npm run build` ✅, `git diff --check` ✅. Restano screenshot autenticati,
 contrasto/focus e verifica cross-viewport nel gate G14.8.
+
+**Registro avanzamento G14.7 — 04/10/2026:** completata la coerenza visiva di
+Profilo e Amministrazione atleta. Aggiornati `AthleteProfileManager.tsx`,
+`AthleteAdministrationManager.tsx`, `AthleteFeesManager.tsx` e `FeeRow.tsx`:
+identità con avatar rosso non semantico, colonne label/valore, Panel/ListRow,
+empty state e badge condivisi; preferenze account separate da identità/dati
+sportivi con “Attiva” notifiche secondaria; domanda, certificato e riepilogo
+quote allineati allo stesso ritmo; importi tabulari e stati espliciti; dettaglio
+rata con superficie secondaria, separatori e testo non troncato. Nessuna nuova
+azione su documenti/certificato e privacy delegata invariata.
+Verifiche: test mirati Profilo/Amministrazione/Rate 14/14 ✅,
+`npx tsc --noEmit` ✅, `npm run build` ✅, `git diff --check` ✅. Restano
+screenshot autenticati, contrasto/focus e verifica cross-viewport nel gate
+G14.8.
+
+**Remediation G14.7 — 04/10/2026:** durante l’audit finale la riga rata è
+stata portata esplicitamente su `ListRow` e sono stati rimossi i residui
+`truncate` dal gruppo squadra delle quote, così attività e nomi lunghi restano
+leggibili. Verifiche aggiornate: 4 suite / 23 test mirati ✅, `npx tsc --noEmit`
+✅, `npm run build` ✅, `git diff --check` ✅. Lo smoke Playwright previsto da
+`tests/e2e/athlete-fees-profile.spec.ts` non ha potuto avviare il web server:
+`listen EPERM: operation not permitted 0.0.0.0:3000`; nessun server era attivo
+su localhost. Nessuna modifica a route, dati, autorizzazioni o staging.
 
 # 25. Criterio finale di successo
 

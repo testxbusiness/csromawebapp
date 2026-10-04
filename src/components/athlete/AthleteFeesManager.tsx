@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
-import { EmptyState, ErrorState, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
+import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
 import type { AthleteFeeInstallment, AthleteFeesContract, AthleteFeeStatus } from '@/types/athlete-fees'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { FeeRow } from './FeeRow'
@@ -56,11 +56,11 @@ export function AthleteFeesContent({ installments, sectionId }: { installments: 
           <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--cs-text-secondary)]">Quote associative</p><h2 id={sectionId ? `${sectionId}-title` : undefined} className="mt-1 text-xl font-bold text-[color:var(--cs-text)]">Situazione economica</h2></div>
           <StatusBadge status="info" label={`${installments.length} ${installments.length === 1 ? 'rata' : 'rate'}`} />
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] p-3"><p className="text-xs text-[color:var(--cs-text-secondary)]">Totale dovuto</p><p className="mt-1 font-variant-numeric tabular-nums text-xl font-bold">{formatAmount(totals.due)}</p></div>
-          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] p-3"><p className="text-xs text-[color:var(--cs-text-secondary)]">Già pagato</p><p className="mt-1 font-variant-numeric tabular-nums text-xl font-bold text-[color:var(--cs-success-canonical)]">{formatAmount(totals.paid)}</p></div>
-          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] p-3"><p className="text-xs text-[color:var(--cs-text-secondary)]">Residuo</p><p className="mt-1 font-variant-numeric tabular-nums text-xl font-bold text-[color:var(--cs-brand-red)]">{formatAmount(totals.remaining)}</p></div>
-        </div>
+        <dl className="divide-y divide-[color:var(--cs-border-canonical)] border-y border-[color:var(--cs-border-canonical)]">
+          <ListRow className="px-0"><dt className="text-sm text-[color:var(--cs-text-secondary)]">Totale dovuto</dt><dd className="font-variant-numeric tabular-nums text-lg font-bold">{formatAmount(totals.due)}</dd></ListRow>
+          <ListRow className="px-0"><dt className="text-sm text-[color:var(--cs-text-secondary)]">Già pagato</dt><dd className="font-variant-numeric tabular-nums text-lg font-bold text-[color:var(--cs-success-canonical)]">{formatAmount(totals.paid)}</dd></ListRow>
+          <ListRow className="px-0"><dt className="text-sm text-[color:var(--cs-text-secondary)]">Residuo</dt><dd className="font-variant-numeric tabular-nums text-lg font-bold">{formatAmount(totals.remaining)}</dd></ListRow>
+        </dl>
       </Panel>
 
       <div className="sm:hidden">
@@ -75,7 +75,7 @@ export function AthleteFeesContent({ installments, sectionId }: { installments: 
 
       {installments.length === 0 ? <EmptyState title="Nessuna quota associativa trovata" description="Contatta l'amministratore per informazioni sulle quote." /> : filteredInstallments.length === 0 ? <EmptyState filtered title="Nessuna rata per questo filtro" /> : <div className="space-y-4">
         {groups.map(({ team, installments: teamInstallments }) => <Panel key={team.id} className="overflow-hidden p-0">
-          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--cs-border-canonical)] px-4 py-3"><div className="min-w-0"><h3 className="truncate font-semibold text-[color:var(--cs-text)]">{team.name} <span className="font-normal text-[color:var(--cs-text-secondary)]">({team.code})</span></h3><p className="truncate text-xs text-[color:var(--cs-text-secondary)]">{team.activity.name}</p></div><span className="shrink-0 text-xs text-[color:var(--cs-text-secondary)]">{teamInstallments.length} {teamInstallments.length === 1 ? 'rata' : 'rate'}</span></div>
+          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--cs-border-canonical)] px-4 py-3"><div className="min-w-0"><h3 className="font-semibold text-[color:var(--cs-text)]">{team.name} <span className="font-normal text-[color:var(--cs-text-secondary)]">({team.code})</span></h3><p className="text-xs text-[color:var(--cs-text-secondary)]">{team.activity.name}</p></div><span className="shrink-0 text-xs text-[color:var(--cs-text-secondary)]">{teamInstallments.length} {teamInstallments.length === 1 ? 'rata' : 'rate'}</span></div>
           {teamInstallments.map((installment) => <FeeRow key={installment.id} installment={installment} />)}
         </Panel>)}
       </div>}
