@@ -75,4 +75,39 @@ describe('SeasonsManager creation flow', () => {
 
     expect(await screen.findByRole('button', { name: 'Avvia rollover verso Stagione 2027/2028' })).toBeInTheDocument()
   })
+
+  it('activates a future draft through the atomic server route', async () => {
+    setup([
+      season,
+      { id: 'season-2728', name: 'Stagione 2027/2028', start_date: '2027-09-01', end_date: '2028-06-30', is_active: false },
+    ])
+    global.fetch = jest.fn().mockResolvedValue(response({ replayed: false }, 200))
+    jest.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<SeasonsManager embedded />)
+    expect(await screen.findAllByRole('button', { name: 'Attiva' })).toHaveLength(2)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Attiva' })[0])
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/admin/season-activation', expect.objectContaining({ method: 'POST' })))
+    const [, request] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit]
+    const payload = JSON.parse(String(request.body)) as Record<string, string>
+    expect(payload.sourceSeasonId).toBe('season-1')
+    expect(payload.targetSeasonId).toBe('season-2728')
+    expect(payload.activationId).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('keeps the season list unchanged and reports activation failures', async () => {
+    setup([
+      season,
+      { id: 'season-2728', name: 'Stagione 2027/2028', start_date: '2027-09-01', end_date: '2028-06-30', is_active: false },
+    ])
+    global.fetch = jest.fn().mockResolvedValue(response({ error: 'La stagione target deve iniziare dopo la fine della source' }, 409))
+    jest.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<SeasonsManager embedded />)
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Attiva' }))[0])
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('La stagione target deve iniziare dopo la fine della source')
+    expect(screen.getAllByText('Stagione 2027/2028')).toHaveLength(2)
+  })
 })

@@ -20,6 +20,11 @@ interface Season {
   updated_at?: string
 }
 
+function createActivationId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return '00000000-0000-4000-8000-' + `${Date.now()}${Math.floor(Math.random() * 100000000)}`.slice(-12).padStart(12, '0')
+}
+
 export default function SeasonsManager({ embedded = false }: { embedded?: boolean }) {
   const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,6 +33,9 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [rolloverOpen, setRolloverOpen] = useState(false)
+  const [activatingSeasonId, setActivatingSeasonId] = useState<string | null>(null)
+  const [activationError, setActivationError] = useState<string | null>(null)
+  const [activationSuccess, setActivationSuccess] = useState<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
   const rolloverContext = useMemo(() => getRolloverSeasonContext(
     seasons.filter((season): season is Season & { id: string } => Boolean(season.id)),
@@ -87,6 +95,45 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
     }
   }
 
+  const handleActivateSeason = async (targetSeason: Season & { id: string }) => {
+    const sourceSeason = rolloverContext.source
+    if (!sourceSeason) return
+
+    const confirmed = window.confirm(
+      `Attivare ${targetSeason.name}? ${sourceSeason.name} verrà archiviata e non sarà più la stagione operativa.`
+    )
+    if (!confirmed) return
+
+    setActivatingSeasonId(targetSeason.id)
+    setActivationError(null)
+    setActivationSuccess(null)
+    try {
+      const response = await fetch('/api/admin/season-activation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          activationId: createActivationId(),
+          sourceSeasonId: sourceSeason.id,
+          targetSeasonId: targetSeason.id,
+        }),
+      })
+      const payload: unknown = await response.json().catch(() => null)
+      if (!response.ok) {
+        const message = typeof payload === 'object' && payload !== null && 'error' in payload && typeof payload.error === 'string'
+          ? payload.error
+          : 'Impossibile attivare la stagione'
+        setActivationError(message)
+        return
+      }
+      setActivationSuccess(`${targetSeason.name} è ora la stagione attiva.`)
+      await loadSeasons()
+    } catch {
+      setActivationError('Impossibile contattare il server. Riprova.')
+    } finally {
+      setActivatingSeasonId(null)
+    }
+  }
+
   const handleDeleteSeason = async (id: string) => {
     if (window.confirm('Sei sicuro di voler eliminare questa stagione?')) {
       const { error } = await supabase
@@ -114,7 +161,8 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
 
   const handleSubmit = (data: Omit<Season, 'id'>) => {
     if (editingSeason?.id) {
-      handleUpdateSeason(editingSeason.id, data)
+      const { is_active: _isActive, ...editableSeasonData } = data
+      handleUpdateSeason(editingSeason.id, editableSeasonData)
     } else {
       handleCreateSeason(data as Season)
     }
@@ -122,6 +170,8 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
 
   return (
     <div className="space-y-6">
+      {activationError ? <p role="alert" className="text-sm text-[color:var(--cs-danger)]">{activationError}</p> : null}
+      {activationSuccess ? <p role="status" className="text-sm text-[color:var(--cs-success)]">{activationSuccess}</p> : null}
       <div className="flex justify-between items-center">
         {!embedded && <h2 className="text-2xl font-bold">Stagioni Sportive</h2>}
         <div className="flex gap-3">
@@ -193,6 +243,15 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
                   )}
                 </td>
                 <td className="cs-table__actions">
+                  {rolloverContext.targets.some((target) => target.id === season.id) ? (
+                    <Button
+                      size="sm"
+                      onClick={() => void handleActivateSeason(season as Season & { id: string })}
+                      loading={activatingSeasonId === season.id}
+                    >
+                      Attiva
+                    </Button>
+                  ) : null}
                   <button
                     onClick={() => { setEditingSeason(season); setModalOpen(true) }}
                     className="cs-btn cs-btn--outline cs-btn--sm"
@@ -220,6 +279,16 @@ export default function SeasonsManager({ embedded = false }: { embedded?: boolea
                 <span className={`cs-badge ${season.is_active ? 'cs-badge--success' : 'cs-badge--neutral'}`}>{season.is_active ? 'Attiva' : 'Inattiva'}</span>
               </div>
               <div className="mt-3 flex gap-2">
+                {rolloverContext.targets.some((target) => target.id === season.id) ? (
+                  <Button
+                    size="sm"
+                    onClick={() => void handleActivateSeason(season as Season & { id: string })}
+                    loading={activatingSeasonId === season.id}
+                    className="flex-1"
+                  >
+                    Attiva
+                  </Button>
+                ) : null}
                 <button onClick={() => { setEditingSeason(season); setModalOpen(true) }} className="cs-btn cs-btn--outline cs-btn--sm flex-1">Modifica</button>
                 <button onClick={() => handleDeleteSeason(season.id!)} className="cs-btn cs-btn--danger cs-btn--sm flex-1">Elimina</button>
               </div>

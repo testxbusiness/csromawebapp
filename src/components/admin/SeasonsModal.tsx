@@ -129,21 +129,6 @@ export function SeasonsModal({
             </div>
           </div>
 
-          {!season?.is_active && (
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="is_active"
-                checked={formData.is_active}
-                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                className="h-4 w-4 text-[color:var(--cs-primary)] focus:ring-[color:var(--cs-primary)] border-[color:var(--cs-border)] rounded"
-              />
-              <label htmlFor="is_active" className="ml-2 block text-sm text-[color:var(--cs-text)]">
-                Imposta come stagione attiva
-              </label>
-            </div>
-          )}
-
           <DialogFooter>
             <Button
               type="button"
