@@ -102,7 +102,7 @@ export async function resolveSubjectProfile(
   }
   const permissionGranted = permission
     ? permissions[permission]
-    : permissions.view_schedule || permissions.view_payments || permissions.receive_messages
+    : Object.values(permissions).some(Boolean)
   if (!permissionGranted) throw new AccountContextError('Permesso sul profilo accessibile non concesso', 403)
 
   const targetIsMinor = isMinor(profile.birth_date, override?.treat_as_minor)

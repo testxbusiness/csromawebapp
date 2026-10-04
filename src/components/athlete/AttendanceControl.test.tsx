@@ -132,6 +132,7 @@ describe('AttendanceControl', () => {
     const onChange = jest.fn().mockResolvedValue(undefined)
     render(<AttendanceControl requiresConfirmation canRespond onChange={onChange} />)
 
+    expect(screen.getByRole('button', { name: 'Partecipo' })).toHaveClass('cs-btn--primary')
     await user.tab()
     await user.keyboard('{Enter}')
 
@@ -204,7 +205,7 @@ describe('AttendanceControl', () => {
     await user.type(screen.getByLabelText(/nota/i), 'Visita medica')
     await user.click(screen.getByRole('button', { name: 'Conferma assenza' }))
     await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith('Visita medica'))
-    expect(screen.getByText(/hai già comunicato/i)).toBeTruthy()
+    expect(screen.getByRole('status', { name: /Assenza segnalata/i })).toHaveTextContent('Puoi modificare la comunicazione entro la scadenza.')
   })
 
   it('revokes early absence and returns to the neutral response state', async () => {
@@ -219,9 +220,18 @@ describe('AttendanceControl', () => {
     const user = userEvent.setup()
     const onEarlyAbsence = jest.fn().mockResolvedValue(undefined)
     render(<AttendanceControl requiresConfirmation attendanceMode="absence_only" canRespond availability={{ attendance_mode: 'absence_only', requires_confirmation: true, can_respond_now: false, can_report_early_absence: true, can_revoke_early_absence: false, actions: { respond: false, report_early_absence: true, revoke_early_absence: false }, closure_reason: null, next_event: null, next_recalculation_at: null }} eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z', end: '2026-09-15T18:30:00Z' }} onChange={jest.fn()} onEarlyAbsence={onEarlyAbsence} />)
-    await user.click(screen.getByRole('button', { name: 'Segnala assenza' }))
+    const reportButton = screen.getByRole('button', { name: 'Segnala assenza' })
+    expect(reportButton).toHaveClass('cs-btn--primary')
+    await user.click(reportButton)
     await waitFor(() => expect(onEarlyAbsence).toHaveBeenCalledWith(''))
-    expect(screen.getAllByText('Assenza segnalata').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('status', { name: /Assenza segnalata/i })).toHaveLength(1)
+    expect(screen.queryByText('Non puoi esserci? Segnala l’assenza qui: il coach la vedrà nell’app.')).toBeNull()
+  })
+
+  it('uses the warning treatment for revoking an absence-only report', async () => {
+    render(<AttendanceControl requiresConfirmation attendanceMode="absence_only" canRespond initialStatus="declined" initialEarlyAbsence availability={{ attendance_mode: 'absence_only', requires_confirmation: true, can_respond_now: false, can_report_early_absence: false, can_revoke_early_absence: true, actions: { respond: false, report_early_absence: false, revoke_early_absence: true }, closure_reason: 'already_early_absence', next_event: null, next_recalculation_at: null }} eventContext={{ teams: ['U16'], start: '2026-09-15T17:00:00Z', end: '2026-09-15T18:30:00Z' }} onChange={jest.fn()} onRevokeEarlyAbsence={jest.fn()} />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Annulla segnalazione' })).toHaveClass('cs-btn--warning'))
   })
 
   it('keeps absence-only closed states free of RSVP participation controls', () => {

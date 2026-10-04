@@ -185,10 +185,10 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         <div className="lg:hidden">
           <div className="cs-overlay" aria-hidden="false" onClick={() => setMobileMenuOpen(false)} />
           <div className="cs-drawer" aria-hidden="false">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[color:var(--cs-text-secondary)]">CSRoma</p>
-                <p className="text-base font-semibold text-[color:var(--cs-primary)]">Navigazione</p>
+            <div className="cs-drawer__header">
+              <div className="cs-drawer__heading">
+                <p className="cs-drawer__eyebrow">CSRoma</p>
+                <p className="cs-drawer__title">Navigazione</p>
               </div>
               <button
                 type="button"
@@ -202,21 +202,21 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
             <RoleSidebar variant="mobile" onNavigate={() => setMobileMenuOpen(false)} />
 
-            <div className="mt-8 space-y-2">
-              <p className="text-xs uppercase tracking-[0.12em] text-[color:var(--cs-text-secondary)]">Account</p>
-              <div className="cs-card">
+            <div className="cs-drawer__account">
+              <p className="cs-drawer__section-label">Account</p>
+              <div className="cs-drawer__account-card">
                 {shouldShowSkeleton ? (
                   <>
-                    <div className="h-3 w-28 bg-[color:var(--cs-border)] rounded animate-pulse mb-1" />
-                    <div className="h-2 w-20 bg-[color:var(--cs-border)] rounded animate-pulse" />
+                    <div className="cs-skeleton cs-drawer__skeleton-name" />
+                    <div className="cs-skeleton cs-drawer__skeleton-role" />
                   </>
                 ) : (
                   <>
-                    <p className="text-sm font-semibold text-[color:var(--cs-text)]">
+                    <p className="cs-drawer__account-name">
                       {`${first ?? ''} ${last ?? ''}`.trim() || user?.email || 'Utente CSRoma'}
                     </p>
                     {roleLabel && (
-                      <p className="text-xs text-[color:var(--cs-text-secondary)]">
+                      <p className="cs-drawer__account-role">
                         {roleLabel}
                         {shouldShowProfileLoading && ' • Caricamento...'}
                       </p>
@@ -229,7 +229,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
                     setMobileMenuOpen(false)
                     await handleSignOut()
                   }}
-                  className="cs-btn cs-btn--primary cs-btn--block mt-3"
+                  className="cs-drawer__logout cs-btn cs-btn--secondary cs-btn--block"
                 >
                   Esci
                 </button>

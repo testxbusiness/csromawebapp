@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from 'react'
 import { CalendarDays, ChevronDown, ChevronUp, Clock3, MapPin, ShieldCheck, Trophy, Users } from 'lucide-react'
-import { Badge, Button, Card, CardMeta, CardTitle, EmptyState, Table } from '@/components/ui'
+import { Badge, Button, Card, CardMeta, CardTitle, EmptyState, ListRow, Table } from '@/components/ui'
 import { formatChampionshipDate, formatMatchScore, formatMatchSetsDetail } from './formatters'
 import { STATUS_LABEL, type Match } from './types'
 
@@ -105,12 +105,14 @@ export function ChampionshipInfoPanel({
       {description ? <CardMeta>{description}</CardMeta> : null}
       <div className="mt-4">
         {items && items.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="divide-y divide-[color:var(--cs-border)] sm:grid sm:grid-cols-2 sm:divide-y-0 sm:gap-x-6">
             {items.map((item) => (
-              <div key={item.label} className="cs-card cs-card--subdued px-4 py-3">
-                <div className="cs-type-label">{item.label}</div>
-                <div className="mt-1 text-sm font-semibold text-[color:var(--cs-ink)]">{item.value}</div>
-              </div>
+              <ListRow key={item.label} className="rounded-none border-0 px-0 py-3">
+                <div>
+                  <div className="cs-type-label">{item.label}</div>
+                  <div className="mt-1 text-sm font-semibold text-[color:var(--cs-ink)]">{item.value}</div>
+                </div>
+              </ListRow>
             ))}
           </div>
         ) : (
@@ -324,11 +326,11 @@ export function RecentResultsPanel({ matches, teamName }: MatchListPanelProps) {
       </div>
       <div className="mt-4 space-y-2">
         {recentResults.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[color:var(--cs-border)] px-4 py-5 text-sm text-[color:var(--cs-text-secondary)]">
+          <div className="border-t border-[color:var(--cs-border)] px-1 py-5 text-sm text-[color:var(--cs-text-secondary)]">
             Nessun risultato recente disponibile.
           </div>
         ) : recentResults.map((match) => (
-          <div key={match.id} className="flex flex-col gap-2 rounded-2xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-subdued)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <ListRow key={match.id} className="rounded-none border-0 border-b last:border-b-0 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--cs-text-secondary)]">
                 {match.match_day ? `Giornata ${match.match_day}` : 'Giornata'} · {matchDateLabel(match)}
@@ -341,7 +343,7 @@ export function RecentResultsPanel({ matches, teamName }: MatchListPanelProps) {
               </span>
               <span className="text-xs font-semibold text-[color:var(--cs-text-secondary)]">{STATUS_LABEL[match.status] || match.status}</span>
             </div>
-          </div>
+          </ListRow>
         ))}
       </div>
     </Card>
@@ -362,7 +364,7 @@ export function ChampionshipSchedulePanel({ matches, teamName }: MatchListPanelP
           <CalendarDays className="mt-1 h-5 w-5 text-[color:var(--cs-primary)]" aria-hidden="true" />
         </div>
         <div className="mt-4 space-y-4">
-          <div className="rounded-2xl bg-[color:var(--cs-surface-subdued)] px-4 py-4 text-sm text-[color:var(--cs-text-secondary)]">
+          <div className="border-y border-[color:var(--cs-border)] px-1 py-4 text-sm text-[color:var(--cs-text-secondary)]">
             {matches.length === 0 ? 'Nessuna partita disponibile nel girone selezionato.' : `${matches.length} partite nel calendario del girone.`}
           </div>
           <Button variant="outline" block onClick={() => setShowSchedule((current) => !current)} aria-expanded={showSchedule}>
@@ -425,18 +427,19 @@ export function CalendarSyncBadge({ synced }: { synced: boolean }) {
 
 export function ConvocationPublishedList({ members, emptyText }: { members: ConvocationMemberView[]; emptyText: string }) {
   if (members.length === 0) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-500">{emptyText}</div>
+    return <div className="border-t border-[color:var(--cs-border)] px-1 py-6 text-sm text-[color:var(--cs-text-secondary)]">{emptyText}</div>
   }
 
   return (
-    <div className="max-h-[min(24rem,calc(100vh-20rem))] space-y-2 overflow-y-auto pr-1">
+    <div className="max-h-[min(24rem,calc(100vh-20rem))] divide-y divide-[color:var(--cs-border)] overflow-y-auto pr-1">
       {members.map((member) => (
-        <div key={member.id} className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
-          <span className="font-medium text-slate-900">{member.label}</span>
-          {member.jerseyNumber ? (
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{member.jerseyNumber}</span>
-          ) : null}
-        </div>
+        <ListRow
+          key={member.id}
+          className="rounded-none border-0 px-1 py-3"
+          trailing={member.jerseyNumber ? <span className="rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-subdued)] px-3 py-1 text-xs font-semibold text-[color:var(--cs-text-secondary)]">{member.jerseyNumber}</span> : undefined}
+        >
+          <span className="font-medium text-[color:var(--cs-text)]">{member.label}</span>
+        </ListRow>
       ))}
     </div>
   )

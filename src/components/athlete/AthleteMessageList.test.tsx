@@ -23,8 +23,10 @@ describe('AthleteMessageList', () => {
     expect(screen.getByRole('list', { name: 'Lista messaggi' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Non letto: Convocazione, Anna Rossi/i })).toBeTruthy()
     expect(screen.getByText('Coach')).toBeTruthy()
+    expect(screen.getByText('Convocazione').className).toContain('cs-athlete-message-row__subject')
     expect(screen.getByText('U16')).toBeTruthy()
     expect(screen.getByText('1 allegato')).toBeTruthy()
+    expect(screen.getByText('Non letto').closest('.cs-status-badge')?.className).toContain('cs-status-badge--info')
     expect(screen.queryByText('🏀')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: /Convocazione/i }))

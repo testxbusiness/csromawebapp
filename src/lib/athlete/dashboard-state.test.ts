@@ -5,7 +5,6 @@ const emptyDashboard = {
   teamCount: 0,
   eventCount: 0,
   messageCount: 0,
-  feeCount: 0,
   hasNextMatch: false,
 }
 
@@ -22,7 +21,6 @@ describe('athlete dashboard state', () => {
     expect(hasDashboardData({ ...emptyDashboard, activeSeason: { id: 'season-1' } })).toBe(true)
     expect(hasDashboardData({ ...emptyDashboard, eventCount: 1 })).toBe(true)
     expect(hasDashboardData({ ...emptyDashboard, messageCount: 1 })).toBe(true)
-    expect(hasDashboardData({ ...emptyDashboard, feeCount: 1 })).toBe(true)
     expect(hasDashboardData({ ...emptyDashboard, hasNextMatch: true })).toBe(true)
   })
 

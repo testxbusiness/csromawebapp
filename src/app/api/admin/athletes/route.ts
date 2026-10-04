@@ -14,11 +14,17 @@ async function validateAthleteTeams(adminClient: ReturnType<typeof createAdminCl
   if (!activities || activities.some((activity) => activity.season_id !== seasonId)) throw new Error('Una o più squadre non appartengono alla stagione selezionata')
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
     await requireGlobalRole(supabase, 'admin')
     const adminClient = createAdminClient()
+    const seasonId = new URL(request.url).searchParams.get('seasonId')
+
+    if (seasonId) {
+      const { data: season } = await adminClient.from('seasons').select('id').eq('id', seasonId).maybeSingle()
+      if (!season) return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
+    }
 
     // Carica atleti con dettagli base
     const [{ data: profiles, error: profilesError }, { data: athleteProfiles, error: athleteProfilesError }, { data: teamMembers, error: teamMembersError }, { data: accounts, error: accountsError }] = await Promise.all([
@@ -67,10 +73,12 @@ export async function GET() {
 
     const athleteProfileIds = athletes.map((athlete) => athlete.id)
 
-    const { data: seasonProfiles, error: seasonProfilesError } = await adminClient
+    let seasonProfilesQuery = adminClient
       .from('season_profiles')
-      .select('profile_id, season_id')
+      .select('profile_id, season_id, enrollment_application_delivered')
       .in('profile_id', athleteProfileIds)
+    if (seasonId) seasonProfilesQuery = seasonProfilesQuery.eq('season_id', seasonId)
+    const { data: seasonProfiles, error: seasonProfilesError } = await seasonProfilesQuery
 
     if (seasonProfilesError) {
       console.error('Errore caricamento stagioni atleti:', seasonProfilesError)
@@ -162,7 +170,12 @@ export async function GET() {
         teams: teamsWithDetails.filter(team => team.id)
       }
 
-      return athleteData
+      return seasonId
+        ? {
+            ...athleteData,
+            enrollment_application_delivered: (seasonProfiles ?? []).find((seasonProfile) => seasonProfile.profile_id === athlete.id)?.enrollment_application_delivered ?? false,
+          }
+        : athleteData
     })
 
     return NextResponse.json({ athletes: formattedAthletes })
@@ -298,6 +311,16 @@ export async function PATCH(request: NextRequest) {
     if (!profile || !athleteProfile) return NextResponse.json({ error: 'Atleta non trovato' }, { status: 404 })
     if (!season) return NextResponse.json({ error: 'Stagione non trovata' }, { status: 404 })
 
+    if ('enrollment_application_delivered' in payload) {
+      const { data: membership } = await adminClient
+        .from('season_profiles')
+        .select('profile_id')
+        .eq('profile_id', payload.id)
+        .eq('season_id', payload.season_id)
+        .maybeSingle()
+      if (!membership) return NextResponse.json({ error: 'L’atleta non è iscritto alla stagione selezionata' }, { status: 404 })
+    }
+
     const teamIdsPayload = payload.team_ids || []
     const jerseyNumbersPayload = payload.jersey_numbers || {}
     try { await validateAthleteTeams(adminClient, payload.season_id, teamIdsPayload) } catch (error) {
@@ -329,6 +352,15 @@ export async function PATCH(request: NextRequest) {
       source: 'admin_athlete_update',
     }, { onConflict: 'profile_id,season_id' })
     if (seasonError) return NextResponse.json({ error: 'Impossibile aggiornare il collegamento stagionale' }, { status: 400 })
+
+    if ('enrollment_application_delivered' in payload) {
+      const { error } = await adminClient
+        .from('season_profiles')
+        .update({ enrollment_application_delivered: payload.enrollment_application_delivered })
+        .eq('profile_id', payload.id)
+        .eq('season_id', payload.season_id)
+      if (error) return NextResponse.json({ error: 'Impossibile aggiornare la domanda di iscrizione' }, { status: 400 })
+    }
 
     if ('team_ids' in payload) {
       const { data: activities } = await adminClient.from('activities').select('id').eq('season_id', payload.season_id)

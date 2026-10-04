@@ -1,4 +1,5 @@
 import {
+  buildDashboardAdministrativeAlerts,
   buildDashboardEvents,
   resolveMatchPerspective,
   buildUnreadMessages,
@@ -111,5 +112,31 @@ describe('athlete dashboard contract', () => {
     expect(result.team?.id).toBe('team-1')
     expect(result.opponent?.name).toBe('Avversari')
     expect(result.is_home).toBe(false)
+  })
+
+  it.each([
+    ['missing', 'danger', 'Certificato medico da consegnare'],
+    ['expired', 'danger', 'Certificato medico scaduto'],
+    ['expiring', 'warning', 'Certificato medico in scadenza'],
+  ] as const)('creates the %s certificate alert only when attention is required', (status, tone, message) => {
+    expect(buildDashboardAdministrativeAlerts({ certificateStatus: status, fees: null })).toEqual([{
+      area: 'certificate', tone, message, href: '/athlete/fees?section=certificate',
+    }])
+  })
+
+  it('omits valid certificates and fees without overdue or due-soon installments', () => {
+    expect(buildDashboardAdministrativeAlerts({
+      certificateStatus: 'valid',
+      fees: { installments: [{ id: 'partial', status: 'partially_paid' }] } as never,
+    })).toEqual([])
+  })
+
+  it('prefers overdue fees to due-soon fees and never creates more than one fee alert', () => {
+    expect(buildDashboardAdministrativeAlerts({
+      certificateStatus: null,
+      fees: { installments: [{ id: 'soon', status: 'due_soon' }, { id: 'late', status: 'overdue' }] } as never,
+    })).toEqual([{
+      area: 'fees', tone: 'danger', message: 'Quota associativa scaduta', href: '/athlete/fees?section=fees',
+    }])
   })
 })

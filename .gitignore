@@ -76,3 +76,6 @@ dbbackup/
 
 # Local production database backups: contain credentials, auth data and user data.
 /backup-prod-*/
+
+# Local visual evidence; do not commit screenshots.
+/screenshot/

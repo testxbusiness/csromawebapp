@@ -136,6 +136,21 @@ export default function AthleteCreateModal({
           </div>
         </div>
 
+        {athlete && (
+          <div>
+            <label htmlFor="athlete-enrollment-application" className="cs-field__label">Domanda di iscrizione consegnata</label>
+            <select
+              id="athlete-enrollment-application"
+              className="cs-select"
+              value={formData.enrollment_application_delivered ? 'yes' : 'no'}
+              onChange={(event) => update('enrollment_application_delivered', event.target.value === 'yes')}
+            >
+              <option value="no">No, da consegnare</option>
+              <option value="yes">Sì, consegnata</option>
+            </select>
+          </div>
+        )}
+
         <fieldset>
           <legend className="cs-field__label">Squadre assegnate</legend>
           <p className="text-sm text-secondary mb-3">Seleziona una o più squadre. Il numero di maglia può essere diverso per ogni squadra.</p>

@@ -10,6 +10,7 @@ interface BulkOperationsModalProps {
   onTeamAssignmentRequest?: () => void
   selectedCount: number
   userType: 'athletes' | 'coaches'
+  enrollmentApplicationSeasonName?: string
   loading?: boolean
   selectedUsers?: Array<{
     id: string
@@ -27,6 +28,7 @@ export default function BulkOperationsModal({
   onTeamAssignmentRequest,
   selectedCount,
   userType,
+  enrollmentApplicationSeasonName,
   loading = false,
   selectedUsers = []
 }: BulkOperationsModalProps) {
@@ -42,7 +44,10 @@ export default function BulkOperationsModal({
     { value: 'assign_to_team', label: 'Assegna a Squadra' },
     { value: 'remove_from_team', label: 'Rimuovi da Squadra' },
     { value: 'update_jersey', label: 'Aggiorna Numero Maglia' },
-    { value: 'update_medical_expiry', label: 'Aggiorna Scadenza Certificato' }
+    { value: 'update_medical_expiry', label: 'Aggiorna Scadenza Certificato' },
+    ...(enrollmentApplicationSeasonName
+      ? [{ value: 'set_enrollment_application_delivered', label: 'Domanda consegnata' }]
+      : []),
   ] : [
     { value: 'assign_to_team', label: 'Assegna a Squadra' },
     { value: 'remove_from_team', label: 'Rimuovi da Squadra' },
@@ -227,6 +232,13 @@ export default function BulkOperationsModal({
           </div>
         )
 
+      case 'set_enrollment_application_delivered':
+        return (
+          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] bg-[color:var(--cs-surface-muted)] p-4 text-sm text-[color:var(--cs-text)]">
+            La domanda di iscrizione sarà segnata come <strong>consegnata</strong> per <strong>{selectedCount}</strong> atlet{selectedCount === 1 ? 'a' : 'i'} nella stagione <strong>{enrollmentApplicationSeasonName}</strong>.
+          </div>
+        )
+
       case 'update_staff_role':
         return (
           <div>
@@ -262,7 +274,7 @@ export default function BulkOperationsModal({
         disabled={!selectedOperation || loading}
         className="cs-btn cs-btn--primary"
       >
-        {loading ? 'Caricamento...' : 'Conferma Operazione'}
+        {loading ? 'Caricamento...' : selectedOperation === 'set_enrollment_application_delivered' ? 'Conferma domanda' : 'Conferma Operazione'}
       </button>
     </div>
   )
@@ -277,8 +289,9 @@ export default function BulkOperationsModal({
     >
       <div className="space-y-6">
         <div>
-          <label className="cs-field__label">Tipo di Operazione</label>
+          <label htmlFor="bulk-operation-type" className="cs-field__label">Tipo di Operazione</label>
           <select
+            id="bulk-operation-type"
             value={selectedOperation}
             onChange={(e) => handleOperationSelect(e.target.value)}
             className="cs-select"
@@ -294,14 +307,14 @@ export default function BulkOperationsModal({
 
         {selectedOperation && (
           <div>
-            <h4 className="text-sm font-medium mb-3">Parametri Operazione</h4>
+            <h4 className="mb-3 text-sm font-medium">{selectedOperation === 'set_enrollment_application_delivered' ? 'Conferma operazione' : 'Parametri Operazione'}</h4>
             {renderOperationForm()}
           </div>
         )}
 
-        <div className="cs-alert cs-alert--warning text-sm">
+        {selectedOperation !== 'set_enrollment_application_delivered' ? <div className="cs-alert cs-alert--warning text-sm">
           <strong>Attenzione:</strong> Questa operazione verrà applicata a tutti i {selectedCount} {userType === 'athletes' ? 'atleti' : 'collaboratori'} selezionati.
-        </div>
+        </div> : null}
       </div>
     </AdminModal>
   )

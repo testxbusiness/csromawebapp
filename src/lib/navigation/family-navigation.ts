@@ -27,7 +27,7 @@ const navigationItems: FamilyNavigationItem[] = [
   // separate relationship permission exists in the domain model.
   { key: 'championship', href: '/athlete/campionati', label: 'Campionato', permission: 'view_schedule' },
   { key: 'messages', href: '/athlete/messages', label: 'Messaggi', permission: 'receive_messages' },
-  { key: 'fees', href: '/athlete/fees', label: 'Quote', permission: 'view_payments' },
+  { key: 'fees', href: '/athlete/fees', label: 'Amministrazione' },
   { key: 'profile', href: '/athlete/profile', label: 'Profilo' },
 ]
 
@@ -36,9 +36,13 @@ export function resolveFamilyNavigation(
 ): FamilyNavigation {
   if (!selectedProfile) return { items: [navigationItems[0]], moreItems: [] }
 
-  const permitted = navigationItems.filter((item) => (
-    !item.permission || selectedProfile.relationship.permissions[item.permission]
-  ))
+  const permitted = navigationItems.filter((item) => {
+    if (item.key === 'fees') {
+      const permissions = selectedProfile.relationship.permissions
+      return permissions.view_payments || permissions.view_medical_status || permissions.view_documents
+    }
+    return !item.permission || selectedProfile.relationship.permissions[item.permission]
+  })
 
   return {
     items: permitted.slice(0, 5),

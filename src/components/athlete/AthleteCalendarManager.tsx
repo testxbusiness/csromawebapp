@@ -40,8 +40,7 @@ export default function AthleteCalendarManager() {
   const [accessDenied, setAccessDenied] = useState(false)
   const [earlyAbsenceOpen, setEarlyAbsenceOpen] = useState(false)
 
-  const [viewMode, setViewMode] = useState<'list'|'calendar'>('calendar')
-  const [mobileViewMode, setMobileViewMode] = useState<'agenda'|'calendar'>('calendar')
+  const [calendarMode, setCalendarMode] = useState<'agenda' | 'month'>('month')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const [filterEventKind, setFilterEventKind] = useState<CalendarEventKindFilter>('')
@@ -340,53 +339,45 @@ export default function AthleteCalendarManager() {
 
   return (
     <>
-      <div className="cs-card cs-card--primary">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+      <div className="cs-card cs-card--primary cs-calendar-shell">
+        <div className="cs-calendar-header">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
-          <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+          <div className="cs-calendar-actions">
             {canConfirmAttendance && (
               <button type="button" onClick={() => setEarlyAbsenceOpen(true)} className="cs-btn cs-btn--primary min-h-11">
                 Comunica assenza
               </button>
             )}
-            <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--success">
+            <button onClick={() => exportEvents(filteredEvents, 'eventi_atleta_csroma')} className="cs-btn cs-btn--secondary">
               Esporta Excel
             </button>
-            <div className="hidden md:block">
-              <button
-                onClick={() => setViewMode(viewMode === 'list' ? 'calendar' : 'list')}
-                className={`cs-btn ${viewMode === 'list' ? 'cs-btn--outline' : 'cs-btn--accent'}`}
-              >
-                {viewMode === 'list' ? 'Vista Calendario' : 'Vista Elenco'}
-              </button>
-            </div>
           </div>
         </div>
 
-        <div className="mb-4 flex items-center gap-2 md:hidden" aria-label="Vista calendario mobile">
+        <div className="cs-calendar-view-switcher" aria-label="Vista calendario">
           <button
             type="button"
-            onClick={() => setMobileViewMode('agenda')}
-            aria-pressed={mobileViewMode === 'agenda'}
-            className={`cs-btn cs-btn--sm ${mobileViewMode === 'agenda' ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+            onClick={() => setCalendarMode('agenda')}
+            aria-pressed={calendarMode === 'agenda'}
+            className={`cs-btn cs-btn--sm ${calendarMode === 'agenda' ? 'cs-btn--primary' : 'cs-btn--secondary'}`}
           >
             Agenda
           </button>
           <button
             type="button"
-            onClick={() => setMobileViewMode('calendar')}
-            aria-pressed={mobileViewMode === 'calendar'}
-            className={`cs-btn cs-btn--sm ${mobileViewMode === 'calendar' ? 'cs-btn--primary' : 'cs-btn--ghost'}`}
+            onClick={() => setCalendarMode('month')}
+            aria-pressed={calendarMode === 'month'}
+            className={`cs-btn cs-btn--sm ${calendarMode === 'month' ? 'cs-btn--primary' : 'cs-btn--secondary'}`}
           >
             Mese
           </button>
         </div>
 
         {/* Filtri: restringono esclusivamente il payload già autorizzato dal server. */}
-        <div className="mb-4 flex flex-col gap-3">
+        <div className="cs-calendar-filters">
           <div className="flex-1">
             <span className="cs-field__label">Tipo evento</span>
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtra per tipo evento">
+            <div className="cs-calendar-filter-group" role="group" aria-label="Filtra per tipo evento">
               {[{ value: '', label: 'Tutti' }, ...EVENT_KIND_OPTIONS].map(({ value, label }) => (
                 <button
                   key={value || 'all'}
@@ -402,123 +393,54 @@ export default function AthleteCalendarManager() {
           </div>
         </div>
 
-        <div className="md:hidden">
+        <div>
           {teamMemberships.length === 0 ? (
             <EmptyState title="Non sei iscritto a nessuna squadra" description="Contatta l'amministratore per essere aggiunto a una squadra" />
           ) : filteredEvents.length === 0 ? (
             <EmptyState title={filteredEmptyTitle} />
-          ) : mobileViewMode === 'agenda' ? (
+          ) : calendarMode === 'agenda' ? (
             <AthleteAgenda events={filteredEvents} canRespond={canConfirmAttendance} onAttendanceChange={saveAttendance} onEarlyAbsence={(id, note) => mutateEarlyAbsence(id, false, note)} onRevokeEarlyAbsence={(id) => mutateEarlyAbsence(id, true)} onEventClick={(id) => {
                 const event = filteredEvents.find((item) => item.id === id)
                 if (event) setSelectedEvent(event)
               }} />
             ) : (
-              <MonthlyMobileCalendar
-                currentDate={currentDate}
-                events={mobileMonthEvents}
-                onNavigate={(action) => {
-                  const nextDate = action === 'today' ? new Date() : new Date(currentDate)
-                  if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
-                  else if (action === 'next') nextDate.setMonth(nextDate.getMonth() + 1)
-                  setCurrentDate(nextDate)
-                }}
-                onEventClick={(id) => {
-                  const event = filteredEvents.find((item) => item.id === id)
-                  if (event) setSelectedEvent(event)
-                }}
-                renderAgendaEvent={renderMobileMonthEvent}
-              />
-          )}
-        </div>
-
-        <div className="hidden md:block">
-          {viewMode === 'calendar' ? (
-          <FullCalendarWidget
-            initialDate={currentDate}
-            view={calView}
-            events={calEvents}
-            onNavigate={(act) => {
-              const d = new Date(currentDate)
-              if (act === 'today') setCurrentDate(new Date())
-              else if (act === 'prev') { calView === 'month' ? d.setMonth(d.getMonth() - 1) : d.setDate(d.getDate() - 7); setCurrentDate(new Date(d)) }
-              else { calView === 'month' ? d.setMonth(d.getMonth() + 1) : d.setDate(d.getDate() + 7); setCurrentDate(new Date(d)) }
-            }}
-            onViewChange={(v) => setCalView(v)}
-            onEventClick={(id) => {
-              const ev = filteredEvents.find(e => e.id === id)
-              if (ev) setSelectedEvent(ev)
-            }}
-          />
-        ) : teamMemberships.length === 0 ? (
-          <EmptyState title="Non sei iscritto a nessuna squadra" description="Contatta l'amministratore per essere aggiunto a una squadra" />
-        ) : filteredEvents.length === 0 ? (
-          <EmptyState title={filteredEmptyTitle} />
-        ) : (
-          <>
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="cs-table">
-                <thead>
-                  <tr>
-                    <th>Evento</th>
-                    <th>Data/Ora</th>
-                    <th>Luogo</th>
-                    <th>Squadre</th>
-                    <th>Tipo</th>
-                    <th>Stato</th>
-                    <th>Azioni</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredEvents.map((event) => (
-                    <tr key={event.id}>
-                      <td>
-                        <div>
-                          <div className="font-semibold">{event.title}</div>
-                          {event.has_conflict && <div role="status" className="text-sm font-semibold text-[color:var(--cs-danger-canonical)]">⚠ Conflitto di orario</div>}
-                          {event.description && (
-                            <div className="text-sm text-secondary">{event.description}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="text-sm">
-                          <div>{new Date(event.start_time).toLocaleDateString('it-IT')}</div>
-                          <div className="text-secondary">
-                            {new Date(event.start_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })} -{' '}
-                            {new Date(event.end_time).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        {event.location || <span className="text-secondary">N/D</span>}
-                      </td>
-                      <td>
-                        {event.teams.length > 0 ? event.teams.join(', ') : <span className="text-secondary">N/D</span>}
-                      </td>
-                      <td>
-                        <EventKindBadge kind={event.event_kind} />
-                      </td>
-                      <td>
-                        {event.my_attendance?.is_early_absence
-                          ? <span className="cs-badge cs-badge--warning" role="status">Assenza segnalata</span>
-                          : <span className="text-sm text-secondary">Nessuna assenza segnalata</span>}
-                      </td>
-                      <td>
-                        <button
-                          onClick={() => setSelectedEvent(event)}
-                          className="cs-btn cs-btn--ghost cs-btn--sm"
-                        >
-                          Dettagli
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-          </>
+              <>
+                <div className="md:hidden">
+                  <MonthlyMobileCalendar
+                    currentDate={currentDate}
+                    events={mobileMonthEvents}
+                    onNavigate={(action) => {
+                      const nextDate = action === 'today' ? new Date() : new Date(currentDate)
+                      if (action === 'prev') nextDate.setMonth(nextDate.getMonth() - 1)
+                      else if (action === 'next') nextDate.setMonth(nextDate.getMonth() + 1)
+                      setCurrentDate(nextDate)
+                    }}
+                    onEventClick={(id) => {
+                      const event = filteredEvents.find((item) => item.id === id)
+                      if (event) setSelectedEvent(event)
+                    }}
+                    renderAgendaEvent={renderMobileMonthEvent}
+                  />
+                </div>
+                <div className="hidden md:block">
+                  <FullCalendarWidget
+                    initialDate={currentDate}
+                    view={calView}
+                    events={calEvents}
+                    onNavigate={(action) => {
+                      const nextDate = action === 'today' ? new Date() : new Date(currentDate)
+                      if (action === 'prev') calView === 'month' ? nextDate.setMonth(nextDate.getMonth() - 1) : nextDate.setDate(nextDate.getDate() - 7)
+                      else if (action === 'next') calView === 'month' ? nextDate.setMonth(nextDate.getMonth() + 1) : nextDate.setDate(nextDate.getDate() + 7)
+                      setCurrentDate(nextDate)
+                    }}
+                    onViewChange={setCalView}
+                    onEventClick={(id) => {
+                      const event = filteredEvents.find((item) => item.id === id)
+                      if (event) setSelectedEvent(event)
+                    }}
+                  />
+                </div>
+              </>
           )}
         </div>
       </div>

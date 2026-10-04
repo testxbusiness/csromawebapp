@@ -56,13 +56,12 @@ describe('AthleteProfileManager', () => {
     expect(screen.queryByText('Accesso ai documenti')).toBeNull()
   })
 
-  it('does not render medical detail for a delegated subject', async () => {
+  it('does not render the medical card for a delegated subject', async () => {
     profilesMock.mockReturnValue({ profiles: [], selectedProfile: { profile: { id: 'profile-2', first_name: 'Luca', last_name: 'Rossi', email: null }, relationship: { id: 'relationship-1', type: 'parent', verified_at: '2026-01-01', permissions: { view_schedule: true, confirm_attendance: false, view_payments: false, view_medical_status: true, view_documents: false, sign_documents: false, receive_messages: false } } }, selectedProfileId: 'profile-2', setSelectedProfileId: jest.fn(), activeArea: 'family', setActiveArea: jest.fn(), loading: false, error: null, refresh: jest.fn() })
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ ...data, subject: { ...data.subject, id: 'profile-2', delegated: true }, athlete: { ...data.athlete, medical: { status: 'expiring', expires_at: null } } }) }) as jest.Mock
     render(<AthleteProfileManager />)
     await waitFor(() => expect(screen.getByText('Stai visualizzando Luca Rossi')).toBeTruthy())
-    expect(screen.getByText('Lo stato è disponibile; la data non è visibile in questo contesto.')).toBeTruthy()
-    expect(screen.queryByText(/Scadenza 31 dicembre 2026/)).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Certificato medico' })).toBeNull()
   })
 
   it('renders authorized documents without exposing a signing action', async () => {
@@ -73,7 +72,7 @@ describe('AthleteProfileManager', () => {
     expect(screen.getByText('Modulo iscrizione')).toBeTruthy()
     expect(screen.getByText(/File disponibile/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /firma/i })).toBeNull()
-    expect(screen.getByText('Non hai il permesso per visualizzare lo stato medico.')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Certificato medico' })).toBeNull()
   })
 
 

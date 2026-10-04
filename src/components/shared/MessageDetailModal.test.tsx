@@ -30,6 +30,8 @@ describe('MessageDetailModal', () => {
 
     expect(screen.getByText('Convocazione')).toBeTruthy()
     expect(screen.getByRole('dialog').className).toContain('cs-responsive-detail--centered-mobile')
+    expect(screen.getByRole('dialog').className).toContain('cs-responsive-detail--centered-desktop')
+    expect(screen.getByRole('dialog').className).toContain('cs-message-detail')
     await waitFor(() => expect(onReadStateChange).toHaveBeenCalledWith({ is_read: true, read_at: '2026-08-28T12:00:00Z' }))
     expect(fetchMock).toHaveBeenCalledWith('/api/messages/read', expect.objectContaining({ method: 'POST' }))
   })
@@ -81,5 +83,21 @@ describe('MessageDetailModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'documento.pdf' }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Allegato non disponibile'))
+  })
+
+  it('keeps long content and recipient metadata readable in the shared detail', () => {
+    render(<MessageDetailModal
+      open
+      onClose={jest.fn()}
+      data={{
+        subject: 'Comunicazione con un titolo molto lungo che deve restare leggibile',
+        content: 'Paragrafo lungo\n'.repeat(30),
+        message_recipients: [{ id: 'r1', teams: { id: 't1', name: 'U16' } }],
+      }}
+    />)
+
+    expect(screen.getByText('Comunicazione con un titolo molto lungo che deve restare leggibile')).toBeTruthy()
+    expect(screen.getByText('U16')).toBeTruthy()
+    expect(screen.getByText('Paragrafo lungo', { exact: false })).toBeTruthy()
   })
 })

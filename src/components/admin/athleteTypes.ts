@@ -8,6 +8,7 @@ export interface Athlete {
   membership_number?: string
   medical_certificate_expiry?: string
   personal_notes?: string
+  enrollment_application_delivered?: boolean
   created_at: string
   updated_at: string
   season_ids?: string[]
@@ -28,6 +29,7 @@ export interface AthleteCreateData {
   membership_number?: string | null
   medical_certificate_expiry?: string | null
   personal_notes?: string | null
+  enrollment_application_delivered?: boolean
   team_ids?: string[]
   jersey_numbers?: Record<string, number | null>
 }
@@ -58,7 +60,7 @@ export interface Season {
 
 export interface BulkOperation {
   id: string
-  type: 'assign_to_team' | 'remove_from_team' | 'update_jersey' | 'update_medical_expiry'
+  type: 'assign_to_team' | 'remove_from_team' | 'update_jersey' | 'update_medical_expiry' | 'set_enrollment_application_delivered'
   target_athletes: string[]
   parameters: Record<string, any>
   status: 'pending' | 'processing' | 'completed' | 'failed'

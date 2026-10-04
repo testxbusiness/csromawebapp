@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { AthleteFeeInstallment, AthleteFeeStatus } from '@/types/athlete-fees'
-import { StatusBadge } from '@/components/ui'
+import { ListRow, StatusBadge } from '@/components/ui'
 
 const STATUS_COPY: Record<AthleteFeeStatus, string> = {
   not_due: 'Non ancora dovuta', due_soon: 'In scadenza', overdue: 'Scaduta', partially_paid: 'Parziale', paid: 'Pagata',
@@ -26,25 +26,26 @@ export function FeeRow({ installment }: { installment: AthleteFeeInstallment }) 
 
   return (
     <div className="border-t border-[color:var(--cs-border-canonical)] first:border-t-0">
-      <button type="button" className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--cs-surface-selected)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[color:var(--cs-brand-red)]" aria-expanded={expanded} aria-controls={`fee-detail-${installment.id}`} onClick={() => setExpanded((value) => !value)}>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-[color:var(--cs-text)]">{fee.name} · Rata {installment.installment_number}</span>
-          <span className="mt-0.5 block truncate text-xs text-[color:var(--cs-text-secondary)]">Scadenza {formatDate(installment.due_date)}</span>
-        </span>
-        <span className="shrink-0 text-right">
+      <ListRow interactive className="px-4 py-3" aria-expanded={expanded} aria-controls={`fee-detail-${installment.id}`} onClick={() => setExpanded((value) => !value)} trailing={<span className="flex shrink-0 items-center gap-3">
+        <span className="text-right">
           <span className="block font-variant-numeric tabular-nums text-sm font-semibold text-[color:var(--cs-text)]">{formatAmount(financials.due_amount)}</span>
           <span className="block text-xs text-[color:var(--cs-text-secondary)]">residuo {formatAmount(financials.remaining_amount)}</span>
         </span>
         <StatusBadge status={STATUS_VARIANT[installment.status]} label={STATUS_COPY[installment.status]} />
         <span aria-hidden="true" className="w-4 text-center text-lg text-[color:var(--cs-text-secondary)]">{expanded ? '−' : '+'}</span>
-      </button>
+      </span>}>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-[color:var(--cs-text)]">{fee.name} · Rata {installment.installment_number}</span>
+          <span className="mt-0.5 block text-xs text-[color:var(--cs-text-secondary)]">Scadenza {formatDate(installment.due_date)}</span>
+        </span>
+      </ListRow>
       {expanded ? (
-        <div id={`fee-detail-${installment.id}`} className="grid gap-3 border-t border-[color:var(--cs-border-canonical)] bg-[color:var(--cs-surface-subdued)] px-4 py-4 text-sm sm:grid-cols-2">
-          <div><p className="text-xs uppercase tracking-wide text-[color:var(--cs-text-secondary)]">Importo dovuto</p><p className="font-variant-numeric tabular-nums font-semibold">{formatAmount(financials.due_amount)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-[color:var(--cs-text-secondary)]">Importo pagato</p><p className="font-variant-numeric tabular-nums font-semibold">{formatAmount(financials.paid_amount)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-[color:var(--cs-text-secondary)]">Importo residuo</p><p className="font-variant-numeric tabular-nums font-semibold">{formatAmount(financials.remaining_amount)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-[color:var(--cs-text-secondary)]">Attività</p><p className="font-medium">{fee.team.activity.name}</p></div>
-          {fee.description ? <p className="text-[color:var(--cs-text-secondary)] sm:col-span-2">{fee.description}</p> : null}
+        <div id={`fee-detail-${installment.id}`} className="cs-fee-detail grid gap-0 border-t border-[color:var(--cs-border-canonical)] px-4 py-2 text-sm sm:grid-cols-2">
+          <div className="border-b border-[color:var(--cs-border-canonical)] py-3 sm:border-r sm:pr-4"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--cs-text-secondary)]">Importo dovuto</p><p className="font-variant-numeric tabular-nums font-semibold">{formatAmount(financials.due_amount)}</p></div>
+          <div className="border-b border-[color:var(--cs-border-canonical)] py-3 sm:pl-4"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--cs-text-secondary)]">Importo pagato</p><p className="font-variant-numeric tabular-nums font-semibold">{formatAmount(financials.paid_amount)}</p></div>
+          <div className="border-b border-[color:var(--cs-border-canonical)] py-3 sm:border-r sm:pr-4"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--cs-text-secondary)]">Importo residuo</p><p className="font-variant-numeric tabular-nums font-semibold">{formatAmount(financials.remaining_amount)}</p></div>
+          <div className="border-b border-[color:var(--cs-border-canonical)] py-3 sm:pl-4"><p className="text-xs font-semibold uppercase tracking-[0.08em] text-[color:var(--cs-text-secondary)]">Attività</p><p className="font-medium">{fee.team.activity.name}</p></div>
+          {fee.description ? <p className="py-3 text-[color:var(--cs-text-secondary)] sm:col-span-2">{fee.description}</p> : null}
         </div>
       ) : null}
     </div>

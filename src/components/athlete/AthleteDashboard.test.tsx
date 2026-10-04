@@ -9,7 +9,7 @@ jest.mock('@/context/TeamContext', () => ({
   useTeamContext: () => ({ selectedTeamId: null, setTeams: jest.fn(), resetTeam: jest.fn() }),
 }))
 jest.mock('@/context/AccessibleProfileContext', () => ({
-  appendSubjectProfile: (url: string) => url,
+  appendSubjectProfile: (url: string, profileId: string | null) => profileId ? `${url}${url.includes('?') ? '&' : '?'}subjectProfileId=${profileId}` : url,
   SUBJECT_CONTEXT_CHANGED_EVENT: 'csroma:subject-context-changed',
   useAccessibleProfiles: jest.fn(() => ({
     selectedProfileId: 'child-1',
@@ -25,7 +25,20 @@ jest.mock('@/context/AccessibleProfileContext', () => ({
 }))
 
 describe('AthleteDashboard delegated mode', () => {
-  afterEach(() => { delete (globalThis as { fetch?: unknown }).fetch })
+  afterEach(() => {
+    delete (globalThis as { fetch?: unknown }).fetch
+    ;(useAccessibleProfiles as jest.Mock).mockReturnValue({
+      selectedProfileId: 'child-1',
+      selectedProfile: {
+        profile: { id: 'child-1', first_name: 'Luca', last_name: 'Rossi', email: null },
+        relationship: { permissions: {
+          view_schedule: true, confirm_attendance: false, view_payments: false,
+          view_medical_status: false, view_documents: false, sign_documents: false,
+          receive_messages: false,
+        } },
+      },
+    })
+  })
 
   it('reuses the athlete dashboard with family context and omits unauthorized sections', async () => {
     globalThis.fetch = jest.fn().mockResolvedValue({
@@ -111,6 +124,47 @@ describe('AthleteDashboard delegated mode', () => {
     const attendanceCall = (globalThis.fetch as jest.Mock).mock.calls.find(([url]) => url.includes('/events/attendance'))
     await waitFor(() => expect(attendanceCall?.[1].signal.aborted).toBe(true))
     expect(screen.queryByText('Risposta salvata')).toBeNull()
+  })
+
+  it('renders at most two authorized administrative alerts and preserves the delegated subject in their links', async () => {
+    ;(useAccessibleProfiles as jest.Mock).mockReturnValue({
+      selectedProfileId: 'child-1',
+      selectedProfile: { profile: { id: 'child-1', first_name: 'Luca', last_name: 'Rossi', email: null }, relationship: { permissions: {
+        view_schedule: true, confirm_attendance: false, view_payments: true,
+        view_medical_status: true, view_documents: false, sign_documents: false,
+        receive_messages: false,
+      } } },
+    })
+    globalThis.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        activeSeason: null, teamMemberships: [], upcomingEvents: [], unreadMessages: [], feeInstallments: [], teams: [],
+        administrativeAlerts: [
+          { area: 'certificate', tone: 'danger', message: 'Certificato medico scaduto', href: '/athlete/fees?section=certificate' },
+          { area: 'fees', tone: 'warning', message: 'Quota associativa in scadenza', href: '/athlete/fees?section=fees' },
+          { area: 'unexpected', tone: 'danger', message: 'Non deve comparire', href: '/athlete/fees?section=fees' },
+        ],
+      }),
+    }) as jest.Mock
+
+    render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'child-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} delegatedView />)
+
+    expect(await screen.findByText('Certificato medico scaduto')).toBeTruthy()
+    expect(screen.getByText('Quota associativa in scadenza')).toBeTruthy()
+    expect(screen.queryByText('Non deve comparire')).toBeNull()
+    const details = screen.getAllByRole('link', { name: 'Dettagli' })
+    expect(details).toHaveLength(2)
+    expect(screen.getByText('Certificato medico scaduto').closest('.cs-alert')).toHaveClass('cs-athlete-dashboard__administrative-alert', 'cs-alert--danger')
+    expect(screen.getByText('Quota associativa in scadenza').closest('.cs-alert')).toHaveClass('cs-athlete-dashboard__administrative-alert', 'cs-alert--warning')
+    expect(details[0]).toHaveClass('cs-btn--secondary')
+    expect(details[0]).toHaveAttribute('href', '/athlete/fees?section=certificate&subjectProfileId=child-1')
+    expect(details[1]).toHaveAttribute('href', '/athlete/fees?section=fees&subjectProfileId=child-1')
+    const mobileAlerts = document.querySelector('.cs-athlete-dashboard__administrative-alerts')
+    const upcomingHeading = screen.getByRole('heading', { name: 'Prossimo impegno' })
+    expect((mobileAlerts?.compareDocumentPosition(upcomingHeading) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    window.dispatchEvent(new CustomEvent('csroma:subject-context-changed', { detail: { subjectProfileId: 'child-2' } }))
+    await waitFor(() => expect(screen.queryByText('Certificato medico scaduto')).toBeNull())
   })
 })
 
@@ -318,7 +372,7 @@ describe('dashboard secondary services', () => {
     if (messages.length === 0) expect(screen.getByText('Nessun messaggio non letto')).toBeTruthy()
   })
 
-  it('keeps an overdue fee ahead of a paid fee and formats the amount in Italian', async () => {
+  it('removes the ordinary fee panel while preserving an authorized fee alert', async () => {
     renderFamilyDashboard({
       ...basePayload,
       unreadMessages: [],
@@ -326,22 +380,13 @@ describe('dashboard secondary services', () => {
         { id: 'paid', installment_number: 1, due_date: '2026-09-01', amount: 80, status: 'paid', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } },
         { id: 'overdue', installment_number: 2, due_date: '2026-08-01', amount: 120, status: 'overdue', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } },
       ],
+      administrativeAlerts: [{ area: 'fees', tone: 'danger', message: 'Quota associativa scaduta', href: '/athlete/fees?section=fees' }],
     })
 
-    await waitFor(() => expect(screen.getByText('Scaduta')).toBeTruthy())
-    expect(screen.getByText(/120,00/)).toBeTruthy()
-    expect(screen.queryByText('80,00')).toBeNull()
-  })
-
-  it('shows the paid state when no unpaid installment is available', async () => {
-    renderFamilyDashboard({
-      ...basePayload,
-      unreadMessages: [],
-      feeInstallments: [{ id: 'paid', installment_number: 1, due_date: '2026-09-01', amount: 120, status: 'paid', membership_fee: { name: 'Quota annuale', team: { id: 'team-1', name: 'U16', code: 'U16', activity: { name: 'Volley' } } } }],
-    })
-
-    await waitFor(() => expect(screen.getByText('Pagata')).toBeTruthy())
-    expect(screen.getByText(/120,00/)).toBeTruthy()
+    expect(await screen.findByText('Quota associativa scaduta')).toBeTruthy()
+    expect(screen.queryByText('Prossima quota')).toBeNull()
+    expect(screen.queryByText('Quota annuale')).toBeNull()
+    expect(screen.queryByText(/120,00/)).toBeNull()
   })
 
   it('keeps each team membership and its authoritative jersey number', async () => {

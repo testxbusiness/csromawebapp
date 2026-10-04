@@ -1,7 +1,11 @@
 import { z } from 'zod'
 
 const uuid = z.string().uuid('ID non valido')
-const ids = z.array(uuid).min(1).max(500)
+const ids = z.array(uuid).min(1).max(500).superRefine((value, context) => {
+  if (new Set(value).size !== value.length) {
+    context.addIssue({ code: 'custom', message: 'Gli ID atleta devono essere univoci' })
+  }
+})
 const teamId = z.string().uuid('ID squadra non valido')
 
 export const athleteBulkSchema = z.discriminatedUnion('operation', [
@@ -9,6 +13,7 @@ export const athleteBulkSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('remove_from_team'), athleteIds: ids, parameters: z.object({ teamId }).strict(), dryRun: z.boolean().optional() }).strict(),
   z.object({ operation: z.literal('update_jersey'), athleteIds: ids, parameters: z.object({ teamId, jerseyNumber: z.string().regex(/^\d{1,2}$/) }).strict(), dryRun: z.boolean().optional() }).strict(),
   z.object({ operation: z.literal('update_medical_expiry'), athleteIds: ids, parameters: z.object({ expiryDate: z.union([z.string().date(), z.string().datetime({ offset: true })]) }).strict(), dryRun: z.boolean().optional() }).strict(),
+  z.object({ operation: z.literal('set_enrollment_application_delivered'), athleteIds: ids, parameters: z.object({ seasonId: uuid, delivered: z.literal(true) }).strict(), dryRun: z.boolean().optional() }).strict(),
 ])
 
 const coachRole = z.enum(['head_coach', 'assistant_coach'])

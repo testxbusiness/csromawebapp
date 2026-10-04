@@ -44,4 +44,9 @@ describe('resolveFamilyNavigation', () => {
     const result = resolveFamilyNavigation(profile(overrides))
     expect([...result.items, ...result.moreItems].map((item) => item.key)).toEqual(expected)
   })
+
+  it.each(['view_medical_status', 'view_documents'] as const)('exposes Administration with %s alone', (permission) => {
+    expect(isFamilyNavigationAllowed('fees', profile({ [permission]: true }))).toBe(true)
+    expect(resolveFamilyNavigation(profile({ [permission]: true })).items.find((item) => item.key === 'fees')?.label).toBe('Amministrazione')
+  })
 })

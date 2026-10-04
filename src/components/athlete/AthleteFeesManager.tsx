@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
-import { EmptyState, ErrorState, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
+import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
 import type { AthleteFeeInstallment, AthleteFeesContract, AthleteFeeStatus } from '@/types/athlete-fees'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { FeeRow } from './FeeRow'
@@ -32,12 +32,62 @@ function countByStatus(installments: AthleteFeeInstallment[], status: AthleteFee
   return installments.filter((installment) => installment.status === status).length
 }
 
+export function AthleteFeesContent({ installments, sectionId }: { installments: AthleteFeeInstallment[]; sectionId?: string }) {
+  const [filter, setFilter] = useState<FeeFilter>('all')
+  const filteredInstallments = useMemo(() => installments.filter((installment) => {
+    if (filter === 'paid') return installment.status === 'paid'
+    if (filter === 'overdue') return installment.status === 'overdue'
+    if (filter === 'pending') return isPending(installment)
+    return true
+  }), [filter, installments])
+  const totals = useMemo(() => installments.reduce((result, installment) => {
+    result.due += installment.financials.due_amount
+    result.paid += installment.financials.paid_amount ?? 0
+    result.remaining += installment.financials.remaining_amount ?? installment.financials.due_amount
+    return result
+  }, { due: 0, paid: 0, remaining: 0 }), [installments])
+  const groups = useMemo(() => groupByTeam(filteredInstallments), [filteredInstallments])
+  const filterCount = (value: FeeFilter) => value === 'all' ? installments.length : value === 'pending' ? installments.filter(isPending).length : value === 'paid' ? countByStatus(installments, 'paid') : countByStatus(installments, 'overdue')
+
+  return (
+    <section id={sectionId} tabIndex={sectionId ? -1 : undefined} aria-labelledby={sectionId ? `${sectionId}-title` : undefined} className="space-y-5 scroll-mt-6">
+      <Panel className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--cs-text-secondary)]">Quote associative</p><h2 id={sectionId ? `${sectionId}-title` : undefined} className="mt-1 text-xl font-bold text-[color:var(--cs-text)]">Situazione economica</h2></div>
+          <StatusBadge status="info" label={`${installments.length} ${installments.length === 1 ? 'rata' : 'rate'}`} />
+        </div>
+        <dl className="divide-y divide-[color:var(--cs-border-canonical)] border-y border-[color:var(--cs-border-canonical)]">
+          <ListRow className="px-0"><dt className="text-sm text-[color:var(--cs-text-secondary)]">Totale dovuto</dt><dd className="font-variant-numeric tabular-nums text-lg font-bold">{formatAmount(totals.due)}</dd></ListRow>
+          <ListRow className="px-0"><dt className="text-sm text-[color:var(--cs-text-secondary)]">Già pagato</dt><dd className="font-variant-numeric tabular-nums text-lg font-bold text-[color:var(--cs-success-canonical)]">{formatAmount(totals.paid)}</dd></ListRow>
+          <ListRow className="px-0"><dt className="text-sm text-[color:var(--cs-text-secondary)]">Residuo</dt><dd className="font-variant-numeric tabular-nums text-lg font-bold">{formatAmount(totals.remaining)}</dd></ListRow>
+        </dl>
+      </Panel>
+
+      <div className="sm:hidden">
+        <label className="sr-only" htmlFor="fees-filter">Filtra rate</label>
+        <select id="fees-filter" value={filter} onChange={(event) => setFilter(event.target.value as FeeFilter)} className="cs-select min-h-11 w-full">
+          {FILTERS.map(({ value, label }) => <option key={value} value={value}>{label} ({filterCount(value)})</option>)}
+        </select>
+      </div>
+      <div className="hidden gap-2 overflow-x-auto pb-1 sm:flex" role="group" aria-label="Filtra quote">
+        {FILTERS.map(({ value, label }) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`cs-btn cs-btn--sm min-h-11 shrink-0 ${filter === value ? 'cs-btn--primary' : 'cs-btn--outline'}`}>{label} <span className="ml-1 tabular-nums">{filterCount(value)}</span></button>)}
+      </div>
+
+      {installments.length === 0 ? <EmptyState title="Nessuna quota associativa trovata" description="Contatta l'amministratore per informazioni sulle quote." /> : filteredInstallments.length === 0 ? <EmptyState filtered title="Nessuna rata per questo filtro" /> : <div className="space-y-4">
+        {groups.map(({ team, installments: teamInstallments }) => <Panel key={team.id} className="overflow-hidden p-0">
+          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--cs-border-canonical)] px-4 py-3"><div className="min-w-0"><h3 className="font-semibold text-[color:var(--cs-text)]">{team.name} <span className="font-normal text-[color:var(--cs-text-secondary)]">({team.code})</span></h3><p className="text-xs text-[color:var(--cs-text-secondary)]">{team.activity.name}</p></div><span className="shrink-0 text-xs text-[color:var(--cs-text-secondary)]">{teamInstallments.length} {teamInstallments.length === 1 ? 'rata' : 'rate'}</span></div>
+          {teamInstallments.map((installment) => <FeeRow key={installment.id} installment={installment} />)}
+        </Panel>)}
+      </div>}
+    </section>
+  )
+}
+
 export default function AthleteFeesManager() {
   const { user, loading: authLoading, profileLoading } = useAuth()
   const { selectedProfileId, selectedProfile, activeArea } = useAccessibleProfiles()
   const userId = user?.id ?? null
   const [installments, setInstallments] = useState<AthleteFeeInstallment[]>([])
-  const [filter, setFilter] = useState<FeeFilter>('all')
   const [loadState, setLoadState] = useState<FeesLoadState>('loading')
   const [accessDenied, setAccessDenied] = useState(false)
   const fetchControllerRef = useRef<AbortController | null>(null)
@@ -107,21 +157,6 @@ export default function AthleteFeesManager() {
     }
   }, [loadInstallments])
 
-  const filteredInstallments = useMemo(() => installments.filter((installment) => {
-    if (filter === 'paid') return installment.status === 'paid'
-    if (filter === 'overdue') return installment.status === 'overdue'
-    if (filter === 'pending') return isPending(installment)
-    return true
-  }), [filter, installments])
-  const totals = useMemo(() => installments.reduce((result, installment) => {
-    result.due += installment.financials.due_amount
-    result.paid += installment.financials.paid_amount ?? 0
-    result.remaining += installment.financials.remaining_amount ?? installment.financials.due_amount
-    return result
-  }, { due: 0, paid: 0, remaining: 0 }), [installments])
-  const groups = useMemo(() => groupByTeam(filteredInstallments), [filteredInstallments])
-  const filterCount = (value: FeeFilter) => value === 'all' ? installments.length : value === 'pending' ? installments.filter(isPending).length : value === 'paid' ? countByStatus(installments, 'paid') : countByStatus(installments, 'overdue')
-
   if (loadState === 'loading' && installments.length === 0) return <LoadingState label="Caricamento quote..." />
   if (accessDenied) return <DelegatedAccessDenied section="le quote associative" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
   const retryAction = <button type="button" className="cs-btn cs-btn--outline" onClick={() => void loadInstallments()}>Riprova</button>
@@ -132,28 +167,7 @@ export default function AthleteFeesManager() {
     <div className="space-y-5">
       {loadState === 'offline' ? <OfflineState title="Quote non aggiornate" description="Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili." action={retryAction} className="py-6 text-left" /> : null}
       {loadState === 'error' ? <ErrorState title="Aggiornamento quote non riuscito" description="I dati mostrati potrebbero non essere aggiornati." action={retryAction} className="py-6 text-left" /> : null}
-      <Panel className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--cs-text-secondary)]">Quote associative</p><h2 className="mt-1 text-xl font-bold text-[color:var(--cs-text)]">Situazione economica</h2></div>
-          <StatusBadge status="info" label={`${installments.length} ${installments.length === 1 ? 'rata' : 'rate'}`} />
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] p-3"><p className="text-xs text-[color:var(--cs-text-secondary)]">Totale dovuto</p><p className="mt-1 font-variant-numeric tabular-nums text-xl font-bold">{formatAmount(totals.due)}</p></div>
-          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] p-3"><p className="text-xs text-[color:var(--cs-text-secondary)]">Già pagato</p><p className="mt-1 font-variant-numeric tabular-nums text-xl font-bold text-[color:var(--cs-success-canonical)]">{formatAmount(totals.paid)}</p></div>
-          <div className="rounded-[var(--cs-r-md)] border border-[color:var(--cs-border-canonical)] p-3"><p className="text-xs text-[color:var(--cs-text-secondary)]">Residuo</p><p className="mt-1 font-variant-numeric tabular-nums text-xl font-bold text-[color:var(--cs-brand-red)]">{formatAmount(totals.remaining)}</p></div>
-        </div>
-      </Panel>
-
-      <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtra quote">
-        {FILTERS.map(({ value, label }) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`cs-btn cs-btn--sm min-h-11 shrink-0 ${filter === value ? 'cs-btn--warm' : 'cs-btn--outline'}`}>{label} <span className="ml-1 tabular-nums">{filterCount(value)}</span></button>)}
-      </div>
-
-      {installments.length === 0 ? <EmptyState title="Nessuna quota associativa trovata" description="Contatta l'amministratore per informazioni sulle quote." /> : filteredInstallments.length === 0 ? <EmptyState filtered title="Nessuna rata per questo filtro" /> : <div className="space-y-4">
-        {groups.map(({ team, installments: teamInstallments }) => <Panel key={team.id} className="overflow-hidden p-0">
-          <div className="flex items-center justify-between gap-3 border-b border-[color:var(--cs-border-canonical)] px-4 py-3"><div className="min-w-0"><h3 className="truncate font-semibold text-[color:var(--cs-text)]">{team.name} <span className="font-normal text-[color:var(--cs-text-secondary)]">({team.code})</span></h3><p className="truncate text-xs text-[color:var(--cs-text-secondary)]">{team.activity.name}</p></div><span className="shrink-0 text-xs text-[color:var(--cs-text-secondary)]">{teamInstallments.length} {teamInstallments.length === 1 ? 'rata' : 'rate'}</span></div>
-          {teamInstallments.map((installment) => <FeeRow key={installment.id} installment={installment} />)}
-        </Panel>)}
-      </div>}
+      <AthleteFeesContent installments={installments} />
     </div>
   )
 }

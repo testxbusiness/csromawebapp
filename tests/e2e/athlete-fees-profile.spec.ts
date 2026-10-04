@@ -47,14 +47,14 @@ async function expectTouchTargets(locator: Locator) {
   expect(sizes.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true)
 }
 
-test.describe('athlete Quote e Profilo responsive smoke', () => {
+test.describe('athlete Amministrazione e Profilo responsive smoke', () => {
   test.describe.configure({ timeout: 120_000 })
 
   test.beforeEach(() => {
     test.skip(!athleteEmail || !athletePassword, 'Set E2E_ATHLETE_EMAIL and E2E_ATHLETE_PASSWORD to run athlete Quote/Profile checks.')
   })
 
-  test('renders Quote e Profilo on all required viewports', async ({ page }) => {
+  test('renders Amministrazione e Profilo on all required viewports', async ({ page }) => {
     await login(page)
 
     for (const viewport of viewports) {
@@ -76,18 +76,27 @@ test.describe('athlete Quote e Profilo responsive smoke', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport)
       await page.goto('/athlete/fees')
-      await expect(page.getByRole('heading', { name: 'Quote Associative', level: 1 })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole('heading', { name: 'Amministrazione', level: 1 })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole('heading', { name: 'Domanda di iscrizione' })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole('heading', { name: 'Certificato medico' })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByRole('heading', { name: 'Situazione economica' })).toBeVisible({ timeout: 30_000 })
 
-      const filterGroup = page.getByRole('group', { name: 'Filtra quote' })
-      await expect(filterGroup).toBeVisible()
-      await expectTouchTargets(filterGroup.getByRole('button'))
+      if (viewport.width < 640) {
+        const mobileFilter = page.getByLabel('Filtra rate')
+        await expect(mobileFilter).toBeVisible()
+        await mobileFilter.selectOption('pending')
+        await expect(mobileFilter).toHaveValue('pending')
+      } else {
+        const filterGroup = page.getByRole('group', { name: 'Filtra quote' })
+        await expect(filterGroup).toBeVisible()
+        await expectTouchTargets(filterGroup.getByRole('button'))
 
-      const pendingFilter = filterGroup.getByRole('button', { name: /Da pagare/ })
-      await pendingFilter.focus()
-      await expect(pendingFilter).toBeFocused()
-      await page.keyboard.press('Space')
-      await expect(pendingFilter).toHaveAttribute('aria-pressed', 'true')
+        const pendingFilter = filterGroup.getByRole('button', { name: /Da pagare/ })
+        await pendingFilter.focus()
+        await expect(pendingFilter).toBeFocused()
+        await page.keyboard.press('Space')
+        await expect(pendingFilter).toHaveAttribute('aria-pressed', 'true')
+      }
       await expectNoHorizontalOverflow(page)
     }
   })
