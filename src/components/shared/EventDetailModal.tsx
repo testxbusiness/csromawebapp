@@ -100,9 +100,9 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
       ) : !data ? (
             <LoadingState label="Caricamento evento..." />
           ) : (
-            <div className="grid grid-cols-1 gap-4 min-[380px]:grid-cols-2">
+            <div className="cs-event-detail-grid grid grid-cols-1 gap-4 min-[480px]:grid-cols-2">
               {/* Orario */}
-              <div id="event-detail-time">
+              <div className="cs-event-detail-field" id="event-detail-time">
                 <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Orario</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <IconClock />
@@ -114,7 +114,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
               </div>
 
               {/* Luogo */}
-              <div id="event-detail-place">
+              <div className="cs-event-detail-field" id="event-detail-place">
                 <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Luogo</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <IconMapPin />
@@ -124,7 +124,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
 
               {/* Squadre */}
               {!!(data.teams?.length) && (
-                <div id="event-detail-teams">
+                <div className="cs-event-detail-field" id="event-detail-teams">
                   <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Squadre</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <IconUsers />
@@ -139,7 +139,7 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
 
               {/* Creato da */}
               {data.creator && (
-                <div id="event-detail-creator">
+                <div className="cs-event-detail-field" id="event-detail-creator">
                   <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Creata da</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <IconPencil />
@@ -150,14 +150,14 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
 
               {/* Descrizione */}
               {data.description && (
-                <div className="sm:col-span-2" id="event-detail-description">
+                <div className="cs-event-detail-wide" id="event-detail-description">
                   <div className="text-secondary" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.02em' }}>Descrizione</div>
                   <p style={{ whiteSpace: 'pre-wrap' }}>{data.description}</p>
                 </div>
               )}
 
               {data.requires_confirmation && onAttendanceChange && (
-                <div className="sm:col-span-2" id="event-detail-attendance">
+                <div className="cs-event-detail-wide" id="event-detail-attendance">
                   <AttendanceControl
                     requiresConfirmation
                     eventKind={data.event_kind}

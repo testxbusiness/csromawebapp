@@ -524,6 +524,18 @@ a{ color:inherit; text-decoration:none }
 .cs-list-row--interactive:focus-visible{ outline:2px solid var(--cs-brand-red); outline-offset:-2px; }
 button.cs-list-row{ font:inherit; }
 
+/* Fee rows keep the title readable on narrow athlete screens. The financial
+   summary becomes a second, right-aligned line instead of competing with the
+   installment name inside one compressed flex row. */
+.cs-fee-row__content{ min-width:0; }
+.cs-fee-row__trailing{ justify-content:flex-end; }
+@media (max-width:479px){
+  .cs-fee-row{ align-items:flex-start; flex-wrap:wrap; row-gap:8px; }
+  .cs-fee-row .cs-list-row__content{ flex:1 1 100%; }
+  .cs-fee-row .cs-list-row__trailing{ flex:1 1 100%; width:100%; }
+  .cs-fee-row__trailing{ flex-wrap:wrap; }
+}
+
 /* Athlete messages: an editorial inbox, with rows carrying hierarchy rather
    than a collection of competing pills and cards. */
 .cs-athlete-messages__heading{ display:flex; align-items:flex-end; justify-content:space-between; gap:var(--cs-sp-4); }
@@ -634,6 +646,8 @@ button.cs-list-row{ font:inherit; }
 .cs-detail-heading__eyebrow{ color:var(--cs-ink); font-size:clamp(1.15rem, 2.4vw, 1.5rem); font-weight:800; line-height:1.15; }
 .cs-detail-heading__title{ overflow-wrap:anywhere; color:var(--cs-ink); font-size:clamp(1.05rem, 2.2vw, 1.3rem); font-weight:700; line-height:1.2; }
 .cs-detail-heading__subtitle{ color:var(--cs-ink-muted); font-size:.95rem; font-weight:500; line-height:1.25; }
+.cs-event-detail-field > div:last-child{ min-width:0; }
+.cs-event-detail-wide{ grid-column:1 / -1; }
 @media (max-width: 767px){
   .cs-responsive-detail{ top:auto; left:0; width:100%; max-height:92dvh; border-radius:var(--cs-r-lg) var(--cs-r-lg) 0 0; padding-left:calc(var(--cs-sp-5) + var(--cs-safe-left)); padding-right:calc(var(--cs-sp-5) + var(--cs-safe-right)); padding-bottom:calc(var(--cs-sp-5) + var(--cs-safe-bottom)); transform:translateY(100%); }
   .cs-overlay[data-state="open"] .cs-responsive-detail{ transform:translateY(0); }
@@ -646,6 +660,9 @@ button.cs-list-row{ font:inherit; }
   .cs-overlay[data-state="open"] ~ .cs-responsive-detail--centered-mobile,
   .cs-responsive-detail--centered-mobile[data-state="open"]{ transform:translate(-50%, -50%); }
   .cs-responsive-detail--centered-mobile .cs-responsive-detail__body{ overflow-y:auto; }
+}
+@media (max-width:479px){
+  .cs-event-detail-grid{ gap:var(--cs-sp-5); }
 }
 
 /* ----------------------------
@@ -1328,7 +1345,7 @@ button.cs-list-row{ font:inherit; }
 /* Close button */
 .cs-modal__close {
   position:absolute; top: 12px; right: 12px;
-  width: 34px; height: 34px; display:grid; place-items:center;
+  width: 40px; height: 40px; display:grid; place-items:center;
   border-radius: var(--cs-control-radius); border: 1px solid var(--cs-modal-border);
   background: color-mix(in oklab, var(--cs-surface), white 8%);
   transition: transform .18s ease, box-shadow .18s ease, background .18s ease;

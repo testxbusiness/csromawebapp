@@ -26,7 +26,7 @@ export function FeeRow({ installment }: { installment: AthleteFeeInstallment }) 
 
   return (
     <div className="border-t border-[color:var(--cs-border-canonical)] first:border-t-0">
-      <ListRow interactive className="px-4 py-3" aria-expanded={expanded} aria-controls={`fee-detail-${installment.id}`} onClick={() => setExpanded((value) => !value)} trailing={<span className="flex shrink-0 items-center gap-3">
+      <ListRow interactive className="cs-fee-row px-4 py-3" aria-expanded={expanded} aria-controls={`fee-detail-${installment.id}`} onClick={() => setExpanded((value) => !value)} trailing={<span className="cs-fee-row__trailing flex shrink-0 items-center gap-3">
         <span className="text-right">
           <span className="block font-variant-numeric tabular-nums text-sm font-semibold text-[color:var(--cs-text)]">{formatAmount(financials.due_amount)}</span>
           <span className="block text-xs text-[color:var(--cs-text-secondary)]">residuo {formatAmount(financials.remaining_amount)}</span>
@@ -34,9 +34,9 @@ export function FeeRow({ installment }: { installment: AthleteFeeInstallment }) 
         <StatusBadge status={STATUS_VARIANT[installment.status]} label={STATUS_COPY[installment.status]} />
         <span aria-hidden="true" className="w-4 text-center text-lg text-[color:var(--cs-text-secondary)]">{expanded ? '−' : '+'}</span>
       </span>}>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-[color:var(--cs-text)]">{fee.name} · Rata {installment.installment_number}</span>
-          <span className="mt-0.5 block text-xs text-[color:var(--cs-text-secondary)]">Scadenza {formatDate(installment.due_date)}</span>
+        <span className="cs-fee-row__content min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-[color:var(--cs-text)]">{fee.name}</span>
+          <span className="mt-0.5 block text-xs text-[color:var(--cs-text-secondary)]">Rata {installment.installment_number} · Scadenza {formatDate(installment.due_date)}</span>
         </span>
       </ListRow>
       {expanded ? (
