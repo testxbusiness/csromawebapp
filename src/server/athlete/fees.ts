@@ -1,47 +1,82 @@
 import 'server-only'
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { buildAthleteFeesContract } from '@/lib/athlete/fees-contract'
+import {
+  buildAthleteFeesContract,
+  type RawActivity,
+  type RawFeeInstallment,
+  type RawMembershipFee,
+  type RawTeam,
+} from '@/lib/athlete/fees-contract'
 import type { AthleteFeesContract } from '@/types/athlete-fees'
+
+function nestedRelation(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return (value[0] as Record<string, unknown> | undefined) ?? null
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null
+}
 
 export async function loadAthleteFeesContract(
   client: SupabaseClient,
   profileId: string,
   activeTeamIds: string[],
 ): Promise<AthleteFeesContract> {
+  if (activeTeamIds.length === 0) return { installments: [] }
+
   const { data: installments, error: installmentsError } = await client
     .from('fee_installments')
-    .select('id, installment_number, due_date, amount, status, paid_at, membership_fee_id')
+    .select(`
+      id,
+      installment_number,
+      due_date,
+      amount,
+      status,
+      paid_at,
+      membership_fee_id,
+      membership_fees!inner(
+        id,
+        team_id,
+        name,
+        description,
+        total_amount,
+        enrollment_fee,
+        insurance_fee,
+        monthly_fee,
+        months_count,
+        installments_count,
+        teams!inner(
+          id,
+          name,
+          code,
+          activity_id,
+          activities!inner(id, name)
+        )
+      )
+    `)
     .eq('profile_id', profileId)
+    .in('membership_fees.team_id', activeTeamIds)
     .order('due_date', { ascending: true })
   if (installmentsError) throw new Error('Impossibile caricare le rate atleta')
 
-  const feeIds = [...new Set((installments ?? []).map((row) => row.membership_fee_id).filter(Boolean))]
-  if (feeIds.length === 0 || activeTeamIds.length === 0) return { installments: [] }
+  const fees = new Map<string, RawMembershipFee>()
+  const teams = new Map<string, RawTeam>()
+  const activities = new Map<string, RawActivity>()
+  const normalizedInstallments: RawFeeInstallment[] = (installments ?? []).map((row) => {
+    const nestedFee = nestedRelation(row.membership_fees)
+    const nestedTeam = nestedRelation(nestedFee?.teams)
+    const nestedActivity = nestedRelation(nestedTeam?.activities)
 
-  const { data: fees, error: feesError } = await client
-    .from('membership_fees')
-    .select('id, team_id, name, description, total_amount, enrollment_fee, insurance_fee, monthly_fee, months_count, installments_count')
-    .in('id', feeIds)
-    .in('team_id', activeTeamIds)
-  if (feesError) throw new Error('Impossibile caricare le quote atleta')
+    if (nestedFee?.id && nestedFee.team_id) fees.set(String(nestedFee.id), nestedFee as RawMembershipFee)
+    if (nestedTeam?.id && nestedTeam.name && nestedTeam.code) teams.set(String(nestedTeam.id), nestedTeam as RawTeam)
+    if (nestedActivity?.id && nestedActivity.name) activities.set(String(nestedActivity.id), nestedActivity as RawActivity)
 
-  const teamIds = [...new Set((fees ?? []).map((fee) => fee.team_id).filter(Boolean))]
-  const { data: teams, error: teamsError } = teamIds.length
-    ? await client.from('teams').select('id, name, code, activity_id').in('id', teamIds)
-    : { data: [], error: null }
-  if (teamsError) throw new Error('Impossibile caricare le squadre delle quote')
-
-  const activityIds = [...new Set((teams ?? []).map((team) => team.activity_id).filter(Boolean))]
-  const { data: activities, error: activitiesError } = activityIds.length
-    ? await client.from('activities').select('id, name').in('id', activityIds)
-    : { data: [], error: null }
-  if (activitiesError) throw new Error('Impossibile caricare le attività delle quote')
+    const { membership_fees: _membershipFees, ...installment } = row
+    return installment as RawFeeInstallment
+  })
 
   return buildAthleteFeesContract(
-    installments ?? [],
-    new Map((fees ?? []).map((fee) => [fee.id, fee])),
-    new Map((teams ?? []).map((team) => [team.id, team])),
-    new Map((activities ?? []).map((activity) => [activity.id, activity])),
+    normalizedInstallments,
+    fees,
+    teams,
+    activities,
   )
 }

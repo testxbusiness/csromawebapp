@@ -173,6 +173,8 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 
 **Criteri di accettazione**  LCP fees ≤2,5 s nel profilo target o miglioramento misurato ≥30%; contratto invariato e access control invariato.
 
+**Stato implementazione — 05/10/2026**  Completata la riduzione della catena: `src/server/athlete/fees.ts` carica rate, quote, squadre e attività con una singola query relazionale su `fee_installments`, filtrata da `profile_id` e `activeTeamIds`. Il builder mantiene invariati contratto JSON, importi, stati e raggruppamento per squadra; con zero squadre attive la query viene evitata. Aggiunto test del servizio su query unica e contesto annidato. Test fees mirati (17 test), typecheck, build e diff check superati; la misura p50/p95 su staging resta da ripetere.
+
 ## PERF-008 — Loading UX e Suspense per fees/messages
 
 **Problema**  Fees usa `Suspense fallback={null}`; messages ha fallback ma il manager fa fetch client.

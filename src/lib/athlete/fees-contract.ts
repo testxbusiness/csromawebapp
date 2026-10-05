@@ -5,7 +5,7 @@ import type {
   AthleteFeeTeam,
 } from '@/types/athlete-fees'
 
-type RawFeeInstallment = {
+export type RawFeeInstallment = {
   id: string
   installment_number: number
   due_date: string
@@ -16,7 +16,7 @@ type RawFeeInstallment = {
   paid_amount?: number | null
 }
 
-type RawMembershipFee = {
+export type RawMembershipFee = {
   id: string
   team_id: string
   name?: string | null
@@ -29,8 +29,8 @@ type RawMembershipFee = {
   installments_count?: number | null
 }
 
-type RawTeam = { id: string; name: string; code: string; activity_id?: string | null }
-type RawActivity = { id: string; name: string }
+export type RawTeam = { id: string; name: string; code: string; activity_id?: string | null }
+export type RawActivity = { id: string; name: string }
 
 function normalizeStatus(row: RawFeeInstallment, now: Date): AthleteFeeStatus {
   if (row.paid_at || row.status === 'paid') return 'paid'

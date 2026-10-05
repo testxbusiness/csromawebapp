@@ -24,6 +24,8 @@
 
 05/10/2026: completato PERF-006 sulla branch `performance-audit`. `AthleteMessagesManager` usa ora `view=minimal` per la lista iniziale e richiede `view=full&id=...` solo all’apertura del dettaglio; i deep link recuperano direttamente il messaggio anche se fuori dalla prima pagina. Abort e cambio subject invalidano entrambe le richieste, mantenendo il perimetro account/subject e il read-state esistenti. Test messaggi mirati (9 test), typecheck, build e diff check superati.
 
+05/10/2026: completato PERF-007 sulla branch `performance-audit`. `loadAthleteFeesContract` usa una query relazionale singola su `fee_installments` con `membership_fees → teams → activities`, mantenendo filtro per profilo e `activeTeamIds`; rimosse le tre letture seriali successive. Il contratto fees e la distinzione per squadra restano invariati. Aggiunto test del servizio per query unica, contesto annidato e subject senza squadre attive. Test fees mirati (17 test), typecheck, build e diff check superati.
+
 ---
 
 ## 0. Come usare questo piano con Codex
