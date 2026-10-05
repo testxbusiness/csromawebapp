@@ -28,6 +28,8 @@
 
 05/10/2026: completato PERF-008 sulla branch `performance-audit`. `/athlete/fees` non è più un Client Component e non usa più `Suspense fallback={null}`: ora mostra `LoadingState` esplicito. Aggiunti i boundary `loading.tsx` per fees e messages, coerenti con i rispettivi PageHeader; i manager mantengono i propri stati di fetch, offline ed errore senza richieste duplicate. Test mirati fees/messages/amministrazione (20 test), typecheck, build e diff check superati.
 
+05/10/2026: completato PERF-009 sulla branch `performance-audit`. RSVP e segnalazione/revoca dell’assenza aggiornano già localmente evento selezionato, agenda e capability attendance; rimossi i refetch dashboard aggregati immediatamente successivi alle mutation. Suite dashboard mirata (4 test delegati/RSVP), typecheck, build e diff check superati. La misura runtime su staging resta da ripetere con trace POST + GET.
+
 ---
 
 ## 0. Come usare questo piano con Codex

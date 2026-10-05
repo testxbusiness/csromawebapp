@@ -10,6 +10,7 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 | PERF-002 | Completato | 05/10/2026 | `src/server/auth/require-account-context.ts`, `src/server/auth/require-account-context.test.ts` | test mirato 1/1, suite completa 103 suite/415 test passati con 2 suite/3 test falliti non correlati, `npx tsc --noEmit`, `npm run build`, `git diff --check` | Memoizzazione per istanza del client Supabase: una sola risoluzione concorrente di user/account/ruoli nello stesso request tree; nessun contesto condiviso tra request o tramite storage client. |
 | PERF-004 | Completato | 05/10/2026 | `src/app/api/athlete/dashboard/route.ts`, test route dashboard | 2 suite API/3 test, suite completa 104 suite/417 test passati con 2 suite/3 test falliti non correlati, `npx tsc --noEmit`, `npm run build`, `git diff --check` | Attività, palestre, presenze, disponibilità e prossima partita vengono risolte in parallelo dopo la disponibilità dei rispettivi ID; contratto e autorizzazioni invariati. |
 | PERF-003 | Completato | 05/10/2026 | `src/app/api/athlete/dashboard/route.ts`, `src/app/api/athlete/dashboard/alerts/route.ts`, `src/components/athlete/AthleteDashboard.tsx` | 2 suite API/3 test, suite completa 104 suite/417 test passati con 2 suite/3 test falliti non correlati, `npx tsc --noEmit`, `npm run build`, `git diff --check` | Alert amministrativi spostati su endpoint subject-aware parallelo; payload dashboard critico e stato successivo non attendono più gli alert. |
+| PERF-009 | Completato | 05/10/2026 | `src/components/athlete/AthleteDashboard.tsx` | suite dashboard mirata 4/4, `npx tsc --noEmit`, `npm run build`, `git diff --check` | RSVP e assenza aggiornano lo stato locale già riflesso nella UI; rimossi i refetch aggregati successivi alle mutation. Timer/focus/online e cambio subject restano gli unici refresh automatici. |
 
 ## PERF-001 — Baseline runtime correlata
 
@@ -220,6 +221,8 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 **Come testare dopo**  Nessun GET dashboard se non necessario; stato, disponibilità e conflitti corretti.
 
 **Criteri di accettazione**  Dopo RSVP/assenza il contenuto visibile è aggiornato in place; zero `window.location.reload`.
+
+**Stato implementazione — 05/10/2026**  Completato l’aggiornamento locale per RSVP e segnalazione/revoca dell’assenza: evento selezionato, agenda e capability `attendance_availability` vengono aggiornati senza rilanciare `loadAthleteData()`. Restano attivi i refresh temporali, al focus e al ritorno online, oltre al retry esplicito e all’invalidazione al cambio subject. La suite dashboard mirata copre le mutation e l’invalidazione del subject (4/4), con typecheck, build e diff check superati. La misura runtime su staging resta da ripetere con trace POST + GET.
 
 ## PERF-010 — Deduplicare refresh focus/online e badge unread
 

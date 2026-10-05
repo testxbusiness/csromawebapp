@@ -286,7 +286,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         ? { ...event, my_attendance: { status, responded_at: respondedAt } }
         : event
       ))
-      void loadAthleteData()
     } catch (error) {
       if (controller.signal.aborted) return
       throw error
@@ -332,7 +331,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     }
     setSelectedEvent((current) => current ? updateEvent(current) : current)
     setUpcomingEvents((current) => current.map(updateEvent))
-    void loadAthleteData()
   }
 
   // Enrich selected message on open
