@@ -28,10 +28,13 @@ export class AccountContextError extends Error {
 const accountStatuses = new Set<AccountStatus>(['invited', 'active', 'suspended', 'disabled'])
 const accountRoles = new Set<AccountRole>(['admin', 'coach', 'staff', 'athlete', 'family_member'])
 
-export async function requireAccountContext(
-  client?: SupabaseClient
-): Promise<AccountContext> {
-  const supabase = client ?? (await createClient())
+// The same Supabase client is request-scoped in the current server patterns.
+// Cache only the in-flight/resolved promise for that client: this removes
+// duplicate auth/account/role reads within one request without sharing auth
+// state across requests or using client storage as an authority.
+const accountContextByClient = new WeakMap<object, Promise<AccountContext>>()
+
+async function resolveAccountContext(supabase: SupabaseClient): Promise<AccountContext> {
   const {
     data: { user },
     error: authError,
@@ -81,11 +84,31 @@ export async function requireAccountContext(
   }
 }
 
+export async function requireAccountContext(
+  client?: SupabaseClient
+): Promise<AccountContext> {
+  const supabase = client ?? (await createClient())
+  const cached = accountContextByClient.get(supabase)
+  if (cached) return cached
+
+  const pending = resolveAccountContext(supabase)
+  accountContextByClient.set(supabase, pending)
+
+  try {
+    return await pending
+  } catch (error) {
+    // Do not retain a failed authorization result if the same client is
+    // explicitly reused by the caller after a recoverable failure.
+    accountContextByClient.delete(supabase)
+    throw error
+  }
+}
+
 export async function requireAthleteContext(
   client?: SupabaseClient
 ): Promise<AccountContext> {
-  const context = await requireAccountContext(client)
   const supabase = client ?? (await createClient())
+  const context = await requireAccountContext(supabase)
 
   if (!context.roles.includes('athlete')) {
     throw new AccountContextError('Ruolo atleta non abilitato', 403)

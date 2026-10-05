@@ -7,6 +7,7 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 | Task | Stato | Data | File principali | Verifiche | Note |
 |---|---|---|---|---|---|
 | PERF-001 | Completato | 05/10/2026 | `src/server/performance/request-timing.ts`, middleware e Route Handler atleta/profilo | `npx tsc --noEmit`, 4 suite/6 test Jest, `npm run build`, `git diff --check` | Strumentazione opt-in con `PERFORMANCE_DIAGNOSTICS=1`; nessuna query, policy RLS o risposta modificata quando disattivata. |
+| PERF-002 | Completato | 05/10/2026 | `src/server/auth/require-account-context.ts`, `src/server/auth/require-account-context.test.ts` | test mirato 1/1, suite completa 103 suite/415 test passati con 2 suite/3 test falliti non correlati, `npx tsc --noEmit`, `npm run build`, `git diff --check` | Memoizzazione per istanza del client Supabase: una sola risoluzione concorrente di user/account/ruoli nello stesso request tree; nessun contesto condiviso tra request o tramite storage client. |
 
 ## PERF-001 — Baseline runtime correlata
 
@@ -51,6 +52,8 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 **Come testare dopo**  Stessa matrice, verificando autorizzazioni identiche e meno segmenti/tempo.
 
 **Criteri di accettazione**  Nessun accesso cross-subject; LCP dashboard ridotto senza cambiare JSON autorizzato; regressione zero sui test di contesto.
+
+**Esito 05/10/2026**  `requireAccountContext` ora memoizza la promise di risoluzione usando l'istanza `SupabaseClient` come chiave, così le chiamate ripetute o concorrenti nello stesso Route Handler condividono `auth.getUser`, lettura `app_accounts` e lettura `account_roles`. Le promise fallite vengono rimosse dalla cache. `requireAthleteContext` riusa inoltre il client creato localmente invece di crearne un secondo. Il perimetro resta intenzionalmente limitato alla singola istanza server-side: middleware, browser `useAuth` e Route Handler distinti restano confini separati e non condividono dati autorevoli tramite client storage. Test aggiunto per verificare una sola risoluzione concorrente e risultato invariato. Misure LCP/TTFB su staging restano da ripetere con la procedura dell'audit.
 
 ## PERF-003 — Dashboard: separare il critical path dagli alert amministrativi
 
