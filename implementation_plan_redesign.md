@@ -8822,6 +8822,12 @@ testo libero. File modificati: `src/app/api/admin/events/route.ts`,
 `src/components/shared/EventDetailModal.tsx`. `npx tsc --noEmit` e 102 suite
 su 104 superate; restano i due failure preesistenti documentati sopra.
 
+**Correzione eventi vista mese — 05/10/2026:** corretto `FullCalendarWidget`:
+il callback `eventContent` restituisce ora sempre titolo e orario anche nella
+vista mese, mantenendo la riga palestra aggiuntiva nella vista settimana. Test
+mirato `FullCalendarWidget` 3/3, `npx tsc --noEmit`, `npm run build` e
+`git diff --check` superati.
+
 # 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:

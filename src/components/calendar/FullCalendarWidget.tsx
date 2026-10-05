@@ -94,12 +94,13 @@ export default function FullCalendarWidget({
         height="auto"
         events={fcEvents}
         eventContent={(arg) => {
-          if (arg.view.type !== 'timeGridWeek') return undefined
+          const title = <div className="truncate">{arg.timeText} {arg.event.title}</div>
+          if (arg.view.type !== 'timeGridWeek') return title
           const location = arg.event.extendedProps.location as string | undefined
-          if (!location) return undefined
+          if (!location) return title
           return (
             <div className="min-w-0 overflow-hidden">
-              <div className="truncate">{arg.timeText} {arg.event.title}</div>
+              {title}
               <div className="truncate text-[10px] opacity-80">📍 {location}</div>
             </div>
           )
