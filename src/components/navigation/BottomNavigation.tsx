@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { appendSubjectProfile, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { MESSAGE_READ_STATE_CHANGED_EVENT, type MessageReadStateChangedDetail } from '@/lib/messages/read-state-events'
 import { resolveFamilyNavigation } from '@/lib/navigation/family-navigation'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 
 const personalItems = [
   { href: '/dashboard', label: 'Oggi', icon: Home },
@@ -45,6 +46,7 @@ export function BottomNavigation({ unreadCount = 0 }: { unreadCount?: number }) 
   useEffect(() => {
     if ((role !== 'athlete' && role !== 'family_member') || !user?.id || !canReadMessages || (isFamilyView && !selectedProfileId)) return
     const controller = new AbortController()
+    const refreshKey = `athlete-messages-badge:${user.id}:${selectedProfileId ?? 'self'}`
     const loadUnreadCount = async () => {
       try {
         const response = await fetch(appendSubjectProfile('/api/athlete/messages?countOnly=1', selectedProfileId), { signal: controller.signal, cache: 'no-store' })
@@ -56,11 +58,16 @@ export function BottomNavigation({ unreadCount = 0 }: { unreadCount?: number }) 
         if (!(error instanceof DOMException && error.name === 'AbortError')) return
       }
     }
-    void loadUnreadCount()
+    const refreshUnreadCount = () => runClientRefresh(refreshKey, loadUnreadCount)
+    void refreshUnreadCount()
     const handleReadStateChanged = (event: Event) => {
       const detail = (event as CustomEvent<MessageReadStateChangedDetail>).detail
       if ((detail?.subjectProfileId ?? null) !== (selectedProfileId ?? null)) return
-      void loadUnreadCount()
+      if (detail?.isRead === true) {
+        setLiveUnreadCount((current) => Math.max(0, current - 1))
+        return
+      }
+      void runClientRefresh(refreshKey, loadUnreadCount, 1500, true)
     }
     window.addEventListener(MESSAGE_READ_STATE_CHANGED_EVENT, handleReadStateChanged)
     return () => {

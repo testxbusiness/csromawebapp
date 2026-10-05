@@ -12,6 +12,7 @@ import { exportEvents } from '@/lib/utils/excelExport'
 import { EmptyState, ErrorState, EventKindBadge, LoadingState, OfflineState } from '@/components/ui'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 import { filterCalendarEvents, type CalendarEventKindFilter } from '@/lib/athlete/calendar-filters'
 import { markCalendarConflicts } from '@/lib/athlete/calendar-conflicts'
 import { canConfirmAthleteAttendance } from '@/lib/athlete/calendar-permissions'
@@ -147,15 +148,17 @@ export default function AthleteCalendarManager() {
   }, [authLoading, profileLoading, userId, loadData])
 
   useEffect(() => {
-    const onFocus = () => { if (document.visibilityState === 'visible') void loadData() }
-    const onOnline = () => void loadData()
+    const refreshKey = `athlete-calendar:${userId ?? 'anonymous'}:${selectedProfileId ?? 'self'}`
+    const refresh = () => runClientRefresh(refreshKey, () => loadData())
+    const onFocus = () => { if (document.visibilityState === 'visible') void refresh() }
+    const onOnline = () => void refresh()
     window.addEventListener('focus', onFocus)
     window.addEventListener('online', onOnline)
     return () => {
       window.removeEventListener('focus', onFocus)
       window.removeEventListener('online', onOnline)
     }
-  }, [loadData])
+  }, [loadData, selectedProfileId, userId])
 
   useEffect(() => {
     if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from './AccessibleProfileContext'
 import { useAuthOptional } from '@/hooks/useAuth'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 
 export type TeamOption = {
   id: string
@@ -95,10 +96,12 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     coachTeamsRequestRef.current = controller
     const refreshWhenVisible = () => {
       if (document.visibilityState !== 'visible') return
-      coachTeamsRequestRef.current?.abort()
-      const nextController = new AbortController()
-      coachTeamsRequestRef.current = nextController
-      void loadCoachTeams(nextController.signal)
+      void runClientRefresh(`coach-teams:${account?.ownerProfileId ?? 'unknown'}`, () => {
+        coachTeamsRequestRef.current?.abort()
+        const nextController = new AbortController()
+        coachTeamsRequestRef.current = nextController
+        return loadCoachTeams(nextController.signal)
+      })
     }
     void loadCoachTeams(controller.signal)
     window.addEventListener('focus', refreshWhenVisible)

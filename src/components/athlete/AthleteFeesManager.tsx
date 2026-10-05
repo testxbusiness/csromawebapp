@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, Sta
 import type { AthleteFeeInstallment, AthleteFeesContract, AthleteFeeStatus } from '@/types/athlete-fees'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { FeeRow } from './FeeRow'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 
 type FeeFilter = 'all' | 'pending' | 'paid' | 'overdue'
 type FeesLoadState = 'loading' | 'ready' | 'error' | 'offline'
@@ -148,14 +149,16 @@ export default function AthleteFeesManager() {
 
   useEffect(() => {
     const handleOffline = () => setLoadState('offline')
-    const handleOnline = () => { void loadInstallments() }
+    const handleOnline = () => {
+      void runClientRefresh(`athlete-fees:${userId ?? 'anonymous'}:${selectedProfileId ?? 'self'}`, () => loadInstallments())
+    }
     window.addEventListener('offline', handleOffline)
     window.addEventListener('online', handleOnline)
     return () => {
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
-  }, [loadInstallments])
+  }, [loadInstallments, selectedProfileId, userId])
 
   if (loadState === 'loading' && installments.length === 0) return <LoadingState label="Caricamento quote..." />
   if (accessDenied) return <DelegatedAccessDenied section="le quote associative" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />

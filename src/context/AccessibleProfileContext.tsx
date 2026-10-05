@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 
 export type AccessibleProfile = {
   profile: {
@@ -107,7 +108,9 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
 
   useEffect(() => {
     const refreshWhenVisible = () => {
-      if (document.visibilityState === 'visible') refresh().catch(() => {})
+      if (document.visibilityState === 'visible') {
+        void runClientRefresh(`accessible-profiles:${account?.authUserId ?? 'anonymous'}`, refresh)
+      }
     }
 
     window.addEventListener('focus', refreshWhenVisible)
@@ -116,7 +119,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-  }, [refresh])
+  }, [account?.authUserId, refresh])
 
   useEffect(() => {
     if (typeof window === 'undefined') return

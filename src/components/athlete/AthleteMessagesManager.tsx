@@ -10,6 +10,7 @@ import { filterAthleteMessages, type MessageReadFilter } from '@/lib/athlete/mes
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useTeamContext } from '@/context/TeamContext'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 
 type MessagesLoadState = 'loading' | 'ready' | 'error' | 'offline'
 
@@ -122,7 +123,7 @@ export default function AthleteMessagesManager() {
 
   useEffect(() => {
     loadMessages()
-  }, [loadMessages])
+  }, [loadMessages, selectedProfileId, user?.id])
 
   const loadMessageDetail = useCallback(async (messageId: string, fallbackMessage?: AthleteMessageListItem) => {
     const subjectContext = selectedProfileId ?? 'self'
@@ -178,7 +179,7 @@ export default function AthleteMessagesManager() {
       setLoadState('offline')
     }
     const handleOnline = () => {
-      void loadMessages()
+      void runClientRefresh(`athlete-messages:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`, loadMessages)
     }
     window.addEventListener('offline', handleOffline)
     window.addEventListener('online', handleOnline)
@@ -186,7 +187,7 @@ export default function AthleteMessagesManager() {
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
-  }, [loadMessages])
+  }, [loadMessages, selectedProfileId, user?.id])
 
   const handleOpenMessage = useCallback((message: AthleteMessageListItem) => {
     void loadMessageDetail(message.id, message)

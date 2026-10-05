@@ -18,6 +18,7 @@ import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { useAuth } from '@/hooks/useAuth'
 import type { AttendanceAvailabilityContract } from '@/types/attendance'
 import type { AthleteDashboardAdministrativeAlert } from '@/types/athlete-dashboard'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 
 interface User {
   id: string
@@ -794,13 +795,15 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   }, [loadAthleteData])
 
   useEffect(() => {
+    const refreshKey = `athlete-dashboard:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`
+    const refresh = () => runClientRefresh(refreshKey, loadAthleteData)
     const onOffline = () => {
       setIsOffline(true)
       setDashboardStatus('offline')
     }
     const onOnline = () => {
       setIsOffline(false)
-      void loadAthleteData()
+      void refresh()
     }
     window.addEventListener('offline', onOffline)
     window.addEventListener('online', onOnline)
@@ -808,20 +811,22 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       window.removeEventListener('offline', onOffline)
       window.removeEventListener('online', onOnline)
     }
-  }, [loadAthleteData])
+  }, [loadAthleteData, selectedProfileId, user?.id])
 
   // Ricarica quando la tab torna visibile; il server resta la fonte dell'evento attivo.
   useEffect(() => {
+    const refreshKey = `athlete-dashboard:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`
+    const refresh = () => runClientRefresh(refreshKey, loadAthleteData)
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
-      void loadAthleteData()
+      void refresh()
     }
 
     window.addEventListener('visibilitychange', onVisible)
     return () => {
       window.removeEventListener('visibilitychange', onVisible)
     }
-  }, [loadAthleteData])
+  }, [loadAthleteData, selectedProfileId, user?.id])
 
   useEffect(() => {
     if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)

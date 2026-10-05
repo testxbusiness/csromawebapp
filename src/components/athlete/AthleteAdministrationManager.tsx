@@ -8,6 +8,7 @@ import { ErrorState, ListRow, LoadingState, OfflineState, Panel, StatusBadge } f
 import { AthleteFeesContent } from './AthleteFeesManager'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import type { AthleteAdministrationContract } from '@/types/athlete-administration'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 
 type LoadState = 'loading' | 'ready' | 'error' | 'offline'
 type FocusSection = 'certificate' | 'fees' | null
@@ -86,11 +87,13 @@ export default function AthleteAdministrationManager() {
 
   useEffect(() => {
     const offline = () => setLoadState('offline')
-    const online = () => { void load() }
+    const online = () => {
+      void runClientRefresh(`athlete-administration:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`, () => load())
+    }
     window.addEventListener('offline', offline)
     window.addEventListener('online', online)
     return () => { window.removeEventListener('offline', offline); window.removeEventListener('online', online) }
-  }, [load])
+  }, [load, selectedProfileId, user?.id])
 
   useEffect(() => {
     if (loadState !== 'ready' || !focusSection) return

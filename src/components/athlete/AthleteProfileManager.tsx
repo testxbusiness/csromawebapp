@@ -8,6 +8,7 @@ import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, Sta
 import InstallPwaButton from '@/components/pwa/InstallPwaButton'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import type { AthleteProfileContract } from '@/types/athlete-profile'
+import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 type ProfileLoadState = 'loading' | 'ready' | 'error' | 'offline' | 'denied'
 
 function initials(profile: AthleteProfileContract['subject']): string {
@@ -91,14 +92,16 @@ export default function AthleteProfileManager() {
 
   useEffect(() => {
     const handleOffline = () => setLoadState('offline')
-    const handleOnline = () => { void loadProfile() }
+    const handleOnline = () => {
+      void runClientRefresh(`athlete-profile:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`, () => loadProfile())
+    }
     window.addEventListener('offline', handleOffline)
     window.addEventListener('online', handleOnline)
     return () => {
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
-  }, [loadProfile])
+  }, [loadProfile, selectedProfileId, user?.id])
 
   useEffect(() => {
     const supported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window

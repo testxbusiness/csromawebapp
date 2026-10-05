@@ -32,6 +32,8 @@
 
 05/10/2026: rifinitura UI post-PERF-009. Lo stato “assenza già segnalata” di `AttendanceControl` ora nasconde il riepilogo RSVP duplicato e mantiene una sola separazione visiva, sia nella card dashboard sia nel modal dettaglio evento; deadline scaduta/offline conservano invece il messaggio di stato completo. Test `AttendanceControl` + `EventDetailModal` 24/24 e typecheck superati.
 
+05/10/2026: completato PERF-010 sulla branch `performance-audit`. Aggiunto `client-refresh-coordinator` per coalescere refresh concorrenti da focus/visibility/online per chiave utente/route/subject, mantenendo i controller abort e i controlli auth/subject esistenti. Applicato a dashboard, calendario, messaggi, quote, amministrazione, profilo, contesto profili accessibili e contesto team coach. Il badge messaggi aggiorna il conteggio localmente dopo una lettura confermata e interroga ancora `countOnly=1` solo per bootstrap/fallback. Test coordinatore 2/2, suite mirate eseguite: messaggi, quote, amministrazione e bottom navigation passano; `AthleteDashboard.test.tsx` conserva il failure data-dipendente preesistente su `Oggi · 20:00`. `npx tsc --noEmit`, `npm run build` e `git diff --check` superati; la build non segnala warning dopo l’allineamento delle dipendenze degli effect. Nessuna modifica a route, API, autorizzazioni, schema o dati.
+
 ---
 
 ## 0. Come usare questo piano con Codex
