@@ -1,107 +1,11 @@
-'use client'
-
-import { useAuth } from '@/hooks/useAuth'
-import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
-import { useEffect, useState, useRef } from 'react'
-import AdminDashboard from '@/components/admin/AdminDashboard'
-import CoachDashboard from '@/components/coach/CoachDashboard'
-import AthleteDashboard from '@/components/athlete/AthleteDashboard'
-import FamilyMemberDashboard from '@/components/family/FamilyMemberDashboard'
+import { Suspense } from 'react'
+import DashboardClient from './DashboardClient'
+import DashboardLoadingState from './DashboardLoadingState'
 
 export default function DashboardPage() {
-  const { user, profile, account, role, loading } = useAuth()
-  const { activeArea, profiles: accessibleProfiles, loading: accessibleProfilesLoading } = useAccessibleProfiles()
-
-  const [lastValidState, setLastValidState] = useState<{
-    user: typeof user
-    profile: typeof profile
-    role: typeof role
-  } | null>(null)
-
-  const hasShownData = useRef(false)
-
-  useEffect(() => {
-    if (user && profile && role) {
-      setLastValidState({ user, profile, role })
-      hasShownData.current = true
-    }
-  }, [user, profile, role])
-
-  const displayUser = user || lastValidState?.user
-  const displayProfile = profile || lastValidState?.profile
-  const displayRole = role || lastValidState?.role
-
-  if (loading && !hasShownData.current) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="cs-skeleton cs-skeleton--circle w-12 h-12"></div>
-          <div className="cs-skeleton w-48 h-4"></div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!displayUser || !displayProfile) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="cs-skeleton cs-skeleton--circle w-12 h-12"></div>
-          <div className="cs-skeleton w-48 h-4"></div>
-        </div>
-      </div>
-    )
-  }
-
-  const isRefreshing = loading && hasShownData.current
-
-  const hasFamilyAccess = Boolean(
-    account?.roles.includes('family_member') || (!accessibleProfilesLoading && accessibleProfiles.length > 0)
-  )
-  const showFamilyArea = displayRole === 'family_member' || (hasFamilyAccess && activeArea === 'family')
-
   return (
-    <div className="space-y-8">
-      {isRefreshing && (
-        <div className="cs-dashboard-refresh-status" role="status" aria-live="polite">
-          <span className="cs-dashboard-refresh-status__indicator" aria-hidden="true" />
-          Aggiornamento...
-        </div>
-      )}
-
-      <section className="space-y-8">
-        {displayRole === 'admin' ? (
-          <AdminDashboard profile={displayProfile} role={displayRole} />
-        ) : displayRole === 'coach' ? (
-          <CoachDashboard user={displayUser} profile={displayProfile} />
-        ) : showFamilyArea ? (
-          <FamilyMemberDashboard />
-        ) : displayRole === 'athlete' ? (
-          <AthleteDashboard user={displayUser} profile={displayProfile} />
-        ) : (
-          <div className="cs-card cs-card--lg">
-            <h2 className="cs-card__title">Panoramica account</h2>
-            <p className="cs-card__description">
-              Ruolo non riconosciuto. Contatta l&apos;amministratore per verificare le autorizzazioni associate al tuo profilo.
-            </p>
-
-            {process.env.NEXT_PUBLIC_DEBUG_ROLE && (
-              <pre className="mt-3 text-xs opacity-70">
-                {JSON.stringify(
-                  {
-                    roleFromProfile: displayProfile?.role,
-                    roleFromAppMeta: (displayUser as any)?.app_metadata?.role,
-                    roleFromUserMeta: (displayUser as any)?.app_metadata?.role,
-                    resolvedRole: displayRole,
-                  },
-                  null,
-                  2
-                )}
-              </pre>
-            )}
-          </div>
-        )}
-      </section>
-    </div>
+    <Suspense fallback={<DashboardLoadingState />}>
+      <DashboardClient />
+    </Suspense>
   )
 }

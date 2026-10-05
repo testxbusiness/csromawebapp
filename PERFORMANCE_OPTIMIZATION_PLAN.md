@@ -125,6 +125,8 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 
 **Criteri di accettazione**  Primo testo utile arriva prima del payload non critico; nessun doppio fetch equivalente durante il mount.
 
+**Stato implementazione — 05/10/2026**  Introdotto il primo incremento a rischio controllato: `src/app/dashboard/page.tsx` è ora un Server Component con `Suspense`; il dispatcher con auth, ruoli, area familiare e subject è stato spostato in `DashboardClient.tsx`; aggiunti `DashboardLoadingState.tsx` e `loading.tsx` per una shell utile e stabile durante hydration/navigation. Non è stato modificato il fetch privato dashboard né il contratto API, quindi non vengono introdotte doppie risoluzioni auth/profile. Typecheck, build e diff check superati. Il test mirato atleta conserva un failure temporale già presente e non correlato (`Oggi · 20:00` vs data fixture); serve ancora misura LCP/TTFB su staging e una successiva separazione del payload critico/non critico per completare pienamente l’obiettivo “payload iniziale minimo”.
+
 ## PERF-006 — Messaggi: separare lista minima e dettaglio full
 
 **Problema**  La pagina usa `view=full` al caricamento iniziale e attende destinatari/allegati metadata.

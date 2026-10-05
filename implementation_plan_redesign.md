@@ -20,6 +20,8 @@
 
 05/10/2026: completato PERF-004 sulla branch `performance-audit`. Nel Route Handler dashboard, dopo il caricamento degli eventi, attività, palestre, presenze, disponibilità attendance e prossima partita sono ora avviate in parallelo; le dipendenze `teamIds`, `eventIds`, `activityIds`, `gymIds` e `clubTeamIds` restano rispettate. Nessuna modifica a schema/RLS, autorizzazioni o contratto JSON. Test API mirati, suite completa (104 suite/417 test passati, 2 suite/3 test falliti non correlati), typecheck, build e diff check eseguiti. La misura p50/p95 su staging resta da ripetere dopo il deploy.
 
+05/10/2026: avviato PERF-005 con un boundary server-side per `/dashboard`: `page.tsx` ora resta Server Component, il dispatcher autenticato è isolato in `DashboardClient.tsx`, e `Suspense`/`loading.tsx` forniscono una shell utile prima del completamento dell’hydration. Auth, subject familiare e fetch dashboard restano invariati per evitare doppie risoluzioni o regressioni di autorizzazione. Typecheck, build e diff check superati; il test dashboard atleta mantiene il solo failure temporale preesistente (`Oggi · 20:00`). Resta da validare su staging il guadagno LCP e, in un follow-up PERF-005, la separazione effettiva del payload critico/non critico.
+
 ---
 
 ## 0. Come usare questo piano con Codex
