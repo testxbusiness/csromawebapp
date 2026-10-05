@@ -26,6 +26,8 @@
 
 05/10/2026: completato PERF-007 sulla branch `performance-audit`. `loadAthleteFeesContract` usa una query relazionale singola su `fee_installments` con `membership_fees → teams → activities`, mantenendo filtro per profilo e `activeTeamIds`; rimosse le tre letture seriali successive. Il contratto fees e la distinzione per squadra restano invariati. Aggiunto test del servizio per query unica, contesto annidato e subject senza squadre attive. Test fees mirati (17 test), typecheck, build e diff check superati.
 
+05/10/2026: completato PERF-008 sulla branch `performance-audit`. `/athlete/fees` non è più un Client Component e non usa più `Suspense fallback={null}`: ora mostra `LoadingState` esplicito. Aggiunti i boundary `loading.tsx` per fees e messages, coerenti con i rispettivi PageHeader; i manager mantengono i propri stati di fetch, offline ed errore senza richieste duplicate. Test mirati fees/messages/amministrazione (20 test), typecheck, build e diff check superati.
+
 ---
 
 ## 0. Come usare questo piano con Codex

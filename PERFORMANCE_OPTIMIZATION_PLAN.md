@@ -197,6 +197,8 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 
 **Criteri di accettazione**  Nessun fallback vuoto sulle route P1; nessun CLS aggiuntivo; testo di errore/offline invariato.
 
+**Stato implementazione — 05/10/2026**  Eliminato il `Suspense fallback={null}` da `/athlete/fees`, rimosso il boundary client non necessario e aggiunti `loading.tsx` route-level per fees e messages con PageHeader e `LoadingState` coerenti. I manager continuano a gestire autonomamente loading durante il fetch client, errori, offline e retry; non sono stati aggiunti fetch. Test mirati fees/messages/amministrazione (20 test), typecheck, build e diff check superati.
+
 ## PERF-009 — Evitare refetch dashboard dopo mutazioni già riflesse localmente
 
 **Problema**  Attendance e early absence aggiornano lo stato locale e poi rilanciano `loadAthleteData()`.
