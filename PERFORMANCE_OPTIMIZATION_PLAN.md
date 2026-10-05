@@ -1,0 +1,349 @@
+# Piano incrementale di ottimizzazione performance
+
+Piano derivato dall’audit diagnostico. Non contiene implementazione e non autorizza modifiche a route, schema, RLS o indici prima delle misurazioni indicate.
+
+## Stato di avanzamento
+
+| Task | Stato | Data | File principali | Verifiche | Note |
+|---|---|---|---|---|---|
+| PERF-001 | Completato | 05/10/2026 | `src/server/performance/request-timing.ts`, middleware e Route Handler atleta/profilo | `npx tsc --noEmit`, 4 suite/6 test Jest, `npm run build`, `git diff --check` | Strumentazione opt-in con `PERFORMANCE_DIAGNOSTICS=1`; nessuna query, policy RLS o risposta modificata quando disattivata. |
+
+## PERF-001 — Baseline runtime correlata
+
+**Problema**  I dati disponibili misurano solo il risultato browser, non i segmenti middleware/auth/API/DB.
+
+**Evidenza (MISURATO / NON MISURATO)**  LCP dashboard 4,83–7,49 s, messages 3,70 s, fees 3,08 s; tempi interni NON MISURATI.
+
+**File coinvolti**  `src/middleware.ts`, `src/hooks/useAuth.ts`, `src/app/api/me/profile/route.ts`, endpoint atleta e configurazione logging preview.
+
+**Soluzione proposta**  Definire request id e Server-Timing/log strutturati solo per preview/staging, con fasi auth, contesto subject e query aggregate; nessuna modifica al contratto o comportamento.
+
+**Miglioramento atteso**  Diagnosi affidabile e priorità verificabili, non miglioramento LCP diretto.
+
+**Complessità di implementazione**  S
+
+**Rischio di regressione**  Basso, se disabilitato fuori da preview.
+
+**Come testare prima**  HAR + Performance trace delle tre route; snapshot di status code, JSON e request count.
+
+**Come testare dopo**  Ripetere gli stessi trace e verificare correlazione 1:1 request id, nessun cambio payload/status.
+
+**Criteri di accettazione**  Ogni segmento critico ha durata osservabile; nessun log sensibile e nessuna query aggiuntiva.
+
+## PERF-002 — Misurare e ridurre la duplicazione auth/profile
+
+**Problema**  Middleware, `useAuth` e endpoint subject-aware risolvono più volte sessione/account/ruoli.
+
+**Evidenza (OSSERVATO NEL CODICE)**  `middleware.ts`; `useAuth.ts:301-314`; `/api/me/profile`; `requireSubjectAthleteContext`.
+
+**File coinvolti**  Gli stessi file e `src/server/auth/require-account-context.ts`.
+
+**Soluzione proposta**  Dopo PERF-001, condividere solo il contesto già sicuro nel perimetro della singola request/server tree oppure eliminare letture ridondanti documentate; non condividere dati auth tramite client storage come fonte autorevole.
+
+**Miglioramento atteso**  Riduzione TTFB e attesa pre-fetch, da quantificare.
+
+**Complessità di implementazione**  M
+
+**Rischio di regressione**  Alto: autorizzazione e delegated subject sono sensibili.
+
+**Come testare prima**  Test auth/RLS esistenti, trace con contatore chiamate e matrice atleta/famiglia/multi-ruolo.
+
+**Come testare dopo**  Stessa matrice, verificando autorizzazioni identiche e meno segmenti/tempo.
+
+**Criteri di accettazione**  Nessun accesso cross-subject; LCP dashboard ridotto senza cambiare JSON autorizzato; regressione zero sui test di contesto.
+
+## PERF-003 — Dashboard: separare il critical path dagli alert amministrativi
+
+**Problema**  `loadAthleteDashboardAdministrativeAlerts` viene atteso prima del caricamento principale.
+
+**Evidenza (OSSERVATO NEL CODICE)**  `src/app/api/athlete/dashboard/route.ts:21` attende gli alert prima di `memberRes/feeRes` a `:27`; il timing del blocco è NON MISURATO.
+
+**File coinvolti**  `src/app/api/athlete/dashboard/route.ts`, `src/server/athlete/administration.ts`, contratto dashboard.
+
+**Soluzione proposta**  Dopo la misura, spostare gli alert fuori dal primo payload oppure farli eseguire in parallelo se il contratto e la privacy lo consentono; mantenere stato esplicito “in aggiornamento”.
+
+**Miglioramento atteso**  Riduzione del tempo prima del primo contenuto dashboard.
+
+**Complessità di implementazione**  M
+
+**Rischio di regressione**  Medio: alert e quote devono restare coerenti.
+
+**Come testare prima**  Snapshot del contratto e trace con/without alert timing solo in staging.
+
+**Come testare dopo**  Test endpoint, snapshot e trace LCP/JSON; verifica delegated permissions.
+
+**Criteri di accettazione**  Primo contenuto non attende alert non critici; nessun alert autorizzato perso; LCP dashboard migliora rispetto alla baseline.
+
+## PERF-004 — Dashboard: eliminare waterfall server confermati
+
+**Problema**  Dopo gruppi paralleli rimangono fasi sequenziali: eventi, attività, availability e match.
+
+**Evidenza (OSSERVATO NEL CODICE)**  `src/app/api/athlete/dashboard/route.ts:136-264`; durata reale NON MISURATA.
+
+**File coinvolti**  Endpoint dashboard e funzioni `src/server/events/attendance-availability.ts`.
+
+**Soluzione proposta**  Solo per dipendenze indipendenti confermate da PERF-001, avviare query in parallelo; mantenere dipendenze ID→lookup e limiti esistenti.
+
+**Miglioramento atteso**  Riduzione della durata server aggregata.
+
+**Complessità di implementazione**  M
+
+**Rischio di regressione**  Medio/alto: query e error handling concorrenti.
+
+**Come testare prima**  Test endpoint e fixture multi-team/multi-evento; trace per fase.
+
+**Come testare dopo**  Confronto p50/p95, JSON byte-identico e suite auth/contract.
+
+**Criteri di accettazione**  Nessuna query parte prima dei propri ID; p95 ridotto; nessun aumento di errori o duplicati.
+
+## PERF-005 — Dashboard: payload iniziale minimo e streaming controllato
+
+**Problema**  La pagina `/dashboard` è client e mostra dati utili solo dopo hydration e fetch aggregato.
+
+**Evidenza (MISURATO + OSSERVATO NEL CODICE)**  LCP 4,83–7,49 s; `src/app/dashboard/page.tsx` è `'use client'`, `AthleteDashboard.tsx:413` fa fetch.
+
+**File coinvolti**  `src/app/dashboard/page.tsx`, `src/components/athlete/AthleteDashboard.tsx`, route dashboard, eventuali `loading.tsx`/boundary.
+
+**Soluzione proposta**  Valutare un Server Component wrapper con payload minimo e Suspense per sezioni non critiche; lasciare interazioni e mutazioni nei client island.
+
+**Miglioramento atteso**  LCP più vicino al target 2,5 s e contenuto progressivo.
+
+**Complessità di implementazione**  L
+
+**Rischio di regressione**  Alto: ruoli, famiglia, subject e shell sono condivisi.
+
+**Come testare prima**  Test per ruolo/subject, screenshot e trace attuali.
+
+**Come testare dopo**  LCP p75 target ≤2,5 s per dashboard su condizioni equivalenti; nessuna regressione deep link, contesto o mutazione.
+
+**Criteri di accettazione**  Primo testo utile arriva prima del payload non critico; nessun doppio fetch equivalente durante il mount.
+
+## PERF-006 — Messaggi: separare lista minima e dettaglio full
+
+**Problema**  La pagina usa `view=full` al caricamento iniziale e attende destinatari/allegati metadata.
+
+**Evidenza (MISURATO + OSSERVATO NEL CODICE)**  LCP messages 3,70 s; `AthleteMessagesManager.tsx:84`; full route `src/app/api/athlete/messages/route.ts:155-240`.
+
+**File coinvolti**  `AthleteMessagesManager.tsx`, `src/app/api/athlete/messages/route.ts`, contratto messages.
+
+**Soluzione proposta**  Lista iniziale limitata a subject/unread/creator/team; caricare destinatari e allegati quando si apre il messaggio, con autorizzazione invariata.
+
+**Miglioramento atteso**  LCP e payload iniziale migliori; dettaglio invariato.
+
+**Complessità di implementazione**  M
+
+**Rischio di regressione**  Medio: deep link e stato letto.
+
+**Come testare prima**  Test API full/minimal, deep link messageId, delegated family e fixture allegati.
+
+**Come testare dopo**  LCP p75 ≤2,5 s; lista non contiene dati non necessari; dettaglio e read-state restano corretti.
+
+**Criteri di accettazione**  Nessun fetch attachments/recipients full al mount; apertura dettaglio in place; zero reload completo.
+
+## PERF-007 — Fees: ridurre la catena di arricchimento
+
+**Problema**  `fee_installments → membership_fees → teams → activities` è seriale.
+
+**Evidenza (MISURATO + OSSERVATO NEL CODICE)**  LCP 3,08 s; `src/server/athlete/fees.ts:13-38`; contatori e durate DB NON MISURATI.
+
+**File coinvolti**  `src/server/athlete/fees.ts`, `src/server/athlete/administration.ts`, API administration/fees, contratti.
+
+**Soluzione proposta**  Misurare prima; poi usare una query relazionale già autorizzata o un servizio server che riduca round trip, senza introdurre RPC/schema implicitamente.
+
+**Miglioramento atteso**  Riduzione TTFB/API e LCP fees.
+
+**Complessità di implementazione**  M/L
+
+**Rischio di regressione**  Alto: quote per squadra/stagione e delegated access.
+
+**Come testare prima**  Fixture multi-team, quote duplicate/stagioni, autorizzazione e JSON snapshot.
+
+**Come testare dopo**  Confrontare query count, p95, payload e risultato per ogni team; nessuna query fuori stagione.
+
+**Criteri di accettazione**  LCP fees ≤2,5 s nel profilo target o miglioramento misurato ≥30%; contratto invariato e access control invariato.
+
+## PERF-008 — Loading UX e Suspense per fees/messages
+
+**Problema**  Fees usa `Suspense fallback={null}`; messages ha fallback ma il manager fa fetch client.
+
+**Evidenza (OSSERVATO NEL CODICE)**  `src/app/athlete/fees/page.tsx`, `src/app/athlete/messages/page.tsx`.
+
+**File coinvolti**  Le due `page.tsx`, componenti `LoadingState`, eventuali `loading.tsx`.
+
+**Soluzione proposta**  Mostrare skeleton stabile e progressivo coerente con l’elemento atteso; non confondere UX anticipata con miglioramento LCP reale.
+
+**Miglioramento atteso**  Percezione migliore; LCP solo se il contenuto reale viene streammato.
+
+**Complessità di implementazione**  XS/S
+
+**Rischio di regressione**  Basso.
+
+**Come testare prima**  Screenshot e Web Vitals attuali.
+
+**Come testare dopo**  Verificare CLS ≤0,1, skeleton senza layout shift e LCP attribuito al contenuto reale.
+
+**Criteri di accettazione**  Nessun fallback vuoto sulle route P1; nessun CLS aggiuntivo; testo di errore/offline invariato.
+
+## PERF-009 — Evitare refetch dashboard dopo mutazioni già riflesse localmente
+
+**Problema**  Attendance e early absence aggiornano lo stato locale e poi rilanciano `loadAthleteData()`.
+
+**Evidenza (OSSERVATO NEL CODICE)**  `AthleteDashboard.tsx:280-289` e `:333-335`; frequenza e costo NON MISURATI.
+
+**File coinvolti**  `src/components/athlete/AthleteDashboard.tsx`, endpoint attendance e contratto availability.
+
+**Soluzione proposta**  Aggiornamento locale completo per i campi visibili, più invalidazione mirata solo quando una sezione realmente dipendente cambia.
+
+**Miglioramento atteso**  Meno refetch e risposta interazione più stabile.
+
+**Complessità di implementazione**  S
+
+**Rischio di regressione**  Medio.
+
+**Come testare prima**  Trace POST + GET e casi deadline/next-event.
+
+**Come testare dopo**  Nessun GET dashboard se non necessario; stato, disponibilità e conflitti corretti.
+
+**Criteri di accettazione**  Dopo RSVP/assenza il contenuto visibile è aggiornato in place; zero `window.location.reload`.
+
+## PERF-010 — Deduplicare refresh focus/online e badge unread
+
+**Problema**  Auth, contesti, manager e bottom navigation possono reagire allo stesso ritorno in foreground/online.
+
+**Evidenza (OSSERVATO NEL CODICE)**  `useAuth.ts:382-423`, `AccessibleProfileContext.tsx`, `TeamContext.tsx`, manager atleta e `BottomNavigation.tsx:45-70`.
+
+**File coinvolti**  I file sopra e un eventuale coordinatore client per request deduplication.
+
+**Soluzione proposta**  Deduplicare per chiave `(subject, route, freshness window)`, mantenere abort controller e aggiornare unread localmente quando possibile; non disattivare i controlli di sessione.
+
+**Miglioramento atteso**  Meno richieste concorrenti e meno lavoro dopo navigazione/focus.
+
+**Complessità di implementazione**  M
+
+**Rischio di regressione**  Medio/alto: dati stale e contesto account.
+
+**Come testare prima**  Trace di focus, visibilitychange e online con request count.
+
+**Come testare dopo**  Una sola richiesta per chiave durante la finestra; refresh corretto dopo cambio subject e logout.
+
+**Criteri di accettazione**  Nessun loop; nessuna richiesta full messages generata dal solo badge; sicurezza invariata.
+
+## PERF-011 — Limitare il profilo account al contratto usato
+
+**Problema**  `/api/me/profile` usa `profiles.select('*')`.
+
+**Evidenza (OSSERVATO NEL CODICE)**  `src/app/api/me/profile/route.ts:9-13`; payload/tempo NON MISURATI.
+
+**File coinvolti**  Route profile, tipo `ProfileRow`, test correlati.
+
+**Soluzione proposta**  Dopo aver misurato i campi effettivamente usati, selezionare solo quelli necessari mantenendo compatibilità esplicita.
+
+**Miglioramento atteso**  Piccola riduzione payload e serializzazione.
+
+**Complessità di implementazione**  XS
+
+**Rischio di regressione**  Basso/medio.
+
+**Come testare prima**  Snapshot JSON e ricerca consumatori dei campi.
+
+**Come testare dopo**  Typecheck, test auth/profile e confronto byte/payload.
+
+**Criteri di accettazione**  Nessun consumer riceve `undefined` inatteso; payload ridotto misurabilmente.
+
+## PERF-012 — Profilare e correggere login INP
+
+**Problema**  L’INP misurato è sopra target, ma l’interazione responsabile non è identificata.
+
+**Evidenza (MISURATO)**  `/login` INP 232 ms, LCP 0,24 s.
+
+**File coinvolti**  `src/app/(auth)/login/page.tsx`, form di login e callback/auth solo dopo attribution.
+
+**Soluzione proposta**  Registrare l’azione precisa con Event Timing/long tasks; intervenire solo sull’handler dimostrato, preservando redirect auth.
+
+**Miglioramento atteso**  INP ≤200 ms.
+
+**Complessità di implementazione**  XS/S
+
+**Rischio di regressione**  Basso/medio.
+
+**Come testare prima**  Chrome Performance con click/submit esatto e test login/callback.
+
+**Come testare dopo**  Stesso trace, INP ≤200 ms e flussi di login/recovery invariati.
+
+**Criteri di accettazione**  Interazione attribuita e migliorata; nessuna navigazione auth duplicata.
+
+## PERF-013 — Verifica caching e Router Cache senza cambiare policy
+
+**Problema**  Le API private usano no-store e il comportamento di Router Cache/Full Route Cache non è misurato.
+
+**Evidenza (OSSERVATO NEL CODICE + NON MISURATO)**  fetch no-store nei manager; assenza di `router.refresh`, `revalidatePath` e `revalidateTag` rilevata nel sorgente.
+
+**File coinvolti**  Route atleta, `next.config.js`, shell/navigation.
+
+**Soluzione proposta**  Misurare prima navigazione, seconda navigazione e ritorno back/forward; applicare solo cache sicure per dati pubblici o tag mirati, mai cacheare dati privati senza revisione.
+
+**Miglioramento atteso**  Meno richieste nelle navigazioni ripetute, se il comportamento attuale lo permette.
+
+**Complessità di implementazione**  M
+
+**Rischio di regressione**  Alto per privacy/staleness.
+
+**Come testare prima**  Network waterfall con cache on/off e matrice account/subject.
+
+**Come testare dopo**  Cache hit verificati, dati sempre subject-correct, logout senza residui.
+
+**Criteri di accettazione**  Nessun dato account-specifico condiviso tra subject/account; nessun reload completo aggiunto.
+
+## PERF-014 — Gate finale Core Web Vitals e refetch
+
+**Problema**  Serve una verifica ripetibile prima di implementare ulteriori ottimizzazioni.
+
+**Evidenza (MISURATO)**  Baseline iniziale fornita dal brief; molte metriche di attribuzione ancora NON MISURATE.
+
+**File coinvolti**  Nessun file di produzione obbligatorio; report e fixture di misura.
+
+**Soluzione proposta**  Ripetere la matrice in preview con condizioni fisse e confrontare p75 LCP/INP/CLS, request count, JSON bytes, p95 API e reload/refetch.
+
+**Miglioramento atteso**  Decisioni basate su regressioni reali.
+
+**Complessità di implementazione**  S
+
+**Rischio di regressione**  Basso.
+
+**Come testare prima**  Trace baseline, HAR, Vercel/Supabase logs.
+
+**Come testare dopo**  Stessa matrice su dashboard/messages/fees/login, più famiglia e multi-team.
+
+**Criteri di accettazione**  Dashboard/messages/fees raggiungono o si avvicinano a LCP p75 ≤2,5 s; login INP p75 ≤200 ms; CLS ≤0,1; nessun reload completo nei flussi normali; refetch non necessario eliminato o motivato.
+
+## Matrice di esecuzione
+
+| Ordine | Task | Dipendenza |
+|---:|---|---|
+| 1 | PERF-001 | — |
+| 2 | PERF-002 | PERF-001 |
+| 3 | PERF-003 | PERF-001 |
+| 4 | PERF-004 | PERF-001 |
+| 5 | PERF-005 | PERF-002, PERF-003, PERF-004 |
+| 6 | PERF-006 | PERF-001 |
+| 7 | PERF-007 | PERF-001 |
+| 8 | PERF-008 | PERF-005, PERF-006, PERF-007 |
+| 9 | PERF-009 | PERF-001 |
+| 10 | PERF-010 | PERF-001, PERF-009 |
+| 11 | PERF-011 | PERF-001 |
+| 12 | PERF-012 | PERF-001 |
+| 13 | PERF-013 | PERF-001, PERF-010 |
+| 14 | PERF-014 | PERF-005–PERF-013 |
+
+## Quick wins implementabili dopo la misura
+
+1. PERF-011 — limitare `select('*')` del profilo.
+2. PERF-008 — sostituire `fallback={null}` delle fees con skeleton stabile.
+3. PERF-009 — non rifare il fetch dashboard dopo patch locale se la misura conferma che i dati sono già completi.
+4. PERF-006 — lista messages minimale e dettaglio on demand.
+5. PERF-003 — togliere gli alert non critici dal critical path.
+6. PERF-010 — deduplicare badge unread e refresh online/focus.
+7. PERF-001 — Server-Timing in preview/staging per rendere verificabili tutti gli altri task.
+8. PERF-012 — correggere esclusivamente l’handler identificato dall’INP attribution.
+
+Le quick wins non autorizzano modifiche immediate: prima vanno raccolte le misure indicate nei rispettivi task.

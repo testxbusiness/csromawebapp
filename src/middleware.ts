@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { performanceDiagnosticsEnabled, performanceDiagnosticHeaders } from '@/server/performance/request-timing'
 
 // Le decisioni di dominio restano nelle route/server layer e in RLS.
 const PUBLIC_ROUTES = [
@@ -35,7 +36,14 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  let res = NextResponse.next({ request: req })
+  const requestHeaders = new Headers(req.headers)
+  const middlewareStartedAt = performanceDiagnosticsEnabled ? performance.now() : 0
+  const requestId = performanceDiagnosticsEnabled
+    ? (req.headers.get(performanceDiagnosticHeaders.requestId) || crypto.randomUUID())
+    : null
+  if (requestId) requestHeaders.set(performanceDiagnosticHeaders.requestId, requestId)
+
+  let res = NextResponse.next({ request: { headers: requestHeaders } })
 
   // Crea un client SSR solo per leggere il JWT/cookie (niente query DB!)
   const supabase = createServerClient(
@@ -46,7 +54,7 @@ export async function middleware(req: NextRequest) {
         getAll: () => req.cookies.getAll(),
         setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value))
-          res = NextResponse.next({ request: req })
+          res = NextResponse.next({ request: { headers: requestHeaders } })
           cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options))
         },
       },
@@ -56,6 +64,18 @@ export async function middleware(req: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser()
+
+  if (performanceDiagnosticsEnabled) {
+    const durationMs = Math.round((performance.now() - middlewareStartedAt) * 100) / 100
+    if (requestId) res.headers.set(performanceDiagnosticHeaders.requestId, requestId)
+    console.warn(JSON.stringify({
+      type: 'performance-diagnostic',
+      route: pathname,
+      requestId,
+      phase: 'middleware-auth',
+      durationMs,
+    }))
+  }
 
   // Enforce password change for logged-in users based on server-controlled app_metadata.
   if (user) {

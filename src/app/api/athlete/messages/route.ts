@@ -3,8 +3,10 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { buildAthleteMessages } from '@/lib/athlete/messages-contract'
+import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
 
 export async function GET(request: NextRequest) {
+  const timing = startRequestTiming(request, '/api/athlete/messages')
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
@@ -14,12 +16,15 @@ export async function GET(request: NextRequest) {
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 10
 
+    const contextStartedAt = timing?.now() ?? 0
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'receive_messages')
+    timing?.mark('subject-context', contextStartedAt)
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
     const activeTeamIds = subject.activeTeamIds ?? []
 
     // Get athlete team IDs
+    const membershipsStartedAt = timing?.now() ?? 0
     const { data: memberships, error: tmErr } = await dataClient
       .from('team_members')
       .select('team_id')
@@ -28,8 +33,9 @@ export async function GET(request: NextRequest) {
 
     if (tmErr) {
       console.error('Error loading athlete team memberships:', tmErr)
-      return NextResponse.json({ error: 'Error loading memberships' }, { status: 400 })
+      return finishRequestResponse(NextResponse.json({ error: 'Error loading memberships' }, { status: 400 }), timing)
     }
+    timing?.mark('team-memberships', membershipsStartedAt)
 
     const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
 
@@ -38,6 +44,7 @@ export async function GET(request: NextRequest) {
     orClauses.push(`profile_id.eq.${athleteProfileId}`)
     if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
 
+    const recipientsStartedAt = timing?.now() ?? 0
     const { data: recips, error: recErr } = await dataClient
       .from('message_recipients')
       .select('id, message_id, team_id, profile_id')
@@ -46,23 +53,24 @@ export async function GET(request: NextRequest) {
 
     if (recErr) {
       console.error('Error loading message recipients (athlete):', recErr)
-      return NextResponse.json({ error: 'Error loading recipients' }, { status: 400 })
+      return finishRequestResponse(NextResponse.json({ error: 'Error loading recipients' }, { status: 400 }), timing)
     }
+    timing?.mark('message-recipients', recipientsStartedAt)
 
     if (!recips || recips.length === 0) {
       if (searchParams.get('countOnly') === '1') {
-        return NextResponse.json({ unreadMessageCount: 0 })
+        return finishRequestResponse(NextResponse.json({ unreadMessageCount: 0 }), timing)
       }
       const { data: authorizedTeams } = teamIds.length > 0
         ? await dataClient.from('teams').select('id, name, code').in('id', teamIds)
         : { data: [] }
-      return NextResponse.json({ messages: [], teams: authorizedTeams || [], read_state_scope: 'account_subject' })
+      return finishRequestResponse(NextResponse.json({ messages: [], teams: authorizedTeams || [], read_state_scope: 'account_subject' }), timing)
     }
 
     let messageIds = [...new Set(recips.map(r => r.message_id))]
     if (idFilter) {
       if (!messageIds.includes(idFilter)) {
-        return NextResponse.json({ error: 'Not found' }, { status: 404 })
+        return finishRequestResponse(NextResponse.json({ error: 'Not found' }, { status: 404 }), timing)
       }
       messageIds = [idFilter]
     }
@@ -70,6 +78,7 @@ export async function GET(request: NextRequest) {
     // The shell only needs the badge count. Avoid loading message bodies and
     // full recipient/attachment metadata for that high-frequency request.
     if (searchParams.get('countOnly') === '1') {
+      const readStateStartedAt = timing?.now() ?? 0
       const { data: readRows } = await dataClient
         .from('message_reads')
         .select('message_id')
@@ -78,10 +87,12 @@ export async function GET(request: NextRequest) {
         .in('message_id', messageIds)
       const readIds = new Set((readRows || []).map((row) => row.message_id))
       const unreadIds = new Set(messageIds.filter((messageId) => !readIds.has(messageId)))
-      return NextResponse.json({ unreadMessageCount: unreadIds.size })
+      timing?.mark('message-read-state', readStateStartedAt)
+      return finishRequestResponse(NextResponse.json({ unreadMessageCount: unreadIds.size }), timing)
     }
 
     // Get messages
+    const messagesStartedAt = timing?.now() ?? 0
     let query = dataClient
       .from('messages')
       .select('id, subject, content, created_at, created_by')
@@ -95,8 +106,9 @@ export async function GET(request: NextRequest) {
     const { data: msgs, error: msgErr } = await query
     if (msgErr) {
       console.error('Error loading messages (athlete):', msgErr)
-      return NextResponse.json({ error: 'Error loading messages' }, { status: 400 })
+      return finishRequestResponse(NextResponse.json({ error: 'Error loading messages' }, { status: 400 }), timing)
     }
+    timing?.mark('messages-query', messagesStartedAt)
 
     const loadedMessageIds = (msgs || []).map((message) => message.id)
     const [{ data: readRows }, { data: messageTeams }] = await Promise.all([
@@ -149,7 +161,7 @@ export async function GET(request: NextRequest) {
         return minimalMsg
       })
 
-      return NextResponse.json({ messages: minimal, teams: messageTeams || [], read_state_scope: 'account_subject' })
+      return finishRequestResponse(NextResponse.json({ messages: minimal, teams: messageTeams || [], read_state_scope: 'account_subject' }), timing)
     }
 
     // === BATCH AGGREGATION FOR FULL VIEW ===
@@ -279,12 +291,13 @@ export async function GET(request: NextRequest) {
       } : message
     })
 
-    return NextResponse.json({ messages, teams: messageTeams || [], read_state_scope: 'account_subject' })
+    timing?.mark('messages-enrichment', messagesStartedAt)
+    return finishRequestResponse(NextResponse.json({ messages, teams: messageTeams || [], read_state_scope: 'account_subject' }), timing)
   } catch (error) {
     if (error instanceof AccountContextError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return finishRequestResponse(NextResponse.json({ error: error.message }, { status: error.status }), timing)
     }
     console.error('Athlete messages API error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return finishRequestResponse(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), timing)
   }
 }

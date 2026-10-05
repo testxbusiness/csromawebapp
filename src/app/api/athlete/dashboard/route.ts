@@ -5,25 +5,32 @@ import { requireSubjectAthleteContext } from '@/server/auth/require-subject-prof
 import { buildUnreadMessages, resolveMatchPerspective } from '@/lib/athlete/dashboard-contract'
 import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 import { loadAthleteDashboardAdministrativeAlerts } from '@/server/athlete/administration'
+import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
 
 export async function GET(request: NextRequest) {
+  const timing = startRequestTiming(request, '/api/athlete/dashboard')
   try {
     const supabase = await createClient()
 
     const { searchParams } = new URL(request.url)
+    const contextStartedAt = timing?.now() ?? 0
     const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
+    timing?.mark('subject-context', contextStartedAt)
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
     const activeTeamIds = subject.activeTeamIds ?? []
     const canViewMessages = subject.permissions.receive_messages
     const canViewPayments = subject.permissions.view_payments
     const canViewSchedule = subject.permissions.view_schedule
+    const alertsStartedAt = timing?.now() ?? 0
     const administrativeAlerts = await loadAthleteDashboardAdministrativeAlerts(subject)
+    timing?.mark('administrative-alerts', alertsStartedAt)
     if (!athleteProfileId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return finishRequestResponse(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), timing)
     }
 
     // Execute all queries in parallel
+    const membershipStartedAt = timing?.now() ?? 0
     const [memberRes, feeRes] = await Promise.all([
       dataClient
         .from('team_members')
@@ -41,6 +48,7 @@ export async function GET(request: NextRequest) {
             .limit(5)
         : Promise.resolve({ data: [] })
     ])
+    timing?.mark('memberships-fees', membershipStartedAt)
 
     const memberships = memberRes.data
     const feeInstallments = feeRes.data
@@ -48,6 +56,7 @@ export async function GET(request: NextRequest) {
     // Get team IDs
     const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
 
+    const messagesStartedAt = timing?.now() ?? 0
     let msgRecipients: any[] = []
     if (canViewMessages) {
       const recipientFilters = [`profile_id.eq.${athleteProfileId}`]
@@ -118,10 +127,11 @@ export async function GET(request: NextRequest) {
             : recipient.messages.created_by_profile || null,
         },
       }))
+    timing?.mark('dashboard-messages', messagesStartedAt)
 
     if (teamIds.length === 0) {
       const directUnreadMessages = buildUnreadMessages(normalizedMessageRecipients, readMessageIds, new Map())
-      return NextResponse.json({
+      return finishRequestResponse(NextResponse.json({
         teamMemberships: [],
         upcomingEvents: [],
         unreadMessages: directUnreadMessages.slice(0, 5),
@@ -130,10 +140,11 @@ export async function GET(request: NextRequest) {
         activeSeason: subject.activeSeason ?? null,
         teams: [],
         administrativeAlerts,
-      })
+      }), timing)
     }
 
     // Get teams, activities, events, and other data in parallel
+    const catalogStartedAt = timing?.now() ?? 0
     const [
       { data: teams },
       { data: eventTeamLinks },
@@ -167,11 +178,13 @@ export async function GET(request: NextRequest) {
         .select('id, team_id')
         .in('team_id', teamIds)
     ])
+    timing?.mark('team-catalog', catalogStartedAt)
 
     // Get event IDs
     const eventIds = [...new Set((eventTeamLinks || []).map(l => l.event_id).filter(Boolean))]
 
     // Get events (with batch processing if needed)
+    const eventsStartedAt = timing?.now() ?? 0
     let allEvents: any[] = []
     if (eventIds.length > 0) {
       if (eventIds.length > 100) {
@@ -197,8 +210,10 @@ export async function GET(request: NextRequest) {
       allEvents = events || []
     }
     }
+    timing?.mark('events', eventsStartedAt)
 
     // Get activities and enriched team data
+    const enrichmentStartedAt = timing?.now() ?? 0
     const activityIds = [...new Set((teams || []).map(t => t.activity_id).filter(Boolean))]
     const { data: activities } = activityIds.length > 0
       ? await dataClient
@@ -262,6 +277,7 @@ export async function GET(request: NextRequest) {
         .maybeSingle()
       nextChampionshipMatch = nextMatch || null
     }
+    timing?.mark('dashboard-enrichment', enrichmentStartedAt)
 
     // Build enriched response
     const activitiesMap = new Map((activities || []).map(a => [a.id, a]))
@@ -403,7 +419,7 @@ export async function GET(request: NextRequest) {
         }
       : null
 
-    return NextResponse.json({
+    return finishRequestResponse(NextResponse.json({
       teamMemberships: enrichedMemberships,
       upcomingEvents: enrichedEvents.slice(0, 10),
       nextChampionshipMatch: enrichedNextChampionshipMatch,
@@ -416,13 +432,13 @@ export async function GET(request: NextRequest) {
         ? attendanceAvailability.availabilityByEventId.get(attendanceAvailability.nextEvent?.id || '') ?? null
         : null,
       administrativeAlerts,
-    })
+    }), timing)
 
   } catch (error) {
     if (error instanceof AccountContextError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return finishRequestResponse(NextResponse.json({ error: error.message }, { status: error.status }), timing)
     }
     console.error('Athlete dashboard API error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return finishRequestResponse(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), timing)
   }
 }

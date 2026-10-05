@@ -10,6 +10,10 @@
 >
 > **Stack di riferimento:** Next.js 15 App Router, React 19, TypeScript strict, Tailwind CSS 4 + CSS custom properties, Supabase, PWA custom service worker.
 
+## Nota di avanzamento — audit performance
+
+05/10/2026: completato il task diagnostico PERF-001 sulla branch `performance-audit`. Aggiunta strumentazione opt-in per correlare request-id, timing middleware e fasi dei Route Handler senza modificare contratti, query, autorizzazioni o policy RLS. Dettagli e piano successivo sono in `PERFORMANCE_AUDIT.md` e `PERFORMANCE_OPTIMIZATION_PLAN.md`. Verificati typecheck, test API atleta mirati, build e `git diff --check`.
+
 ---
 
 ## 0. Come usare questo piano con Codex
