@@ -18,6 +18,8 @@
 
 05/10/2026: completato PERF-003 sulla branch `performance-audit`. Gli alert amministrativi della dashboard sono stati spostati in `/api/athlete/dashboard/alerts`, mantenendo la verifica subject-aware server-side; il client avvia endpoint critico e alert in parallelo e non blocca il primo contenuto sugli alert. Test API mirati, suite completa (104 suite/417 test passati, 2 suite/3 test falliti non correlati), typecheck, build e diff check eseguiti. La misura post-deploy deve verificare separatamente `route-total` dashboard e durata dell’endpoint alert.
 
+05/10/2026: completato PERF-004 sulla branch `performance-audit`. Nel Route Handler dashboard, dopo il caricamento degli eventi, attività, palestre, presenze, disponibilità attendance e prossima partita sono ora avviate in parallelo; le dipendenze `teamIds`, `eventIds`, `activityIds`, `gymIds` e `clubTeamIds` restano rispettate. Nessuna modifica a schema/RLS, autorizzazioni o contratto JSON. Test API mirati, suite completa (104 suite/417 test passati, 2 suite/3 test falliti non correlati), typecheck, build e diff check eseguiti. La misura p50/p95 su staging resta da ripetere dopo il deploy.
+
 ---
 
 ## 0. Come usare questo piano con Codex

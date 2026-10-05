@@ -210,30 +210,63 @@ export async function GET(request: NextRequest) {
     // Get activities and enriched team data
     const enrichmentStartedAt = timing?.now() ?? 0
     const activityIds = [...new Set((teams || []).map(t => t.activity_id).filter(Boolean))]
-    const { data: activities } = activityIds.length > 0
-      ? await dataClient
+    const activitiesPromise = activityIds.length > 0
+      ? dataClient
           .from('activities')
           .select('id, name')
           .in('id', activityIds)
-      : { data: [] }
+      : Promise.resolve({ data: [] })
 
     const gymIds = [...new Set((allEvents || []).map((event) => event.gym_id).filter(Boolean))]
-    const [{ data: gyms }, { data: attendanceRows }] = await Promise.all([
-      gymIds.length > 0
-        ? dataClient.from('gyms').select('id, name, city').in('id', gymIds)
-        : Promise.resolve({ data: [] }),
-      allEvents.length > 0
-        ? dataClient
-            .from('event_attendances')
-            .select('event_id, status, responded_at, is_early_absence')
-            .eq('profile_id', athleteProfileId)
-            .in('event_id', allEvents.map((event) => event.id))
-        : Promise.resolve({ data: [] }),
+    const gymsPromise = gymIds.length > 0
+      ? dataClient.from('gyms').select('id, name, city').in('id', gymIds)
+      : Promise.resolve({ data: [] })
+    const attendanceRowsPromise = allEvents.length > 0
+      ? dataClient
+          .from('event_attendances')
+          .select('event_id, status, responded_at, is_early_absence')
+          .eq('profile_id', athleteProfileId)
+          .in('event_id', allEvents.map((event) => event.id))
+      : Promise.resolve({ data: [] })
+    const attendanceAvailabilityPromise = canViewSchedule
+      ? resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds, new Date(), activeTeamIds)
+      : Promise.resolve(null)
+
+    const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
+    const nextChampionshipMatchPromise = clubTeamIds.length > 0
+      ? dataClient
+          .from('championship_matches')
+          .select(`
+            id, event_id, match_day, match_date, start_time, location_text, status,
+            home_club_team:home_club_team_id ( id, name, code, is_home_club, team_id ),
+            away_club_team:away_club_team_id ( id, name, code, is_home_club, team_id )
+          `)
+          .or(`home_club_team_id.in.(${clubTeamIds.join(',')}),away_club_team_id.in.(${clubTeamIds.join(',')})`)
+          .eq('status', 'scheduled')
+          .gte('match_date', new Date().toISOString().slice(0, 10))
+          .order('match_date', { ascending: true })
+          .order('start_time', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+          .then(({ data }) => data || null)
+      : Promise.resolve(null)
+
+    const [
+      { data: activities },
+      { data: gyms },
+      { data: attendanceRows },
+      attendanceAvailability,
+      nextChampionshipMatch,
+    ] = await Promise.all([
+      activitiesPromise,
+      gymsPromise,
+      attendanceRowsPromise,
+      attendanceAvailabilityPromise,
+      nextChampionshipMatchPromise,
     ])
 
-    const attendanceAvailability = canViewSchedule
-      ? await resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds, new Date(), activeTeamIds)
-      : null
+    timing?.mark('dashboard-enrichment', enrichmentStartedAt)
+
     if (attendanceAvailability?.nextEvent && !allEvents.some((event) => event.id === attendanceAvailability.nextEvent?.id)) {
       const nextEvent = attendanceAvailability.nextEvent
       allEvents.push({
@@ -251,28 +284,6 @@ export async function GET(request: NextRequest) {
         generated_from_schedule_id: nextEvent.generated_from_schedule_id || null,
       })
     }
-
-    let nextChampionshipMatch = null
-    const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
-    if (clubTeamIds.length > 0) {
-      const clubTeamList = clubTeamIds.join(',')
-      const { data: nextMatch } = await dataClient
-        .from('championship_matches')
-        .select(`
-          id, event_id, match_day, match_date, start_time, location_text, status,
-          home_club_team:home_club_team_id ( id, name, code, is_home_club, team_id ),
-          away_club_team:away_club_team_id ( id, name, code, is_home_club, team_id )
-        `)
-        .or(`home_club_team_id.in.(${clubTeamList}),away_club_team_id.in.(${clubTeamList})`)
-        .eq('status', 'scheduled')
-        .gte('match_date', new Date().toISOString().slice(0, 10))
-        .order('match_date', { ascending: true })
-        .order('start_time', { ascending: true })
-        .limit(1)
-        .maybeSingle()
-      nextChampionshipMatch = nextMatch || null
-    }
-    timing?.mark('dashboard-enrichment', enrichmentStartedAt)
 
     // Build enriched response
     const activitiesMap = new Map((activities || []).map(a => [a.id, a]))
