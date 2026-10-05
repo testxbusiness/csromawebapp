@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AthleteMessagesManager from './AthleteMessagesManager'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
@@ -161,7 +161,29 @@ describe('AthleteMessagesManager load states', () => {
     render(<AthleteMessagesManager />)
 
     await waitFor(() => expect(screen.getByText('Avviso famiglia')).toBeTruthy())
-    expect(global.fetch).toHaveBeenCalledWith('/api/athlete/messages?view=full', expect.objectContaining({ signal: expect.any(AbortSignal) }))
+    expect(global.fetch).toHaveBeenCalledWith('/api/athlete/messages?view=minimal', expect.objectContaining({ signal: expect.any(AbortSignal) }))
+  })
+
+  it('loads the full message only when the list row is opened', async () => {
+    const message = {
+      id: 'message-1', subject: 'Avviso famiglia', content: 'Anteprima',
+      created_at: '2026-08-28T10:00:00.000Z', created_by_profile: { first_name: 'Coach', last_name: 'Roma', role: 'coach' },
+      teams: [], team_ids: [], is_read: false, read_state: { is_read: false, read_at: null }, message_recipients: [],
+    }
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ teams: [], messages: [message] }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ teams: [], messages: [{ ...message, attachments: [{ id: 'attachment-1', file_name: 'orari.pdf' }] }] }) })
+    global.fetch = fetchMock as jest.Mock
+
+    render(<AthleteMessagesManager />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Avviso famiglia/i })).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /Avviso famiglia/i }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/athlete/messages?view=full&id=message-1',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    ))
   })
 
   it('denies family messages without receive_messages before loading another subject payload', async () => {

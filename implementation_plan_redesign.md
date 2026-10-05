@@ -22,6 +22,8 @@
 
 05/10/2026: avviato PERF-005 con un boundary server-side per `/dashboard`: `page.tsx` ora resta Server Component, il dispatcher autenticato è isolato in `DashboardClient.tsx`, e `Suspense`/`loading.tsx` forniscono una shell utile prima del completamento dell’hydration. Auth, subject familiare e fetch dashboard restano invariati per evitare doppie risoluzioni o regressioni di autorizzazione. Typecheck, build e diff check superati; il test dashboard atleta mantiene il solo failure temporale preesistente (`Oggi · 20:00`). Resta da validare su staging il guadagno LCP e, in un follow-up PERF-005, la separazione effettiva del payload critico/non critico.
 
+05/10/2026: completato PERF-006 sulla branch `performance-audit`. `AthleteMessagesManager` usa ora `view=minimal` per la lista iniziale e richiede `view=full&id=...` solo all’apertura del dettaglio; i deep link recuperano direttamente il messaggio anche se fuori dalla prima pagina. Abort e cambio subject invalidano entrambe le richieste, mantenendo il perimetro account/subject e il read-state esistenti. Test messaggi mirati (9 test), typecheck, build e diff check superati.
+
 ---
 
 ## 0. Come usare questo piano con Codex

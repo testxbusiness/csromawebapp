@@ -149,6 +149,8 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 
 **Criteri di accettazione**  Nessun fetch attachments/recipients full al mount; apertura dettaglio in place; zero reload completo.
 
+**Stato implementazione — 05/10/2026**  Completato il flusso lista/dettaglio: `AthleteMessagesManager` carica `view=minimal` all’ingresso e `view=full&id=...` solo quando l’utente apre una riga. Un deep link con `messageId` non presente nella prima pagina viene risolto direttamente dal dettaglio autorizzato. Le richieste vengono abortite al cambio subject/unmount e non cambiano il contratto di autorizzazione o il read-state. Test mirati messaggi (9 test), typecheck, build e diff check superati; resta da verificare su staging il payload/TTFB.
+
 ## PERF-007 — Fees: ridurre la catena di arricchimento
 
 **Problema**  `fee_installments → membership_fees → teams → activities` è seriale.

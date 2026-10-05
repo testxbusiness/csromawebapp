@@ -28,12 +28,14 @@ export default function AthleteMessagesManager() {
   const [readFilter, setReadFilter] = useState<MessageReadFilter>('all')
   const [deepLinkUnavailable, setDeepLinkUnavailable] = useState(false)
   const messagesRequestRef = useRef<AbortController | null>(null)
+  const messageDetailRequestRef = useRef<AbortController | null>(null)
   const subjectContextRef = useRef<string | null>(null)
 
   useEffect(() => {
     const handleSubjectChange = (event: Event) => {
       subjectContextRef.current = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? 'self'
       messagesRequestRef.current?.abort()
+      messageDetailRequestRef.current?.abort()
       setMessages([])
       setSelectedMessage(null)
       setDeepLinkUnavailable(false)
@@ -81,7 +83,7 @@ export default function AthleteMessagesManager() {
     const controller = new AbortController()
     messagesRequestRef.current = controller
     try {
-      const res = await fetch(appendSubjectProfile('/api/athlete/messages?view=full', selectedProfileId), {
+      const res = await fetch(appendSubjectProfile('/api/athlete/messages?view=minimal', selectedProfileId), {
         signal: controller.signal,
       })
       const result = await res.json()
@@ -122,6 +124,32 @@ export default function AthleteMessagesManager() {
     loadMessages()
   }, [loadMessages])
 
+  const loadMessageDetail = useCallback(async (messageId: string, fallbackMessage?: AthleteMessageListItem) => {
+    const subjectContext = selectedProfileId ?? 'self'
+    messageDetailRequestRef.current?.abort()
+    const controller = new AbortController()
+    messageDetailRequestRef.current = controller
+    setDeepLinkUnavailable(false)
+    if (fallbackMessage) setSelectedMessage(fallbackMessage)
+
+    try {
+      const res = await fetch(
+        appendSubjectProfile(`/api/athlete/messages?view=full&id=${encodeURIComponent(messageId)}`, selectedProfileId),
+        { signal: controller.signal },
+      )
+      const result = await res.json() as { messages?: AthleteMessageListItem[] }
+      if (controller.signal.aborted || subjectContextRef.current !== subjectContext) return
+      if (!res.ok || !result.messages?.length) {
+        if (!fallbackMessage && res.status === 404) setDeepLinkUnavailable(true)
+        return
+      }
+      setSelectedMessage((current) => current?.id === messageId || !current ? result.messages![0] : current)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return
+      if (!fallbackMessage && subjectContextRef.current === subjectContext) setDeepLinkUnavailable(true)
+    }
+  }, [selectedProfileId])
+
   useEffect(() => {
     if (!deepLinkSubjectProfileId || !profiles.some((profile) => profile.profile.id === deepLinkSubjectProfileId)) return
     if (role === 'family_member' || activeArea === 'family') {
@@ -133,13 +161,14 @@ export default function AthleteMessagesManager() {
   useEffect(() => {
     if (!deepLinkMessageId || selectedMessage) return
     const linkedMessage = messages.find((message) => message.id === deepLinkMessageId)
-    if (linkedMessage) setSelectedMessage(linkedMessage)
-    else if (loadState === 'ready') setDeepLinkUnavailable(true)
-  }, [deepLinkMessageId, loadState, messages, selectedMessage])
+    if (linkedMessage) void loadMessageDetail(linkedMessage.id, linkedMessage)
+    else if (loadState === 'ready') void loadMessageDetail(deepLinkMessageId)
+  }, [deepLinkMessageId, loadMessageDetail, loadState, messages, selectedMessage])
 
   useEffect(() => {
     return () => {
       messagesRequestRef.current?.abort()
+      messageDetailRequestRef.current?.abort()
     }
   }, [])
 
@@ -158,6 +187,10 @@ export default function AthleteMessagesManager() {
       window.removeEventListener('online', handleOnline)
     }
   }, [loadMessages])
+
+  const handleOpenMessage = useCallback((message: AthleteMessageListItem) => {
+    void loadMessageDetail(message.id, message)
+  }, [loadMessageDetail])
 
   const handleReadStateChange = useCallback((state: MessageReadState) => {
     if (!selectedMessage) return
@@ -203,8 +236,8 @@ export default function AthleteMessagesManager() {
         {loadState === 'offline' ? <OfflineState title="Messaggi non disponibili offline" description="I messaggi richiedono una connessione. Quando torni online, riprova." className="rounded-none border-0" /> : null}
         {loadState === 'error' ? <ErrorState title="Impossibile caricare i messaggi" description={loadError ?? 'Riprova tra poco.'} action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void loadMessages()}>Riprova</button>} className="rounded-none border-0" /> : null}
         {deepLinkUnavailable ? <FeedbackState variant="error" title="Messaggio non disponibile" description="Il messaggio non è disponibile o non hai accesso a questa comunicazione." className="border-b border-[var(--cs-border-canonical)] text-left" /> : null}
-        {loadState === 'ready' && (visibleMessages.length > 0 ? <AthleteMessageList messages={visibleMessages} onOpen={setSelectedMessage} /> : messages.length > 0 ? <EmptyState filtered title="Nessun messaggio corrisponde ai filtri" description="Prova a cambiare il filtro di lettura o la squadra." /> : <EmptyState title="Nessun messaggio" description="Qui troverai i messaggi indirizzati a te o alle tue squadre." />)}
-        {loadState !== 'ready' && messages.length > 0 ? <AthleteMessageList messages={visibleMessages} onOpen={setSelectedMessage} /> : null}
+        {loadState === 'ready' && (visibleMessages.length > 0 ? <AthleteMessageList messages={visibleMessages} onOpen={handleOpenMessage} /> : messages.length > 0 ? <EmptyState filtered title="Nessun messaggio corrisponde ai filtri" description="Prova a cambiare il filtro di lettura o la squadra." /> : <EmptyState title="Nessun messaggio" description="Qui troverai i messaggi indirizzati a te o alle tue squadre." />)}
+        {loadState !== 'ready' && messages.length > 0 ? <AthleteMessageList messages={visibleMessages} onOpen={handleOpenMessage} /> : null}
       </Panel>
 
       {selectedMessage && (
