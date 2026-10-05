@@ -18,6 +18,8 @@ interface Event {
   title: string
   description?: string
   location?: string
+  gym_id?: string | null
+  gym?: { id?: string; name: string; city?: string | null } | null
   start_time: string
   end_time: string
   is_recurring: boolean
@@ -87,6 +89,7 @@ export default function CoachCalendarManager() {
   const [calView, setCalView] = useState<'month'|'week'>('month')
   const [filterEventKind, setFilterEventKind] = useState<string>('')
   const [filterTeamId, setFilterTeamId] = useState<string>('')
+  const [filterGymId, setFilterGymId] = useState<string>('')
 
   const fetchControllerRef = useRef<AbortController | null>(null)
 
@@ -102,7 +105,14 @@ export default function CoachCalendarManager() {
     setLoadState('ready')
     setLoadError(null)
     try {
-      const query = selectedTeamId ? `?team_id=${encodeURIComponent(selectedTeamId)}` : ''
+      const params = new URLSearchParams()
+      if (selectedTeamId) params.set('team_id', selectedTeamId)
+      if (filterGymId === 'other' || filterGymId === 'unassigned') {
+        params.set('venue', filterGymId)
+      } else if (filterGymId) {
+        params.set('gym_id', filterGymId)
+      }
+      const query = params.toString() ? `?${params.toString()}` : ''
       const response = await fetch(`/api/coach/calendar${query}`, {
         signal,
         cache: 'no-store',
@@ -118,6 +128,7 @@ export default function CoachCalendarManager() {
       const result = await response.json() as {
         teams?: unknown
         events?: unknown
+        gyms?: unknown
       }
 
       // Keep the page tolerant of Supabase/PostgREST returning a to-one
@@ -129,6 +140,7 @@ export default function CoachCalendarManager() {
 
       setTeams(normalizedTeams as Team[])
       setContextTeams(normalizedTeams as Team[])
+      if (Array.isArray(result.gyms)) setGyms(result.gyms as Gym[])
       setEvents(normalizedEvents as Event[])
     } catch (error: any) {
       if (error?.name === 'AbortError') return
@@ -138,7 +150,7 @@ export default function CoachCalendarManager() {
     } finally {
       setLoading(false)
     }
-  }, [ownerProfileId, selectedTeamId, setContextTeams])
+  }, [filterGymId, ownerProfileId, selectedTeamId, setContextTeams])
 
   useEffect(() => {
     if (!ownerProfileId) {
@@ -168,8 +180,17 @@ export default function CoachCalendarManager() {
     if (filterTeamId) {
       next = next.filter(e => (e.selected_teams || []).includes(filterTeamId))
     }
+    if (filterGymId && filterGymId !== 'other' && filterGymId !== 'unassigned') {
+      next = next.filter(e => e.gym_id === filterGymId)
+    }
+    if (filterGymId === 'other') {
+      next = next.filter(e => !e.gym_id && Boolean(e.location?.trim()))
+    }
+    if (filterGymId === 'unassigned') {
+      next = next.filter(e => !e.gym_id && !e.location?.trim())
+    }
     setFilteredEvents(next)
-  }, [events, filterEventKind, filterTeamId])
+  }, [events, filterEventKind, filterGymId, filterTeamId])
 
   useEffect(() => {
     setFilterTeamId(selectedTeamId ?? '')
@@ -348,6 +369,21 @@ export default function CoachCalendarManager() {
               ))}
             </Select>
           </div>
+          <div>
+            <label className="cs-field__label">Palestra</label>
+            <Select
+              value={filterGymId}
+              onChange={(e) => setFilterGymId(e.target.value)}
+              className="cs-select"
+            >
+              <option value="">Tutte le palestre</option>
+              {gyms.map((gym) => (
+                <option key={gym.id} value={gym.id}>{gym.name}{gym.city ? `, ${gym.city}` : ''}</option>
+              ))}
+              <option value="other">Altro / fuori sede</option>
+              <option value="unassigned">Luogo da definire</option>
+            </Select>
+          </div>
         </div>
 
         {viewMode === 'calendar' ? teams.length === 0 ? (
@@ -370,7 +406,7 @@ export default function CoachCalendarManager() {
                   start: event.start_time,
                   end: event.end_time,
                   eventKind: event.event_kind,
-                  location: event.location,
+                  location: event.gym?.name || event.location,
                 }))}
                 onNavigate={(action) => {
                   const nextDate = action === 'today' ? new Date() : new Date(currentDate)
@@ -392,7 +428,8 @@ export default function CoachCalendarManager() {
                 events={(filteredEventsForCalendar || []).map((e:any)=>({
                   id: e.id!, title: e.title,
                   start: new Date(e.start_time), end: new Date(e.end_time),
-                  color: eventKindVisual(e.event_kind)?.colorToken
+                  color: eventKindVisual(e.event_kind)?.colorToken,
+                  location: e.gym?.name || e.location,
                 }))}
                 onNavigate={(act) => {
                   const d = new Date(currentDate)

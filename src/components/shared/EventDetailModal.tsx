@@ -67,8 +67,8 @@ export default function EventDetailModal({ open, onClose, data, onAttendanceChan
 
   const place = (d: EventDetailData | null) => {
     if (!d) return '—'
+    if (d.gym?.name) return d.gym.city ? `${d.gym.name}, ${d.gym.city}` : d.gym.name
     if (d.location && d.location.trim()) return d.location
-    if (d.gym?.name) return d.gym.city ? `${d.gym.name} - ${d.gym.city}` : d.gym.name
     return '—'
   }
 

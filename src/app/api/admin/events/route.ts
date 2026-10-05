@@ -227,6 +227,11 @@ export async function GET(request: NextRequest) {
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
 
     const requestedSeasonId = searchParams.get('season_id')
+    const requestedGymId = searchParams.get('gym_id')
+    const requestedVenue = searchParams.get('venue')
+    if (requestedVenue && !['other', 'unassigned'].includes(requestedVenue)) {
+      return NextResponse.json({ error: 'Filtro palestra non valido' }, { status: 400 })
+    }
     const activeSeason = requestedSeasonId
       ? null
       : await resolveActiveSeason(adminClient)
@@ -275,6 +280,9 @@ export async function GET(request: NextRequest) {
             if (from) batchQuery = batchQuery.gte('start_date', from)
             if (to) batchQuery = batchQuery.lte('start_date', to)
           }
+          if (requestedGymId) batchQuery = batchQuery.eq('gym_id', requestedGymId)
+          if (requestedVenue === 'other') batchQuery = batchQuery.is('gym_id', null).not('location', 'is', null).neq('location', '')
+          if (requestedVenue === 'unassigned') batchQuery = batchQuery.is('gym_id', null).or('location.is.null,location.eq.')
           const { data } = await batchQuery
           batchedEvents.push(...(data || []))
         }
@@ -298,6 +306,9 @@ export async function GET(request: NextRequest) {
       if (from) query = query.gte('start_date', from)
       if (to) query = query.lte('start_date', to)
     }
+    if (requestedGymId) query = query.eq('gym_id', requestedGymId)
+    if (requestedVenue === 'other') query = query.is('gym_id', null).not('location', 'is', null).neq('location', '')
+    if (requestedVenue === 'unassigned') query = query.is('gym_id', null).or('location.is.null,location.eq.')
 
     const { data: eventsData, error, count } = await query
       .order('start_date', { ascending: true })

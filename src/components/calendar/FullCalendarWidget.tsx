@@ -13,6 +13,7 @@ export type CalEvent = {
   start: Date | string
   end: Date | string
   color?: string
+  location?: string | null
 }
 
 type View = 'month' | 'week'
@@ -44,6 +45,7 @@ export default function FullCalendarWidget({
     start: e.start,
     end: e.end,
     color: e.color,
+    extendedProps: { location: e.location || '' },
   })), [events])
 
   const initialView = view === 'month' ? 'dayGridMonth' : 'timeGridWeek'
@@ -91,6 +93,17 @@ export default function FullCalendarWidget({
         }}
         height="auto"
         events={fcEvents}
+        eventContent={(arg) => {
+          if (arg.view.type !== 'timeGridWeek') return undefined
+          const location = arg.event.extendedProps.location as string | undefined
+          if (!location) return undefined
+          return (
+            <div className="min-w-0 overflow-hidden">
+              <div className="truncate">{arg.timeText} {arg.event.title}</div>
+              <div className="truncate text-[10px] opacity-80">📍 {location}</div>
+            </div>
+          )
+        }}
         selectable={true}
         selectMirror={true}
         select={(info) => {

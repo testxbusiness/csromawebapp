@@ -97,6 +97,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const [teams, setTeams] = useState<Team[]>([])
   const [seasons, setSeasons] = useState<Season[]>([])
   const [filterSeasonId, setFilterSeasonId] = useState<string>('')
+  const [filterGymId, setFilterGymId] = useState<string>('')
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [filterTeams, setFilterTeams] = useState<string[]>([])
   const [isTeamDropdownOpen, setIsTeamDropdownOpen] = useState(false)
@@ -153,6 +154,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
 
     setFilterSeasonId(seasonId)
     setFilterTeams([])
+    setFilterGymId('')
     setCurrentDate(nextDate)
     requestedVisibleRangeRef.current = null
 
@@ -163,6 +165,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       to: filterTo ? `${filterTo}T23:59:59.999` : range.to,
       visible: true,
       seasonId,
+      gymId: '',
+      venue: '',
     })
   }
 
@@ -208,6 +212,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const loadEvents = async (overrides?: {
     teamIds?: string[]
     eventKinds?: string[]
+    gymId?: string
+    venue?: '' | 'other' | 'unassigned'
     from?: string
     to?: string
     visible?: boolean
@@ -222,6 +228,8 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     try {
       const selectedTeamIds = overrides?.teamIds ?? filterTeams
       const selectedEventKinds = overrides?.eventKinds ?? filterEventKinds
+      const selectedGymId = overrides?.gymId ?? filterGymId
+      const selectedVenue = overrides?.venue ?? (selectedGymId === 'other' || selectedGymId === 'unassigned' ? selectedGymId : '')
       const selectedFrom = overrides?.from ?? filterFrom
       const selectedTo = overrides?.to ?? filterTo
       const selectedSeasonId = overrides?.seasonId ?? filterSeasonId
@@ -229,11 +237,13 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       const params = new URLSearchParams()
       if (selectedTeamIds.length > 0) params.set('team_ids', selectedTeamIds.join(','))
       if (selectedSeasonId) params.set('season_id', selectedSeasonId)
+      if (selectedGymId && selectedGymId !== 'other' && selectedGymId !== 'unassigned') params.set('gym_id', selectedGymId)
+      if (selectedVenue) params.set('venue', selectedVenue)
       if (selectedFrom) params.set('from', new Date(selectedFrom).toISOString())
       if (selectedTo) params.set('to', new Date(selectedTo).toISOString())
       if (overrides?.visible) {
         params.set('visible', '1')
-        requestedVisibleRangeRef.current = [selectedSeasonId, selectedTeamIds.join(','), selectedEventKinds.join(','), selectedFrom, selectedTo].join('|')
+        requestedVisibleRangeRef.current = [selectedSeasonId, selectedTeamIds.join(','), selectedEventKinds.join(','), selectedGymId, selectedVenue, selectedFrom, selectedTo].join('|')
       }
       params.set('limit', overrides?.visible ? '500' : '5000')
       const qs = params.toString()
@@ -299,12 +309,12 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     }
   }, [filterSeasonId, supabase])
 
-  // Lazy load gyms/activities solo quando il modal si apre
   useEffect(() => {
-    if (showModal && filterSeasonId && gyms.length === 0 && activities.length === 0) {
-      void loadSelectOptions()
-    }
-  }, [activities.length, filterSeasonId, gyms.length, loadSelectOptions, showModal])
+    if (!filterSeasonId) return
+    setGyms([])
+    setActivities([])
+    void loadSelectOptions()
+  }, [filterSeasonId, loadSelectOptions])
 
   const loadTeams = async (seasonId: string) => {
     setTeams([])
@@ -555,7 +565,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
 
       {/* Filtri */}
       <div className="hidden md:block cs-card cs-card--primary p-4">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-end">
           <div>
             <label htmlFor="admin-calendar-season" className="cs-field__label">Stagione</label>
             <select id="admin-calendar-season" className="cs-input w-full min-h-[44px]" value={filterSeasonId} onChange={(event) => {
@@ -689,6 +699,15 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             </div>
           </div>
           <div>
+            <label htmlFor="admin-calendar-gym" className="cs-field__label">Palestra</label>
+            <select id="admin-calendar-gym" className="cs-input w-full min-h-[44px]" value={filterGymId} onChange={(event) => setFilterGymId(event.target.value)}>
+              <option value="">Tutte le palestre</option>
+              {gyms.map((gym) => <option key={gym.id} value={gym.id}>{gym.name}</option>)}
+              <option value="other">Altro / fuori sede</option>
+              <option value="unassigned">Luogo da definire</option>
+            </select>
+          </div>
+          <div>
             <label className="cs-field__label">Dal</label>
             <input
               type="date"
@@ -714,13 +733,14 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
               onClick={() => {
                 const activeSeasonId = seasons.find((season) => season.is_active)?.id || ''
                 setFilterTeams([])
+                setFilterGymId('')
                 setFilterSeasonId(activeSeasonId)
                 setFilterEventKinds([])
                 setFilterFrom('')
                 setFilterTo('')
                 loadEvents(viewMode === 'calendar'
-                  ? { teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true, seasonId: activeSeasonId }
-                  : { teamIds: [], eventKinds: [], from: '', to: '', visible: false, seasonId: activeSeasonId })
+                  ? { teamIds: [], eventKinds: [], gymId: '', venue: '', ...visibleMonthRange(currentDate), visible: true, seasonId: activeSeasonId }
+                  : { teamIds: [], eventKinds: [], gymId: '', venue: '', from: '', to: '', visible: false, seasonId: activeSeasonId })
               }}
               className="cs-btn cs-btn--ghost"
             >
@@ -738,7 +758,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           aria-haspopup="dialog"
         >
           <span className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4" aria-hidden="true" /> Filtri</span>
-          <span className="text-xs text-secondary">{filterTeams.length + filterEventKinds.length + (filterFrom || filterTo ? 1 : 0) + (filterSeasonId ? 1 : 0)} attivi</span>
+          <span className="text-xs text-secondary">{filterTeams.length + filterEventKinds.length + (filterGymId ? 1 : 0) + (filterFrom || filterTo ? 1 : 0) + (filterSeasonId ? 1 : 0)} attivi</span>
         </button>
       </div>
 
@@ -749,11 +769,11 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         description="Restringi gli eventi per squadra, tipologia e intervallo."
         fullscreenOnMobile
         footer={<div className="flex w-full gap-2"><button type="button" className="cs-btn cs-btn--ghost flex-1" onClick={() => {
-          setFilterTeams([]); setFilterEventKinds([]); setFilterFrom(''); setFilterTo('')
-          void loadEvents({ teamIds: [], eventKinds: [], ...visibleMonthRange(currentDate), visible: true })
+          setFilterTeams([]); setFilterEventKinds([]); setFilterGymId(''); setFilterFrom(''); setFilterTo('')
+          void loadEvents({ teamIds: [], eventKinds: [], gymId: '', venue: '', ...visibleMonthRange(currentDate), visible: true })
           setIsFilterSheetOpen(false)
         }}>Reset</button><button type="button" className="cs-btn cs-btn--primary flex-1" onClick={() => {
-          void loadEvents(visibleRequest()); setIsFilterSheetOpen(false)
+          void loadEvents({ ...visibleRequest(), gymId: filterGymId, venue: filterGymId === 'other' || filterGymId === 'unassigned' ? filterGymId : '' }); setIsFilterSheetOpen(false)
         }}>Applica</button></div>}
       >
         <div className="space-y-5">
@@ -765,6 +785,15 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
               {seasons.map((season) => <option key={season.id} value={season.id}>{season.name}{season.is_active ? ' (Attiva)' : ''}</option>)}
             </select>
           </div>
+          <fieldset>
+            <legend className="cs-field__label">Palestra</legend>
+            <select id="admin-calendar-gym-mobile" className="cs-input mt-1 w-full" value={filterGymId} onChange={(event) => setFilterGymId(event.target.value)}>
+              <option value="">Tutte le palestre</option>
+              {gyms.map((gym) => <option key={gym.id} value={gym.id}>{gym.name}</option>)}
+              <option value="other">Altro / fuori sede</option>
+              <option value="unassigned">Luogo da definire</option>
+            </select>
+          </fieldset>
           <fieldset>
             <legend className="cs-field__label">Squadre</legend>
             <div className="space-y-1" role="group" aria-label="Filtra per squadre">
@@ -813,7 +842,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
               start: event.start_date,
               end: event.end_date,
               eventKind: event.event_kind,
-              location: event.location || event.gyms?.name,
+              location: event.gyms?.name || event.location,
             }))}
             onNavigate={navigateCalendar}
             onEventClick={(id) => {
@@ -832,6 +861,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
             title: e.title,
             start: new Date(e.start_date),
             end: new Date(e.end_date),
+            location: e.gyms?.name || e.location,
             color: eventKindVisual(e.event_kind)?.colorToken,
           }))}
           onNavigate={(act)=>{
@@ -846,12 +876,14 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
           onVisibleRangeChange={(start, end) => {
             const from = filterFrom || start.toISOString()
             const to = filterTo ? `${filterTo}T23:59:59.999` : end.toISOString()
-            const requestKey = [filterSeasonId, filterTeams.join(','), filterEventKinds.join(','), from, to].join('|')
+            const requestKey = [filterSeasonId, filterTeams.join(','), filterEventKinds.join(','), filterGymId, from, to].join('|')
             if (requestedVisibleRangeRef.current === requestKey) return
             requestedVisibleRangeRef.current = requestKey
             void loadEvents({
               from,
               to,
+              gymId: filterGymId,
+              venue: filterGymId === 'other' || filterGymId === 'unassigned' ? filterGymId : '',
               visible: true,
             })
           }}

@@ -8806,6 +8806,22 @@ nel drawer amministrativo, fuori dall’ambito atleta. Una suite dashboard
 completa resta instabile per un’asserzione temporale preesistente su fixture
 del 15 settembre 2026 (`Oggi · 20:00`), non correlata a questa modifica.
 
+**Filtro palestre calendario — 05/10/2026:** aggiunto in `EventsManager` e
+`CoachCalendarManager` il filtro “Palestra” con catalogo della stagione e le
+opzioni `Tutte le palestre`, palestre censite, `Altro / fuori sede` e `Luogo da
+definire`. Il filtro usa `gym_id` per le palestre registrate e distingue gli
+eventi senza palestra in base al testo libero `location`; le attività (inclusi
+Pilates 1 e Pilates 2) non entrano nel catalogo. Le API admin/coach applicano
+il filtro lato server e restituiscono il riferimento palestra. Nella vista
+settimana desktop il luogo viene mostrato sotto il titolo dell’evento, mentre
+la vista mese resta compatta; il dettaglio preferisce il nome palestra al
+testo libero. File modificati: `src/app/api/admin/events/route.ts`,
+`src/app/api/coach/calendar/route.ts`, `src/components/admin/EventsManager.tsx`,
+`src/components/coach/CoachCalendarManager.tsx`,
+`src/components/calendar/FullCalendarWidget.tsx`,
+`src/components/shared/EventDetailModal.tsx`. `npx tsc --noEmit` e 102 suite
+su 104 superate; restano i due failure preesistenti documentati sopra.
+
 # 25. Criterio finale di successo
 
 Il redesign è riuscito solo se l'app:
