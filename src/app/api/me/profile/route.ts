@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const profileStartedAt = timing?.now() ?? 0
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, email, first_name, last_name, role, phone, birth_date, avatar_url')
       .eq('id', account.ownerProfileId)
       .maybeSingle()
     timing?.mark('profile-query', profileStartedAt)

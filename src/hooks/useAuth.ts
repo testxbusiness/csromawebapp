@@ -10,13 +10,11 @@ type ProfileRow = {
   email: string | null
   first_name: string
   last_name: string
-  date_of_birth?: string | null
+  phone?: string | null
+  birth_date?: string | null
   avatar_url?: string | null
   // Retained only for profile display compatibility; account roles are authoritative.
   role: 'admin' | 'coach' | 'athlete' | string
-  must_change_password: boolean | null
-  created_at: string | null
-  updated_at: string | null
   athlete_profile?: {
     membership_number?: string | null
     medical_certificate_expiry?: string | null

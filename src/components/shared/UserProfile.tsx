@@ -45,8 +45,8 @@ export default function UserProfile({ userRole }: UserProfileProps) {
     setProfileData({
       first_name: profile.first_name || '',
       last_name: profile.last_name || '',
-      phone_number: (profile as any).phone || (profile as any).phone_number || '',
-      date_of_birth: profile.date_of_birth || '',
+      phone_number: profile.phone || '',
+      date_of_birth: profile.birth_date || '',
       avatar_url: profile.avatar_url || ''
     })
     if (userRole !== 'athlete') {

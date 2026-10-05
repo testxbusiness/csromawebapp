@@ -34,6 +34,8 @@
 
 05/10/2026: completato PERF-010 sulla branch `performance-audit`. Aggiunto `client-refresh-coordinator` per coalescere refresh concorrenti da focus/visibility/online per chiave utente/route/subject, mantenendo i controller abort e i controlli auth/subject esistenti. Applicato a dashboard, calendario, messaggi, quote, amministrazione, profilo, contesto profili accessibili e contesto team coach. Il badge messaggi aggiorna il conteggio localmente dopo una lettura confermata e interroga ancora `countOnly=1` solo per bootstrap/fallback. Test coordinatore 2/2, suite mirate eseguite: messaggi, quote, amministrazione e bottom navigation passano; `AthleteDashboard.test.tsx` conserva il failure data-dipendente preesistente su `Oggi · 20:00`. `npx tsc --noEmit`, `npm run build` e `git diff --check` superati; la build non segnala warning dopo l’allineamento delle dipendenze degli effect. Nessuna modifica a route, API, autorizzazioni, schema o dati.
 
+05/10/2026: completato PERF-011 sulla branch `performance-audit`. `/api/me/profile` non usa più `profiles.select('*')`: il contratto esplicito restituisce solo `id, email, first_name, last_name, role, phone, birth_date, avatar_url`; account, ruoli e `mustChangePassword` restano nel resolver `requireAccountContext`. Aggiornato `ProfileRow` e il consumer admin condiviso per usare `birth_date`/`phone` senza cast legacy. Aggiunto test Route Handler sul campo `select` e mantenuta la regressione dei profili accessibili. Test route 1/1, regressione accessibile 2/2, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. Nessuna modifica a schema, RLS, route path o dati.
+
 ---
 
 ## 0. Come usare questo piano con Codex
