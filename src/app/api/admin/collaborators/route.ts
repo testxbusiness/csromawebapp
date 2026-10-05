@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { collaboratorCreateSchema, collaboratorUpdateSchema } from '@/lib/validation/profiles'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { syncProfileEmail } from '@/server/admin/profile-email'
 
 type CollaboratorType = 'coach' | 'staff' | 'admin'
 
@@ -173,8 +174,13 @@ export async function PATCH(request: NextRequest) {
     const teamRolesPayload = payload.team_roles || {}
     try { await validateTeams(adminClient, payload.season_id, type, teamIdsPayload) } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 }) }
 
+    if ('email' in payload) {
+      const emailResult = await syncProfileEmail(adminClient, payload.id, payload.email)
+      if (!emailResult.ok) return NextResponse.json({ error: emailResult.error }, { status: 400 })
+    }
+
     const profileUpdate: Record<string, string | null> = {}
-    for (const field of ['first_name', 'last_name', 'email', 'phone', 'birth_date'] as const) if (field in payload) profileUpdate[field] = payload[field] ?? null
+    for (const field of ['first_name', 'last_name', 'phone', 'birth_date'] as const) if (field in payload) profileUpdate[field] = payload[field] ?? null
     if (Object.keys(profileUpdate).length) {
       const { error } = await adminClient.from('profiles').update(profileUpdate).eq('id', payload.id)
       if (error) return NextResponse.json({ error: 'Impossibile aggiornare l’anagrafica' }, { status: 400 })

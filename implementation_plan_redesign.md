@@ -12,6 +12,8 @@
 
 ## Nota di avanzamento — audit performance
 
+05/10/2026: corretta la sincronizzazione delle email amministrative. Modifiche email da Atleti, Collaboratori e import atleti aggiornano ora `public.profiles` e, quando esiste `app_accounts`, anche `auth.users` tramite `auth.admin.updateUserById`; account senza email vengono rifiutati e gli errori di Auth non modificano il profilo. Aggiunto il servizio condiviso `src/server/admin/profile-email.ts` con compensazione best-effort in caso di errore sulla scrittura del profilo e test unitari 3/3. Verificati `npx tsc --noEmit`, test mirato, `npm run build` e `git diff --check`. Nessuna modifica dati o migration.
+
 05/10/2026: completato il task diagnostico PERF-001 sulla branch `performance-audit`. Aggiunta strumentazione opt-in per correlare request-id, timing middleware e fasi dei Route Handler senza modificare contratti, query, autorizzazioni o policy RLS. Dettagli e piano successivo sono in `PERFORMANCE_AUDIT.md` e `PERFORMANCE_OPTIMIZATION_PLAN.md`. Verificati typecheck, test API atleta mirati, build e `git diff --check`.
 
 05/10/2026: completato PERF-002 sulla branch `performance-audit`. `requireAccountContext` condivide la risoluzione auth/account/ruoli per la sola istanza `SupabaseClient` della request; `requireAthleteContext` riusa il client locale invece di ricrearlo. Nessuna modifica a schema/RLS, route, JSON o autorizzazioni; test mirato, suite completa (103 suite/415 test passati, 2 suite/3 test falliti non correlati), typecheck, build e diff check eseguiti. La misura LCP/TTFB su staging resta da ripetere dopo il deploy.

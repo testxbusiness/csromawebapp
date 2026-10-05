@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { athleteImportSchema, type AthleteImportRow } from '@/lib/validation/profiles'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { syncProfileEmail } from '@/server/admin/profile-email'
 
 type ImportError = { row: number; membership_number: string; error: string }
 
@@ -72,9 +73,12 @@ export async function POST(request: NextRequest) {
             first_name: row.first_name,
             last_name: row.last_name,
           }
-          if (row.email != null) profileUpdate.email = row.email
           if (row.phone != null) profileUpdate.phone = row.phone
           if (row.birth_date != null) profileUpdate.birth_date = row.birth_date
+          if (row.email != null) {
+            const emailResult = await syncProfileEmail(adminClient, profileId, row.email)
+            if (!emailResult.ok) throw new Error(emailResult.error)
+          }
           const { error } = await adminClient.from('profiles').update(profileUpdate).eq('id', profileId)
           if (error) throw new Error('impossibile aggiornare l’anagrafica')
 

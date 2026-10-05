@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { athleteCreateSchema, athleteUpdateSchema } from '@/lib/validation/profiles'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { syncProfileEmail } from '@/server/admin/profile-email'
 import { getAccountActorSnapshot, recordAccountLifecycleAudit } from '@/server/audit/account-lifecycle'
 
 async function validateAthleteTeams(adminClient: ReturnType<typeof createAdminClient>, seasonId: string, teamIds: string[]) {
@@ -327,8 +328,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: error instanceof Error ? error.message : 'Squadre non valide' }, { status: 400 })
     }
 
+    if ('email' in payload) {
+      const emailResult = await syncProfileEmail(adminClient, payload.id, payload.email)
+      if (!emailResult.ok) return NextResponse.json({ error: emailResult.error }, { status: 400 })
+    }
+
     const profileUpdate: Record<string, string | null> = {}
-    for (const field of ['first_name', 'last_name', 'email', 'phone', 'birth_date'] as const) {
+    for (const field of ['first_name', 'last_name', 'phone', 'birth_date'] as const) {
       if (field in payload) profileUpdate[field] = payload[field] ?? null
     }
     if (Object.keys(profileUpdate).length > 0) {
