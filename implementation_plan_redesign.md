@@ -30,6 +30,8 @@
 
 05/10/2026: completato PERF-009 sulla branch `performance-audit`. RSVP e segnalazione/revoca dell’assenza aggiornano già localmente evento selezionato, agenda e capability attendance; rimossi i refetch dashboard aggregati immediatamente successivi alle mutation. Suite dashboard mirata (4 test delegati/RSVP), typecheck, build e diff check superati. La misura runtime su staging resta da ripetere con trace POST + GET.
 
+05/10/2026: rifinitura UI post-PERF-009. Lo stato “assenza già segnalata” di `AttendanceControl` ora nasconde il riepilogo RSVP duplicato e mantiene una sola separazione visiva, sia nella card dashboard sia nel modal dettaglio evento; deadline scaduta/offline conservano invece il messaggio di stato completo. Test `AttendanceControl` + `EventDetailModal` 24/24 e typecheck superati.
+
 ---
 
 ## 0. Come usare questo piano con Codex
