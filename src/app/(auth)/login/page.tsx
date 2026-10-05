@@ -84,10 +84,11 @@ function LoginPageInner() {
       }
 
       if (j?.user) {
-        await new Promise((resolve) => setTimeout(resolve, 100))
         // Reload the authenticated route after persisting the browser session.
         // This keeps the SSR middleware and AuthProvider on the same session
-        // boundary and avoids a protected-layout redirect back to /login.
+        // boundary and avoids a protected-layout redirect back to /login. The
+        // awaited setSession call above already completes browser persistence;
+        // a fixed delay here would only extend the submit interaction.
         window.location.assign(nextPath)
       }
     } catch (err) {

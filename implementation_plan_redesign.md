@@ -36,6 +36,8 @@
 
 05/10/2026: completato PERF-011 sulla branch `performance-audit`. `/api/me/profile` non usa più `profiles.select('*')`: il contratto esplicito restituisce solo `id, email, first_name, last_name, role, phone, birth_date, avatar_url`; account, ruoli e `mustChangePassword` restano nel resolver `requireAccountContext`. Aggiornato `ProfileRow` e il consumer admin condiviso per usare `birth_date`/`phone` senza cast legacy. Aggiunto test Route Handler sul campo `select` e mantenuta la regressione dei profili accessibili. Test route 1/1, regressione accessibile 2/2, `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. Nessuna modifica a schema, RLS, route path o dati.
 
+05/10/2026: completato PERF-012 sulla branch `performance-audit`. Nel submit login è stato rimosso il `setTimeout` fisso di 100 ms che ritardava la navigazione dopo che `supabase.auth.setSession` aveva già completato la persistenza della sessione e il profilo era stato scritto in `sessionStorage`. `window.location.assign(nextPath)`, validazione del redirect, gestione errori, sincronizzazione sessione e flusso reset password sono invariati. `npx tsc --noEmit`, `npm run build` e `git diff --check` superati. La conferma quantitativa dell’INP p75 e l’attribution Chrome restano da ripetere sulla preview/deploy con lo stesso trace baseline.
+
 ---
 
 ## 0. Come usare questo piano con Codex
