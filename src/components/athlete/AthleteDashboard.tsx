@@ -310,6 +310,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       const availability = event.attendance_availability
       if (!availability) return event
       const isNext = availability.next_event?.id === eventId
+      const canReportAfterRevoke = true
+      const canReportAfterMutation = revoke
+        ? canReportAfterRevoke
+        : availability.attendance_mode !== 'absence_only'
       return {
         ...event,
         my_attendance: revoke
@@ -318,14 +322,16 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         attendance_availability: {
           ...availability,
           can_respond_now: revoke ? isNext : false,
-          can_report_early_absence: !revoke,
-          can_revoke_early_absence: revoke,
+          can_report_early_absence: canReportAfterMutation,
+          can_revoke_early_absence: !revoke,
           actions: {
             respond: revoke ? isNext : false,
-            report_early_absence: !revoke,
-            revoke_early_absence: revoke,
+            report_early_absence: canReportAfterMutation,
+            revoke_early_absence: !revoke,
           },
-          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
+          closure_reason: revoke
+            ? (availability.attendance_mode === 'absence_only' || isNext ? null : 'not_next_event')
+            : 'already_early_absence',
         },
       }
     }
