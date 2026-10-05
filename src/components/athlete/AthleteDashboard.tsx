@@ -410,9 +410,16 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     dashboardRequestRef.current = controller
 
     try {
-      const response = await fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId), {
+      const dashboardResponsePromise = fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId), {
         signal: controller.signal,
       })
+      const alertsResponsePromise = fetch(appendSubjectProfile('/api/athlete/dashboard/alerts', selectedProfileId), {
+        signal: controller.signal,
+      }).catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return null
+        throw error
+      })
+      const response = await dashboardResponsePromise
       if (!response.ok) {
         if (response.status === 403) {
           setAccessDenied(true)
@@ -448,6 +455,20 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       hasLoadedDashboardRef.current = true
       setIsOffline(false)
       setDashboardStatus('success')
+
+      void alertsResponsePromise
+        .then(async (alertsResponse) => {
+          if (!alertsResponse?.ok) return
+          const alertsResult = await alertsResponse.json().catch(() => null)
+          if (controller.signal.aborted || lastSubjectKeyRef.current !== subjectKey) return
+          setAdministrativeAlerts(Array.isArray(alertsResult?.administrativeAlerts)
+            ? alertsResult.administrativeAlerts.slice(0, 2)
+            : [])
+        })
+        .catch((error) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return
+          console.warn('Unable to load athlete dashboard administrative alerts:', error)
+        })
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return
       console.error('Error loading athlete data:', e)

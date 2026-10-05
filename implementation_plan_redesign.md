@@ -16,6 +16,8 @@
 
 05/10/2026: completato PERF-002 sulla branch `performance-audit`. `requireAccountContext` condivide la risoluzione auth/account/ruoli per la sola istanza `SupabaseClient` della request; `requireAthleteContext` riusa il client locale invece di ricrearlo. Nessuna modifica a schema/RLS, route, JSON o autorizzazioni; test mirato, suite completa (103 suite/415 test passati, 2 suite/3 test falliti non correlati), typecheck, build e diff check eseguiti. La misura LCP/TTFB su staging resta da ripetere dopo il deploy.
 
+05/10/2026: completato PERF-003 sulla branch `performance-audit`. Gli alert amministrativi della dashboard sono stati spostati in `/api/athlete/dashboard/alerts`, mantenendo la verifica subject-aware server-side; il client avvia endpoint critico e alert in parallelo e non blocca il primo contenuto sugli alert. Test API mirati, suite completa (104 suite/417 test passati, 2 suite/3 test falliti non correlati), typecheck, build e diff check eseguiti. La misura post-deploy deve verificare separatamente `route-total` dashboard e durata dell’endpoint alert.
+
 ---
 
 ## 0. Come usare questo piano con Codex

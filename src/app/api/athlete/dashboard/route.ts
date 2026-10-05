@@ -4,7 +4,6 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { buildUnreadMessages, resolveMatchPerspective } from '@/lib/athlete/dashboard-contract'
 import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
-import { loadAthleteDashboardAdministrativeAlerts } from '@/server/athlete/administration'
 import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
 
 export async function GET(request: NextRequest) {
@@ -22,9 +21,6 @@ export async function GET(request: NextRequest) {
     const canViewMessages = subject.permissions.receive_messages
     const canViewPayments = subject.permissions.view_payments
     const canViewSchedule = subject.permissions.view_schedule
-    const alertsStartedAt = timing?.now() ?? 0
-    const administrativeAlerts = await loadAthleteDashboardAdministrativeAlerts(subject)
-    timing?.mark('administrative-alerts', alertsStartedAt)
     if (!athleteProfileId) {
       return finishRequestResponse(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), timing)
     }
@@ -139,7 +135,6 @@ export async function GET(request: NextRequest) {
         feeInstallments: [],
         activeSeason: subject.activeSeason ?? null,
         teams: [],
-        administrativeAlerts,
       }), timing)
     }
 
@@ -431,7 +426,6 @@ export async function GET(request: NextRequest) {
       attendance_availability: attendanceAvailability
         ? attendanceAvailability.availabilityByEventId.get(attendanceAvailability.nextEvent?.id || '') ?? null
         : null,
-      administrativeAlerts,
     }), timing)
 
   } catch (error) {

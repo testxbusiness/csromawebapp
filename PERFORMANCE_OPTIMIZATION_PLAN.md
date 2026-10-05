@@ -8,6 +8,7 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 |---|---|---|---|---|---|
 | PERF-001 | Completato | 05/10/2026 | `src/server/performance/request-timing.ts`, middleware e Route Handler atleta/profilo | `npx tsc --noEmit`, 4 suite/6 test Jest, `npm run build`, `git diff --check` | Strumentazione opt-in con `PERFORMANCE_DIAGNOSTICS=1`; nessuna query, policy RLS o risposta modificata quando disattivata. |
 | PERF-002 | Completato | 05/10/2026 | `src/server/auth/require-account-context.ts`, `src/server/auth/require-account-context.test.ts` | test mirato 1/1, suite completa 103 suite/415 test passati con 2 suite/3 test falliti non correlati, `npx tsc --noEmit`, `npm run build`, `git diff --check` | Memoizzazione per istanza del client Supabase: una sola risoluzione concorrente di user/account/ruoli nello stesso request tree; nessun contesto condiviso tra request o tramite storage client. |
+| PERF-003 | Completato | 05/10/2026 | `src/app/api/athlete/dashboard/route.ts`, `src/app/api/athlete/dashboard/alerts/route.ts`, `src/components/athlete/AthleteDashboard.tsx` | 2 suite API/3 test, suite completa 104 suite/417 test passati con 2 suite/3 test falliti non correlati, `npx tsc --noEmit`, `npm run build`, `git diff --check` | Alert amministrativi spostati su endpoint subject-aware parallelo; payload dashboard critico e stato successivo non attendono più gli alert. |
 
 ## PERF-001 — Baseline runtime correlata
 
@@ -76,6 +77,8 @@ Piano derivato dall’audit diagnostico. Non contiene implementazione e non auto
 **Come testare dopo**  Test endpoint, snapshot e trace LCP/JSON; verifica delegated permissions.
 
 **Criteri di accettazione**  Primo contenuto non attende alert non critici; nessun alert autorizzato perso; LCP dashboard migliora rispetto alla baseline.
+
+**Esito 05/10/2026**  Il Route Handler `/api/athlete/dashboard` non attende più `loadAthleteDashboardAdministrativeAlerts` e non include gli alert nel payload critico. È stato aggiunto `/api/athlete/dashboard/alerts`, che riusa la validazione `requireSubjectAthleteContext` e restituisce solo gli alert autorizzati con `Cache-Control: private, no-store`. `AthleteDashboard` avvia dashboard e alert in parallelo, rende la dashboard principale appena il payload critico è pronto e aggiorna gli alert successivamente; errori o abort del fetch alert non portano la dashboard in stato di errore. Il payload principale, le autorizzazioni e il comportamento delegated restano invariati per le sezioni critiche. La baseline fornita mostrava `administrative-alerts` a circa 1,08 s; la misura post-deploy va ripetuta verificando separatamente i due `Server-Timing`.
 
 ## PERF-004 — Dashboard: eliminare waterfall server confermati
 
