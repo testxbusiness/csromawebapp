@@ -2,6 +2,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import EventDetailModal, { type EventDetailData } from '@/components/shared/EventDetailModal'
 import MonthlyMobileCalendar, { type MonthlyCalendarEvent } from '@/components/calendar/MonthlyMobileCalendar'
 import FullCalendarWidget, { type CalEvent } from '@/components/calendar/FullCalendarWidget'
@@ -12,10 +13,12 @@ import { exportEvents } from '@/lib/utils/excelExport'
 import { EmptyState, ErrorState, EventKindBadge, LoadingState, OfflineState } from '@/components/ui'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
-import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 import { filterCalendarEvents, type CalendarEventKindFilter } from '@/lib/athlete/calendar-filters'
 import { markCalendarConflicts } from '@/lib/athlete/calendar-conflicts'
 import { canConfirmAthleteAttendance } from '@/lib/athlete/calendar-permissions'
+import { AthleteCalendarQueryError, useAthleteCalendarQuery } from '@/lib/athlete/calendar'
+import { athleteKeys } from '@/lib/query-keys'
+import type { AthleteCalendarContract } from '@/types/athlete-calendar'
 import AttendanceControl from '@/components/athlete/AttendanceControl'
 import type { AttendanceStatus } from '@/types/attendance'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
@@ -23,22 +26,23 @@ import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
 import EarlyAbsencePeriodModal from '@/components/athlete/EarlyAbsencePeriodModal'
 
 type Event = AthleteCalendarEvent
-type CalendarLoadState = 'loading' | 'ready' | 'error' | 'offline'
-
 interface TeamLite { id: string; name: string; code: string }
+const EMPTY_EVENTS: Event[] = []
+const EMPTY_TEAMS: TeamLite[] = []
 
 export default function AthleteCalendarManager() {
-  const { user, role, loading: authLoading, profileLoading } = useAuth()
+  const { role } = useAuth()
   const { selectedProfileId, selectedProfile, activeArea } = useAccessibleProfiles()
   const { selectedTeamId, setTeams } = useTeamContext()
-  const userId = user?.id || null
-
-  const [events, setEvents] = useState<Event[]>([])
-  const [loadState, setLoadState] = useState<CalendarLoadState>('loading')
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [teamMemberships, setTeamMemberships] = useState<TeamLite[]>([])
+  const queryClient = useQueryClient()
+  const calendarQuery = useAthleteCalendarQuery()
+  const { data: calendarData, error: calendarError, isPending, refetch, accountId, subjectProfileId, enabled } = calendarQuery
+  const events = calendarData?.events ?? EMPTY_EVENTS
+  const teamMemberships: TeamLite[] = calendarData?.teams ?? EMPTY_TEAMS
+  const calendarKey = accountId && subjectProfileId
+    ? athleteKeys.calendar(accountId, subjectProfileId)
+    : null
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
-  const [accessDenied, setAccessDenied] = useState(false)
   const [earlyAbsenceOpen, setEarlyAbsenceOpen] = useState(false)
 
   const [calendarMode, setCalendarMode] = useState<'agenda' | 'month'>('month')
@@ -47,7 +51,6 @@ export default function AthleteCalendarManager() {
   const [filterEventKind, setFilterEventKind] = useState<CalendarEventKindFilter>('')
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
 
-  const fetchControllerRef = useRef<AbortController | null>(null)
   const attendanceRequestRef = useRef<AbortController | null>(null)
   const subjectContextRef = useRef<string | null>(selectedProfileId)
   const nextRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -56,109 +59,21 @@ export default function AthleteCalendarManager() {
     const handleSubjectChange = (event: globalThis.Event) => {
       const nextSubject = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? null
       subjectContextRef.current = nextSubject
-      fetchControllerRef.current?.abort()
       attendanceRequestRef.current?.abort()
-      setEvents([])
-      setTeamMemberships([])
       setSelectedEvent(null)
       setEarlyAbsenceOpen(false)
-      setAccessDenied(false)
-      setLoadState('loading')
     }
     window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
     return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
   }, [])
 
-  const loadData = useCallback(async (signal?: AbortSignal) => {
+  useEffect(() => {
+    if (calendarData) setTeams(calendarData.teams)
+  }, [calendarData, setTeams])
+
+  useEffect(() => {
     subjectContextRef.current = selectedProfileId
-    if (activeArea === 'family' && (!selectedProfileId || !selectedProfile || !selectedProfile.relationship.permissions.view_schedule)) {
-      setAccessDenied(true)
-      setEvents([])
-      setTeamMemberships([])
-      setLoadState('ready')
-      return
-    }
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setLoadState('offline')
-      setLoadError(null)
-      return
-    }
-    setLoadState('loading')
-    setLoadError(null)
-    setAccessDenied(false)
-    try {
-      const response = await fetch(appendSubjectProfile('/api/athlete/calendar', selectedProfileId), { signal })
-      if (!response.ok) {
-        if (response.status === 403) {
-          setAccessDenied(true)
-          setEvents([])
-          setTeamMemberships([])
-          setLoadState('ready')
-          return
-        }
-        console.error('Error loading athlete calendar:', response.statusText)
-        setEvents([])
-        setTeamMemberships([])
-        setLoadError('Il calendario non è disponibile al momento. Riprova tra poco.')
-        setLoadState('error')
-        return
-      }
-
-      const result = await response.json() as { teams?: TeamLite[]; events?: Event[] }
-      if (signal?.aborted || subjectContextRef.current !== selectedProfileId) return
-      const authorizedTeams = result.teams || []
-      setTeamMemberships(authorizedTeams)
-      setTeams(authorizedTeams)
-      setEvents(result.events || [])
-      setLoadState('ready')
-    } catch (error: unknown) {
-      if (error instanceof DOMException && error.name === 'AbortError') return
-      console.error('Error loading athlete calendar:', error)
-      setEvents([])
-      setTeamMemberships([])
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        setLoadError(null)
-        setLoadState('offline')
-      } else {
-        setLoadError('Il calendario non è disponibile al momento. Riprova tra poco.')
-        setLoadState('error')
-      }
-    }
-  }, [activeArea, selectedProfile, selectedProfileId, setTeams])
-
-  useEffect(() => {
-    if (authLoading || profileLoading) return
-    if (!userId) {
-      setEvents([])
-      setTeamMemberships([])
-      setLoadState('ready')
-      fetchControllerRef.current?.abort()
-      fetchControllerRef.current = null
-      return
-    }
-
-    const controller = new AbortController()
-    fetchControllerRef.current?.abort()
-    fetchControllerRef.current = controller
-    void loadData(controller.signal)
-
-    return () => {
-      controller.abort()
-    }
-  }, [authLoading, profileLoading, userId, loadData])
-
-  useEffect(() => {
-    const refreshKey = `athlete-calendar:${userId ?? 'anonymous'}:${selectedProfileId ?? 'self'}`
-    const refresh = () => runClientRefresh(refreshKey, () => loadData())
-    const onFocus = () => { if (document.visibilityState === 'visible') void refresh() }
-    const onOnline = () => void refresh()
-    window.addEventListener('focus', onFocus)
-    window.addEventListener('online', onOnline)
-    return () => {
-      window.removeEventListener('focus', onFocus)
-      window.removeEventListener('online', onOnline)
-    }
-  }, [loadData, selectedProfileId, userId])
+  }, [selectedProfileId])
 
   useEffect(() => {
     if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
@@ -169,12 +84,15 @@ export default function AthleteCalendarManager() {
       .filter((value) => Number.isFinite(value) && value > Date.now())
       .sort((a, b) => a - b)[0]
     if (!nextAt) return
-    nextRefreshTimerRef.current = setTimeout(() => void loadData(), Math.max(0, nextAt - Date.now() + 25))
+    if (!calendarKey) return
+    nextRefreshTimerRef.current = setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: calendarKey })
+    }, Math.max(0, nextAt - Date.now() + 25))
     return () => {
       if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
       nextRefreshTimerRef.current = null
     }
-  }, [events, loadData])
+  }, [calendarKey, events, queryClient])
 
   const filteredEvents = useMemo(
     () => markCalendarConflicts(filterCalendarEvents(events, filterEventKind, selectedTeamId)),
@@ -191,6 +109,14 @@ export default function AthleteCalendarManager() {
     selectedProfileId,
     selectedProfile?.relationship.permissions.confirm_attendance,
   )
+
+  const accessDenied = activeArea === 'family' && (
+    !selectedProfileId || !selectedProfile?.relationship.permissions.view_schedule
+  ) || calendarError instanceof AthleteCalendarQueryError && calendarError.status === 403
+  const isOffline = calendarError instanceof AthleteCalendarQueryError && calendarError.message === 'offline'
+  const loadError = calendarError && !isOffline
+    ? 'Il calendario non è disponibile al momento. Riprova tra poco.'
+    : null
 
   const saveAttendance = useCallback(async (eventId: string, status: AttendanceStatus) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -212,19 +138,23 @@ export default function AthleteCalendarManager() {
       if (controller.signal.aborted || subjectContextRef.current !== selectedProfileId) return
 
       const respondedAt = new Date().toISOString()
-      setEvents((currentEvents) => currentEvents.map((event) => (
-        event.id === eventId
-          ? { ...event, my_attendance: { status, responded_at: respondedAt } }
-          : event
-      )))
-      void loadData()
+      if (calendarKey) {
+        queryClient.setQueryData<AthleteCalendarContract>(calendarKey, (current) => current
+          ? {
+              ...current,
+              events: current.events.map((event) => event.id === eventId
+                ? { ...event, my_attendance: { status, responded_at: respondedAt } }
+                : event),
+            }
+          : current)
+      }
     } catch (error: unknown) {
       if (error instanceof DOMException && error.name === 'AbortError') return
       throw error
     } finally {
       if (attendanceRequestRef.current === controller) attendanceRequestRef.current = null
     }
-  }, [loadData, selectedProfileId])
+  }, [calendarKey, queryClient, selectedProfileId])
 
   const mutateEarlyAbsence = useCallback(async (eventId: string, revoke = false, note?: string) => {
     if (!navigator.onLine) throw new Error('Sei offline: l’assenza non può essere salvata')
@@ -235,34 +165,40 @@ export default function AthleteCalendarManager() {
     const result = await response.json().catch(() => null) as { error?: string } | null
     if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
     if (subjectContextRef.current !== selectedProfileId) return
-    setEvents((currentEvents) => currentEvents.map((event) => {
-      if (event.id !== eventId) return event
-      const currentAvailability = event.attendance_availability
-      if (!currentAvailability) return event
-      const isNext = currentAvailability.next_event?.id === eventId
-      return {
-        ...event,
-        my_attendance: revoke
-          ? null
-          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
-        attendance_availability: {
-          ...currentAvailability,
-          can_respond_now: revoke ? isNext : false,
-          can_report_early_absence: !revoke,
-          can_revoke_early_absence: revoke,
-          actions: {
-            respond: revoke ? isNext : false,
-            report_early_absence: !revoke,
-            revoke_early_absence: revoke,
-          },
-          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
-        },
-      }
-    }))
-    void loadData()
-  }, [loadData, selectedProfileId])
+    if (calendarKey) {
+      queryClient.setQueryData<AthleteCalendarContract>(calendarKey, (current) => current
+        ? {
+            ...current,
+            events: current.events.map((event) => {
+              if (event.id !== eventId) return event
+              const currentAvailability = event.attendance_availability
+              if (!currentAvailability) return event
+              const isNext = currentAvailability.next_event?.id === eventId
+              return {
+                ...event,
+                my_attendance: revoke
+                  ? null
+                  : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+                attendance_availability: {
+                  ...currentAvailability,
+                  can_respond_now: revoke ? isNext : false,
+                  can_report_early_absence: !revoke,
+                  can_revoke_early_absence: revoke,
+                  actions: {
+                    respond: revoke ? isNext : false,
+                    report_early_absence: !revoke,
+                    revoke_early_absence: revoke,
+                  },
+                  closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
+                },
+              }
+            }),
+          }
+        : current)
+    }
+  }, [calendarKey, queryClient, selectedProfileId])
 
-  const retryLoad = () => { void loadData() }
+  const retryLoad = () => { void refetch() }
 
   const mobileMonthEvents: MonthlyCalendarEvent[] = filteredEvents.map((event) => ({
     id: event.id,
@@ -313,11 +249,11 @@ export default function AthleteCalendarManager() {
     )
   }
 
-  if (loadState === 'loading') {
+  if (accessDenied) return <DelegatedAccessDenied section="il calendario" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
+  if (!calendarData && (isPending || !enabled)) {
     return <LoadingState label="Caricamento calendario..." />
   }
-  if (accessDenied) return <DelegatedAccessDenied section="il calendario" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
-  if (loadState === 'offline') {
+  if (!calendarData && isOffline) {
     return (
       <OfflineState
         title="Calendario non disponibile offline"
@@ -326,7 +262,7 @@ export default function AthleteCalendarManager() {
       />
     )
   }
-  if (loadState === 'error') {
+  if (!calendarData && calendarError) {
     return (
       <ErrorState
         title="Impossibile caricare il calendario"
@@ -484,7 +420,9 @@ export default function AthleteCalendarManager() {
           open={earlyAbsenceOpen}
           subjectProfileId={selectedProfileId}
           onClose={() => setEarlyAbsenceOpen(false)}
-          onSaved={() => void loadData()}
+          onSaved={() => {
+            if (calendarKey) void queryClient.invalidateQueries({ queryKey: calendarKey })
+          }}
         />
       )}
     </>

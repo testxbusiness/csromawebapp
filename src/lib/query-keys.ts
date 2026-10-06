@@ -4,6 +4,8 @@ export const athleteKeys = {
     [...athleteKeys.all, accountId, subjectProfileId, 'profile'] as const,
   administration: (accountId: string, subjectProfileId: string) =>
     [...athleteKeys.all, accountId, subjectProfileId, 'administration'] as const,
+  calendar: (accountId: string, subjectProfileId: string) =>
+    [...athleteKeys.all, accountId, subjectProfileId, 'calendar'] as const,
   messages: {
     all: (accountId: string, subjectProfileId: string) =>
       [...athleteKeys.all, accountId, subjectProfileId, 'messages'] as const,

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AthleteCalendarManager from './AthleteCalendarManager'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
@@ -31,7 +32,13 @@ describe('AthleteCalendarManager load states', () => {
       user: { id: 'user-1' } as ReturnType<typeof useAuth>['user'],
       session: null,
       profile: null,
-      account: null,
+      account: {
+        authUserId: 'account-1',
+        ownerProfileId: 'profile-1',
+        accountStatus: 'active',
+        roles: ['athlete'],
+        mustChangePassword: false,
+      },
       role: 'athlete',
       loading: false,
       profileLoading: false,
@@ -66,6 +73,14 @@ describe('AthleteCalendarManager load states', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: originalOnline })
   })
 
+  function renderManager(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <AthleteCalendarManager />
+      </QueryClientProvider>,
+    )
+  }
+
   it('renders the valid empty state only after a successful empty response', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -73,7 +88,7 @@ describe('AthleteCalendarManager load states', () => {
       json: async () => ({ teams: [], events: [] }),
     }) as jest.Mock
 
-    render(<AthleteCalendarManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Non sei iscritto a nessuna squadra')).toBeTruthy())
     expect(screen.queryByText('Impossibile caricare il calendario')).toBeNull()
@@ -88,6 +103,26 @@ describe('AthleteCalendarManager load states', () => {
     expect(screen.getByRole('button', { name: /Filtri.*Allenamento/i })).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('reuses cached calendar data when the manager remounts', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        teams: [],
+        events: [],
+      }),
+    }) as jest.Mock
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const view = renderManager(queryClient)
+    await waitFor(() => expect(screen.getByText('Non sei iscritto a nessuna squadra')).toBeTruthy())
+    view.unmount()
+
+    renderManager(queryClient)
+    expect(screen.getByText('Non sei iscritto a nessuna squadra')).toBeTruthy()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('renders an error state for an HTTP failure instead of empty content', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
@@ -96,7 +131,7 @@ describe('AthleteCalendarManager load states', () => {
       json: async () => ({ error: 'Impossibile caricare il calendario' }),
     }) as jest.Mock
 
-    render(<AthleteCalendarManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Impossibile caricare il calendario')).toBeTruthy())
     expect(screen.getByRole('button', { name: 'Riprova' })).toBeTruthy()
@@ -107,7 +142,7 @@ describe('AthleteCalendarManager load states', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
     global.fetch = jest.fn() as jest.Mock
 
-    render(<AthleteCalendarManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Calendario non disponibile offline')).toBeTruthy())
     expect(global.fetch).not.toHaveBeenCalled()
@@ -140,7 +175,7 @@ describe('AthleteCalendarManager load states', () => {
       }),
     }) as jest.Mock
 
-    render(<AthleteCalendarManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getAllByText('Allenamento mese').length).toBeGreaterThan(0))
     expect(screen.getByRole('button', { name: /^Mese$/ })).toHaveAttribute('aria-pressed', 'true')
@@ -192,7 +227,7 @@ describe('AthleteCalendarManager load states', () => {
       }),
     }) as jest.Mock
 
-    render(<AthleteCalendarManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getAllByText('Allenamento famiglia').length).toBeGreaterThan(0))
     fireEvent.click(screen.getByRole('button', { name: new RegExp(`${eventDate.getDate()} ${monthName}.*1 eventi`, 'i') }))
@@ -222,7 +257,7 @@ describe('AthleteCalendarManager load states', () => {
     })
     global.fetch = jest.fn() as jest.Mock
 
-    render(<AthleteCalendarManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Accesso non abilitato')).toBeTruthy())
     expect(global.fetch).not.toHaveBeenCalled()
