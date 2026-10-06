@@ -102,10 +102,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events: [], teams: teamData })
     }
 
-    // 3. Get upcoming events (same window used by the athlete dashboard)
-    const fromDate = new Date()
-    const throughDate = new Date(fromDate)
-    throughDate.setDate(throughDate.getDate() + 30)
+    // 3. Get events for the requested calendar range. Keep the historical
+    // upcoming-events fallback for callers such as the coach dashboard.
+    const requestedFrom = searchParams.get('from')
+    const requestedTo = searchParams.get('to')
+    const fromDate = requestedFrom ? new Date(requestedFrom) : new Date()
+    const throughDate = requestedTo
+      ? new Date(requestedTo)
+      : new Date(fromDate.getTime() + 30 * 24 * 60 * 60 * 1000)
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(throughDate.getTime()) || fromDate > throughDate) {
+      return NextResponse.json({ error: 'Intervallo calendario non valido' }, { status: 400 })
+    }
+    const isCalendarRange = Boolean(requestedFrom || requestedTo)
 
     let allEvents: any[] = []
 
@@ -135,7 +143,7 @@ export async function GET(request: NextRequest) {
         .gte('start_date', fromDate.toISOString())
         .lte('start_date', throughDate.toISOString())
         .order('start_date', { ascending: true })
-        .limit(10)
+      if (!isCalendarRange) eventsQuery = eventsQuery.limit(10)
       if (requestedGymId) eventsQuery = eventsQuery.eq('gym_id', requestedGymId)
       if (requestedVenue === 'other') eventsQuery = eventsQuery.is('gym_id', null).not('location', 'is', null).neq('location', '')
       if (requestedVenue === 'unassigned') eventsQuery = eventsQuery.is('gym_id', null).or('location.is.null,location.eq.')

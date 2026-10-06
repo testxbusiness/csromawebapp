@@ -37,6 +37,16 @@ interface Team { id: string; name: string; code: string }
 interface Gym { id: string; name: string; city?: string }
 interface Activity { id: string; name: string }
 
+function visibleMonthRange(date: Date): { from: string; to: string } {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1)
+  const mondayOffset = (first.getDay() + 6) % 7
+  first.setDate(first.getDate() - mondayOffset)
+  const last = new Date(first)
+  last.setDate(last.getDate() + 41)
+  last.setHours(23, 59, 59, 999)
+  return { from: first.toISOString(), to: last.toISOString() }
+}
+
 export function createCoachEventDraft(date: Date = new Date(), teamIds: string[] = []): Event {
   const start = new Date(date)
   start.setHours(start.getHours(), 0, 0, 0)
@@ -107,6 +117,9 @@ export default function CoachCalendarManager() {
     try {
       const params = new URLSearchParams()
       if (selectedTeamId) params.set('team_id', selectedTeamId)
+      const range = visibleMonthRange(currentDate)
+      params.set('from', range.from)
+      params.set('to', range.to)
       if (filterGymId === 'other' || filterGymId === 'unassigned') {
         params.set('venue', filterGymId)
       } else if (filterGymId) {
@@ -150,7 +163,7 @@ export default function CoachCalendarManager() {
     } finally {
       setLoading(false)
     }
-  }, [filterGymId, ownerProfileId, selectedTeamId, setContextTeams])
+  }, [currentDate, filterGymId, ownerProfileId, selectedTeamId, setContextTeams])
 
   useEffect(() => {
     if (!ownerProfileId) {
