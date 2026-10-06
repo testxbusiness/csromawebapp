@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { AccessibleProfileProvider } from "@/context/AccessibleProfileContext";
 import { TeamProvider } from "@/context/TeamContext";
 import PwaBootstrap from "@/components/pwa/PwaBootstrap";
+import { QueryProvider, QuerySessionCacheBoundary } from "@/components/providers/QueryProvider";
 
 export const metadata: Metadata = {
   title: "CSRoma - Gestione Società Sportiva",
@@ -58,11 +59,15 @@ export default function RootLayout({
           <ToastProvider>
             <OnboardingProvider>
               <AuthProvider>
-                <AccessibleProfileProvider>
-                  <TeamProvider>
-                    <LayoutShell>{children}</LayoutShell>
-                  </TeamProvider>
-                </AccessibleProfileProvider>
+                <QueryProvider>
+                  <QuerySessionCacheBoundary>
+                    <AccessibleProfileProvider>
+                      <TeamProvider>
+                        <LayoutShell>{children}</LayoutShell>
+                      </TeamProvider>
+                    </AccessibleProfileProvider>
+                  </QuerySessionCacheBoundary>
+                </QueryProvider>
               </AuthProvider>
             </OnboardingProvider>
           </ToastProvider>

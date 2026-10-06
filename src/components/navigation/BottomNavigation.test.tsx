@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BottomNavigation } from './BottomNavigation'
 import { MESSAGE_READ_STATE_CHANGED_EVENT } from '@/lib/messages/read-state-events'
 
@@ -12,19 +13,24 @@ jest.mock('@/context/AccessibleProfileContext', () => ({
 }))
 
 describe('BottomNavigation', () => {
+  const renderWithQueryClient = () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(<QueryClientProvider client={queryClient}><BottomNavigation /></QueryClientProvider>)
+  }
+
   beforeEach(() => {
-    authMock.mockReturnValue({ role: 'athlete', user: { id: 'auth-1' } })
+    authMock.mockReturnValue({ role: 'athlete', user: { id: 'auth-1' }, account: { authUserId: 'auth-1', ownerProfileId: 'athlete-1' } })
     profilesMock.mockReturnValue({ activeArea: 'personal', selectedProfileId: null, selectedProfile: null })
   })
   afterEach(() => { delete (globalThis as { fetch?: unknown }).fetch })
 
   it('refreshes and removes the unread badge after a confirmed read event', async () => {
     const fetchMock = jest.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ is_read: false }, { is_read: false }] }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ is_read: true }, { is_read: true }] }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadMessageCount: 2 }) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadMessageCount: 0 }) } as Response)
     globalThis.fetch = fetchMock
 
-    render(<BottomNavigation />)
+    renderWithQueryClient()
     await waitFor(() => expect(screen.getByLabelText('2 messaggi non letti')).toBeTruthy())
 
     await act(async () => {
@@ -38,7 +44,7 @@ describe('BottomNavigation', () => {
   }, 15_000)
 
   it('shows only permitted family destinations for the selected athlete', async () => {
-    authMock.mockReturnValue({ role: 'family_member', user: { id: 'auth-1' } })
+    authMock.mockReturnValue({ role: 'family_member', user: { id: 'auth-1' }, account: { authUserId: 'auth-1', ownerProfileId: 'owner-1' } })
     profilesMock.mockReturnValue({
       activeArea: 'family',
       selectedProfileId: 'athlete-1',
@@ -46,7 +52,7 @@ describe('BottomNavigation', () => {
     })
     globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [{ is_read: false }] }) } as Response)
 
-    render(<BottomNavigation />)
+    renderWithQueryClient()
 
     expect(screen.getByRole('link', { name: 'Oggi' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Calendario' })).toBeTruthy()
@@ -59,7 +65,7 @@ describe('BottomNavigation', () => {
   it('exposes the canonical coach destinations on mobile', () => {
     authMock.mockReturnValue({ role: 'coach', user: { id: 'coach-1' } })
 
-    render(<BottomNavigation />)
+    renderWithQueryClient()
 
     expect(screen.getByRole('link', { name: 'Oggi' }).getAttribute('href')).toBe('/dashboard')
     expect(screen.getByRole('link', { name: 'Calendario' }).getAttribute('href')).toBe('/coach/calendar')
