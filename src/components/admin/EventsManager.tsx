@@ -119,6 +119,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
   const eventKindDropdownRef = useRef<HTMLDivElement | null>(null)
   const requestedVisibleRangeRef = useRef<string | null>(null)
   const eventsRequestAbortRef = useRef<AbortController | null>(null)
+  const eventsCacheRef = useRef(new Map<string, Event[]>())
   const supabase = useMemo(() => createClient(), [])
 
   const selectedTeamsLabel = (() => {
@@ -233,6 +234,27 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       const selectedFrom = overrides?.from ?? filterFrom
       const selectedTo = overrides?.to ?? filterTo
       const selectedSeasonId = overrides?.seasonId ?? filterSeasonId
+      const cacheKey = JSON.stringify({
+        seasonId: selectedSeasonId,
+        teamIds: [...selectedTeamIds].sort(),
+        eventKinds: [...selectedEventKinds].sort(),
+        gymId: selectedGymId,
+        venue: selectedVenue,
+        from: selectedFrom,
+        to: selectedTo,
+        visible: overrides?.visible ?? false,
+      })
+
+      const cachedEvents = eventsCacheRef.current.get(cacheKey)
+      if (cachedEvents) {
+        if (isCurrentRequest()) {
+          setEvents(cachedEvents)
+          setSelectedEventIds([])
+          setLoading(false)
+          setInitialLoading(false)
+        }
+        return
+      }
 
       const params = new URLSearchParams()
       if (selectedTeamIds.length > 0) params.set('team_ids', selectedTeamIds.join(','))
@@ -280,6 +302,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
 
       setEvents(eventsWithSafeData)
       setSelectedEventIds([])
+      eventsCacheRef.current.set(cacheKey, eventsWithSafeData)
     } catch (error) {
       if (controller.signal.aborted || !isCurrentRequest()) return
       console.error('Errore caricamento eventi:', error)
@@ -290,6 +313,11 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         setInitialLoading(false)
       }
     }
+  }
+
+  const invalidateEventsCache = () => {
+    eventsCacheRef.current.clear()
+    requestedVisibleRangeRef.current = null
   }
 
   const loadSelectOptions = useCallback(async () => {
@@ -389,6 +417,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       toast.success('Evento creato con successo')
       setShowModal(false)
       setEditingEvent(null)
+      invalidateEventsCache()
       loadEvents()
 
     } catch (error) {
@@ -421,6 +450,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
       toast.success('Evento aggiornato con successo')
       setShowModal(false)
       setEditingEvent(null)
+      invalidateEventsCache()
       loadEvents()
 
     } catch (error) {
@@ -458,6 +488,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
         }
 
         toast.success('Evento eliminato con successo')
+        invalidateEventsCache()
         loadEvents()
 
       } catch (error) {
@@ -478,6 +509,7 @@ export default function EventsManager({ embedded = false }: { embedded?: boolean
     if (deletedCount === results.length) toast.success(`${deletedCount} eventi eliminati`)
     else toast.error(`${deletedCount} eventi eliminati; alcuni non sono stati rimossi`)
     setSelectedEventIds([])
+    invalidateEventsCache()
     void loadEvents(viewMode === 'calendar' ? visibleRequest() : { visible: false })
   }
 

@@ -102,6 +102,7 @@ export default function CoachCalendarManager() {
   const [filterGymId, setFilterGymId] = useState<string>('')
 
   const fetchControllerRef = useRef<AbortController | null>(null)
+  const calendarCacheRef = useRef(new Map<string, { events: Event[]; teams: Team[]; gyms: Gym[] }>())
 
   const loadData = useCallback(async (signal?: AbortSignal) => {
     if (!ownerProfileId) {
@@ -124,6 +125,16 @@ export default function CoachCalendarManager() {
         params.set('venue', filterGymId)
       } else if (filterGymId) {
         params.set('gym_id', filterGymId)
+      }
+      const cacheKey = `${ownerProfileId}|${selectedTeamId || 'all'}|${filterGymId || 'all'}|${range.from}|${range.to}`
+      const cached = calendarCacheRef.current.get(cacheKey)
+      if (cached) {
+        setTeams(cached.teams)
+        setContextTeams(cached.teams)
+        setGyms(cached.gyms)
+        setEvents(cached.events)
+        setLoading(false)
+        return
       }
       const query = params.toString() ? `?${params.toString()}` : ''
       const response = await fetch(`/api/coach/calendar${query}`, {
@@ -150,11 +161,15 @@ export default function CoachCalendarManager() {
         ? result.teams.flatMap((team: any) => Array.isArray(team) ? team : [team])
         : []
       const normalizedEvents = Array.isArray(result.events) ? result.events : []
+      const nextTeams = normalizedTeams as Team[]
+      const nextEvents = normalizedEvents as Event[]
+      const nextGyms = Array.isArray(result.gyms) ? result.gyms as Gym[] : []
 
-      setTeams(normalizedTeams as Team[])
-      setContextTeams(normalizedTeams as Team[])
-      if (Array.isArray(result.gyms)) setGyms(result.gyms as Gym[])
-      setEvents(normalizedEvents as Event[])
+      setTeams(nextTeams)
+      setContextTeams(nextTeams)
+      setGyms(nextGyms)
+      setEvents(nextEvents)
+      calendarCacheRef.current.set(cacheKey, { events: nextEvents, teams: nextTeams, gyms: nextGyms })
     } catch (error: any) {
       if (error?.name === 'AbortError') return
       setLoadState(loadStateFromError(error))
@@ -212,6 +227,7 @@ export default function CoachCalendarManager() {
   const filteredEventsForCalendar = useMemo(() => filteredEvents, [filteredEvents])
 
   const refreshEvents = useCallback(() => {
+    calendarCacheRef.current.clear()
     void loadData()
   }, [loadData])
 
