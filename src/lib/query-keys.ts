@@ -7,6 +7,10 @@ export const athleteKeys = {
   messages: {
     all: (accountId: string, subjectProfileId: string) =>
       [...athleteKeys.all, accountId, subjectProfileId, 'messages'] as const,
+    list: (accountId: string, subjectProfileId: string) =>
+      [...athleteKeys.messages.all(accountId, subjectProfileId), 'list'] as const,
+    detail: (accountId: string, subjectProfileId: string, messageId: string) =>
+      [...athleteKeys.messages.all(accountId, subjectProfileId), 'detail', messageId] as const,
     unread: (accountId: string, subjectProfileId: string) =>
       [...athleteKeys.messages.all(accountId, subjectProfileId), 'unread'] as const,
   },

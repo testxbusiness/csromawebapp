@@ -1,8 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AthleteMessagesManager from './AthleteMessagesManager'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
+import { resetClientRefreshCoordinator } from '@/lib/client-refresh-coordinator'
 
 jest.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }))
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
@@ -17,15 +19,21 @@ const authMock = useAuth as jest.MockedFunction<typeof useAuth>
 const profilesMock = useAccessibleProfiles as jest.MockedFunction<typeof useAccessibleProfiles>
 const teamMock = useTeamContext as jest.MockedFunction<typeof useTeamContext>
 
+function renderManager() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={queryClient}><AthleteMessagesManager /></QueryClientProvider>)
+}
+
 describe('AthleteMessagesManager load states', () => {
   const originalOnline = navigator.onLine
 
   beforeEach(() => {
+    resetClientRefreshCoordinator()
     authMock.mockReturnValue({
       user: { id: 'user-1' } as ReturnType<typeof useAuth>['user'],
       session: null,
       profile: null,
-      account: null,
+      account: { authUserId: 'user-1', ownerProfileId: 'profile-1', accountStatus: 'active', roles: ['athlete'], mustChangePassword: false },
       role: 'athlete',
       loading: false,
       profileLoading: false,
@@ -67,7 +75,7 @@ describe('AthleteMessagesManager load states', () => {
       json: async () => ({ teams: [], messages: [] }),
     }) as jest.Mock
 
-    render(<AthleteMessagesManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Nessun messaggio')).toBeTruthy())
     expect(screen.queryByText('Impossibile caricare i messaggi')).toBeNull()
@@ -80,7 +88,7 @@ describe('AthleteMessagesManager load states', () => {
       json: async () => ({ error: 'Errore server' }),
     }) as jest.Mock
 
-    render(<AthleteMessagesManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Impossibile caricare i messaggi')).toBeTruthy())
     expect(screen.getByRole('button', { name: 'Riprova' })).toBeTruthy()
@@ -91,7 +99,7 @@ describe('AthleteMessagesManager load states', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
     global.fetch = jest.fn() as jest.Mock
 
-    render(<AthleteMessagesManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Messaggi non disponibili offline')).toBeTruthy())
     expect(global.fetch).not.toHaveBeenCalled()
@@ -115,7 +123,7 @@ describe('AthleteMessagesManager load states', () => {
       .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'Errore server' }) })
     global.fetch = fetchMock as jest.Mock
 
-    render(<AthleteMessagesManager />)
+    renderManager()
     await waitFor(() => expect(screen.getByText('Allenamento')).toBeTruthy())
 
     window.dispatchEvent(new Event('online'))
@@ -158,7 +166,7 @@ describe('AthleteMessagesManager load states', () => {
       }),
     }) as jest.Mock
 
-    render(<AthleteMessagesManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Avviso famiglia')).toBeTruthy())
     expect(global.fetch).toHaveBeenCalledWith('/api/athlete/messages?view=minimal', expect.objectContaining({ signal: expect.any(AbortSignal) }))
@@ -175,7 +183,7 @@ describe('AthleteMessagesManager load states', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ teams: [], messages: [{ ...message, attachments: [{ id: 'attachment-1', file_name: 'orari.pdf' }] }] }) })
     global.fetch = fetchMock as jest.Mock
 
-    render(<AthleteMessagesManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Avviso famiglia/i })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: /Avviso famiglia/i }))
@@ -207,7 +215,7 @@ describe('AthleteMessagesManager load states', () => {
     })
     global.fetch = jest.fn() as jest.Mock
 
-    render(<AthleteMessagesManager />)
+    renderManager()
 
     await waitFor(() => expect(screen.getByText('Accesso non abilitato')).toBeTruthy())
     expect(global.fetch).not.toHaveBeenCalled()

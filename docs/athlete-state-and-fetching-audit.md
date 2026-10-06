@@ -259,6 +259,7 @@ I manager attuali contengono contemporaneamente fetching, business logic, trasfo
 - `athleteKeys.administration(accountId, subjectProfileId)` identifica il contratto completo di `/api/athlete/administration`. La key non include `section`, filtri quote, squadra selezionata o stagione: l’endpoint corrente non riceve questi parametri e il payload non cambia per tali valori.
 - `useAthleteAdministrationQuery` in `src/lib/athlete/administration.ts` mantiene il fetch client-side con `cache: 'no-store'`, abilita la query solo dopo sessione/account, subject e ruolo validi, e conserva nella Query Cache quote, certificato, domanda di iscrizione e l’intero contratto amministrativo. Le verifiche definitive restano server-side in `requireSubjectAthleteContext`.
 - Lo `staleTime` è di 3 minuti: Administration è meno volatile di unread/attendance, ma può cambiare dopo pagamenti, ricevute o aggiornamenti amministrativi. Il `gcTime` globale di 30 minuti resta sufficiente per la navigazione tra pagine; non è stata introdotta persistenza browser.
+
 - `AthleteAdministrationManager` usa `isPending` solo quando non esiste alcun dato. Un ritorno entro cache mostra subito il contratto; un refetch stale resta in background e gli errori vengono mostrati come banner senza sostituire una pagina già utilizzabile. Il primo errore, offline e 403 mantengono rispettivamente le UI esistenti; 403 continua a prevalere come accesso negato.
 - Il cambio subject produce immediatamente una key distinta, senza `placeholderData` o `previousData`. Le cache dei subject restano separate; tornando a un subject autorizzato è possibile riutilizzare la propria cache.
 - `section=certificate|fees` continua a controllare solo focus/scroll e non crea una seconda query. `AthleteFeesContent` resta presentazionale e riceve `installments` dal manager; non è stata aggiunta una query fees duplicata.
@@ -266,3 +267,10 @@ I manager attuali contengono contemporaneamente fetching, business logic, trasfo
 - Il logout/cambio account continua a usare `QuerySessionCacheBoundary`, che esegue `queryClient.clear()` quando cambia l’identità della sessione. Non è stato aggiunto un secondo sistema di clearing.
 - Test eseguiti: first load, errore/offline, 403, cached remount, background refetch, isolamento subject A/B, deep-link `section` senza refetch duplicato e typecheck. La verifica network manuale in ambiente autenticato resta un follow-up operativo.
 - Fuori scope: Dashboard, alert Dashboard, Messaggi, Calendario, Profilo, provider globali, endpoint/API, schema DB, policy Supabase, Service Worker e duplicazioni dei contratti Dashboard/Administration.
+
+## 12. TanStack Query implementation — Phase 4: Athlete Messages (6 ottobre 2026)
+
+- `AthleteMessagesManager` usa query separate per lista minimal e dettaglio full. Le chiavi includono sempre `accountId`, `subjectProfileId` e, per il dettaglio, `messageId`; i filtri lettura/squadra restano locali perché il payload minimal contiene già la lista autorizzata.
+- La lista usa `staleTime` di 45 secondi e il dettaglio 3 minuti. Entrambe le query rispettano il contesto account/subject, mantengono gli endpoint esistenti e passano l’`AbortSignal` di TanStack Query.
+- L’apertura di un messaggio usa la query dettaglio senza rifare la lista. La lettura confermata aggiorna miratamente lista e dettaglio e continua a emettere l’evento condiviso, così la query unread esistente aggiorna il badge senza refresh completo.
+- Deep link `messageId`/`subjectProfileId`, permessi delegati, errori 403/404, offline, allegati on demand e filtri UI restano compatibili con il comportamento precedente. Non sono stati modificati Dashboard, Calendario, provider globali o la query unread.
