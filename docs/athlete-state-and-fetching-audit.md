@@ -234,6 +234,18 @@ I manager attuali contengono contemporaneamente fetching, business logic, trasfo
 - La `QuerySessionCacheBoundary`, collocata sotto `AuthProvider`, esegue `queryClient.clear()` quando la sessione/account passa a un’altra identità o diventa nulla durante il logout. Questo impedisce il riuso della cache dell’account precedente.
 - In questo pilot non sono stati migrati Dashboard, Calendario, pagina Messaggi, Amministrazione, Profilo, `AccessibleProfileProvider`, `TeamProvider` o `AuthProvider`.
 
+## 10. TanStack Query implementation — Phase 2: Athlete Profile (6 ottobre 2026)
+
+- `athleteKeys.profile(accountId, subjectProfileId)` identifica il contratto `/api/athlete/profile` con account autenticato e subject separati. Non include squadra selezionata, stagione o filtri UI: l’endpoint non cambia richiesta in base a questi valori.
+- `useAthleteProfileQuery` in `src/lib/athlete/profile.ts` mantiene il fetch client-side con `cache: 'no-store'`, conserva la risposta `AthleteProfileContract` nella Query Cache e abilita la query solo dopo sessione/account, subject e ruolo validi. Le autorizzazioni definitive restano in `requireSubjectAthleteContext` lato server.
+- Lo `staleTime` del profilo è di 5 minuti, più lungo del badge unread; il `gcTime` globale di 30 minuti consente il ritorno tra pagine senza perdere subito la cache. Non è stata introdotta persistenza browser.
+- `AthleteProfileManager` usa `isPending` solo quando non esiste alcun dato. Con dati cached il profilo resta visibile durante `isFetching`/refetch e gli errori tecnici o offline diventano un banner; il 403 continua a mostrare `DelegatedAccessDenied`.
+- Il cambio subject produce immediatamente una query key distinta. Non vengono usati `placeholderData` o `previousData`, quindi il subject B non può visualizzare la risposta A; la cache A può restare disponibile per un successivo ritorno autorizzato.
+- Il logout/cambio account continua a usare `QuerySessionCacheBoundary`, che esegue `queryClient.clear()` quando cambia l’identità della sessione. Non è stato aggiunto un secondo meccanismo di clearing.
+- Supporto push, permission browser, `PushSubscription`, stato busy ed errori subscribe/unsubscribe restano nello stato locale di `AthleteProfileManager`; subscribe/unsubscribe non invalidano la query profilo.
+- Test eseguiti: suite `AthleteProfileManager.test.tsx` con first load, error/denied/offline, push, cached remount e background refetch; `npx tsc --noEmit`.
+- Non sono state migrate altre pagine o provider. Resta da eseguire, se necessario, una verifica manuale network dei percorsi account-switch/logout in ambiente autenticato.
+
 ## Sintesi
 
 - **Causa principale dei reload percepiti:** non è un document reload; è l’unmount dei manager pagina, che cancella lo stato locale e al remount avvia nuovamente il fetch con stato `loading`.

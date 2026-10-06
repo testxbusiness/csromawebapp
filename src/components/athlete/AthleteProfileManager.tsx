@@ -1,15 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
-import { useAuth } from '@/hooks/useAuth'
+import { useEffect, useState } from 'react'
+import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { usePush } from '@/hooks/usePush'
 import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
 import InstallPwaButton from '@/components/pwa/InstallPwaButton'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
+import { AthleteProfileQueryError, useAthleteProfileQuery } from '@/lib/athlete/profile'
 import type { AthleteProfileContract } from '@/types/athlete-profile'
-import { runClientRefresh } from '@/lib/client-refresh-coordinator'
-type ProfileLoadState = 'loading' | 'ready' | 'error' | 'offline' | 'denied'
 
 function initials(profile: AthleteProfileContract['subject']): string {
   return `${profile.first_name.charAt(0)}${profile.last_name.charAt(0)}`.toUpperCase()
@@ -28,72 +26,22 @@ function DetailValue({ label, value }: { label: string; value: string }) {
 }
 
 export default function AthleteProfileManager() {
-  const { user, loading: authLoading, profileLoading } = useAuth()
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const { subscribe, unsubscribe } = usePush()
-  const [data, setData] = useState<AthleteProfileContract | null>(null)
-  const [loadState, setLoadState] = useState<ProfileLoadState>('loading')
+  const profileQuery = useAthleteProfileQuery()
+  const { data, refetch } = profileQuery
   const [pushSupported, setPushSupported] = useState(false)
   const [pushPermission, setPushPermission] = useState<NotificationPermission>('default')
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushError, setPushError] = useState<string | null>(null)
-  const subjectContextRef = useRef<string | null>(null)
-  const profileRequestRef = useRef<AbortController | null>(null)
+  const [offline, setOffline] = useState(false)
 
   useEffect(() => {
-    const handleSubjectChange = (event: Event) => {
-      subjectContextRef.current = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? 'self'
-      profileRequestRef.current?.abort()
-      setData(null)
-      setLoadState('loading')
-    }
-    window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
-    return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
-  }, [])
-
-  const loadProfile = useCallback(async (signal?: AbortSignal) => {
-    if (!user) { setData(null); setLoadState('ready'); return }
-    if (typeof navigator !== 'undefined' && !navigator.onLine) { setLoadState('offline'); return }
-    setLoadState('loading')
-    try {
-      const response = await fetch(appendSubjectProfile('/api/athlete/profile', selectedProfileId), { signal, cache: 'no-store' })
-      if (!response.ok) {
-        if (response.status === 403) {
-          setData(null)
-          setLoadState('denied')
-          return
-        }
-        setLoadState('error')
-        return
-      }
-      const result = await response.json() as AthleteProfileContract
-      if (signal?.aborted || subjectContextRef.current !== (selectedProfileId ?? 'self')) return
-      setData(result)
-      setLoadState('ready')
-    } catch (caught) {
-      if (caught instanceof DOMException && caught.name === 'AbortError') return
-      setLoadState(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error')
-    }
-  }, [selectedProfileId, user])
-
-  useEffect(() => {
-    if (authLoading || profileLoading) return
-    const subjectContext = selectedProfileId ?? 'self'
-    if (subjectContextRef.current !== subjectContext) {
-      subjectContextRef.current = subjectContext
-      setData(null)
-    }
-    const controller = new AbortController()
-    profileRequestRef.current = controller
-    void loadProfile(controller.signal)
-    return () => controller.abort()
-  }, [authLoading, profileLoading, loadProfile, selectedProfileId])
-
-  useEffect(() => {
-    const handleOffline = () => setLoadState('offline')
+    const handleOffline = () => setOffline(true)
     const handleOnline = () => {
-      void runClientRefresh(`athlete-profile:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`, () => loadProfile())
+      setOffline(false)
+      void refetch()
     }
     window.addEventListener('offline', handleOffline)
     window.addEventListener('online', handleOnline)
@@ -101,7 +49,7 @@ export default function AthleteProfileManager() {
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
-  }, [loadProfile, selectedProfileId, user?.id])
+  }, [refetch])
 
   useEffect(() => {
     const supported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
@@ -132,14 +80,19 @@ export default function AthleteProfileManager() {
     } finally { setPushBusy(false) }
   }
 
-  if (loadState === 'loading' && !data) return <LoadingState label="Caricamento profilo..." />
-  const retryAction = <button type="button" className="cs-btn cs-btn--outline" onClick={() => void loadProfile()}>Riprova</button>
-  if (loadState === 'denied') {
+  const queryError = profileQuery.error instanceof AthleteProfileQueryError ? profileQuery.error : null
+  const denied = queryError?.status === 403
+  const profileOffline = offline || queryError?.message === 'offline'
+  const initialLoading = profileQuery.isPending && !data
+  const errorState = !denied && !profileOffline && queryError && !data
+  const retryAction = <button type="button" className="cs-btn cs-btn--outline" onClick={() => void profileQuery.refetch()}>Riprova</button>
+  if (initialLoading) return <LoadingState label="Caricamento profilo..." />
+  if (denied) {
     const deniedProfileName = selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined
     return <DelegatedAccessDenied section="il profilo atleta" profileName={deniedProfileName} />
   }
-  if (loadState === 'offline' && !data) return <OfflineState title="Profilo non disponibile offline" description="Il profilo richiede una connessione. Quando torni online, riprova." action={retryAction} />
-  if (loadState === 'error' && !data) return <ErrorState title="Non è stato possibile caricare il profilo" description="Riprova tra poco." action={retryAction} />
+  if (profileOffline && !data) return <OfflineState title="Profilo non disponibile offline" description="Il profilo richiede una connessione. Quando torni online, riprova." action={retryAction} />
+  if (errorState) return <ErrorState title="Non è stato possibile caricare il profilo" description="Riprova tra poco." action={retryAction} />
   if (!data) return <EmptyState title="Profilo non disponibile" />
 
   const { subject, athlete, account, memberships, permissions } = data
@@ -147,8 +100,8 @@ export default function AthleteProfileManager() {
 
   return (
     <div className="space-y-5">
-      {loadState === 'offline' ? <OfflineState title="Profilo non aggiornato" description="Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili." action={retryAction} className="py-6 text-left" /> : null}
-      {loadState === 'error' ? <ErrorState title="Aggiornamento profilo non riuscito" description="I dati mostrati potrebbero non essere aggiornati." action={retryAction} className="py-6 text-left" /> : null}
+      {profileOffline ? <OfflineState title="Profilo non aggiornato" description="Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili." action={retryAction} className="py-6 text-left" /> : null}
+      {queryError && !denied && !profileOffline ? <ErrorState title="Aggiornamento profilo non riuscito" description="I dati mostrati potrebbero non essere aggiornati." action={retryAction} className="py-6 text-left" /> : null}
       <header className="space-y-1">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--cs-text-secondary)]">Profilo atleta</p>
         <h1 className="text-2xl font-bold text-[color:var(--cs-text)]">{subject.first_name} {subject.last_name}</h1>
