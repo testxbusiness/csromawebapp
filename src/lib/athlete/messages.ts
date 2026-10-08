@@ -3,6 +3,7 @@ import { appendSubjectProfile, useAccessibleProfiles } from '@/context/Accessibl
 import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { AthleteMessageContract, AthleteMessageTeam } from '@/types/athlete-messages'
+import { markAthleteQueryParsed, markAthleteQueryResponse, markAthleteQueryStart } from '@/lib/performance/athlete-first-load'
 
 const ATHLETE_MESSAGES_LIST_STALE_TIME = 45 * 1000
 const ATHLETE_MESSAGE_DETAIL_STALE_TIME = 3 * 60 * 1000
@@ -36,11 +37,15 @@ async function fetchAthleteMessages(
   const params = view === 'full' && messageId
     ? `view=full&id=${encodeURIComponent(messageId)}`
     : 'view=minimal'
+  const query = view === 'full' ? 'message-detail' : 'messages-list'
+  const requestStartedAt = markAthleteQueryStart('messages', query)
   const response = await fetch(appendSubjectProfile(`/api/athlete/messages?${params}`, subjectProfileId), {
     cache: 'no-store',
     signal,
   })
+  markAthleteQueryResponse('messages', query, requestStartedAt, response)
   const payload = await response.json().catch(() => null) as Partial<AthleteMessagesResponse> & { error?: string } | null
+  markAthleteQueryParsed('messages', query, requestStartedAt)
 
   if (!response.ok) {
     throw new AthleteMessagesQueryError(
@@ -78,13 +83,14 @@ export function useAthleteMessagesQuery() {
     ? athleteKeys.messages.list(accountId, subjectProfileId)
     : athleteKeys.messages.list('anonymous', 'unavailable')
 
-  return useQuery({
+  const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => fetchAthleteMessages(isFamilyView ? subjectProfileId : null, 'minimal', signal),
     enabled,
     retry: false,
     staleTime: ATHLETE_MESSAGES_LIST_STALE_TIME,
   })
+  return { ...query, enabled }
 }
 
 export function useAthleteMessageDetailQuery(messageId: string | null) {

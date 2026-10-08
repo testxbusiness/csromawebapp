@@ -23,6 +23,7 @@ import { useAthleteMessageDetailQuery } from '@/lib/athlete/messages'
 import { useAthleteTeamDetailQuery } from '@/lib/athlete/team-detail'
 import { athleteKeys } from '@/lib/query-keys'
 import { syncAthleteAttendanceCaches, syncAthleteMessageReadCaches } from '@/lib/athlete/cache-synchronization'
+import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
 
 interface User {
   id: string
@@ -226,6 +227,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const nextChampionshipMatch = (dashboard?.nextChampionshipMatch ?? null) as ChampionshipMatch | null
   const activeSeason = dashboard?.activeSeason as { name?: string } | null | undefined
   const dashboardStatus = dashboardQuery.isPending ? 'loading' : dashboardQuery.isError && !dashboard ? 'error' : dashboardQuery.isFetching ? 'refreshing' : 'success'
+  useAthleteFirstLoadDiagnostics('dashboard', dashboardQuery.enabled, Boolean(dashboard))
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)

@@ -4,6 +4,7 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { resolveAthleteChampionshipContext, type AthleteChampionship } from '@/server/championships/resolve-athlete-championship'
 import { noStoreJson } from '@/server/http/no-store'
+import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
 
 const uuid = z.string().uuid()
 const querySchema = z.object({
@@ -43,34 +44,40 @@ function findAuthorizedGroup(
 }
 
 export async function GET(request: NextRequest) {
+  const timing = startRequestTiming(request, '/api/athlete/championships')
   try {
     const raw = Object.fromEntries(new URL(request.url).searchParams.entries())
     const parsed = querySchema.safeParse(raw)
     if (!parsed.success) {
-      return noStoreJson({ error: 'Parametri campionato non validi' }, 400)
+      return finishRequestResponse(noStoreJson({ error: 'Parametri campionato non validi' }, 400), timing)
     }
 
     const { view, subjectProfileId, groupId, matchId, clubTeamId } = parsed.data
     if (view === 'group' && !groupId) {
-      return noStoreJson({ error: 'groupId obbligatorio' }, 400)
+      return finishRequestResponse(noStoreJson({ error: 'groupId obbligatorio' }, 400), timing)
     }
     if (view === 'convocation' && (!matchId || !clubTeamId)) {
-      return noStoreJson({ error: 'matchId e clubTeamId obbligatori' }, 400)
+      return finishRequestResponse(noStoreJson({ error: 'matchId e clubTeamId obbligatori' }, 400), timing)
     }
 
     const supabase = await createClient()
-    const resolved = await resolveAthleteChampionshipContext(supabase, subjectProfileId ?? null)
+    const contextStartedAt = timing?.now() ?? 0
+    const resolved = timing
+      ? await resolveAthleteChampionshipContext(supabase, subjectProfileId ?? null, timing)
+      : await resolveAthleteChampionshipContext(supabase, subjectProfileId ?? null)
+    timing?.mark('championship-context', contextStartedAt)
     const { dataClient, account: _account, permissions: _permissions, delegated: _delegated, ...context } = resolved
     if (view === 'catalog') {
-      return noStoreJson(context)
+      return finishRequestResponse(noStoreJson(context), timing)
     }
 
     if (view === 'group') {
       const authorizedGroup = findAuthorizedGroup(context.championships, groupId!)
       if (!authorizedGroup) {
-        return noStoreJson({ error: 'Girone non autorizzato per il soggetto' }, 403)
+        return finishRequestResponse(noStoreJson({ error: 'Girone non autorizzato per il soggetto' }, 403), timing)
       }
 
+      const matchesStartedAt = timing?.now()
       const { data: matches, error: matchesError } = await dataClient
         .from('championship_matches')
         .select(`
@@ -84,11 +91,13 @@ export async function GET(request: NextRequest) {
         .order('match_day', { ascending: true })
         .order('match_date', { ascending: true })
       if (matchesError) throw new AccountContextError('Impossibile caricare le partite del girone', 500)
+      if (matchesStartedAt !== undefined) timing?.mark('championship-matches', matchesStartedAt)
 
       // The materialized view has no RLS and is intentionally inaccessible to
       // authenticated Data API clients. Authorization is complete above, so
       // read only the selected group through the server-side admin client.
       const adminClient = createAdminClient()
+      const standingsStartedAt = timing?.now() ?? 0
       const [{ data: standings, error: standingsError }, { data: groupTeamLabels, error: groupTeamLabelsError }] = await Promise.all([
         adminClient
         .from('championship_standings_mv')
@@ -99,6 +108,7 @@ export async function GET(request: NextRequest) {
           .select('championship_club_team_id, championship_club_teams(id, name, code)')
           .eq('championship_group_id', groupId!),
       ])
+      timing?.mark('championship-standings-team-labels', standingsStartedAt)
       if (standingsError) throw new AccountContextError('Impossibile caricare la classifica del girone', 500)
       if (groupTeamLabelsError) throw new AccountContextError('Impossibile caricare i nomi delle squadre del girone', 500)
 
@@ -109,7 +119,7 @@ export async function GET(request: NextRequest) {
         }),
       )
 
-      return noStoreJson({
+      return finishRequestResponse(noStoreJson({
         subjectProfileId: context.subjectProfileId,
         championship: authorizedGroup.championship,
         group: authorizedGroup.group,
@@ -118,14 +128,16 @@ export async function GET(request: NextRequest) {
           ...standing,
           team_name: standing.club_team_id ? teamLabels.get(standing.club_team_id) ?? null : null,
         })),
-      })
+      }), timing)
     }
 
+    const matchStartedAt = timing?.now() ?? 0
     const { data: match, error: matchError } = await dataClient
       .from('championship_matches')
       .select('id, championship_group_id, home_club_team_id, away_club_team_id')
       .eq('id', matchId!)
       .maybeSingle()
+    timing?.mark('convocation-match-authorization', matchStartedAt)
     if (matchError) throw new AccountContextError('Impossibile verificare la partita', 500)
     const authorizedGroup = match
       ? findAuthorizedGroup(context.championships, match.championship_group_id)
@@ -133,9 +145,10 @@ export async function GET(request: NextRequest) {
     const clubTeam = authorizedGroup?.championship.clubTeams.find((candidate) => candidate.id === clubTeamId)
     if (!match || !authorizedGroup || !clubTeam || !authorizedGroup.group.clubTeamIds.includes(clubTeam.id)
       || ![match.home_club_team_id, match.away_club_team_id].includes(clubTeam.id)) {
-      return noStoreJson({ error: 'Partita non autorizzata per la squadra' }, 403)
+      return finishRequestResponse(noStoreJson({ error: 'Partita non autorizzata per la squadra' }, 403), timing)
     }
 
+    const convocationStartedAt = timing?.now() ?? 0
     const { data: convocation, error: convocationError } = await dataClient
       .from('championship_match_convocations')
       .select(`
@@ -150,17 +163,19 @@ export async function GET(request: NextRequest) {
       .eq('match_id', matchId!)
       .eq('championship_club_team_id', clubTeam.id)
       .maybeSingle()
+    timing?.mark('convocation', convocationStartedAt)
     if (convocationError && convocationError.code !== 'PGRST116') {
       throw new AccountContextError('Impossibile caricare la convocazione', 500)
     }
 
-    return noStoreJson({
+    return finishRequestResponse(noStoreJson({
       subjectProfileId: context.subjectProfileId,
       matchId,
       clubTeamId: clubTeam.id,
       convocation: convocation ?? null,
-    })
+    }), timing)
   } catch (error) {
-    return jsonError(error)
+    const response = jsonError(error)
+    return finishRequestResponse(response, timing)
   }
 }

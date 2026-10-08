@@ -14,6 +14,7 @@ import { SUBJECT_CONTEXT_CHANGED_EVENT, useAccessibleProfiles } from '@/context/
 import { useAuth } from '@/hooks/useAuth'
 import { useTeamContext } from '@/context/TeamContext'
 import type { AthleteMessageContract } from '@/types/athlete-messages'
+import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
 
 function toDetailData(message: AthleteMessageContract | AthleteMessageListItem | null): MessageDetailData | null {
   if (!message) return null
@@ -52,6 +53,7 @@ export default function AthleteMessagesManager() {
   const [deepLinkUnavailable, setDeepLinkUnavailable] = useState(false)
   const [browserOffline, setBrowserOffline] = useState(false)
   const detailQuery = useAthleteMessageDetailQuery(selectedMessageId)
+  useAthleteFirstLoadDiagnostics('messages', messagesQuery.enabled, Boolean(messagesQuery.data))
 
   const messages = useMemo(() => messagesQuery.data?.messages ?? [], [messagesQuery.data?.messages])
   const listTeams = useMemo(() => messagesQuery.data?.teams ?? [], [messagesQuery.data?.teams])

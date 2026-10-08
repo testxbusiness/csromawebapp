@@ -3,6 +3,7 @@ import { appendSubjectProfile, useAccessibleProfiles } from '@/context/Accessibl
 import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { AthleteDashboardAdministrativeAlert, AthleteDashboardContract } from '@/types/athlete-dashboard'
+import { markAthleteQueryParsed, markAthleteQueryResponse, markAthleteQueryStart } from '@/lib/performance/athlete-first-load'
 
 export const ATHLETE_DASHBOARD_STALE_TIME = 90 * 1000
 export const ATHLETE_DASHBOARD_ALERTS_STALE_TIME = 3 * 60 * 1000
@@ -26,11 +27,14 @@ async function fetchDashboard(
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     throw new AthleteDashboardQueryError('offline')
   }
+  const requestStartedAt = markAthleteQueryStart('dashboard', 'dashboard')
   const response = await fetch(appendSubjectProfile('/api/athlete/dashboard', subjectProfileId), {
     cache: 'no-store',
     signal,
   })
+  markAthleteQueryResponse('dashboard', 'dashboard', requestStartedAt, response)
   const payload = await response.json().catch(() => null) as Partial<AthleteDashboardContract> & { error?: string } | null
+  markAthleteQueryParsed('dashboard', 'dashboard', requestStartedAt)
   if (!response.ok) {
     throw new AthleteDashboardQueryError(
       response.status === 403 ? 'denied' : response.status === 401 ? 'session_expired' : payload?.error ?? 'dashboard_fetch_failed',
@@ -57,11 +61,14 @@ async function fetchDashboardAlerts(
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
     throw new AthleteDashboardQueryError('offline')
   }
+  const requestStartedAt = markAthleteQueryStart('dashboard', 'dashboard-alerts')
   const response = await fetch(appendSubjectProfile('/api/athlete/dashboard/alerts', subjectProfileId), {
     cache: 'no-store',
     signal,
   })
+  markAthleteQueryResponse('dashboard', 'dashboard-alerts', requestStartedAt, response)
   const payload = await response.json().catch(() => null) as DashboardAlertsResponse | null
+  markAthleteQueryParsed('dashboard', 'dashboard-alerts', requestStartedAt)
   if (!response.ok) {
     throw new AthleteDashboardQueryError(
       response.status === 403 ? 'denied' : response.status === 401 ? 'session_expired' : payload?.error ?? 'dashboard_alerts_fetch_failed',

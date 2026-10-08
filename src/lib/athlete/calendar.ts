@@ -3,6 +3,7 @@ import { appendSubjectProfile, useAccessibleProfiles } from '@/context/Accessibl
 import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { AthleteCalendarContract } from '@/types/athlete-calendar'
+import { markAthleteQueryParsed, markAthleteQueryResponse, markAthleteQueryStart } from '@/lib/performance/athlete-first-load'
 
 export const ATHLETE_CALENDAR_STALE_TIME = 2 * 60 * 1000
 
@@ -24,11 +25,14 @@ async function fetchAthleteCalendar(
     throw new AthleteCalendarQueryError('offline')
   }
 
+  const requestStartedAt = markAthleteQueryStart('calendar', 'calendar')
   const response = await fetch(appendSubjectProfile('/api/athlete/calendar', subjectProfileId), {
     cache: 'no-store',
     signal,
   })
+  markAthleteQueryResponse('calendar', 'calendar', requestStartedAt, response)
   const payload = await response.json().catch(() => null) as Partial<AthleteCalendarContract> & { error?: string } | null
+  markAthleteQueryParsed('calendar', 'calendar', requestStartedAt)
 
   if (!response.ok) {
     throw new AthleteCalendarQueryError(

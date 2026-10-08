@@ -3,6 +3,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
+import type { RequestTiming } from '@/server/performance/request-timing'
 
 type TeamRow = {
   team_id: string
@@ -210,8 +211,13 @@ function championshipsForSelection(
 export async function resolveAthleteChampionshipContext(
   supabase: SupabaseClient,
   requestedProfileId: string | null,
+  timing?: RequestTiming | null,
 ) {
-  const subject = await requireSubjectAthleteContext(supabase, requestedProfileId, 'view_schedule')
+  const subject = timing
+    ? await requireSubjectAthleteContext(supabase, requestedProfileId, 'view_schedule', timing)
+    : await requireSubjectAthleteContext(supabase, requestedProfileId, 'view_schedule')
+  const championshipResolutionStartedAt = timing?.now() ?? 0
   const resolution = await resolveAthleteChampionshipsForSubject(subject.dataClient, subject.profileId, subject.activeTeamIds ?? [])
+  timing?.mark('championship-resolution', championshipResolutionStartedAt)
   return { ...subject, ...resolution }
 }

@@ -12,9 +12,9 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
 
     const { searchParams } = new URL(request.url)
-    const contextStartedAt = timing?.now() ?? 0
-    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
-    timing?.mark('subject-context', contextStartedAt)
+    const subject = timing
+      ? await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), undefined, timing)
+      : await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'))
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
     const activeTeamIds = subject.activeTeamIds ?? []
@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
       const recipientFilters = [`profile_id.eq.${athleteProfileId}`]
       if (teamIds.length > 0) recipientFilters.push(`team_id.in.(${teamIds.join(',')})`)
 
+      const recipientsStartedAt = timing?.now() ?? 0
       const { data, error } = await dataClient
         .from('message_recipients')
         .select(`
@@ -84,6 +85,7 @@ export async function GET(request: NextRequest) {
       } else {
         msgRecipients = data || []
       }
+      timing?.mark('dashboard-message-recipients', recipientsStartedAt)
     }
 
     const messageIds = [...new Set(msgRecipients.map((recipient: any) => recipient.messages?.id).filter(Boolean))]
@@ -95,14 +97,17 @@ export async function GET(request: NextRequest) {
         .map((recipient: any) => recipient.messages?.created_by)
         .filter(Boolean)
     )]
+    const creatorsStartedAt = timing?.now() ?? 0
     const { data: creatorProfiles, error: creatorProfilesError } = canViewMessages && creatorIds.length > 0
       ? await createAdminClient()
           .from('profiles')
           .select('id, first_name, last_name')
           .in('id', creatorIds)
       : { data: [], error: null }
+    timing?.mark('dashboard-message-creators', creatorsStartedAt)
     if (creatorProfilesError) console.error('Error loading dashboard message creators:', creatorProfilesError)
     const creatorProfilesMap = new Map((creatorProfiles || []).map((creator: any) => [creator.id, creator]))
+    const readStateStartedAt = timing?.now() ?? 0
     const { data: readRows } = canViewMessages && messageIds.length > 0
       ? await dataClient
           .from('message_reads')
@@ -111,6 +116,8 @@ export async function GET(request: NextRequest) {
           .eq('subject_profile_id', athleteProfileId)
           .in('message_id', messageIds)
       : { data: [] }
+    timing?.mark('dashboard-message-read-state', readStateStartedAt)
+    const messageTransformStartedAt = timing?.now() ?? 0
     const readMessageIds = new Set((readRows || []).map((row: any) => row.message_id))
     const normalizedMessageRecipients = (msgRecipients || [])
       .filter((recipient: any) => recipient.messages)
@@ -123,6 +130,7 @@ export async function GET(request: NextRequest) {
             : recipient.messages.created_by_profile || null,
         },
       }))
+    timing?.mark('dashboard-message-transform', messageTransformStartedAt)
     timing?.mark('dashboard-messages', messagesStartedAt)
 
     if (teamIds.length === 0) {
@@ -209,6 +217,7 @@ export async function GET(request: NextRequest) {
 
     // Get activities and enriched team data
     const enrichmentStartedAt = timing?.now() ?? 0
+    const enrichmentQueriesStartedAt = timing?.now() ?? 0
     const activityIds = [...new Set((teams || []).map(t => t.activity_id).filter(Boolean))]
     const activitiesPromise = activityIds.length > 0
       ? dataClient
@@ -264,6 +273,7 @@ export async function GET(request: NextRequest) {
       attendanceAvailabilityPromise,
       nextChampionshipMatchPromise,
     ])
+    timing?.mark('dashboard-enrichment-queries', enrichmentQueriesStartedAt)
 
     timing?.mark('dashboard-enrichment', enrichmentStartedAt)
 
@@ -286,6 +296,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build enriched response
+    const transformStartedAt = timing?.now() ?? 0
     const activitiesMap = new Map((activities || []).map(a => [a.id, a]))
     const teamsMap = new Map((teams || []).map(t => [t.id, t]))
     const membershipFeesMap = new Map((membershipFees || []).map(f => [f.id, f]))
@@ -424,6 +435,7 @@ export async function GET(request: NextRequest) {
           )),
         }
       : null
+    timing?.mark('dashboard-response-transform', transformStartedAt)
 
     return finishRequestResponse(NextResponse.json({
       teamMemberships: enrichedMemberships,

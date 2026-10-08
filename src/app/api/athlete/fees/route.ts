@@ -11,9 +11,9 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
 
     const { searchParams } = new URL(request.url)
-    const contextStartedAt = timing?.now() ?? 0
-    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_payments')
-    timing?.mark('subject-context', contextStartedAt)
+    const subject = timing
+      ? await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_payments', timing)
+      : await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_payments')
     const contractStartedAt = timing?.now() ?? 0
     const contract = await loadAthleteFeesContract(
       subject.dataClient,

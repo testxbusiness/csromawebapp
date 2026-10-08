@@ -25,6 +25,7 @@ import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
 import EarlyAbsencePeriodModal from '@/components/athlete/EarlyAbsencePeriodModal'
 import { syncAthleteAttendanceCaches } from '@/lib/athlete/cache-synchronization'
 import { useAthleteEventDetailQuery } from '@/lib/athlete/event-detail'
+import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
 
 type Event = AthleteCalendarEvent
 interface TeamLite { id: string; name: string; code: string }
@@ -43,6 +44,7 @@ export default function AthleteCalendarManager() {
   const calendarKey = accountId && subjectProfileId
     ? athleteKeys.calendar(accountId, subjectProfileId)
     : null
+  useAthleteFirstLoadDiagnostics('calendar', enabled, Boolean(calendarData))
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [earlyAbsenceOpen, setEarlyAbsenceOpen] = useState(false)
   const [browserOffline, setBrowserOffline] = useState(false)

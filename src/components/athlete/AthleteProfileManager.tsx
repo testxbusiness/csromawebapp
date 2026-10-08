@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, Sta
 import InstallPwaButton from '@/components/pwa/InstallPwaButton'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { AthleteProfileQueryError, useAthleteProfileQuery } from '@/lib/athlete/profile'
+import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
 import type { AthleteProfileContract } from '@/types/athlete-profile'
 
 function initials(profile: AthleteProfileContract['subject']): string {
@@ -29,6 +30,7 @@ export default function AthleteProfileManager() {
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
   const { subscribe, unsubscribe } = usePush()
   const profileQuery = useAthleteProfileQuery()
+  useAthleteFirstLoadDiagnostics('profile', profileQuery.enabled, Boolean(profileQuery.data))
   const { data, refetch } = profileQuery
   const [pushSupported, setPushSupported] = useState(false)
   const [pushPermission, setPushPermission] = useState<NotificationPermission>('default')

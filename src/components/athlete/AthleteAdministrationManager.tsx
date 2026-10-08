@@ -7,6 +7,7 @@ import { ErrorState, ListRow, LoadingState, OfflineState, Panel, StatusBadge } f
 import { AthleteFeesContent } from './AthleteFeesManager'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { AthleteAdministrationQueryError, useAthleteAdministrationQuery } from '@/lib/athlete/administration'
+import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
 
 type FocusSection = 'certificate' | 'fees' | null
 const CERTIFICATE_COPY = { missing: 'Da consegnare', expired: 'Scaduto', expiring: 'In scadenza', valid: 'Valido' } as const
@@ -34,6 +35,7 @@ export default function AthleteAdministrationManager() {
   const { activeArea, selectedProfile } = useAccessibleProfiles()
   const searchParams = useSearchParams()
   const administrationQuery = useAthleteAdministrationQuery()
+  useAthleteFirstLoadDiagnostics('administration', administrationQuery.enabled, Boolean(administrationQuery.data))
   const { data: contract, refetch } = administrationQuery
   const [browserOffline, setBrowserOffline] = useState(false)
   const focusSection = getFocusSection(searchParams.get('section'))

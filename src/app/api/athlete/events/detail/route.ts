@@ -3,46 +3,57 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
+import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
 
 export async function GET(request: NextRequest) {
+  const timing = startRequestTiming(request, '/api/athlete/events/detail')
   try {
     const supabase = await createClient()
     const admin = createAdminClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
-    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+    if (!id) return finishRequestResponse(NextResponse.json({ error: 'Missing id' }, { status: 400 }), timing)
 
-    const subject = await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
+    const subject = timing
+      ? await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule', timing)
+      : await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'view_schedule')
     const athleteProfileId = subject.profileId
     const dataClient = subject.dataClient
     const activeTeamIds = subject.activeTeamIds ?? []
-    if (!athleteProfileId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!athleteProfileId) return finishRequestResponse(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), timing)
 
     // Verify membership to any team of event
+    const linksStartedAt = timing?.now() ?? 0
     const { data: links } = await dataClient
       .from('event_teams')
       .select('team_id')
       .eq('event_id', id)
+    timing?.mark('event-team-links', linksStartedAt)
     const teamIds = (links || []).map(l => l.team_id)
-    if (teamIds.length === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (teamIds.length === 0) return finishRequestResponse(NextResponse.json({ error: 'Not found' }, { status: 404 }), timing)
+    const membershipStartedAt = timing?.now() ?? 0
     const { data: member } = await dataClient
       .from('team_members')
       .select('team_id')
       .in('team_id', teamIds)
       .eq('profile_id', athleteProfileId)
       .in('team_id', activeTeamIds)
-    if (!member || member.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    timing?.mark('event-team-membership', membershipStartedAt)
+    if (!member || member.length === 0) return finishRequestResponse(NextResponse.json({ error: 'Forbidden' }, { status: 403 }), timing)
     // Only expose team context that was authorized for this subject. An event
     // may also be linked to teams where the subject is not a member.
     const authorizedTeamIds = [...new Set(member.map((row) => row.team_id))]
 
+    const eventStartedAt = timing?.now() ?? 0
     const { data: ev } = await dataClient
       .from('events')
       .select('*, generated_from_schedule_id')
       .eq('id', id)
       .maybeSingle()
-    if (!ev) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    timing?.mark('event', eventStartedAt)
+    if (!ev) return finishRequestResponse(NextResponse.json({ error: 'Not found' }, { status: 404 }), timing)
 
+    const enrichmentStartedAt = timing?.now() ?? 0
     let gym: any = null
     if (ev.gym_id) {
       const { data } = await dataClient.from('gyms').select('name, address, city').eq('id', ev.gym_id).maybeSingle()
@@ -67,6 +78,8 @@ export async function GET(request: NextRequest) {
       .eq('profile_id', athleteProfileId)
       .maybeSingle()
 
+    timing?.mark('event-enrichment', enrichmentStartedAt)
+    const availabilityStartedAt = timing?.now() ?? 0
     const attendanceAvailability = await resolveAttendanceAvailability(
       dataClient,
       athleteProfileId,
@@ -75,8 +88,9 @@ export async function GET(request: NextRequest) {
       new Date(),
       activeTeamIds,
     )
+    timing?.mark('attendance-availability', availabilityStartedAt)
 
-    return NextResponse.json({
+    return finishRequestResponse(NextResponse.json({
       id: ev.id,
       title: ev.title,
       description: ev.description,
@@ -91,11 +105,11 @@ export async function GET(request: NextRequest) {
       gym,
       teams,
       creator,
-    })
+    }), timing)
   } catch (e) {
     if (e instanceof AccountContextError) {
-      return NextResponse.json({ error: e.message }, { status: e.status })
+      return finishRequestResponse(NextResponse.json({ error: e.message }, { status: e.status }), timing)
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return finishRequestResponse(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), timing)
   }
 }

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { runClientRefresh } from '@/lib/client-refresh-coordinator'
+import { markAccessibleProfilesFetchEnd, markAccessibleProfilesFetchStart } from '@/lib/performance/athlete-first-load'
 
 export type AccessibleProfile = {
   profile: {
@@ -64,7 +65,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (source: 'initial-effect' | 'focus-visibility' = 'initial-effect') => {
     // Wait for Supabase to restore the session before deciding whether the
     // stored subject is still valid. On a full navigation `user` is briefly
     // null even for an authenticated user; clearing localStorage here would
@@ -89,7 +90,9 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
     setProfilesLoaded(false)
     setError(null)
     try {
+      const diagnosticStartedAt = markAccessibleProfilesFetchStart(source)
       const response = await fetch('/api/me/accessible-profiles', { cache: 'no-store' })
+      markAccessibleProfilesFetchEnd(source, diagnosticStartedAt, response)
       const payload = await response.json().catch(() => null) as { profiles?: AccessibleProfile[]; error?: string } | null
       if (!response.ok) throw new Error(payload?.error || 'Impossibile caricare i profili accessibili')
       setProfiles(payload?.profiles ?? [])
@@ -109,7 +112,10 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   useEffect(() => {
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') {
-        void runClientRefresh(`accessible-profiles:${account?.authUserId ?? 'anonymous'}`, refresh)
+        void runClientRefresh(
+          `accessible-profiles:${account?.authUserId ?? 'anonymous'}`,
+          () => refresh('focus-visibility'),
+        )
       }
     }
 

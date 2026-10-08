@@ -8,6 +8,7 @@ import {
   requireAccountContext,
 } from '@/server/auth/require-account-context'
 import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
+import type { RequestTiming } from '@/server/performance/request-timing'
 
 export type SubjectPermission =
   | 'view_schedule'
@@ -56,7 +57,8 @@ export async function resolveSubjectProfile(
   supabase: SupabaseClient,
   account: AccountContext,
   requestedProfileId: string | null,
-  permission?: SubjectPermission
+  permission?: SubjectPermission,
+  timing?: RequestTiming | null,
 ) {
   if (!requestedProfileId || requestedProfileId === account.ownerProfileId) {
     return {
@@ -71,6 +73,7 @@ export async function resolveSubjectProfile(
   }
 
   const adminClient = createAdminClient()
+  const delegatedPermissionsStartedAt = timing?.now() ?? 0
   const [{ data: relationship, error: relationshipError }, { data: profile, error: profileError }, { data: override, error: overrideError }] = await Promise.all([
     adminClient
       .from('profile_relationships')
@@ -84,6 +87,7 @@ export async function resolveSubjectProfile(
     adminClient.from('profiles').select('birth_date').eq('id', requestedProfileId).maybeSingle(),
     adminClient.from('profile_age_overrides').select('treat_as_minor').eq('profile_id', requestedProfileId).eq('active', true).maybeSingle(),
   ])
+  timing?.mark('delegated-permissions', delegatedPermissionsStartedAt)
 
   if (relationshipError || profileError || overrideError) {
     throw new AccountContextError('Impossibile verificare il profilo accessibile', 500)
@@ -131,25 +135,36 @@ export async function resolveSubjectProfile(
 export async function requireSubjectAthleteContext(
   supabase: SupabaseClient,
   requestedProfileId: string | null,
-  permission?: SubjectPermission
+  permission?: SubjectPermission,
+  timing?: RequestTiming | null,
 ): Promise<SubjectAthleteContext> {
+  const subjectContextStartedAt = timing?.now() ?? 0
+  const accountStartedAt = timing?.now() ?? 0
   const account = await requireAccountContext(supabase)
-  const subject = await resolveSubjectProfile(supabase, account, requestedProfileId, permission)
+  timing?.mark('account-context', accountStartedAt)
+  const subjectResolutionStartedAt = timing?.now() ?? 0
+  const subject = await resolveSubjectProfile(supabase, account, requestedProfileId, permission, timing)
+  timing?.mark('subject-resolution', subjectResolutionStartedAt)
 
   // A family account may act on an athlete subject. Check the athlete role only
   // for the account's own subject, after delegated subject resolution has run.
   if (!subject.delegated && !account.roles.includes('athlete')) {
     throw new AccountContextError('Ruolo atleta non abilitato', 403)
   }
+  const athleteProfileStartedAt = timing?.now() ?? 0
   const { data: athleteProfile } = await subject.dataClient
     .from('athlete_profiles')
     .select('profile_id')
     .eq('profile_id', subject.profileId)
     .maybeSingle()
+  timing?.mark('athlete-profile', athleteProfileStartedAt)
+  const activeSeasonStartedAt = timing?.now() ?? 0
   const activeSeason = await resolveActiveSeason(subject.dataClient)
+  timing?.mark('active-season', activeSeasonStartedAt)
   if (!activeSeason) {
     throw new AccountContextError('Nessuna stagione attiva configurata', 403)
   }
+  const seasonMembershipStartedAt = timing?.now() ?? 0
   const { data: seasonMembership } = await subject.dataClient
     .from('season_profiles')
     .select('profile_id')
@@ -158,10 +173,16 @@ export async function requireSubjectAthleteContext(
     .eq('status', 'active')
     .limit(1)
     .maybeSingle()
+  timing?.mark('season-membership', seasonMembershipStartedAt)
 
   if (!athleteProfile || !seasonMembership) {
     throw new AccountContextError('Accesso atleta non abilitato: profilo o iscrizione stagionale attiva mancanti', 403)
   }
+
+  const activeTeamsStartedAt = timing?.now() ?? 0
+  const activeTeamIds = await resolveActiveSeasonTeamIds(subject.dataClient, activeSeason.id)
+  timing?.mark('active-season-teams', activeTeamsStartedAt)
+  timing?.mark('subject-context', subjectContextStartedAt)
 
   return {
     account,
@@ -170,6 +191,6 @@ export async function requireSubjectAthleteContext(
     delegated: subject.delegated,
     permissions: subject.permissions,
     activeSeason,
-    activeTeamIds: await resolveActiveSeasonTeamIds(subject.dataClient, activeSeason.id),
+    activeTeamIds,
   }
 }
