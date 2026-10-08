@@ -24,10 +24,9 @@ describe('BottomNavigation', () => {
   })
   afterEach(() => { delete (globalThis as { fetch?: unknown }).fetch })
 
-  it('refreshes and removes the unread badge after a confirmed read event', async () => {
+  it('updates the unread badge after a confirmed read event', async () => {
     const fetchMock = jest.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadMessageCount: 2 }) } as Response)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ unreadMessageCount: 0 }) } as Response)
     globalThis.fetch = fetchMock
 
     renderWithQueryClient()
@@ -35,13 +34,34 @@ describe('BottomNavigation', () => {
 
     await act(async () => {
       window.dispatchEvent(new CustomEvent(MESSAGE_READ_STATE_CHANGED_EVENT, {
-        detail: { messageId: 'm1', subjectProfileId: null },
+        detail: { messageId: 'm1', subjectProfileId: null, isRead: true, readAt: '2026-10-08T10:01:00.000Z' },
       }))
     })
 
-    await waitFor(() => expect(screen.queryByLabelText('2 messaggi non letti')).toBeNull())
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(screen.getByLabelText('1 messaggi non letti')).toBeTruthy())
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   }, 15_000)
+
+  it('does not update the unread badge for an unconfirmed read event', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ unreadMessageCount: 2 }) } as Response)
+    globalThis.fetch = fetchMock
+
+    renderWithQueryClient()
+    await waitFor(() => expect(screen.getByLabelText('2 messaggi non letti')).toBeTruthy())
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(MESSAGE_READ_STATE_CHANGED_EVENT, {
+        detail: { messageId: 'm1', subjectProfileId: null, isRead: false },
+      }))
+      window.dispatchEvent(new CustomEvent(MESSAGE_READ_STATE_CHANGED_EVENT, {
+        detail: { messageId: 'm2', subjectProfileId: null },
+      }))
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.getByLabelText('2 messaggi non letti')).toBeTruthy()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 
   it('shows only permitted family destinations for the selected athlete', async () => {
     authMock.mockReturnValue({ role: 'family_member', user: { id: 'auth-1' }, account: { authUserId: 'auth-1', ownerProfileId: 'owner-1' } })

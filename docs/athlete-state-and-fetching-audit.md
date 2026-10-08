@@ -774,3 +774,7 @@ I retry espliciti `Riprova` restano invariati e continuano a invocare `refetch()
 Lo stesso comportamento UI-only è stato esteso a Dashboard, Calendario e Campionati. Dashboard e Calendario mantengono il contenuto cached visibile con un banner di dati non aggiornati. Campionati distingue catalogo/girone cached in errore `offline` — pannelli ancora visibili — dall’assenza totale di cache, che mantiene lo stato di errore con retry. Timer di ricalcolo calendario, RSVP, mutation, prefetch convocazioni e retry espliciti non sono stati modificati.
 
 Il banner offline cached è ora il primo elemento della pagina in tutte le sezioni atleta interessate, con titolo, descrizione e `Riprova` coerenti con Profile/Administration. Messages è stato spostato fuori dal pannello lista; Campionati prima dell’header contenutistico.
+
+## BottomNavigation unread event contract — test correction (8 ottobre 2026)
+
+`MessageDetailModal` emette `MESSAGE_READ_STATE_CHANGED_EVENT` con `isRead: true` solo dopo la conferma server della lettura. `useAthleteUnreadMessageCount` ignora correttamente eventi con `isRead` assente o diverso da `true`. Il test `BottomNavigation.test.tsx` è stato corretto per usare la shape confermata e verificare il decremento cache da 2 a 1; è stato aggiunto un test negativo per eventi non confermati. L’idempotenza degli eventi duplicati resta coperta da `cache-synchronization.test.ts`.
