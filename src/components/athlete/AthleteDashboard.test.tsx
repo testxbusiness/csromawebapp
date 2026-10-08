@@ -1,10 +1,11 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import AthleteDashboard, { formatAgendaDateTime, getFeaturedEventState, shouldShowNextChampionshipMatchSummary } from './AthleteDashboard'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 
 jest.mock('@/lib/supabase/client', () => ({ createClient: () => ({}) }))
-jest.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ role: 'family_member', loading: false, profileLoading: false }) }))
+jest.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ role: 'family_member', loading: false, profileLoading: false, user: { id: 'account-1' }, account: { authUserId: 'account-1', ownerProfileId: 'athlete-1' } }) }))
 jest.mock('@/context/TeamContext', () => ({
   useTeamContext: () => ({ selectedTeamId: null, setTeams: jest.fn(), resetTeam: jest.fn() }),
 }))
@@ -23,6 +24,11 @@ jest.mock('@/context/AccessibleProfileContext', () => ({
     },
   })),
 }))
+
+function render(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+}
 
 describe('AthleteDashboard delegated mode', () => {
   afterEach(() => {
@@ -269,8 +275,8 @@ describe('dashboard agenda preview', () => {
     render(<AthleteDashboard user={{ id: 'account-1' }} profile={{ id: 'athlete-1', first_name: 'Luca', last_name: 'Rossi', role: 'athlete' }} />)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Apri dettaglio: Riunione tecnica' })).toBeTruthy())
-    expect(screen.getByText('Oggi · 20:00')).toBeTruthy()
-    expect(screen.getByText('Domani · 20:00')).toBeTruthy()
+    expect(screen.getByText(formatAgendaDateTime(events[1].start_time))).toBeTruthy()
+    expect(screen.getByText(formatAgendaDateTime(events[2].start_time))).toBeTruthy()
     expect(screen.getByText('Cardarelli')).toBeTruthy()
     expect(screen.getByText('Under 17 · Under 15')).toBeTruthy()
     const secondEventRow = screen.getByRole('button', { name: 'Apri dettaglio: Allenamento Under 17 con un titolo molto lungo che non deve rompere la riga' })

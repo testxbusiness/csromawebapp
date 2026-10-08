@@ -1,24 +1,27 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { useQueryClient } from '@tanstack/react-query'
 import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import MessageDetailModal, { type MessageReadState } from '@/components/shared/MessageDetailModal'
-import TeamDetailModal, { TeamDetailData } from '@/components/shared/TeamDetailModal'
+import TeamDetailModal from '@/components/shared/TeamDetailModal'
 import { Alert, EventKindBadge, FeedbackState, ListRow, LoadingState, Panel, StatusBadge } from '@/components/ui'
 import AttendanceControl from './AttendanceControl'
 import { MessagePreviewRow } from './MessagePreviewRow'
 import { MembershipRow } from './MembershipRow'
-import { hasDashboardData, isDashboardDataCurrent, type DashboardStatus } from '@/lib/athlete/dashboard-state'
+import { hasDashboardData } from '@/lib/athlete/dashboard-state'
 import { appendSubjectProfile, SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { useAuth } from '@/hooks/useAuth'
 import type { AttendanceAvailabilityContract } from '@/types/attendance'
 import type { AthleteDashboardAdministrativeAlert } from '@/types/athlete-dashboard'
-import { runClientRefresh } from '@/lib/client-refresh-coordinator'
+import { useAthleteDashboardAlertsQuery, useAthleteDashboardQuery } from '@/lib/athlete/dashboard'
+import { useAthleteMessageDetailQuery } from '@/lib/athlete/messages'
+import { useAthleteTeamDetailQuery } from '@/lib/athlete/team-detail'
+import { athleteKeys } from '@/lib/query-keys'
 
 interface User {
   id: string
@@ -204,57 +207,48 @@ function featuredEventStateLabel(state: FeaturedEventState) {
   }
 }
 
+const EMPTY_DASHBOARD_ITEMS: unknown[] = []
+
 export default function AthleteDashboard({ user, profile, delegatedView = false }: AthleteDashboardProps) {
   const { selectedProfileId, selectedProfile } = useAccessibleProfiles()
-  const { selectedTeamId: activeTeamId, setTeams, resetTeam } = useTeamContext()
-  const { role: accountRole, loading: authLoading, profileLoading } = useAuth()
-  const [teamMemberships, setTeamMemberships] = useState<TeamMember[]>([])
-  const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([])
-  const [unreadMessages, setUnreadMessages] = useState<Message[]>([])
-  const [unreadMessageCount, setUnreadMessageCount] = useState<number | null>(null)
-  const [administrativeAlerts, setAdministrativeAlerts] = useState<AthleteDashboardAdministrativeAlert[]>([])
-  const [nextChampionshipMatch, setNextChampionshipMatch] = useState<ChampionshipMatch | null>(null)
-  const [dashboardStatus, setDashboardStatus] = useState<DashboardStatus>('loading')
-  const [dashboardError, setDashboardError] = useState<string | null>(null)
-  const [dataSubjectKey, setDataSubjectKey] = useState<string | null>(null)
-  const [isOffline, setIsOffline] = useState(false)
-  const [activeSeason, setActiveSeason] = useState<any>(null)
+  const { selectedTeamId: activeTeamId, setTeams } = useTeamContext()
+  const { role: accountRole } = useAuth()
+  const queryClient = useQueryClient()
+  const dashboardQuery = useAthleteDashboardQuery()
+  const alertsQuery = useAthleteDashboardAlertsQuery()
+  const dashboard = dashboardQuery.data
+  const teamMemberships = (dashboard?.teamMemberships ?? []) as TeamMember[]
+  const upcomingEvents = (dashboard?.upcomingEvents ?? EMPTY_DASHBOARD_ITEMS) as Event[]
+  const unreadMessages = (dashboard?.unreadMessages ?? []) as Message[]
+  const unreadMessageCount = typeof dashboard?.unreadMessageCount === 'number' ? dashboard.unreadMessageCount : null
+  const administrativeAlerts = alertsQuery.data ?? []
+  const nextChampionshipMatch = (dashboard?.nextChampionshipMatch ?? null) as ChampionshipMatch | null
+  const activeSeason = dashboard?.activeSeason as { name?: string } | null | undefined
+  const dashboardStatus = dashboardQuery.isPending ? 'loading' : dashboardQuery.isError && !dashboard ? 'error' : dashboardQuery.isFetching ? 'refreshing' : 'success'
+  const isOffline = dashboardQuery.error?.message === 'offline'
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
-  const [messageDetail, setMessageDetail] = useState<any>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
-  const [teamDetailData, setTeamDetailData] = useState<TeamDetailData | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
-  const supabase = useMemo(() => createClient(), [])
-  const dashboardRequestRef = useRef<AbortController | null>(null)
   const attendanceRequestRef = useRef<AbortController | null>(null)
-  const lastSubjectKeyRef = useRef<string | null>(null)
-  const hasLoadedDashboardRef = useRef(false)
   const subjectKey = selectedProfileId ?? profile?.id ?? null
+  const lastSubjectKeyRef = useRef<string | null>(subjectKey)
+  const [subjectContextKey, setSubjectContextKey] = useState(subjectKey)
+  const messageDetailQuery = useAthleteMessageDetailQuery(selectedMessage?.id ?? null)
+  const teamDetailQuery = useAthleteTeamDetailQuery(selectedTeamId)
+  const messageDetail = messageDetailQuery.data?.messages?.[0] ?? null
+  const teamDetailData = teamDetailQuery.data ?? null
 
   useEffect(() => {
     const handleSubjectChange = (event: globalThis.Event) => {
       const nextSubject = (event as CustomEvent<SubjectContextChangedDetail>).detail?.subjectProfileId ?? profile?.id ?? null
       lastSubjectKeyRef.current = nextSubject
-      dashboardRequestRef.current?.abort()
+      setSubjectContextKey(nextSubject)
       attendanceRequestRef.current?.abort()
-      hasLoadedDashboardRef.current = false
-      setDataSubjectKey(null)
-      setActiveSeason(null)
-      setTeamMemberships([])
-      setUpcomingEvents([])
-      setUnreadMessages([])
-      setUnreadMessageCount(null)
-      setAdministrativeAlerts([])
-      setNextChampionshipMatch(null)
       setSelectedEvent(null)
       setSelectedMessage(null)
-      setMessageDetail(null)
-      setTeamDetailData(null)
       setSelectedTeamId(null)
-      setDashboardError(null)
       setAccessDenied(false)
-      setDashboardStatus('loading')
     }
     window.addEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
     return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
@@ -279,14 +273,19 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       if (controller.signal.aborted || lastSubjectKeyRef.current !== requestSubjectKey) return
 
       const respondedAt = new Date().toISOString()
-      setSelectedEvent((current) => current?.id === eventId ? {
-        ...current,
-        my_attendance: { status, responded_at: respondedAt },
-      } : current)
-      setUpcomingEvents((current) => current.map((event) => event.id === eventId
-        ? { ...event, my_attendance: { status, responded_at: respondedAt } }
-        : event
-      ))
+      const key = dashboardQuery.accountId && subjectKey
+        ? athleteKeys.dashboard(dashboardQuery.accountId, subjectKey)
+        : null
+      if (key) {
+        queryClient.setQueryData(key, (current: typeof dashboard | undefined) => current ? {
+          ...current,
+          upcomingEvents: current.upcomingEvents.map((event) => (
+            event && typeof event === 'object' && 'id' in event && event.id === eventId
+              ? { ...event, my_attendance: { status, responded_at: respondedAt } }
+              : event
+          )),
+        } : current)
+      }
     } catch (error) {
       if (controller.signal.aborted) return
       throw error
@@ -336,519 +335,48 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         },
       }
     }
+    const key = dashboardQuery.accountId && subjectKey
+      ? athleteKeys.dashboard(dashboardQuery.accountId, subjectKey)
+      : null
+    if (key) {
+      queryClient.setQueryData(key, (current: typeof dashboard | undefined) => current ? {
+        ...current,
+        upcomingEvents: current.upcomingEvents.map((event) => updateEvent(event as Event)),
+      } : current)
+    }
     setSelectedEvent((current) => current ? updateEvent(current) : current)
-    setUpcomingEvents((current) => current.map(updateEvent))
   }
-
-  // Enrich selected message on open
-  useEffect(() => {
-    const controller = new AbortController()
-    const loadDetail = async () => {
-      if (!selectedMessage) { return }
-      try {
-        const requestSubjectKey = subjectKey
-        const res = await fetch(appendSubjectProfile(`/api/athlete/messages?view=full&id=${selectedMessage.id}`, selectedProfileId), { signal: controller.signal })
-        const json = await res.json()
-        if (!controller.signal.aborted && lastSubjectKeyRef.current === requestSubjectKey && res.ok && json.messages && json.messages.length) {
-          setMessageDetail(json.messages[0])
-        }
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) return
-      }
-    }
-    void loadDetail()
-    return () => controller.abort()
-  }, [selectedMessage, selectedProfileId, subjectKey])
-
-  const nextRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const loadAthleteData = useCallback(async () => {
-    if (!user?.id || !profile?.id || !accountRole) {
-      dashboardRequestRef.current?.abort()
-      setDashboardStatus('loading')
-      return
-    }
-
-    if (authLoading || profileLoading) {
-      setDashboardStatus('loading')
-      return
-    }
-
-    const subjectChanged = lastSubjectKeyRef.current !== subjectKey
-    if (subjectChanged) {
-      lastSubjectKeyRef.current = subjectKey
-      hasLoadedDashboardRef.current = false
-      setDataSubjectKey(null)
-      setActiveSeason(null)
-      setTeamMemberships([])
-      setUpcomingEvents([])
-      setNextChampionshipMatch(null)
-      setUnreadMessages([])
-      setUnreadMessageCount(null)
-      setAdministrativeAlerts([])
-      resetTeam()
-    }
-
-    const delegatedPermissions = selectedProfile?.relationship.permissions
-    const canAccessDelegatedDashboard = Boolean(
-      delegatedPermissions?.view_schedule ||
-      delegatedPermissions?.view_payments ||
-      delegatedPermissions?.view_medical_status ||
-      delegatedPermissions?.receive_messages
-    )
-    if (accountRole === 'family_member' && (!selectedProfile || !canAccessDelegatedDashboard)) {
-      setAccessDenied(true)
-      setDashboardStatus('denied')
-      return
-    }
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setIsOffline(true)
-      setDashboardStatus('offline')
-      return
-    }
-
-    setDashboardStatus(hasLoadedDashboardRef.current && !subjectChanged ? 'refreshing' : 'loading')
-    setDashboardError(null)
-    setAccessDenied(false)
-    dashboardRequestRef.current?.abort()
-    const controller = new AbortController()
-    dashboardRequestRef.current = controller
-
-    try {
-      const dashboardResponsePromise = fetch(appendSubjectProfile('/api/athlete/dashboard', selectedProfileId), {
-        signal: controller.signal,
-      })
-      const alertsResponsePromise = fetch(appendSubjectProfile('/api/athlete/dashboard/alerts', selectedProfileId), {
-        signal: controller.signal,
-      }).catch((error) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return null
-        throw error
-      })
-      const response = await dashboardResponsePromise
-      if (!response.ok) {
-        if (response.status === 403) {
-          setAccessDenied(true)
-          setDashboardStatus('denied')
-          return
-        }
-        if (response.status === 401) {
-          setDashboardError('La sessione non è più valida. Accedi di nuovo per continuare.')
-        } else {
-          setDashboardError('Non è stato possibile caricare i dati della dashboard.')
-          console.error('Error loading athlete dashboard:', response.statusText)
-        }
-        setDashboardStatus('error')
-        return
-      }
-
-      const result = await response.json()
-      if (controller.signal.aborted || lastSubjectKeyRef.current !== subjectKey) return
-      setActiveSeason(result.activeSeason)
-      setTeamMemberships(result.teamMemberships || [])
-      setUpcomingEvents(result.upcomingEvents || [])
-      setNextChampionshipMatch(result.nextChampionshipMatch || null)
-      setUnreadMessages(result.unreadMessages || [])
-      setUnreadMessageCount(typeof result.unreadMessageCount === 'number' ? result.unreadMessageCount : null)
-      setAdministrativeAlerts(Array.isArray(result.administrativeAlerts) ? result.administrativeAlerts.slice(0, 2) : [])
-      setTeams((result.teams || []).map((team: { id: string; name: string; code?: string; activity?: { name?: string } | null }) => ({
-        id: team.id,
-        name: team.name,
-        code: team.code,
-        activity: team.activity?.name ?? null,
-      })))
-      setDataSubjectKey(subjectKey)
-      hasLoadedDashboardRef.current = true
-      setIsOffline(false)
-      setDashboardStatus('success')
-
-      void alertsResponsePromise
-        .then(async (alertsResponse) => {
-          if (!alertsResponse?.ok) return
-          const alertsResult = await alertsResponse.json().catch(() => null)
-          if (controller.signal.aborted || lastSubjectKeyRef.current !== subjectKey) return
-          setAdministrativeAlerts(Array.isArray(alertsResult?.administrativeAlerts)
-            ? alertsResult.administrativeAlerts.slice(0, 2)
-            : [])
-        })
-        .catch((error) => {
-          if (error instanceof DOMException && error.name === 'AbortError') return
-          console.warn('Unable to load athlete dashboard administrative alerts:', error)
-        })
-    } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return
-      console.error('Error loading athlete data:', e)
-      setDashboardError('Controlla la connessione e riprova.')
-      setDashboardStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error')
-      setIsOffline(typeof navigator !== 'undefined' && !navigator.onLine)
-    } finally {
-      if (controller.signal.aborted) return
-    }
-  }, [accountRole, authLoading, profile?.id, profileLoading, resetTeam, selectedProfile, selectedProfileId, setTeams, subjectKey, user?.id])
-
-  useEffect(() => {
-    return () => {
-      dashboardRequestRef.current?.abort()
-    }
-  }, [])
-
-  /* Legacy per-widget loaders were superseded by /api/athlete/dashboard. */
-  /*
-  const loadActiveSeason = useCallback(async () => {
-    const { data } = await supabase
-      .from('seasons')
-      .select('*')
-      .eq('is_active', true)
-      .single()
-    if (data) setActiveSeason(data)
-  }, [supabase])
-
-  const loadTeamMemberships = useCallback(async () => {
-    // 1) Base memberships (no joins) — avoids PostgREST relationship cache errors
-    const { data: baseMemberships, error: tmError } = await supabase
-      .from('team_members')
-      .select('id, team_id, jersey_number')
-      .eq('profile_id', profile.id)
-
-    if (tmError) {
-      console.error('Error loading team memberships:', tmError)
-      setTeamMemberships([])
-      return [] as TeamMember[]
-    }
-
-    const teamIds = [...new Set((baseMemberships || []).map((tm: any) => tm.team_id).filter(Boolean))]
-
-    const athleteProfile = profile?.athlete_profile
-
-    // 3) Teams details
-    let teams: any[] = []
-    if (teamIds.length > 0) {
-      const { data: teamsData } = await supabase
-        .from('teams')
-        .select('id, name, code, activity_id')
-        .in('id', teamIds)
-      teams = teamsData || []
-    }
-
-    // 4) Activities names
-    const activityIds = [...new Set(teams.map(t => t.activity_id).filter(Boolean))]
-    let activities: any[] = []
-    if (activityIds.length > 0) {
-      const { data: acts } = await supabase
-        .from('activities')
-        .select('id, name')
-        .in('id', activityIds)
-      activities = acts || []
-    }
-
-    // 5) Compose memberships with team + activity and profile extras
-    const mapped: TeamMember[] = (baseMemberships || []).map((tm: any) => {
-      const team = teams.find(t => t.id === tm.team_id)
-      const activity = team ? activities.find(a => a.id === team.activity_id) : null
-      return {
-        id: tm.id,
-        jersey_number: tm.jersey_number ?? undefined,
-        membership_number: athleteProfile?.membership_number ?? undefined,
-        medical_certificate_expiry: athleteProfile?.medical_certificate_expiry ?? undefined,
-        team: team
-          ? {
-              id: team.id,
-              name: team.name,
-              code: team.code,
-              activity: { name: activity?.name || 'N/A' },
-            }
-          : {
-              id: 'unknown',
-              name: 'N/D',
-              code: 'N/D',
-              activity: { name: 'N/D' },
-            },
-      }
-    })
-
-    setTeamMemberships(mapped)
-    return mapped
-  }, [profile?.athlete_profile, profile.id, supabase])
-
-  const loadUpcomingEvents = useCallback(async (teamIds: string[]) => {
-    if (!teamIds || teamIds.length === 0) return
-
-    // Next 30 days window
-    const nextMonth = new Date()
-    nextMonth.setDate(nextMonth.getDate() + 30)
-
-    // Step 1: relations
-    const { data: relations, error: relErr } = await supabase
-      .from('event_teams')
-      .select('event_id, created_at')
-      .in('team_id', teamIds)
-      .order('created_at', { ascending: false })
-
-    if (relErr) {
-      console.error('Error loading event relations (athlete):', relErr)
-      setUpcomingEvents([])
-      return
-    }
-
-    const eventIds = [...new Set((relations || []).map(r => r.event_id))]
-    if (eventIds.length === 0) {
-      setUpcomingEvents([])
-      return
-    }
-
-    // Step 2: events by ID
-    const { data: events, error: evErr } = await supabase
-      .from('events')
-      .select('id, title, start_time:start_date, end_time:end_date, location, description')
-      .in('id', eventIds)
-      .gte('start_date', new Date().toISOString())
-      .lte('start_date', nextMonth.toISOString())
-      .order('start_date', { ascending: true })
-      .limit(10)
-
-    if (evErr) {
-      console.error('Error loading events (athlete):', evErr)
-      setUpcomingEvents([])
-      return
-    }
-
-    setUpcomingEvents(events || [])
-  }, [supabase])
-
-  const loadUnreadMessages = useCallback(async (teamIds: string[]) => {
-    if (!teamIds || teamIds.length === 0) return
-
-    const orClauses: string[] = []
-    orClauses.push(`profile_id.eq.${profile.id}`)
-    if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
-
-    const { data, error } = await supabase
-      .from('message_recipients')
-      .select(`
-        is_read,
-        message:messages(
-          id,
-          subject,
-          content,
-          created_at,
-          created_by,
-          created_by_profile:profiles!messages_created_by_fkey(first_name, last_name)
-        )
-      `)
-      .eq('is_read', false)
-      .or(orClauses.join(','))
-      .order('created_at', { ascending: false })
-      .limit(5)
-
-    if (error) {
-      console.error('Error loading unread messages:', error)
-      setUnreadMessages([])
-      return
-    }
-
-    if (data) {
-      const mapped = data
-        .filter((mr:any) => mr.message) // safeguard
-        .map((mr:any) => {
-          const msg = mr.message
-          const from = msg.created_by_profile
-            ? `${msg.created_by_profile.first_name || ''} ${msg.created_by_profile.last_name || ''}`.trim()
-            : undefined
-          return {
-            ...msg,
-            is_read: mr.is_read,
-            from
-          }
-        })
-      // Deduplicate by message id (avoid double counting when both team and personal recipients exist)
-      const uniq = Array.from(new Map(mapped.map((m:any) => [m.id, m])).values())
-      setUnreadMessages(uniq)
-    }
-  }, [profile.id, supabase])
-
-  const loadFeeInstallments = useCallback(async () => {
-    const { data } = await supabase
-      .from('fee_installments')
-      .select(`
-        id,
-        installment_number,
-        due_date,
-        amount,
-        status,
-        membership_fee:membership_fees(
-          name,
-          team:teams(name)
-        )
-      `)
-      .eq('profile_id', profile.id)
-      .order('due_date', { ascending: true })
-      .limit(5)
-
-    if (data) setFeeInstallments(data as unknown as FeeInstallment[])
-  }, [profile.id, supabase])
-
-  */
-
-  const loadTeamDetail = useCallback(async (teamId: string) => {
-    try {
-      // 1. Team basic info
-      const { data: teamData } = await supabase
-        .from('teams')
-        .select('name, code, activity_id, activities(name)')
-        .eq('id', teamId)
-        .single()
-
-      if (!teamData) return
-
-      // 2. Training schedules with gyms
-      const { data: schedules } = await supabase
-        .from('team_training_schedules')
-        .select('day_of_week, start_time, end_time, gym_id, gyms(name, city)')
-        .eq('team_id', teamId)
-        .eq('is_active', true)
-        .order('day_of_week, start_time')
-
-      // 3. Coaches (without join)
-      const { data: coachesData, error: coachesError } = await supabase
-        .from('team_coaches')
-        .select('coach_id, role')
-        .eq('team_id', teamId)
-
-      console.log('Athlete loading coaches:', { coachesData, coachesError, teamId })
-
-      // 4. Athletes (without join)
-      const { data: membersData } = await supabase
-        .from('team_members')
-        .select('profile_id, jersey_number')
-        .eq('team_id', teamId)
-        .order('jersey_number')
-
-      // 5. Load profiles separately to avoid RLS recursion
-      const coachIds = coachesData?.map(c => c.coach_id).filter(Boolean) || []
-      const memberIds = membersData?.map(m => m.profile_id).filter(Boolean) || []
-      const allProfileIds = [...coachIds, ...memberIds]
-
-      let profilesMap = new Map<string, any>()
-      if (allProfileIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, first_name, last_name')
-          .in('id', allProfileIds)
-
-        console.log('Athlete loading profiles:', { allProfileIds, profilesData, profilesError })
-
-        profilesData?.forEach(p => profilesMap.set(p.id, p))
-      }
-
-      // Build TeamDetailData
-      const detail: TeamDetailData = {
-        name: teamData.name,
-        code: teamData.code,
-        activity: firstRelation(teamData.activities) ? { name: firstRelation(teamData.activities)!.name } : undefined,
-        training_schedules: schedules?.map(s => ({
-          day_of_week: s.day_of_week,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          gym: {
-            name: firstRelation(s.gyms)?.name || 'N/D',
-            city: firstRelation(s.gyms)?.city
-          }
-        })) || [],
-        coaches: coachesData?.map(c => {
-          const profile = profilesMap.get(c.coach_id)
-          return {
-            id: c.coach_id,
-            first_name: profile?.first_name || '',
-            last_name: profile?.last_name || '',
-            role: c.role
-          }
-        }) || [],
-        athletes: membersData?.map(m => {
-          const profile = profilesMap.get(m.profile_id)
-          return {
-            id: m.profile_id,
-            first_name: profile?.first_name || '',
-            last_name: profile?.last_name || '',
-            jersey_number: m.jersey_number
-          }
-        }) || []
-      }
-
-      setTeamDetailData(detail)
-    } catch (error) {
-      console.error('Error loading team details:', error)
-      setTeamDetailData(null)
-    }
-  }, [supabase])
-
-  // Effects that depend on dashboard callbacks are declared after them so the
-  // callbacks are initialized before React evaluates their dependency arrays.
-  useEffect(() => {
-    if (selectedTeamId) {
-      void loadTeamDetail(selectedTeamId)
-    } else {
-      setTeamDetailData(null)
-    }
-  }, [loadTeamDetail, selectedTeamId])
-
-  useEffect(() => {
-    void loadAthleteData()
-  }, [loadAthleteData])
-
-  useEffect(() => {
-    const refreshKey = `athlete-dashboard:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`
-    const refresh = () => runClientRefresh(refreshKey, loadAthleteData)
-    const onOffline = () => {
-      setIsOffline(true)
-      setDashboardStatus('offline')
-    }
-    const onOnline = () => {
-      setIsOffline(false)
-      void refresh()
-    }
-    window.addEventListener('offline', onOffline)
-    window.addEventListener('online', onOnline)
-    return () => {
-      window.removeEventListener('offline', onOffline)
-      window.removeEventListener('online', onOnline)
-    }
-  }, [loadAthleteData, selectedProfileId, user?.id])
-
-  // Ricarica quando la tab torna visibile; il server resta la fonte dell'evento attivo.
-  useEffect(() => {
-    const refreshKey = `athlete-dashboard:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`
-    const refresh = () => runClientRefresh(refreshKey, loadAthleteData)
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      void refresh()
-    }
-
-    window.addEventListener('visibilitychange', onVisible)
-    return () => {
-      window.removeEventListener('visibilitychange', onVisible)
-    }
-  }, [loadAthleteData, selectedProfileId, user?.id])
-
-  useEffect(() => {
-    if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
-    const nextAt = upcomingEvents
-      .map((event) => event.attendance_availability?.next_recalculation_at)
-      .filter((value): value is string => Boolean(value))
-      .map((value) => new Date(value).getTime())
-      .filter((value) => Number.isFinite(value) && value > Date.now())
-      .sort((a, b) => a - b)[0]
-    if (!nextAt) return
-    nextRefreshTimerRef.current = setTimeout(() => void loadAthleteData(), Math.max(0, nextAt - Date.now() + 25))
-    return () => {
-      if (nextRefreshTimerRef.current) clearTimeout(nextRefreshTimerRef.current)
-      nextRefreshTimerRef.current = null
-    }
-  }, [loadAthleteData, upcomingEvents])
 
   const isDelegatedProfile = (accountRole === 'family_member' || delegatedView) && Boolean(selectedProfileId)
   const isFamilyDashboard = delegatedView || isDelegatedProfile
   const permissions = isDelegatedProfile ? selectedProfile?.relationship.permissions : null
   const canViewSchedule = !isDelegatedProfile || permissions?.view_schedule === true
   const canReceiveMessages = !isDelegatedProfile || permissions?.receive_messages === true
+  const subjectContextIsCurrent = subjectContextKey === subjectKey
+
+  useEffect(() => {
+    if (!dashboard?.teams) return
+    setTeams(dashboard.teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      code: team.code,
+      activity: team.activity?.name ?? null,
+    })))
+  }, [dashboard?.teams, setTeams])
+
+  useEffect(() => {
+    const nextAt = upcomingEvents
+      .map((event) => event.attendance_availability?.next_recalculation_at)
+      .filter((value): value is string => Boolean(value))
+      .map((value) => new Date(value).getTime())
+      .filter((value) => Number.isFinite(value) && value > Date.now())
+      .sort((a, b) => a - b)[0]
+    if (!nextAt || !dashboardQuery.accountId || !subjectKey) return
+    const timer = setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: athleteKeys.dashboard(dashboardQuery.accountId!, subjectKey) })
+    }, Math.max(0, nextAt - Date.now() + 25))
+    return () => clearTimeout(timer)
+  }, [dashboardQuery.accountId, queryClient, subjectKey, upcomingEvents])
 
   useEffect(() => {
     if (!canViewSchedule) {
@@ -857,7 +385,6 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     }
     if (!canReceiveMessages) {
       setSelectedMessage(null)
-      setMessageDetail(null)
     }
   }, [canReceiveMessages, canViewSchedule])
 
@@ -868,7 +395,11 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     messageCount: unreadMessages.length,
     hasNextMatch: Boolean(nextChampionshipMatch),
   })
-  const subjectDataIsCurrent = isDashboardDataCurrent(dataSubjectKey, subjectKey)
+  const isDenied = accessDenied || dashboardQuery.error?.message === 'denied'
+  const isOfflineFromQuery = dashboardQuery.error?.message === 'offline'
+  const dashboardErrorMessage = dashboardQuery.error?.message === 'session_expired'
+    ? 'La sessione non è più valida. Accedi di nuovo per continuare.'
+    : 'Non è stato possibile caricare i dati della dashboard.'
   const selectedTeamMatches = (teamIds?: string[]) => !activeTeamId || Boolean(teamIds?.includes(activeTeamId))
   const visibleEvents = upcomingEvents.filter((event) => selectedTeamMatches(event.team_ids || event.teams?.map((team) => team.id)))
   const visibleMessages = unreadMessages.filter((message) => selectedTeamMatches(message.team_ids || message.teams?.map((team) => team.id)))
@@ -877,26 +408,26 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const showNextChampionshipMatch = shouldShowNextChampionshipMatchSummary(visibleEvents[0], visibleMatch)
   const messageTitleCount = activeTeamId ? visibleMessages.length : unreadMessageCount ?? unreadMessages.length
 
-  if (accessDenied || dashboardStatus === 'denied') return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
-  if (dashboardStatus === 'offline' && !dashboardHasData) {
+  if (isDenied) return <DelegatedAccessDenied section="la dashboard" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
+  if ((isOffline || isOfflineFromQuery) && !dashboardHasData) {
     return <FeedbackState
       variant="offline"
       title="Dashboard non disponibile offline"
       description="Riconnettiti a internet per caricare i dati della dashboard."
       className="mx-auto max-w-2xl px-5 py-12 text-center"
-      action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void loadAthleteData()}>Riprova</button>}
+      action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void dashboardQuery.refetch()}>Riprova</button>}
     />
   }
-  if (!subjectDataIsCurrent || dashboardStatus === 'loading') {
+  if (!subjectContextIsCurrent || dashboardStatus === 'loading') {
     return <LoadingState label="Un attimo, si scende in campo…" />
   }
   if (dashboardStatus === 'error') {
     return <FeedbackState
       variant="error"
       title="Dashboard non disponibile"
-      description={dashboardError || 'Non è stato possibile caricare i dati. Riprova tra poco.'}
+      description={dashboardErrorMessage}
       className="mx-auto max-w-2xl px-5 py-12 text-center"
-      action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void loadAthleteData()}>Riprova</button>}
+      action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void dashboardQuery.refetch()}>Riprova</button>}
     />
   }
 
@@ -906,7 +437,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       data-dashboard-context={isFamilyDashboard ? 'family' : 'personal'}
     >
       {dashboardStatus === 'refreshing' && <FeedbackState variant="refreshing" description="Stai visualizzando i dati già caricati mentre controlliamo gli aggiornamenti." />}
-      {isOffline && <FeedbackState
+      {(isOffline || isOfflineFromQuery) && <FeedbackState
         variant="offline"
         title={dashboardHasData ? 'Connessione assente' : 'Dashboard non disponibile offline'}
         description={dashboardHasData ? 'Stai visualizzando gli ultimi dati caricati per questo profilo.' : 'Riconnettiti a internet per caricare i dati della dashboard.'}
@@ -1104,7 +635,21 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           subjectProfileId={selectedProfileId}
           markAsRead
           readState={selectedMessage.read_state ?? { is_read: selectedMessage.is_read, read_at: null }}
-          onReadStateChange={(state) => setUnreadMessages((current) => current.map((message) => message.id === selectedMessage.id ? { ...message, is_read: state.is_read, read_state: state } : message))}
+          onReadStateChange={(state) => {
+            if (!dashboardQuery.accountId || !subjectKey) return
+            const key = athleteKeys.dashboard(dashboardQuery.accountId, subjectKey)
+            queryClient.setQueryData(key, (current: typeof dashboard | undefined) => {
+              if (!current) return current
+              const wasUnread = current.unreadMessages.some((message) => message && typeof message === 'object' && 'id' in message && message.id === selectedMessage.id && 'is_read' in message && message.is_read === false)
+              return {
+                ...current,
+                unreadMessages: current.unreadMessages.map((message) => message && typeof message === 'object' && 'id' in message && message.id === selectedMessage.id
+                  ? { ...message, is_read: state.is_read, read_state: state }
+                  : message),
+                unreadMessageCount: state.is_read && wasUnread ? Math.max(0, current.unreadMessageCount - 1) : current.unreadMessageCount,
+              }
+            })
+          }}
           data={{
             subject: messageDetail?.subject || selectedMessage.subject,
             content: messageDetail?.content || selectedMessage.content,

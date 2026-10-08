@@ -6,6 +6,12 @@ export const athleteKeys = {
     [...athleteKeys.all, accountId, subjectProfileId, 'administration'] as const,
   calendar: (accountId: string, subjectProfileId: string) =>
     [...athleteKeys.all, accountId, subjectProfileId, 'calendar'] as const,
+  dashboard: (accountId: string, subjectProfileId: string) =>
+    [...athleteKeys.all, accountId, subjectProfileId, 'dashboard'] as const,
+  dashboardAlerts: (accountId: string, subjectProfileId: string) =>
+    [...athleteKeys.all, accountId, subjectProfileId, 'dashboard-alerts'] as const,
+  teamDetail: (accountId: string, subjectProfileId: string, teamId: string) =>
+    [...athleteKeys.all, accountId, subjectProfileId, 'team-detail', teamId] as const,
   messages: {
     all: (accountId: string, subjectProfileId: string) =>
       [...athleteKeys.all, accountId, subjectProfileId, 'messages'] as const,
