@@ -286,7 +286,7 @@ export default function AthleteCalendarManager() {
 
   return (
     <>
-      {isOffline ? <OfflineState title={calendarData ? 'Calendario non aggiornato' : 'Calendario non disponibile offline'} description={calendarData ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I dati del calendario richiedono una connessione. Quando torni online, riprova.'} action={<button type="button" className="cs-btn cs-btn--outline" onClick={retryLoad}>Riprova</button>} /> : null}
+      {isOffline ? <OfflineState title={calendarData ? 'Calendario non aggiornato' : 'Calendario non disponibile offline'} description={calendarData ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I dati del calendario richiedono una connessione. Quando torni online, riprova.'} action={<button type="button" className="cs-btn cs-btn--outline" onClick={retryLoad}>Riprova</button>} className="py-6" /> : null}
       <div className="cs-card cs-card--primary cs-calendar-shell">
         <div className="cs-calendar-header">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>

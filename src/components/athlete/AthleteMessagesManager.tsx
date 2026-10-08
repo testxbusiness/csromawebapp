@@ -136,8 +136,8 @@ export default function AthleteMessagesManager() {
     setSelectedMessage((current) => current ? { ...current, is_read: state.is_read, read_state: state } : current)
   }, [account?.authUserId, account?.ownerProfileId, queryClient, selectedMessageId, selectedProfileId])
 
-  const retryAction = <button type="button" className="cs-btn cs-btn--primary" onClick={() => void messagesQuery.refetch()}>Riprova</button>
-  const offlineBanner = offline ? <OfflineState title={messagesQuery.data ? 'Messaggi non aggiornati' : 'Messaggi non disponibili offline'} description={messagesQuery.data ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I messaggi richiedono una connessione. Quando torni online, riprova.'} action={retryAction} className="rounded-none border-0" /> : null
+  const retryAction = <button type="button" className="cs-btn cs-btn--outline" onClick={() => void messagesQuery.refetch()}>Riprova</button>
+  const offlineBanner = offline ? <OfflineState title={messagesQuery.data ? 'Messaggi non aggiornati' : 'Messaggi non disponibili offline'} description={messagesQuery.data ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I messaggi richiedono una connessione. Quando torni online, riprova.'} action={retryAction} className="py-6" /> : null
 
   if (!hasValidAuthContext && !authLoading && !profileLoading) return null
   if (initialLoading && !messagesQuery.data) return <LoadingState label="Caricamento messaggi..." />

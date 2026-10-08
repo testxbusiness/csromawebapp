@@ -100,7 +100,7 @@ describe('AthleteMessagesManager load states', () => {
     renderManager()
 
     await waitFor(() => expect(screen.getByText('Messaggi non disponibili offline')).toBeTruthy())
-    expect(screen.getByRole('button', { name: 'Riprova' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Riprova' })).toHaveClass('cs-btn--outline')
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
@@ -130,6 +130,7 @@ describe('AthleteMessagesManager load states', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
     window.dispatchEvent(new Event('offline'))
     await waitFor(() => expect(screen.getByText('Messaggi non aggiornati')).toBeTruthy())
+    expect(screen.getByRole('button', { name: 'Riprova' })).toHaveClass('cs-btn--outline')
     expect(screen.getByText('Allenamento')).toBeTruthy()
 
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
