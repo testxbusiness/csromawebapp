@@ -39,10 +39,7 @@ export default function AthleteProfileManager() {
 
   useEffect(() => {
     const handleOffline = () => setOffline(true)
-    const handleOnline = () => {
-      setOffline(false)
-      void refetch()
-    }
+    const handleOnline = () => setOffline(false)
     window.addEventListener('offline', handleOffline)
     window.addEventListener('online', handleOnline)
     return () => {

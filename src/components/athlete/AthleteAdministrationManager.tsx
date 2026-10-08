@@ -46,7 +46,7 @@ export default function AthleteAdministrationManager() {
 
   useEffect(() => {
     const handleOffline = () => setBrowserOffline(true)
-    const handleOnline = () => { setBrowserOffline(false); void refetch() }
+    const handleOnline = () => setBrowserOffline(false)
     window.addEventListener('offline', handleOffline)
     window.addEventListener('online', handleOnline)
     return () => { window.removeEventListener('offline', handleOffline); window.removeEventListener('online', handleOnline) }

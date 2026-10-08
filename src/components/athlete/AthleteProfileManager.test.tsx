@@ -125,7 +125,7 @@ describe('AthleteProfileManager', () => {
     expect(subscribeMock).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps the loaded profile visible offline and refreshes after reconnecting', async () => {
+  it('keeps the loaded profile visible offline without manually refetching after reconnecting', async () => {
     renderManager()
     await waitFor(() => expect(screen.getByText('Identità sportiva')).toBeTruthy())
 
@@ -137,7 +137,24 @@ describe('AthleteProfileManager', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
     fireEvent(window, new Event('online'))
     await waitFor(() => expect(screen.queryByText('Profilo non aggiornato')).toBeNull())
-    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not manually refetch cached profile on reconnect', async () => {
+    const queryClient = createQueryClient()
+    queryClient.setQueryData(athleteKeys.profile('auth-1', 'profile-1'), data)
+    renderManager(queryClient)
+
+    expect(screen.getByText('Identità sportiva')).toBeTruthy()
+    expect(global.fetch).not.toHaveBeenCalled()
+
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+    fireEvent(window, new Event('offline'))
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
+    fireEvent(window, new Event('online'))
+
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(screen.getByText('Identità sportiva')).toBeTruthy()
   })
 
   it('renders a fresh cached profile immediately after remount without fetching again', async () => {

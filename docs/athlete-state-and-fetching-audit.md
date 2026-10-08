@@ -760,3 +760,9 @@ Verificati:
 - `npm run lint` da eseguire come check finale del goal.
 
 Rischio residuo: resta raccomandata una verifica manuale autenticata su staging con self, Child A, Child B e un team non appartenente al subject, perché i test repository non emulano una sessione Supabase/RLS reale. La correzione non modifica policy o dati Supabase.
+
+## Cleanup reconnect legacy — Administration e Profile (8 ottobre 2026)
+
+In `AthleteAdministrationManager` e `AthleteProfileManager` i listener `offline`/`online` restano necessari esclusivamente per lo stato UI locale: mostrano o nascondono il banner offline senza assumere ownership del server state. È stato rimosso il `refetch()` automatico dall'evento `online`, perché il reconnect viene già gestito da TanStack Query tramite `refetchOnReconnect`.
+
+I retry espliciti `Riprova` restano invariati e continuano a invocare `refetch()` direttamente. Il lifecycle push/device del Profile — rilevamento supporto, permission, service worker, subscription e gestione busy/error — non è stato modificato.

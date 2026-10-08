@@ -84,7 +84,27 @@ describe('AthleteAdministrationManager', () => {
 
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
     fireEvent(window, new Event('online'))
+    expect(global.fetch).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Riprova' }))
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Domanda di iscrizione' })).toBeTruthy())
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not manually refetch cached administration on reconnect', async () => {
+    const queryClient = createQueryClient()
+    queryClient.setQueryData(athleteKeys.administration('user-1', 'profile-1'), contract)
+    renderManager(queryClient)
+
+    expect(screen.getByRole('heading', { name: 'Domanda di iscrizione' })).toBeTruthy()
+    expect(global.fetch).not.toHaveBeenCalled()
+
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+    fireEvent(window, new Event('offline'))
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
+    fireEvent(window, new Event('online'))
+
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Domanda di iscrizione' })).toBeTruthy()
   })
 
   it('preserves initial error and denied states', async () => {
