@@ -10,6 +10,12 @@ export const athleteKeys = {
     [...athleteKeys.all, accountId, subjectProfileId, 'dashboard'] as const,
   dashboardAlerts: (accountId: string, subjectProfileId: string) =>
     [...athleteKeys.all, accountId, subjectProfileId, 'dashboard-alerts'] as const,
+  championships: {
+    all: (accountId: string, subjectProfileId: string) =>
+      [...athleteKeys.all, accountId, subjectProfileId, 'championships'] as const,
+    convocation: (accountId: string, subjectProfileId: string, matchId: string, clubTeamId: string) =>
+      [...athleteKeys.championships.all(accountId, subjectProfileId), 'convocation', matchId, clubTeamId] as const,
+  },
   teamDetail: (accountId: string, subjectProfileId: string, teamId: string) =>
     [...athleteKeys.all, accountId, subjectProfileId, 'team-detail', teamId] as const,
   messages: {

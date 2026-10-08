@@ -310,3 +310,148 @@ I manager attuali contengono contemporaneamente fetching, business logic, trasfo
 - Le key includono sempre account e subject; nessuna cache di un altro account/subject viene modificata. Le cache assenti restano assenti, salvo l’aggiornamento della query unread già esistente quando è presente.
 - Anche la mutation di assenza su periodo propaga lo stato attendance per gli eventi selezionati alle cache già presenti; mantiene una invalidazione mirata del calendario perché la risposta non restituisce le capability complete per ogni evento. Sono rimasti fuori scope il modal dettaglio evento, gli endpoint/API, staleTime, default QueryClient, UI, provider, persistenza e refetch globali. Le invalidazioni timer già esistenti restano mirate alle rispettive query.
 - Test aggiunti in `src/lib/athlete/cache-synchronization.test.ts`: attendance/early absence in entrambe le direzioni, message read tra tutti i consumer, idempotenza, cache assenti e isolamento subject.
+
+## 15. Detail surfaces and modal caching audit (8 ottobre 2026)
+
+### A. Detail inventory
+
+Questo audit considera l'area atleta personale e familiare/delegata, inclusi Dashboard, Calendario, Messaggi, Amministrazione, Profilo e Campionato. Sono state escluse le modali esclusivamente amministrative/coach che non sono montate dall'area atleta.
+
+| Entità / surface | UI component | Parent page | Data source | Fetch on open | Data lost on close | Data lost on route change |
+| --- | --- | --- | --- | --- | --- | --- |
+| Messaggio | `MessageDetailModal` | `/dashboard`, `/athlete/messages`, deep link `messageId` | lista minimal + `GET /api/athlete/messages?view=full&id=...` | Sì, se il dettaglio non è già nella query detail | Lo stato di selezione/modal sì; risposta resta nella Query Cache | La selezione sì; cache account/subject resta fino a `gcTime` o logout |
+| Evento da Calendario | `EventDetails` → `EventDetailModal` | `/athlete/calendar` | evento completo della query calendario + `GET /api/athlete/events/detail?id=...` | Sì, sempre al mount di `EventDetails` | Sì: `data`, `error` e `retryToken` sono locali | Sì, oltre alla cache calendario; il detail non è cached |
+| Evento da Dashboard | `EventDetailModal` | `/dashboard` | evento già presente nel payload dashboard | No | Solo lo stato selezionato | Sì, insieme alla query dashboard; non esiste una query detail separata |
+| Squadra | `TeamDetailModal` | `/dashboard` | query Supabase client-side `teams`, schedules, coaches, members, profiles | Sì alla prima apertura per `teamId` | Lo stato selezionato sì; risposta resta nella Query Cache | Se la cache sopravvive, no; la selezione sì |
+| Rata / quota | `FeeRow` espandibile | `/athlete/fees`, sezione quote di `/athlete/administration` | contratto administration (o legacy `/api/athlete/fees`) già caricato | No | Solo `expanded` locale | Il contratto legacy e l'espansione sì; la query administration resta cached |
+| Certificato / domanda | sezioni inline, `section=certificate|fees` | `/athlete/administration` | `GET /api/athlete/administration` | No | Nessuna modal/detail indipendente | La pagina si smonta; il contratto resta cached |
+| Documento atleta | lista inline nel profilo | `/athlete/profile` | `GET /api/athlete/profile`, metadata `athlete.documents.items` | No: non esiste apertura/download nella UI atleta corrente | Nessun detail state | Profilo precedente resta cached per account/subject |
+| Allegato messaggio | link/button dentro `MessageDetailModal` | Dashboard / Messaggi | metadata nel full message; endpoint attachment on demand | Solo al click sul download, non all'apertura | URL in `attachmentUrls` locale sì | Sì; il download non viene conservato da Query Cache |
+| Convocazione | `ResponsiveDetail` in `ChampionshipsManager` | `/athlete/campionati` | `GET /api/athlete/championships?view=convocation&matchId=...&clubTeamId=...` | Sì, all'apertura e al cambio club team | `convocation`, selezioni e membri sì alla chiusura | Sì; hook con stato locale |
+| Partita / calendario campionato | pannelli inline, nessuna modal | `/athlete/campionati` | query group con `matches` e `standings` | No per riga partita | Solo espansione calendario/classifica | Sì, stato del group hook; nessun match detail autonomo |
+| Finestra assenza su periodo | `EarlyAbsencePeriodModal` | `/athlete/calendar` | endpoint eventi per intervallo/subject, paginato | Sì quando l'utente cerca un intervallo | Risultati e selezione sì | Sì; è una workflow list, non un entity detail |
+
+Non sono state trovate altre detail surface atleta con `Dialog`, `Sheet`, `Drawer`, `selectedMatch` o download di documento. `DetailsDrawer` e le modali del campionato presenti nel repository appartengono a flussi admin/coach oppure a form di gestione, non a una detail view atleta.
+
+### B. Current behavior and fetch lifecycle
+
+| Entità | Classificazione payload | Comportamento `open → close → reopen` | Cache/manual dedup attuale |
+| --- | --- | --- | --- |
+| Messaggio | B: la lista minimal contiene subject/data/read state ma il full aggiunge content, creator, recipients e attachments | La query detail viene richiesta una volta per `account + subject + messageId`; riaprendo mentre è in cache usa il dato cached secondo `staleTime` 3 minuti e può fare refetch se stale. La lista non viene rifatta per aprire il dettaglio | TanStack Query condivisa; `cache: 'no-store'` riguarda la richiesta HTTP, non impedisce la Query Cache |
+| Evento Calendario | B: il parent ha evento, orari, squadre e attendance; il detail aggiunge descrizione/luogo/gym/creator e availability completa | Ogni chiusura smonta `EventDetails`; ogni riapertura crea `AbortController` e riparte da `setData(null)` con una nuova GET. È una richiesta ripetibile ed evitabile | Nessuna cache detail/dedup; abort solo della richiesta del mount precedente |
+| Evento Dashboard | A per i campi renderizzati oggi | Nessuna GET al click; il modal legge `selectedEvent` | Query dashboard condivisa; nessun detail cache necessario per il contratto corrente |
+| Squadra | B: membership contiene summary; detail aggiunge orari, staff e rosa | Prima apertura GET Supabase; riapertura usa la query `teamDetail` cached per 10 minuti | TanStack Query già presente, ma il `queryFn` è client-side Supabase e non un endpoint subject-scoped |
+| Rata | A: il contratto contiene tutti i campi usati dal row espanso | Nessun fetch; il close non elimina il contratto parent | Query administration già condivisa; `FeeRow` è puro UI state |
+| Convocazione | B/C: match parent contiene summary; la convocazione è un contratto dedicato già esposto dall'endpoint campionati | Il prossimo match atleta può invocare `loadConvocationData` in un effect prima dell'apertura; `openConvocationModal` invoca nuovamente lo stesso load. Quindi esiste un possibile doppio fetch per la prossima gara. Dopo close, la riapertura rifà la GET | Stato locale + `AbortController`; nessuna dedup/cache. Il server mantiene la verifica subject |
+| Allegato | B per metadata, file/URL on demand | Il click può ripetere la richiesta dopo un remount; l'URL è mantenuto solo finché il modal resta montato | Nessuna cache manuale persistente; `cache: 'no-store'` |
+
+### C. Strategy classification
+
+| Detail | Strategia futura | Motivo |
+| --- | --- | --- |
+| Evento Dashboard | A — nessuna query detail | Il modal corrente usa soltanto dati già nel payload dashboard; non creare un fetch aggiuntivo senza un requisito di campi completi |
+| Rata, certificato, domanda | A — nessuna query detail | Sono già contenuti nel contratto administration; filtri e apertura row sono UI state |
+| Messaggio | C — query detail già esistente e condivisa | La query `athleteKeys.messages.detail(accountId, subjectProfileId, messageId)` è già riusabile tra Dashboard, Messaggi e deep link |
+| Squadra | C — query detail già esistente | `athleteKeys.teamDetail(accountId, subjectProfileId, teamId)` evita il refetch tra aperture; va però riesaminato il contratto di autorizzazione client-side |
+| Evento Calendario | B — query detail dedicata, potenzialmente condivisa con Dashboard | Il payload detail è più ricco del parent; il contratto server e la verifica membership già esistono in `/api/athlete/events/detail` |
+| Convocazione | B — query detail dedicata | Non è contenuta nel group payload; la combinazione partita + club team identifica il dato |
+| Allegato | D per il file binario/URL; metadata resta nel messaggio | Il download è un’azione autorizzata ed effimera, non server state utile da visualizzare come cache generica |
+| Finestra assenza su periodo | D rispetto a questo audit detail | È una ricerca/pianificazione di eventi per intervallo e una selezione temporanea; non va trattata come detail entity. Un futuro audit separato può valutare una query collection |
+| Partita inline | A per i campi attuali | Il group payload contiene data, squadre, stato, luogo e set; oggi non esiste una UI di dettaglio partita |
+
+### D. Proposed query keys and shared consumers
+
+Le key concettuali per le query mancanti sono:
+
+```text
+athleteKeys.events.detail(accountId, subjectProfileId, eventId)
+athleteKeys.championships.convocation(accountId, subjectProfileId, matchId, clubTeamId)
+```
+
+La key evento deve rappresentare il contratto autorizzato del subject; non includere mese, modal open, vista calendario o filtri locali. La key convocazione deve includere `matchId` e `clubTeamId`; la stagione/gruppo entra solo se modifica davvero la risposta server. Le key già attive restano:
+
+```text
+athleteKeys.messages.detail(accountId, subjectProfileId, messageId)
+athleteKeys.teamDetail(accountId, subjectProfileId, teamId)
+```
+
+| Entity detail | Consumer 1 | Consumer 2 | Consumer 3 | Same contract? | Shared cache possible? |
+| --- | --- | --- | --- | --- | --- |
+| Messaggio | Dashboard | Messaggi | deep link `messageId` | Sì per full detail; lista minimal è un contratto diverso | Sì, già possibile e già implementato |
+| Evento | Calendario | Dashboard | eventuale futura card campionato | No oggi: Dashboard usa subset parent, Calendario usa full endpoint | Sì solo se tutti consumano lo stesso full contract; altrimenti Dashboard resta A |
+| Squadra | Dashboard | — | futura profile/campionato solo se introdotta | Detail query attuale unica; summary appare anche in più parent payload | Sì tecnicamente; prima verificare subject-scoping del `queryFn` |
+| Convocazione | Campionato, prossima gara | Campionato, modal aperta | deep link futuro se aggiunto | Sì: stessa coppia match/club team e endpoint view | Sì, soprattutto per evitare prefetch + open duplicati |
+| Quote | Administration | Dashboard/alerts con contratti diversi | — | No: summary dashboard e contratto administration non sono lo stesso payload | Condividere solo dopo normalizzazione esplicita; oggi preferire invalidazioni mirate |
+
+### E. Parent payload versus detail payload
+
+- **Messaggio:** la lista minimal e il full condividono id, subject, date, stato lettura e parte del mittente. Solo full aggiunge corpo completo, recipients normalizzati e attachments. Non usare la lista come `initialData` del detail se il modal deve dichiararsi completo: mostrerebbe correttamente un eventuale summary, ma può mascherare l'assenza del body/attachments e rendere ambiguo il loading.
+- **Evento:** il calendario contiene id, title, tipo, date, team ids/names e attendance; il detail aggiunge descrizione, gym/address, creator, team autorizzati e attendance availability ricalcolata. Il Dashboard modal è deliberatamente A per il suo subset. Non usare automaticamente l'evento parent come `initialData` del detail calendario, perché `my_attendance`/availability e campi arricchiti potrebbero essere parziali o stantii.
+- **Squadra:** la membership parent contiene nome, codice, attività e membership; il detail aggiunge schedules, coaches e athletes. È ragionevole mostrare summary mentre il detail arriva solo se la UI distingue chiaramente loading dei campi completi; non usare summary come detail completo.
+- **Convocazione:** il match parent contiene solo dati gara; il detail contiene pubblicazione, membri convocati e stato del subject. Nessun `initialData` dal match per il contenuto della convocazione.
+- **Quote/certificato/documenti:** il parent è già il contratto che renderizza i campi disponibili. Non esiste un detail payload separato da introdurre.
+
+### F. Mutations and cache coherence
+
+| Mutation | Detail query | Parent/list query | Other related queries | Update or invalidate |
+| --- | --- | --- | --- | --- |
+| `mark as read` | message detail | messages list | unread badge, Dashboard preview/count | Usare l’helper già esistente `syncAthleteMessageReadCaches`; aggiornare solo cache presenti e unread corrente, senza invalidazione globale |
+| RSVP / attendance | event detail, se presente | calendar e Dashboard upcoming events | availability/capability del calendario | Aggiornamento mirato già applicato a calendar/dashboard; una futura event detail query va aggiornata se la risposta deterministica è disponibile, altrimenti invalidata solo per quella key |
+| early absence / revoke | event detail | calendar e Dashboard | next-event availability | Stessa regola attendance; evitare di lasciare il modal con stato diverso dal parent |
+| save convocation (solo admin/coach; non atleta) | convocation detail | championship group/match payload | next match convocation preview | Fuori dal consumer atleta in scrittura, ma una futura query condivisa dovrà invalidare `convocation(matchId, clubTeamId)` e il group query correlato dopo salvataggio |
+| upload receipt / aggiornamento quota futuro | eventuale fee detail non esistente | administration, dashboard alerts/summary | certificato o enrollment solo se lo stesso mutation li modifica | Invalidare/aggiornare `administration(accountId, subjectProfileId)` e i consumer dashboard coinvolti; non creare una fee detail query solo per l’upload |
+| document/certificate update futuro | metadata/document detail se introdotto | athlete profile o administration | dashboard alerts | Invalidate solo il contratto realmente modificato; URL/file non deve diventare cache persistente |
+
+### G. Attachments and documents
+
+- **Metadata:** può restare nel full message o nel profilo/administration parent, con cache account+subject. È il dato utile alla UI per nome file, status e disponibilità.
+- **URL di download:** deve restare prodotto dall’endpoint autorizzato al momento del click. L’URL può essere breve/firmato e non deve essere assunto come autorizzazione permanente; non inserirlo in una cache condivisa senza conoscere TTL e policy.
+- **Autorizzazione:** resta server-side. La query/cache deve essere separata per account e subject, ma la presenza di metadata o URL cached non concede accesso.
+- **Blob/file binario:** non proporre caching TanStack in-memory del contenuto completo. Il codice attuale legge JSON con `download_url` e apre il link; il file resta fuori dalla Query Cache e dal Service Worker autenticato.
+- **Riapertura:** il metadata del messaggio può arrivare dalla detail cache; il download può richiedere nuovamente un URL autorizzato dopo un remount. Questo è preferibile a conservare blob sensibili.
+
+### H. Prefetch, freshness and loading UX
+
+| Candidate | Priority | Conservative trigger | Rationale |
+| --- | --- | --- | --- |
+| Message detail | Medium | `pointerenter`/focus sul row selezionato, oppure solo click con fetch cancellabile | Payload piccolo ma l’utente può aprire molti messaggi; non prefetcheare tutta la lista |
+| Event detail | Medium | click prima dell’apertura oppure `pointerenter` solo su evento evidenziato | Il parent contiene già molto; il full endpoint calcola attendance/permission e non va moltiplicato per tutti gli eventi |
+| Team detail | Medium | pointer/focus sulla membership row, non `visible` per tutte le squadre | Detail include rosa/staff e può essere relativamente grande |
+| Convocazione prossima gara | Alto, limitato a una sola gara | prefetch del next match già individuato; riusare la stessa cache all’apertura | È il dettaglio più probabile e oggi il codice lo carica già prima dell’apertura, ma senza dedup tra effect e modal |
+| Allegati/documenti | Basso / evitare | click esplicito download | Possibili file grandi, URL sensibili e autorizzazione puntuale |
+
+Categorie suggerite, senza fissare valori numerici ulteriori:
+
+- **Molto breve:** eventuale attendance/event detail se la availability è sensibile al tempo e alle deadline.
+- **Breve:** message detail e convocazione se pubblicazioni/read state possono cambiare durante la sessione.
+- **Medio:** event detail generale e administration/metadata documenti.
+- **Lungo:** team detail e cataloghi relativamente stabili.
+
+Tutte le detail query devono usare `isPending`/skeleton del solo modal quando non esiste data. Con cached data il modal deve restare immediatamente leggibile durante `isFetching`; errori di background diventano stato non bloccante, mentre 403/404 restano distinti da empty. `gcTime` deve coprire apertura, chiusura, navigazione ad altra pagina e ritorno; il logout/account switch deve continuare a usare `QuerySessionCacheBoundary` e `queryClient.clear()`.
+
+### I. Privacy, deep links and recommended implementation order
+
+Ogni query proposta deve includere `accountId`, `subjectProfileId` quando il subject modifica il contratto, e l’entity ID. Questo è necessario per messaggi delegati, documenti, quote, membership di squadra ed eventi autorizzati. Il server deve continuare a validare account, role, subject access e membership: una key diversa isola la cache, ma non sostituisce RLS/API authorization. Nessuna query deve usare dati cached del subject A come placeholder per B. Un deep link `messageId` è già gestito senza dipendere dalla lista: dopo la lista, se l’id manca, viene richiesta direttamente la detail query. La stessa modalità è il modello da mantenere per eventuali deep link evento/convocazione futuri.
+
+Ordine consigliato, dal minor rischio/maggior beneficio alla maggiore complessità:
+
+1. **Verifica e test di riuso del messaggio detail** tra Dashboard, Messaggi e deep link; è già migrato e richiede soprattutto network/account-switch validation.
+2. **Dedupe della convocazione next match** tramite una futura query condivisa `matchId + clubTeamId`; alto beneficio e contratto endpoint già disponibile.
+3. **Migrazione del dettaglio evento calendario** a query detail condivisa; è il principale fetch ripetuto evitabile rimasto tra i modal atleta.
+4. **Revisione del team detail**: mantenere la key esistente, ma valutare un endpoint/server contract subject-scoped prima di riusarlo fuori Dashboard.
+5. **Prefetch conservativo** di messaggio/evento/team solo dopo aver misurato apertura reale e payload; nessun prefetch di massa.
+6. **Audit separato dei campionati** per catalog/group cache e mutation convocation; non confondere group query con match detail finché le righe partita restano inline.
+7. **Documenti/ricevute** solo se viene introdotta una vera UI di apertura/download; cache metadata separata, file binario fuori dalla Query Cache.
+
+Conclusione dell’audit: i fetch ripetuti sicuramente evitabili sono il dettaglio evento calendario a ogni riapertura e, potenzialmente, la convocazione caricata sia dal prefetch del next match sia dall’apertura modal. Messaggi e squadra sono già coperti da detail query in-memory; eventi Dashboard, quote, certificati e match inline sono già coperti dal parent payload e non richiedono nuove detail query nel contratto corrente.
+
+## 16. TanStack Query implementation — Athlete Convocation deduplication (8 ottobre 2026)
+
+- `athleteKeys.championships.convocation(accountId, subjectProfileId, matchId, clubTeamId)` identifica il contratto della convocazione atleta. Non include modal state, tab o filtri UI; `clubTeamId` resta obbligatorio perché la stessa partita può avere convocazioni diverse per club team.
+- `src/lib/athlete/convocations.ts` centralizza query options, `queryFn`, normalizzazione del payload e `prefetchAthleteConvocation`. Il contratto HTTP resta invariato: `GET /api/athlete/championships?view=convocation&matchId=...&clubTeamId=...`, con `subjectProfileId` aggiunto solo nel contesto familiare/delegato.
+- Il prefetch del next match e il modal usano la stessa key e le stesse query options. `openConvocationModal` aggiorna soltanto selezione/modal state per l’atleta; se il prefetch è in corso, l’observer del modal si aggancia alla stessa richiesta senza una seconda GET.
+- Il `staleTime` è di 60 secondi: breve per consentire una nuova pubblicazione/modifica della convocazione durante la sessione, ma sufficiente per `open → close → reopen` senza refetch immediato. Non è stato introdotto un `gcTime` speciale: resta il default globale di 30 minuti.
+- `isPending`/loading viene applicato solo al detail modal. Con dati cached la convocazione resta visibile durante un eventuale background refetch; errori offline, 403 e tecnici mantengono stati distinti. Il cambio `clubTeamId` produce una key diversa e non usa dati del team precedente come placeholder.
+- Account e subject effettivi entrano sempre nella key; il cambio subject seleziona una cache distinta e il logout/account switch continua a essere gestito dall’unica `QuerySessionCacheBoundary`. Le autorizzazioni definitive restano nel route handler esistente.
+- Il percorso coach/admin conserva il proprio hook locale e il proprio flusso di modifica; la migrazione riguarda soltanto il consumer atleta e non modifica mutation, endpoint o business rule.
+- Test aggiunti: `src/lib/athlete/convocations.test.ts` verifica deduplicazione di due prefetch concorrenti e separazione della cache tra club team diversi. Verificati anche typecheck e suite UI campionato esistenti.

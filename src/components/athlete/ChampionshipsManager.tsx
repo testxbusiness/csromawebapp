@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { SUBJECT_CONTEXT_CHANGED_EVENT, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
@@ -17,7 +18,6 @@ import {
   type Championship,
   type ClubTeam,
   type ClubTeamOption,
-  type Convocation,
   type ConvocationMember,
   type GroupTeam,
   isProfileConvoked,
@@ -33,6 +33,7 @@ import { useChampionshipGroupDetails } from '@/components/championship/useChampi
 import { useChampionshipMatchMutations } from '@/components/championship/useChampionshipMatchMutations'
 import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
 import { useChampionshipCalendarDeletion } from '@/components/championship/useChampionshipCalendarDeletion'
+import { prefetchAthleteConvocation, useAthleteConvocationContext, useAthleteConvocationQuery } from '@/lib/athlete/convocations'
 import { formatChampionshipDate as formatDate, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
 import { AthleteChampionshipShell } from '@/components/athlete/AthleteChampionshipShell'
 import { StatusBadge } from '@/components/ui'
@@ -47,6 +48,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const { selectedProfileId, activeArea } = useAccessibleProfiles()
   const { selectedTeamId, setTeams: setContextTeams } = useTeamContext()
   const supabase = useMemo(() => createClient(), [])
+  const queryClient = useQueryClient()
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [savingResult, setSavingResult] = useState(false)
@@ -84,16 +86,18 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const [convocationModalOpen, setConvocationModalOpen] = useState(false)
   const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
   const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
-  const [nextMatchConvocation, setNextMatchConvocation] = useState<Convocation | null>(null)
+  const { accountId: athleteAccountId, subjectProfileId: athleteSubjectProfileId, subjectProfileQueryParam: athleteSubjectProfileQueryParam } = useAthleteConvocationContext()
 
   useEffect(() => {
     const handleSubjectChange = () => {
       setSelectedChampionshipId(null)
       setSelectedGroupId(null)
       setNextMatch(null)
-      setConvocation(null)
-      setConvocationSelection(new Set())
-      setConvocationTeamMembers([])
+      if (mode !== 'athlete') {
+        setConvocation(null)
+        setConvocationSelection(new Set())
+        setConvocationTeamMembers([])
+      }
       setConvocationModalOpen(false)
       setResultModalOpen(false)
     }
@@ -118,6 +122,9 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     reload: reloadGroupDetails,
   } = useChampionshipGroupDetails(selectedGroupId, mode === 'athlete' ? selectedProfileId : undefined, familySubjectReady)
   const athleteTeamIds = useMemo(() => new Set(teams.map((team) => team.id)), [teams])
+  const nextMatchClubTeam = nextMatch ? pickUserClubTeamForMatch(nextMatch) : null
+  const nextMatchConvocationQuery = useAthleteConvocationQuery(nextMatch?.id ?? null, nextMatchClubTeam?.id ?? null, false)
+  const modalConvocationQuery = useAthleteConvocationQuery(convocationMatch?.id ?? null, convocationClubTeamId, convocationModalOpen)
   const loading = catalogLoading || groupLoading
   const catalogIssue = mode === 'athlete' && ['error', 'offline', 'denied'].includes(catalogStatus)
   const showAthletePanels = mode !== 'athlete' || (catalogStatus === 'ready' && Boolean(selectedGroupId) && groupStatus === 'ready')
@@ -150,9 +157,9 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     statusUpdating,
   } = useChampionshipMatchMutations({ selectedGroupId, reloadGroupDetails })
   const {
-    convocation,
-    convocationLoading,
-    convocationStatus,
+    convocation: legacyConvocation,
+    convocationLoading: legacyConvocationLoading,
+    convocationStatus: legacyConvocationStatus,
     convocationSaving,
     convocationSelection,
     convocationTeamMembers,
@@ -161,7 +168,24 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     setConvocation,
     setConvocationSelection,
     setConvocationTeamMembers,
-  } = useChampionshipConvocations({ subjectProfileId: mode === 'athlete' ? selectedProfileId : undefined, enabled: familySubjectReady })
+  } = useChampionshipConvocations({ subjectProfileId: mode === 'athlete' ? undefined : selectedProfileId, enabled: familySubjectReady && mode !== 'athlete' })
+  const convocation = mode === 'athlete' ? modalConvocationQuery.data ?? null : legacyConvocation
+  const convocationLoading = mode === 'athlete'
+    ? modalConvocationQuery.isPending || (modalConvocationQuery.isFetching && !modalConvocationQuery.data)
+    : legacyConvocationLoading
+  const convocationStatus: RequestState = mode !== 'athlete'
+    ? legacyConvocationStatus
+    : modalConvocationQuery.data
+      ? 'ready'
+      : modalConvocationQuery.isPending
+      ? 'loading'
+      : modalConvocationQuery.error?.message === 'offline'
+        ? 'offline'
+        : modalConvocationQuery.error?.status === 403
+          ? 'denied'
+          : modalConvocationQuery.error
+            ? 'error'
+            : 'ready'
   const { deleteCalendar: persistDeleteCalendar, deleting } = useChampionshipCalendarDeletion()
 
   useEffect(() => {
@@ -511,7 +535,6 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const convocationCSRTeams = convocationMatch ? matchCSRClubTeams(convocationMatch) : []
   const convocationClubTeam = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === convocationClubTeamId)?.clubTeam || null
   const canEditConvocation = mode === 'admin' || (mode === 'coach' && !!(convocationClubTeam?.team_id && coachTeamIds.has(convocationClubTeam.team_id)))
-  const nextMatchClubTeam = nextMatch ? pickUserClubTeamForMatch(nextMatch) : null
   const nextMatchSide = nextMatchClubTeam
     ? nextMatchClubTeam.id === nextMatch?.home_club_team_id ? 'Casa' : 'Trasferta'
     : undefined
@@ -519,6 +542,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     ? nextMatchClubTeam.id === nextMatch.home_club_team_id ? nextMatch.away_club_team_id : nextMatch.home_club_team_id
     : null
   const athleteProfileId = selectedProfileId || account?.ownerProfileId || null
+  const nextMatchConvocation = nextMatchConvocationQuery.data ?? null
   const nextMatchConvocationStatus = mode !== 'athlete'
     ? undefined
     : !nextMatchConvocation
@@ -528,17 +552,16 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         : 'Non convocato'
 
   useEffect(() => {
-    if (mode !== 'athlete' || !nextMatch || !nextMatchClubTeam?.id) {
-      setNextMatchConvocation(null)
-      return
-    }
-    let cancelled = false
-    void loadConvocationData(nextMatch, nextMatchClubTeam.id, nextMatchClubTeam.team_id || null)
-      .then((loaded) => {
-        if (!cancelled) setNextMatchConvocation(loaded)
-      })
-    return () => { cancelled = true }
-  }, [loadConvocationData, mode, nextMatch, nextMatchClubTeam?.id, nextMatchClubTeam?.team_id, selectedProfileId])
+    if (mode !== 'athlete' || !nextMatch?.id || !nextMatchClubTeam?.id) return
+    if (!athleteAccountId || !athleteSubjectProfileId || (activeArea === 'family' && !athleteSubjectProfileQueryParam)) return
+    void prefetchAthleteConvocation(queryClient, {
+      accountId: athleteAccountId,
+      subjectProfileId: athleteSubjectProfileId,
+      subjectProfileQueryParam: athleteSubjectProfileQueryParam,
+      matchId: nextMatch.id,
+      clubTeamId: nextMatchClubTeam.id,
+    })
+  }, [activeArea, athleteAccountId, athleteSubjectProfileId, athleteSubjectProfileQueryParam, mode, nextMatch?.id, nextMatchClubTeam?.id, queryClient])
 
   function isCSRClubTeam(club?: ClubTeam | null) {
     return !!(club?.is_home_club || club?.team_id)
@@ -596,10 +619,12 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     setConvocationClubTeamId(clubTeamId)
     setConvocationMatch(m)
     setConvocationSelection(new Set())
-    setConvocation(null)
-    setConvocationTeamMembers([])
+    if (mode !== 'athlete') {
+      setConvocation(null)
+      setConvocationTeamMembers([])
+    }
     setConvocationModalOpen(true)
-    if (clubTeamId) {
+    if (mode !== 'athlete' && clubTeamId) {
       await loadConvocationData(m, clubTeamId, fallback?.team_id || null)
     }
   }
@@ -821,9 +846,9 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         onOpenChange={(open) => {
           setConvocationModalOpen(open)
           if (!open) {
-            setConvocation(null)
+            if (mode !== 'athlete') setConvocation(null)
             setConvocationSelection(new Set())
-            setConvocationTeamMembers([])
+            if (mode !== 'athlete') setConvocationTeamMembers([])
             setConvocationClubTeamId(null)
             setConvocationMatch(null)
           }
@@ -843,9 +868,9 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
                     const id = e.target.value
                     setConvocationClubTeamId(id || null)
                     setConvocationSelection(new Set())
-                    setConvocation(null)
+                    if (mode !== 'athlete') setConvocation(null)
                     const chosen = convocationCSRTeams.find(({ clubTeam }) => clubTeam.id === id)?.clubTeam
-                    if (id && convocationMatch) {
+                    if (mode !== 'athlete' && id && convocationMatch) {
                       await loadConvocationData(convocationMatch, id, chosen?.team_id || null)
                     }
                   }}
@@ -870,7 +895,10 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
               <FeedbackState
                 variant={convocationStatus}
                 title="Impossibile caricare la convocazione"
-                action={<Button onClick={() => convocationMatch && convocationClubTeamId && void loadConvocationData(convocationMatch, convocationClubTeamId, convocationClubTeam?.team_id || null)}>Riprova</Button>}
+                action={<Button onClick={() => {
+                  if (mode === 'athlete') void modalConvocationQuery.refetch()
+                  else if (convocationMatch && convocationClubTeamId) void loadConvocationData(convocationMatch, convocationClubTeamId, convocationClubTeam?.team_id || null)
+                }}>Riprova</Button>}
               />
             )}
 
