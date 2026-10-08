@@ -13,7 +13,6 @@ import { syncAthleteMessageReadCaches } from '@/lib/athlete/cache-synchronizatio
 import { SUBJECT_CONTEXT_CHANGED_EVENT, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useTeamContext } from '@/context/TeamContext'
-import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 import type { AthleteMessageContract } from '@/types/athlete-messages'
 
 function toDetailData(message: AthleteMessageContract | AthleteMessageListItem | null): MessageDetailData | null {
@@ -52,7 +51,6 @@ export default function AthleteMessagesManager() {
   const [readFilter, setReadFilter] = useState<MessageReadFilter>('all')
   const [deepLinkUnavailable, setDeepLinkUnavailable] = useState(false)
   const detailQuery = useAthleteMessageDetailQuery(selectedMessageId)
-  const { refetch } = messagesQuery
 
   const messages = useMemo(() => messagesQuery.data?.messages ?? [], [messagesQuery.data?.messages])
   const listTeams = useMemo(() => messagesQuery.data?.teams ?? [], [messagesQuery.data?.teams])
@@ -108,19 +106,6 @@ export default function AthleteMessagesManager() {
       setDeepLinkUnavailable(true)
     }
   }, [deepLinkMessageId, detailQuery.error, detailQuery.isError, selectedMessage, selectedMessageId])
-
-  useEffect(() => {
-    const handleOffline = () => { void refetch() }
-    const handleOnline = () => {
-      void runClientRefresh(`athlete-messages:${user?.id ?? 'anonymous'}:${selectedProfileId ?? 'self'}`, async () => { await refetch() })
-    }
-    window.addEventListener('offline', handleOffline)
-    window.addEventListener('online', handleOnline)
-    return () => {
-      window.removeEventListener('offline', handleOffline)
-      window.removeEventListener('online', handleOnline)
-    }
-  }, [refetch, selectedProfileId, user?.id])
 
   const handleOpenMessage = useCallback((message: AthleteMessageListItem) => {
     setDeepLinkUnavailable(false)

@@ -467,6 +467,13 @@ Conclusione dell’audit: i fetch ripetuti sicuramente evitabili sono il dettagl
 - Il Dashboard non è stato collegato automaticamente alla detail query: il suo modal continua a usare il parent payload e non introduce un fetch aggiuntivo.
 - Test aggiunti in `src/lib/athlete/event-detail.test.ts` e ampliati in `src/lib/athlete/cache-synchronization.test.ts`: riuso della cache close/reopen, key distinte per evento/subject, aggiornamento della detail cache già presente, mancata creazione di detail cache assenti e isolamento subject. Verificati anche i test Calendar/EventDetailModal esistenti.
 
+## 18. Cleanup lifecycle legacy — Athlete Messages (8 ottobre 2026)
+
+- `AthleteMessagesManager` non usa più `runClientRefresh` per il GET della lista messaggi.
+- Sono stati rimossi i listener custom `online`/`offline`: erano entrambi FETCH LIFECYCLE (`offline → refetch`, `online → runClientRefresh → refetch`) e non gestivano uno stato UI offline indipendente. La UI continua a derivare l’offline da `AthleteMessagesQueryError`/`navigator.onLine`, mentre reconnect, deduplicazione, AbortSignal e request lifecycle restano a TanStack Query.
+- Query key, `staleTime` lista/detail, unread query, read-state synchronization, subject switching, deep link, filtri e autorizzazioni non sono stati modificati.
+- Il test reconnect verifica che un evento `online` non avvii una seconda GET mentre la lista cached è fresca; il test offline continua a verificare che non parta alcuna richiesta senza connessione.
+
 ## Phase 7 — Athlete Championships (8 ottobre 2026)
 
 - Il flusso atleta precedente usava `useChampionshipCatalog` e `useChampionshipGroupDetails`, con fetch manuali su mount e stato locale perso al cambio route. Il catalogo atleta usa `GET /api/athlete/championships?view=catalog`; il girone usa `GET /api/athlete/championships?view=group&groupId=...`, che restituisce nello stesso contratto partite, set e standings autorizzati.

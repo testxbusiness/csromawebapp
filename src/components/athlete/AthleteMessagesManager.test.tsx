@@ -4,7 +4,6 @@ import AthleteMessagesManager from './AthleteMessagesManager'
 import { useAuth } from '@/hooks/useAuth'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
-import { resetClientRefreshCoordinator } from '@/lib/client-refresh-coordinator'
 
 jest.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }))
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
@@ -28,7 +27,6 @@ describe('AthleteMessagesManager load states', () => {
   const originalOnline = navigator.onLine
 
   beforeEach(() => {
-    resetClientRefreshCoordinator()
     authMock.mockReturnValue({
       user: { id: 'user-1' } as ReturnType<typeof useAuth>['user'],
       session: null,
@@ -105,7 +103,7 @@ describe('AthleteMessagesManager load states', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('preserves loaded messages while a refresh fails', async () => {
+  it('does not start a manual reconnect fetch while cached messages are fresh', async () => {
     const message = {
       id: 'message-1',
       subject: 'Allenamento',
@@ -118,18 +116,21 @@ describe('AthleteMessagesManager load states', () => {
       read_state: { is_read: false, read_at: null },
       message_recipients: [],
     }
-    const fetchMock = jest.fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ teams: [], messages: [message] }) })
-      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ error: 'Errore server' }) })
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ teams: [], messages: [message] }),
+    })
     global.fetch = fetchMock as jest.Mock
 
     renderManager()
     await waitFor(() => expect(screen.getByText('Allenamento')).toBeTruthy())
 
     window.dispatchEvent(new Event('online'))
-    await waitFor(() => expect(screen.getByText('Impossibile caricare i messaggi')).toBeTruthy())
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(screen.getByText('Allenamento')).toBeTruthy()
     expect(screen.queryByText('Nessun messaggio')).toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('loads family messages for the selected subject and keeps the account-subject scope', async () => {
