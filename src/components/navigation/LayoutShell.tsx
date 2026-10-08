@@ -76,7 +76,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     try {
       await signOut()
     } finally {
-      router.replace('/login')
+      // Logout is an auth boundary: reload the public route so the browser,
+      // middleware and AuthProvider cannot reuse a protected RSC/navigation state.
+      window.location.replace('/login')
     }
   }
 
