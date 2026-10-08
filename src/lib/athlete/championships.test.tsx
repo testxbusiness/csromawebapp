@@ -80,4 +80,17 @@ describe('athlete championships queries', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('view=group')
     expect(fetchMock.mock.calls[0][0]).toContain('groupId=group-a')
   })
+
+  it('does not expose a loading state after logout disables the query', async () => {
+    useAuthOptional.mockReturnValue(null)
+    useAccessibleProfilesOptional.mockReturnValue(null)
+    const fetchMock = jest.fn()
+    global.fetch = fetchMock as unknown as typeof fetch
+    const result = renderHook(() => useAthleteChampionshipCatalogQuery(true), {
+      wrapper: wrapper(new QueryClient()),
+    })
+
+    expect(result.result.current.status).toBe('idle')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

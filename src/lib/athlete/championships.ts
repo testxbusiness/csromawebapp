@@ -127,26 +127,28 @@ export function useAthleteChampionshipCatalogQuery(enabled: boolean) {
   const context = useAthleteContext()
   const input = context.accountId && context.subjectProfileId ? { accountId: context.accountId, subjectProfileId: context.subjectProfileId, subjectProfileQueryParam: context.subjectProfileQueryParam } : null
   const queryKey = input ? athleteKeys.championships.catalog(input.accountId, input.subjectProfileId) : athleteKeys.championships.catalog('anonymous', 'unavailable')
+  const queryEnabled = enabled && context.enabled && Boolean(input)
   const query = useQuery<AthleteChampionshipCatalog, AthleteChampionshipQueryError>({
     queryKey,
     queryFn: async ({ signal }) => normalizeCatalog(await fetchAthleteChampionship({ subjectProfileId: input?.subjectProfileId ?? null, subjectProfileQueryParam: input?.subjectProfileQueryParam ?? null, view: 'catalog' }, signal)),
-    enabled: enabled && context.enabled && Boolean(input),
+    enabled: queryEnabled,
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
-  return { ...query, status: query.isPending ? 'loading' as RequestState : query.error ? query.error.message === 'offline' ? 'offline' as RequestState : query.error.status === 403 ? 'denied' as RequestState : requestErrorState(query.error) : 'ready' as RequestState, reload: query.refetch }
+  return { ...query, status: !queryEnabled ? 'idle' as RequestState : query.isPending ? 'loading' as RequestState : query.error ? query.error.message === 'offline' ? 'offline' as RequestState : query.error.status === 403 ? 'denied' as RequestState : requestErrorState(query.error) : 'ready' as RequestState, reload: query.refetch }
 }
 
 export function useAthleteChampionshipGroupQuery(groupId: string | null, enabled: boolean) {
   const context = useAthleteContext()
   const input = context.accountId && context.subjectProfileId && groupId ? { accountId: context.accountId, subjectProfileId: context.subjectProfileId, subjectProfileQueryParam: context.subjectProfileQueryParam, groupId } : null
   const queryKey = input ? athleteKeys.championships.group(input.accountId, input.subjectProfileId, input.groupId) : athleteKeys.championships.group('anonymous', 'unavailable', groupId ?? 'unavailable')
+  const queryEnabled = enabled && context.enabled && Boolean(input)
   const query = useQuery<AthleteChampionshipGroup, AthleteChampionshipQueryError>({
     queryKey,
     queryFn: async ({ signal }) => normalizeGroup(await fetchAthleteChampionship({ subjectProfileId: input?.subjectProfileId ?? null, subjectProfileQueryParam: input?.subjectProfileQueryParam ?? null, view: 'group', groupId: input?.groupId }, signal)),
-    enabled: enabled && context.enabled && Boolean(input),
+    enabled: queryEnabled,
     staleTime: 3 * 60 * 1000,
     retry: false,
   })
-  return { ...query, status: !groupId ? 'ready' as RequestState : query.isPending ? 'loading' as RequestState : query.error ? query.error.message === 'offline' ? 'offline' as RequestState : query.error.status === 403 ? 'denied' as RequestState : requestErrorState(query.error) : 'ready' as RequestState, reload: query.refetch }
+  return { ...query, status: !queryEnabled ? 'idle' as RequestState : !groupId ? 'ready' as RequestState : query.isPending ? 'loading' as RequestState : query.error ? query.error.message === 'offline' ? 'offline' as RequestState : query.error.status === 403 ? 'denied' as RequestState : requestErrorState(query.error) : 'ready' as RequestState, reload: query.refetch }
 }
