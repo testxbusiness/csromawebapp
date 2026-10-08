@@ -34,6 +34,7 @@ import { useChampionshipMatchMutations } from '@/components/championship/useCham
 import { useChampionshipConvocations } from '@/components/championship/useChampionshipConvocations'
 import { useChampionshipCalendarDeletion } from '@/components/championship/useChampionshipCalendarDeletion'
 import { prefetchAthleteConvocation, useAthleteConvocationContext, useAthleteConvocationQuery } from '@/lib/athlete/convocations'
+import { useAthleteChampionshipCatalogQuery, useAthleteChampionshipGroupQuery } from '@/lib/athlete/championships'
 import { formatChampionshipDate as formatDate, matchDateTime, normalizeChampionshipTime as normalizeTime } from '@/components/championship/formatters'
 import { AthleteChampionshipShell } from '@/components/athlete/AthleteChampionshipShell'
 import { StatusBadge } from '@/components/ui'
@@ -105,6 +106,8 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     return () => window.removeEventListener(SUBJECT_CONTEXT_CHANGED_EVENT, handleSubjectChange)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const legacyCatalog = useChampionshipCatalog({ mode, coachTeamIds, subjectProfileId: mode === 'athlete' ? selectedProfileId : undefined, enabled: familySubjectReady, tanstack: mode === 'athlete' })
+  const athleteCatalog = useAthleteChampionshipCatalogQuery(mode === 'athlete' && familySubjectReady)
   const {
     championships,
     seasons,
@@ -113,14 +116,20 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
     loading: catalogLoading,
     status: catalogStatus,
     reload: reloadChampionships,
-  } = useChampionshipCatalog({ mode, coachTeamIds, subjectProfileId: mode === 'athlete' ? selectedProfileId : undefined, enabled: familySubjectReady })
+  } = mode === 'athlete' ? {
+    championships: athleteCatalog.data?.championships ?? [], seasons: athleteCatalog.data?.seasons ?? [], activities: athleteCatalog.data?.activities ?? [], teams: athleteCatalog.data?.teams ?? [], loading: athleteCatalog.status === 'loading', status: athleteCatalog.status, reload: athleteCatalog.reload,
+  } : legacyCatalog
+  const legacyGroup = useChampionshipGroupDetails(selectedGroupId, mode === 'athlete' ? selectedProfileId : undefined, familySubjectReady, mode, mode === 'athlete')
+  const athleteGroup = useAthleteChampionshipGroupQuery(selectedGroupId, mode === 'athlete' && familySubjectReady)
   const {
     matches,
     standings,
     loading: groupLoading,
     status: groupStatus,
     reload: reloadGroupDetails,
-  } = useChampionshipGroupDetails(selectedGroupId, mode === 'athlete' ? selectedProfileId : undefined, familySubjectReady)
+  } = mode === 'athlete' ? {
+    matches: athleteGroup.data?.matches ?? [], standings: athleteGroup.data?.standings ?? [], loading: athleteGroup.status === 'loading', status: athleteGroup.status, reload: athleteGroup.reload,
+  } : legacyGroup
   const athleteTeamIds = useMemo(() => new Set(teams.map((team) => team.id)), [teams])
   const nextMatchClubTeam = nextMatch ? pickUserClubTeamForMatch(nextMatch) : null
   const nextMatchConvocationQuery = useAthleteConvocationQuery(nextMatch?.id ?? null, nextMatchClubTeam?.id ?? null, false)

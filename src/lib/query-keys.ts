@@ -19,6 +19,10 @@ export const athleteKeys = {
   championships: {
     all: (accountId: string, subjectProfileId: string) =>
       [...athleteKeys.all, accountId, subjectProfileId, 'championships'] as const,
+    catalog: (accountId: string, subjectProfileId: string) =>
+      [...athleteKeys.championships.all(accountId, subjectProfileId), 'catalog'] as const,
+    group: (accountId: string, subjectProfileId: string, groupId: string) =>
+      [...athleteKeys.championships.all(accountId, subjectProfileId), 'group', groupId] as const,
     convocation: (accountId: string, subjectProfileId: string, matchId: string, clubTeamId: string) =>
       [...athleteKeys.championships.all(accountId, subjectProfileId), 'convocation', matchId, clubTeamId] as const,
   },

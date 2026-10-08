@@ -205,3 +205,7 @@ export function useAccessibleProfiles() {
   if (!context) throw new Error('useAccessibleProfiles deve essere utilizzato dentro AccessibleProfileProvider')
   return context
 }
+
+export function useAccessibleProfilesOptional() {
+  return useContext(AccessibleProfileContext)
+}

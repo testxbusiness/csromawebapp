@@ -6,7 +6,7 @@ import { requestErrorState, responseErrorState, type RequestState } from '@/lib/
 import { SUBJECT_CONTEXT_CHANGED_EVENT, type SubjectContextChangedDetail } from '@/context/AccessibleProfileContext'
 import { firstRelation, type ManagerMode, type Match, type Standing } from './types'
 
-export function useChampionshipGroupDetails(groupId: string | null, subjectProfileId?: string | null, enabled = true, mode: ManagerMode = 'admin') {
+export function useChampionshipGroupDetails(groupId: string | null, subjectProfileId?: string | null, enabled = true, mode: ManagerMode = 'admin', tanstack = false) {
   const supabase = useMemo(() => createClient(), [])
   const [matches, setMatches] = useState<Match[]>([])
   const [standings, setStandings] = useState<Standing[]>([])
@@ -117,8 +117,8 @@ export function useChampionshipGroupDetails(groupId: string | null, subjectProfi
   }, [enabled, groupId, mode, subjectProfileId, supabase])
 
   useEffect(() => {
-    void reload()
-  }, [reload])
+    if (mode !== 'athlete' || !tanstack) void reload()
+  }, [mode, reload, tanstack])
 
   return { matches, standings, loading: status === 'loading', status, reload }
 }

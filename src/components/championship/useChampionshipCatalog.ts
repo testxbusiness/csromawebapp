@@ -20,6 +20,7 @@ type UseChampionshipCatalogOptions = {
   subjectProfileId?: string | null
   adminSeasonId?: string | null
   enabled?: boolean
+  tanstack?: boolean
 }
 
 const EMPTY_TEAM_IDS = new Set<string>()
@@ -30,6 +31,7 @@ export function useChampionshipCatalog({
   subjectProfileId = null,
   adminSeasonId = null,
   enabled = true,
+  tanstack = false,
 }: UseChampionshipCatalogOptions) {
   const supabase = useMemo(() => createClient(), [])
   const [championships, setChampionships] = useState<Championship[]>([])
@@ -256,12 +258,12 @@ export function useChampionshipCatalog({
   }, [adminSeasonId, coachTeamIds, enabled, mode, subjectProfileId, supabase])
 
   useEffect(() => {
-    void loadSelectData()
-  }, [loadSelectData])
+    if (mode !== 'athlete' || !tanstack) void loadSelectData()
+  }, [loadSelectData, mode, tanstack])
 
   useEffect(() => {
-    void reload()
-  }, [reload])
+    if (mode !== 'athlete' || !tanstack) void reload()
+  }, [mode, reload, tanstack])
 
   return { championships, seasons, activities, teams, loading: status === 'loading', status, reload }
 }
