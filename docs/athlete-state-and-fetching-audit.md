@@ -478,3 +478,278 @@ Conclusione dell’audit: i fetch ripetuti sicuramente evitabili sono il dettagl
 - Subject switching seleziona immediatamente una key diversa senza placeholder/previous data; account switching/logout continua a dipendere dall'unica `QuerySessionCacheBoundary` e dal relativo `queryClient.clear()`. Team selection continua a essere gestita da `TeamProvider` e non modifica il fetch group corrente.
 - Per il percorso atleta il vecchio fetch equivalente dei due hook non viene più eseguito dal manager; i percorsi coach/admin e le loro query Supabase/API restano invariati. Non sono stati aggiunti listener focus/online: la revalidazione è quella della foundation TanStack Query. Dashboard, Calendar, API, schema, RLS, UI e business rules restano fuori scope.
 - Test aggiunti in `src/lib/athlete/championships.test.tsx` per cached remount e isolamento account/subject; restano verdi i test esistenti di catalog/group e convocazioni.
+
+## 18. Final TanStack Query audit (8 ottobre 2026)
+
+Questo audit è stato eseguito sul codice corrente del repository. Non sono state modificate applicazioni, API, query key, policy, storage, staleTime o gcTime.
+
+### A. Query inventory reale
+
+| Dominio | Query key | Hook/queryFn | Endpoint/source | staleTime | Consumer |
+| --- | --- | --- | --- | --- | --- |
+| Unread messages | `athleteKeys.messages.unread(account, subject)` | `useAthleteUnreadMessageCount` | `GET /api/athlete/messages?countOnly=1` | 15 s | `BottomNavigation` |
+| Profile | `athleteKeys.profile(account, subject)` | `useAthleteProfileQuery` | `GET /api/athlete/profile` | 5 min | `AthleteProfileManager` |
+| Administration | `athleteKeys.administration(account, subject)` | `useAthleteAdministrationQuery` | `GET /api/athlete/administration` | 3 min | `AthleteAdministrationManager`, `AthleteFeesContent` |
+| Messages list | `athleteKeys.messages.list(account, subject)` | `useAthleteMessagesQuery` | `GET /api/athlete/messages?view=minimal` | 45 s | `AthleteMessagesManager` |
+| Message detail | `athleteKeys.messages.detail(account, subject, messageId)` | `useAthleteMessageDetailQuery` | `GET /api/athlete/messages?view=full&id=...` | 3 min | Dashboard, Messages |
+| Calendar | `athleteKeys.calendar(account, subject)` | `useAthleteCalendarQuery` | `GET /api/athlete/calendar` | 2 min | `AthleteCalendarManager` |
+| Dashboard | `athleteKeys.dashboard(account, subject)` | `useAthleteDashboardQuery` | `GET /api/athlete/dashboard` | 90 s | `AthleteDashboard` |
+| Dashboard alerts | `athleteKeys.dashboardAlerts(account, subject)` | `useAthleteDashboardAlertsQuery` | `GET /api/athlete/dashboard/alerts` | 3 min | `AthleteDashboard` |
+| Team detail | `athleteKeys.teamDetail(account, subject, teamId)` | `useAthleteTeamDetailQuery` | Supabase client query su teams/schedules/coaches/members | 10 min | Dashboard team modal |
+| Event detail | `athleteKeys.events.detail(account, subject, eventId)` | `useAthleteEventDetailQuery` | `GET /api/athlete/events/detail?id=...` | 60 s | Calendar event modal |
+| Championships catalog | `athleteKeys.championships.catalog(account, subject)` | `useAthleteChampionshipCatalogQuery` | `GET /api/athlete/championships?view=catalog` | 5 min | `/athlete/campionati` |
+| Championship group | `athleteKeys.championships.group(account, subject, groupId)` | `useAthleteChampionshipGroupQuery` | `GET /api/athlete/championships?view=group&groupId=...` | 3 min | `/athlete/campionati` |
+| Convocation | `athleteKeys.championships.convocation(account, subject, matchId, clubTeamId)` | `useAthleteConvocationQuery`, prefetch | `GET /api/athlete/championships?view=convocation&...` | 60 s | next-match prefetch, modal |
+
+La documentazione precedente coincide con il codice per le query introdotte. La correzione interpretativa principale è Campionati: i vecchi hook condivisi sono ancora presenti per coach/admin, ma nel percorso atleta ricevono `tanstack=true` e non eseguono il loro `reload`; il consumer effettivo è la query TanStack dedicata.
+
+### B. Fetch manuali residui
+
+| File/superficie | Fetch | Trigger | Tipo | Classificazione | Motivazione |
+| --- | --- | --- | --- | --- | --- |
+| `AthleteDashboard`, `AthleteCalendarManager` | POST/DELETE attendance e early absence | azione esplicita | mutation | 2 — KEEP AS IS | Server mutation; cache sync mirata già presente. |
+| `EarlyAbsencePeriodModal` | GET paginato periodo + POST/DELETE | apertura/carica altri/salvataggio | workflow collection/mutation | 2 — KEEP AS IS | Dataset temporaneo del workflow; non è una pagina navigabile e non va trattato come query persistente senza un requisito di paginazione/cache. |
+| `MessageDetailModal` | POST `/api/messages/read` | apertura con messaggio non letto | mutation | 2 — KEEP AS IS | Aggiorna il server e propaga evento/cache. |
+| `MessageDetailModal` | GET attachment signed URL | click allegato | binary/signed URL | 2 — KEEP AS IS | Download on demand; URL e binary restano fuori Query Cache. |
+| `usePush` / Profile | POST subscribe/unsubscribe + Push API | azione dispositivo | device mutation | 2 — KEEP AS IS | Browser/device state, non server-state generico. |
+| `AccessibleProfileContext` | GET accessible profiles | bootstrap e focus/visibility | server state provider | 4 — FOLLOW-UP GOAL | È server state globale, ma alimenta il contesto di autorizzazione; la migrazione richiede un disegno esplicito di bootstrap, subject switching e revoca. |
+| `useAuth` | GET `/api/me/profile` | bootstrap auth | account/auth state | 2 — KEEP AS IS | Contratto account diverso dal profilo atleta/subject; non è una duplicazione sostituibile automaticamente. |
+| `AthleteFeesManager` | GET `/api/athlete/fees` | mount del componente legacy | server state locale | 5 — OPTIONAL CLEANUP | Non è montato dalla route corrente (`/athlete/fees` usa Administration); resta codice/test legacy da rimuovere o chiarire in un goal dedicato. |
+| `team-detail.ts` | query Supabase client-side | apertura team detail | server state query-backed | 4 — FOLLOW-UP GOAL | È già dentro TanStack, ma il transport non riceve il subject delegato; vedi security review. |
+
+Non sono rimasti GET di pagina in `Dashboard`, Calendar, Messages, Administration, Profile o Championships fuori da una query TanStack attiva, con l’eccezione del componente Fees legacy non raggiunto dalla route.
+
+### C. State/useEffect/listener residuals
+
+Lo stato proveniente dalle query attive non è più conservato in `useState` nei manager principali. Restano correttamente locali: modal/detail selection, filtri, vista/mese calendario, feedback, loading/error presentation, stato push e form/modali Campionati. Il vecchio stato array/object di `AthleteFeesManager` è la sola residua implementazione applicativa non raggiunta.
+
+| Superficie | Effect/listener | Valutazione |
+| --- | --- | --- |
+| Messages | `online`/`offline` con `refetch` e `runClientRefresh` | 3 — QUICK WIN: possibile duplicazione con `refetchOnReconnect`; l’handler `offline` tenta anche un refetch mentre la connessione è assente. Non rimosso in questo audit. |
+| Administration | `online`/`offline` con `refetch` | 3 — QUICK WIN: la query ha già refetch/reconnect globale; mantenere solo se serve il banner locale, non il refetch duplicato. |
+| Profile | `online`/`offline` con `refetch` | 3 — QUICK WIN: stesso rilievo; lo stato push/device resta necessario. |
+| Calendar/Dashboard | timer `next_recalculation_at` | 1 — COMPLETE / CORRECT: timer business-specific, invalida solo la propria query. |
+| Messages/Dashboard/Calendar | subject context event | 2 — KEEP AS IS: resetta modal/selezioni e impedisce di mostrare il subject precedente. |
+| `AccessibleProfileProvider` | focus/visibility | 2 — KEEP AS IS fino a migrazione provider: refresh dell’elenco profili autorizzati, non duplicazione di una query atleta. |
+| `PwaBootstrap` | online/offline/focus/visibility/service worker | 2 — KEEP AS IS: device/PWA/connectivity lifecycle globale. |
+
+`runClientRefresh` resta in uso reale per Messages, `AthleteFeesManager`, `AccessibleProfileProvider` e nel percorso coach di `TeamProvider`. Per l’area atleta migrata è ancora legacy in Messages; nel componente Fees è legacy non raggiunto. Non è usato da Calendar o Dashboard.
+
+### D. Query key review
+
+Le query athlete attive includono account e subject quando il risultato è subject-specifico; detail includono l’ID entità; catalog/group/convocation includono solo i parametri che cambiano il contratto server. Mese, vista, filtri, tab e `selectedTeamId` restano fuori quando sono trasformazioni locali.
+
+| Area | Esito | Nota |
+| --- | --- | --- |
+| Profile, Administration, Calendar, Dashboard, Messages, unread | 1 — COMPLETE / CORRECT | account + subject presenti. |
+| Event detail, message detail, team detail | 1 per isolamento cache | ID detail presente; team detail ha però il problema transport/RLS separato. |
+| Championships catalog/group | 1 — COMPLETE / CORRECT | subject/account + group dove necessario; stagione non è parametro del response atleta corrente. |
+| Convocation | 1 — COMPLETE / CORRECT | match + club team presenti; evita collisioni tra convocazioni della stessa partita. |
+| Delegated subject | 1 — COMPLETE / CORRECT per query HTTP | nessun `placeholderData`/`previousData` cross-subject; il contesto server resta autoritativo. |
+
+Non risultano key incomplete o key gonfiate da filtri UI. Il rischio residuo non è nella key ma nel fatto che `team-detail.ts` usa `teamId` senza trasmettere il subject delegated al client Supabase.
+
+### E. Duplicate API/query audit
+
+- Messages: lista, detail e unread sono payload/chiavi diverse e quindi deduplicazione corretta; Dashboard detail riusa la stessa message-detail query. La duplicazione count/list è accettabile perché i payload e il costo sono diversi.
+- Dashboard/Administration/alerts: sovrapposizione di fees/certificate è reale ma i contratti sono diversi (aggregato Dashboard, alerts limitati, contratto Administration completo). Classificata 2 — KEEP AS IS; consolidarla richiederebbe API redesign.
+- `/api/me/profile` e `/api/athlete/profile`: contratti account vs subject distinti. 2 — KEEP AS IS.
+- Teams: Dashboard/Calendar/Messages trasportano liste nel loro payload per motivi di contratto; `TeamProvider` atleta non esegue un GET separato. 2 — KEEP AS IS.
+- Campionati: nessun doppio GET catalog/group nel consumer atleta corrente; i legacy hooks sono disabilitati in quel mode. 1 — COMPLETE / CORRECT.
+
+### F. Cache synchronization e invalidations
+
+`syncAthleteAttendanceCaches` aggiorna solo cache già presenti di Dashboard, Calendar e Event Detail, preservando il payload completo e senza inventare cache parziali. `syncAthleteMessageReadCaches` aggiorna list, detail, unread e Dashboard preview/count, è account/subject-aware e idempotente tramite marker per `QueryClient/account/subject/message`.
+
+| Mutation | Consumer | Esito |
+| --- | --- | --- |
+| RSVP | Calendar, Dashboard, Event Detail | 1 — COMPLETE / CORRECT |
+| Early absence singola | Calendar, Dashboard, Event Detail | 1 — COMPLETE / CORRECT |
+| Early absence period | Calendar, Dashboard/Event Detail già presenti | 1 — COMPLETE / CORRECT; invalidazione detail mirata perché il batch non restituisce tutte le capability. |
+| Mark read | list, detail, unread, Dashboard preview/count | 1 — COMPLETE / CORRECT |
+| Push subscribe/unsubscribe | device + endpoint notifiche | 2 — KEEP AS IS; non altera server query athlete corrente. |
+
+Le invalidazioni trovate sono mirate: Calendar timer, Dashboard timer, Calendar/event detail dopo batch. Non risultano `invalidateQueries()` senza filtro, `resetQueries` o `removeQueries` impropri. `queryClient.clear()` esiste solo in `QuerySessionCacheBoundary` al cambio di session identity ed è necessario per logout/account switch.
+
+### G. Detail/modal status
+
+| Detail/workflow | Strategia corrente | Esito |
+| --- | --- | --- |
+| Message Detail | detail query condivisa | 1 — COMPLETE / CORRECT |
+| Calendar Event Detail | detail query condivisa | 1 — COMPLETE / CORRECT |
+| Dashboard Event | parent Dashboard payload | 2 — KEEP AS IS; il contratto parent è sufficiente. |
+| Team Detail | detail query cached | 4 — FOLLOW-UP GOAL per subject transport/RLS. |
+| Convocation | detail query + prefetch stesso key | 1 — COMPLETE / CORRECT |
+| Fees/Certificate | parent Administration | 1 — COMPLETE / CORRECT |
+| Documents metadata | parent Profile | 1 — COMPLETE / CORRECT |
+| Attachment URL/binary | on-demand | 2 — KEEP AS IS |
+| Match inline | parent Championship group payload | 2 — KEEP AS IS |
+| Early absence period | workflow collection locale | 2 — KEEP AS IS |
+
+### H. Championships status
+
+Campionati non è più prevalentemente legacy nel percorso atleta: catalogo e group server state usano Query Cache e sopravvivono al remount entro `gcTime`. Matches, standings, next match e club teams arrivano dal payload catalog/group e vengono filtrati localmente; la convocazione è cached separatamente. Rimangono hook legacy condivisi per coach/admin e stato UI/compatibilità nel manager, ma non causano un fetch atleta aggiuntivo.
+
+### I. Provider, storage e hard reload
+
+| Data | Storage | Personal data | Esito |
+| --- | --- | --- | --- |
+| Query athlete | QueryClient in-memory | Sì | 1 — COMPLETE / CORRECT; nessuna persistenza TanStack. |
+| Account profile cache | `sessionStorage` `csroma_profile_cache` | Sì, profilo account | 2 — KEEP AS IS; è auth cache preesistente, non Query Cache. |
+| Subject/area selection | `localStorage` | ID subject/area | 2 — KEEP AS IS; contesto UI/navigation, non payload server. |
+| Selected team | `localStorage` per area+subject | ID team | 2 — KEEP AS IS; filtro/context state. |
+| Theme/app version | `localStorage` | No | 2 — KEEP AS IS. |
+| Service Worker | precache/static/image cache | No API atleta autenticata | 1 — COMPLETE / CORRECT. |
+
+`AuthProvider`, `AccessibleProfileProvider` e `TeamProvider` conservano ancora stato globale; la loro eventuale migrazione a TanStack è un follow-up architetturale, non una lacuna delle query pagina. `QuerySessionCacheBoundary` esegue `clear()` quando cambia l’identità sessione. SPA navigation riusa la stessa QueryClient; browser hard reload ricrea il client e rifà i fetch: comportamento corretto e coerente con cache in-memory.
+
+### J. staleTime/gcTime matrix
+
+`gcTime` è 30 minuti per tutte le query, salvo override assenti.
+
+| Dominio | staleTime | gcTime | Valutazione |
+| --- | ---: | ---: | --- |
+| Unread | 15 s | 30 min | 1 — coerente con badge volatile. |
+| Messages list | 45 s | 30 min | 1 — coerente. |
+| Attendance/event detail | 60 s | 30 min | 1 — breve per stato operativo. |
+| Dashboard | 90 s | 30 min | 1 — coerente con aggregato. |
+| Calendar | 2 min | 30 min | 1 — coerente con timer availability. |
+| Administration/alerts | 3 min | 30 min | 1 — coerente con dati meno volatili. |
+| Profile | 5 min | 30 min | 1 — coerente. |
+| Championships catalog/group | 5/3 min | 30 min | 1 — coerente con calendario sportivo. |
+| Convocation | 60 s | 30 min | 1 — coerente con pubblicazione/modifica convocazioni. |
+| Team detail | 10 min | 30 min | 4 — FOLLOW-UP GOAL solo se il contratto subject-scoped viene confermato; freshness lunga non è di per sé un bug. |
+
+Non emerge un’anomalia evidente di freshness. La validità dell’autorizzazione non dipende da staleTime: i refetch e le API server restano autoritativi.
+
+### K. Request deduplication e network path
+
+La deduplicazione reale è garantita quando concorrenti usano la stessa key: message detail Dashboard/Messages, convocation prefetch/modal, e ciascun event detail. Dashboard consumers non duplicano automaticamente la query dashboard perché il consumer principale è unico; badge count e lista restano endpoint diversi per contratto.
+
+Percorso teorico in una sessione:
+
+`Login → Dashboard`: fetch Dashboard + alerts + unread badge; i payload distinti sono attesi.
+
+`Dashboard → Calendar`: primo fetch Calendar; ritorno successivo entro cache è hit, oltre staleTime è background refetch.
+
+`Calendar → Event Detail`: prima apertura fetch detail; chiusura/riapertura entro 60 s è hit; RSVP sincronizza le cache già presenti.
+
+`Event Detail → Messages`: primo ingresso fetch lista; detail solo all’apertura se non già in cache; badge usa count query separata.
+
+`Messages → Message Detail`: se il detail è stato aperto da Dashboard e la key coincide, hit; altrimenti un fetch full inevitabile.
+
+`Messages → Administration`: fetch Administration al primo ingresso; ritorni successivi cache hit/background refetch.
+
+`Administration → Profile`: fetch Profile al primo ingresso; `/api/me/profile` resta il fetch account separato del provider.
+
+`Profile → Championships`: fetch catalog al primo ingresso; group solo quando il gruppo viene selezionato; convocation fetch/prefetch sulla key dedicata.
+
+`Championships → Dashboard`: cache hit se ancora entro `gcTime`, altrimenti refetch; nessuna perdita per il normale unmount.
+
+### L. Test coverage e gap
+
+Copertura presente: typecheck, lint, contract/query tests per catalog/group, convocation dedup, event detail, cache synchronization, cached remount per Profile/Administration/Calendar e component tests per Dashboard/Messages/Championships/navigation/provider.
+
+Gap importanti rimasti:
+
+- 4 — FOLLOW-UP GOAL: test manuale/integrato autenticato per delegated Team Detail, logout/account switch e revoca accesso con network/RLS reali.
+- 3 — QUICK WIN: correggere il test `BottomNavigation.test.tsx` perché l’evento simulato omette `isRead: true`; il codice ignora correttamente eventi non confermati, ma il test attuale fallisce (184 passati, 1 fallito).
+- 3 — QUICK WIN: aggiungere una verifica esplicita che Messages/Administration/Profile non mostrino full loading su background refetch, oltre ai test già presenti per alcuni manager.
+
+### M. Residual risks e classificazione finale
+
+| Rischio | Severità | Classificazione | Evidenza |
+| --- | --- | --- | --- |
+| Team Detail delegato usa RLS dell’account e non passa il subject alla query Supabase | MEDIUM | 4 — FOLLOW-UP GOAL | `fetchTeamDetail(teamId)` non riceve subject; key isolata non cambia l’identità RLS. Rischio primario di underfetch/contratto incoerente, non prova di leakage. |
+| Listener reconnect duplicano refetch TanStack | LOW | 3 — QUICK WIN | Messages/Administration/Profile hanno listener `online` oltre a `refetchOnReconnect`. |
+| `runClientRefresh` residuo in Messages | LOW | 4 — FOLLOW-UP GOAL | coalescing legacy su query già TanStack. |
+| Fees manager legacy manuale non raggiunto | LOW | 5 — OPTIONAL CLEANUP | `/athlete/fees` usa Administration; il componente resta solo nel codice/test. |
+| Stale data dopo revoca permesso | NONE osservato | 1 — COMPLETE / CORRECT | key subject/account, 403 distinto, clear su session switch; revoca subject necessita comunque test E2E reale. |
+| Cache cross-account/cross-subject | NONE osservato | 1 — COMPLETE / CORRECT | key factory e `QuerySessionCacheBoundary`; sync usa sempre account+subject. |
+| Payload parziali creati da `setQueryData` | NONE osservato | 1 — COMPLETE / CORRECT | helper usa `getQueryData` e aggiorna solo cache esistenti. |
+| Full loading durante background refetch | NONE nei manager migrati verificati | 1 — COMPLETE / CORRECT | condizioni basate su `isPending`/assenza dati; Dashboard conserva UI cached. |
+
+### M. Final recommendation
+
+Verdetto: **MIGRAZIONE SOSTANZIALMENTE COMPLETA CON 2 FOLLOW-UP**.
+
+L’area Atleta principale non perde più il server state al normale cambio route per Dashboard, Calendar, Messages, Administration, Profile, Championships, detail evento, detail messaggio, detail squadra e convocazione cached. Query key, logout clearing, subject isolation, loading UX e sincronizzazione delle mutation sono coerenti.
+
+Prossimo goal consigliato: verificare e correggere con un contratto esplicito il Team Detail per subject delegato, includendo test RLS/network account-vs-subject. In un goal successivo separato si può rimuovere il reconnect legacy delle query già migrate e chiarire/eliminare `AthleteFeesManager` manuale non raggiunto.
+
+## Team Detail subject/RLS verification (8 ottobre 2026)
+
+### Comportamento precedente e classificazione
+
+Il percorso era:
+
+```text
+AthleteDashboard
+→ selectedTeamId da TeamProvider
+→ useAthleteTeamDetailQuery(teamId)
+→ query Supabase browser-side filtrata solo per teamId
+→ RLS sull’identità Supabase dell’account autenticato
+```
+
+La Query Key distingueva correttamente `accountId`, `subjectProfileId` e `teamId`, ma il `queryFn` non trasmetteva il subject. Per il subject personale questo coincideva normalmente con `private.current_profile_id()`. Per un familiare/delegato, invece, la key cambiava mentre la membership valutata dalle RLS restava quella dell’account delegante.
+
+Classificazione iniziale: **D — CONTRACT AMBIGUOUS**, con rischio concreto di **B — UNDERFETCH** per un subject delegato autorizzato. Non è stata trovata evidenza di overfetch: le RLS browser-side limitano comunque l’account ai propri team, ma non rappresentano il contratto delegato richiesto dalla UI.
+
+### RLS e authorization effettive
+
+Le policy rilevanti nel canonical staging schema sono:
+
+- `teams_athlete_select`, basata su `private.is_in_same_team(teams.id)`;
+- `team_members` per l’atleta, basata su `private.is_in_same_team(team_id)`;
+- `team_training_schedules_athlete_select`, basata sulla stessa membership dell’identità corrente;
+- `Athletes can view coaches of their teams`, basata su `private.is_in_same_team(team_id)`;
+- profili teammate, limitati da `private.can_view_teammate_profile`.
+
+`private.current_profile_id()` risolve il profilo owner dell’account autenticato. Queste policy autorizzano correttamente il self subject, ma non ricevono il `subjectProfileId` delegato. La Query Key non può sostituire questa autorizzazione.
+
+### Correzione applicata
+
+Sono stati aggiunti:
+
+- `src/app/api/athlete/teams/detail/route.ts`;
+- `src/server/athlete/team-detail.ts`;
+- query client aggiornata in `src/lib/athlete/team-detail.ts`.
+
+Il nuovo contratto è:
+
+```text
+client
+→ GET /api/athlete/teams/detail?id=teamId&subjectProfileId=subjectId
+→ requireSubjectAthleteContext(..., 'view_schedule')
+→ account access + relationship + permission + athlete/season checks
+→ subject.activeTeamIds
+→ esplicita team_members(profile_id = subject, team_id = team)
+→ Team Detail dal subject.dataClient
+```
+
+Per il self subject `subject.dataClient` mantiene il client autenticato e quindi le RLS. Per un subject delegato il contesto già autorizzato usa il server-side data client previsto dal repository, dopo aver verificato relazione, permesso `view_schedule`, profilo atleta, iscrizione stagionale e membership esplicita. Un team fuori dal subject restituisce `403`; non viene convertito in lista vuota o dettaglio parziale.
+
+La shape `TeamDetailData`, la UI `TeamDetailModal`, la staleTime di 10 minuti e la Query Key `athleteKeys.teamDetail(accountId, subjectProfileId, teamId)` sono rimaste invariate. Il client aggiunge `subjectProfileId` solo nel family view e mantiene `cache: 'no-store'` sul trasporto HTTP.
+
+### Cache e account/subject isolation
+
+- self/Team T e Child A/Team T hanno key distinte;
+- Child A/Team T non può riusare la cache di Child B/Team T;
+- `open → close → reopen` riusa la stessa query fresh senza nuovo GET;
+- il cambio account continua a essere protetto da `QuerySessionCacheBoundary.queryClient.clear()`;
+- non è stato introdotto `placeholderData` o `previousData` cross-subject.
+
+### Test e verifica
+
+Test aggiunti:
+
+- `src/app/api/athlete/teams/detail/route.test.ts`: risoluzione subject server-side, propagazione `view_schedule`, 403 prima del loader e validazione `teamId`;
+- `src/lib/athlete/team-detail.test.ts`: subject delegato nel request, key account/subject/team, cached reopen, risposta 403 tipizzata.
+
+Verificati:
+
+- `npx tsc --noEmit`;
+- test Team Detail, route API e Dashboard: 30 test passati;
+- `npm run lint` da eseguire come check finale del goal.
+
+Rischio residuo: resta raccomandata una verifica manuale autenticata su staging con self, Child A, Child B e un team non appartenente al subject, perché i test repository non emulano una sessione Supabase/RLS reale. La correzione non modifica policy o dati Supabase.
