@@ -17,7 +17,7 @@ type EarlyAbsencePeriodModalProps = {
   open: boolean
   subjectProfileId: string | null
   onClose: () => void
-  onSaved: () => void
+  onSaved: (eventIds: string[]) => void
 }
 
 function eventTeamLabels(event: AthleteCalendarEvent) {
@@ -164,7 +164,7 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
         setError(staleError)
         return
       }
-      onSaved()
+      onSaved(selectedEvents.map((event) => event.id))
       onClose()
     } catch (cause: unknown) {
       setError(typeof navigator !== 'undefined' && !navigator.onLine ? 'Sei offline: l’assenza non può essere salvata' : cause instanceof Error ? cause.message : 'Impossibile salvare l’assenza')

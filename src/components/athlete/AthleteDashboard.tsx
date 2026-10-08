@@ -22,6 +22,7 @@ import { useAthleteDashboardAlertsQuery, useAthleteDashboardQuery } from '@/lib/
 import { useAthleteMessageDetailQuery } from '@/lib/athlete/messages'
 import { useAthleteTeamDetailQuery } from '@/lib/athlete/team-detail'
 import { athleteKeys } from '@/lib/query-keys'
+import { syncAthleteAttendanceCaches, syncAthleteMessageReadCaches } from '@/lib/athlete/cache-synchronization'
 
 interface User {
   id: string
@@ -273,18 +274,11 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       if (controller.signal.aborted || lastSubjectKeyRef.current !== requestSubjectKey) return
 
       const respondedAt = new Date().toISOString()
-      const key = dashboardQuery.accountId && subjectKey
-        ? athleteKeys.dashboard(dashboardQuery.accountId, subjectKey)
-        : null
-      if (key) {
-        queryClient.setQueryData(key, (current: typeof dashboard | undefined) => current ? {
-          ...current,
-          upcomingEvents: current.upcomingEvents.map((event) => (
-            event && typeof event === 'object' && 'id' in event && event.id === eventId
-              ? { ...event, my_attendance: { status, responded_at: respondedAt } }
-              : event
-          )),
-        } : current)
+      if (dashboardQuery.accountId && dashboardQuery.subjectProfileId) {
+        syncAthleteAttendanceCaches(queryClient, dashboardQuery.accountId, dashboardQuery.subjectProfileId, {
+          eventId,
+          myAttendance: { status, responded_at: respondedAt },
+        })
       }
     } catch (error) {
       if (controller.signal.aborted) return
@@ -335,14 +329,18 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
         },
       }
     }
-    const key = dashboardQuery.accountId && subjectKey
-      ? athleteKeys.dashboard(dashboardQuery.accountId, subjectKey)
-      : null
-    if (key) {
-      queryClient.setQueryData(key, (current: typeof dashboard | undefined) => current ? {
-        ...current,
-        upcomingEvents: current.upcomingEvents.map((event) => updateEvent(event as Event)),
-      } : current)
+    if (dashboardQuery.accountId && dashboardQuery.subjectProfileId) {
+      const currentEvent = upcomingEvents.find((event) => event.id === eventId)
+      const updatedEvent = currentEvent ? updateEvent(currentEvent) : null
+      syncAthleteAttendanceCaches(queryClient, dashboardQuery.accountId, dashboardQuery.subjectProfileId, {
+        eventId,
+        myAttendance: revoke
+          ? null
+          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+        ...(currentEvent?.attendance_availability
+          ? { attendanceAvailability: updatedEvent?.attendance_availability }
+          : {}),
+      })
     }
     setSelectedEvent((current) => current ? updateEvent(current) : current)
   }
@@ -636,18 +634,11 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           markAsRead
           readState={selectedMessage.read_state ?? { is_read: selectedMessage.is_read, read_at: null }}
           onReadStateChange={(state) => {
-            if (!dashboardQuery.accountId || !subjectKey) return
-            const key = athleteKeys.dashboard(dashboardQuery.accountId, subjectKey)
-            queryClient.setQueryData(key, (current: typeof dashboard | undefined) => {
-              if (!current) return current
-              const wasUnread = current.unreadMessages.some((message) => message && typeof message === 'object' && 'id' in message && message.id === selectedMessage.id && 'is_read' in message && message.is_read === false)
-              return {
-                ...current,
-                unreadMessages: current.unreadMessages.map((message) => message && typeof message === 'object' && 'id' in message && message.id === selectedMessage.id
-                  ? { ...message, is_read: state.is_read, read_state: state }
-                  : message),
-                unreadMessageCount: state.is_read && wasUnread ? Math.max(0, current.unreadMessageCount - 1) : current.unreadMessageCount,
-              }
+            if (!dashboardQuery.accountId || !dashboardQuery.subjectProfileId) return
+            syncAthleteMessageReadCaches(queryClient, dashboardQuery.accountId, dashboardQuery.subjectProfileId, {
+              messageId: selectedMessage.id,
+              isRead: state.is_read,
+              readAt: state.read_at,
             })
           }}
           data={{

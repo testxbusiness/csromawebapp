@@ -18,12 +18,12 @@ import { markCalendarConflicts } from '@/lib/athlete/calendar-conflicts'
 import { canConfirmAthleteAttendance } from '@/lib/athlete/calendar-permissions'
 import { AthleteCalendarQueryError, useAthleteCalendarQuery } from '@/lib/athlete/calendar'
 import { athleteKeys } from '@/lib/query-keys'
-import type { AthleteCalendarContract } from '@/types/athlete-calendar'
 import AttendanceControl from '@/components/athlete/AttendanceControl'
 import type { AttendanceStatus } from '@/types/attendance'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
 import EarlyAbsencePeriodModal from '@/components/athlete/EarlyAbsencePeriodModal'
+import { syncAthleteAttendanceCaches } from '@/lib/athlete/cache-synchronization'
 
 type Event = AthleteCalendarEvent
 interface TeamLite { id: string; name: string; code: string }
@@ -138,15 +138,11 @@ export default function AthleteCalendarManager() {
       if (controller.signal.aborted || subjectContextRef.current !== selectedProfileId) return
 
       const respondedAt = new Date().toISOString()
-      if (calendarKey) {
-        queryClient.setQueryData<AthleteCalendarContract>(calendarKey, (current) => current
-          ? {
-              ...current,
-              events: current.events.map((event) => event.id === eventId
-                ? { ...event, my_attendance: { status, responded_at: respondedAt } }
-                : event),
-            }
-          : current)
+      if (accountId && subjectProfileId) {
+        syncAthleteAttendanceCaches(queryClient, accountId, subjectProfileId, {
+          eventId,
+          myAttendance: { status, responded_at: respondedAt },
+        })
       }
     } catch (error: unknown) {
       if (error instanceof DOMException && error.name === 'AbortError') return
@@ -154,7 +150,7 @@ export default function AthleteCalendarManager() {
     } finally {
       if (attendanceRequestRef.current === controller) attendanceRequestRef.current = null
     }
-  }, [calendarKey, queryClient, selectedProfileId])
+  }, [accountId, queryClient, selectedProfileId, subjectProfileId])
 
   const mutateEarlyAbsence = useCallback(async (eventId: string, revoke = false, note?: string) => {
     if (!navigator.onLine) throw new Error('Sei offline: l’assenza non può essere salvata')
@@ -165,38 +161,33 @@ export default function AthleteCalendarManager() {
     const result = await response.json().catch(() => null) as { error?: string } | null
     if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
     if (subjectContextRef.current !== selectedProfileId) return
-    if (calendarKey) {
-      queryClient.setQueryData<AthleteCalendarContract>(calendarKey, (current) => current
+    if (accountId && subjectProfileId) {
+      const currentEvent = events.find((event) => event.id === eventId)
+      const currentAvailability = currentEvent?.attendance_availability
+      const isNext = currentAvailability?.next_event?.id === eventId
+      const nextAvailability = currentAvailability
         ? {
-            ...current,
-            events: current.events.map((event) => {
-              if (event.id !== eventId) return event
-              const currentAvailability = event.attendance_availability
-              if (!currentAvailability) return event
-              const isNext = currentAvailability.next_event?.id === eventId
-              return {
-                ...event,
-                my_attendance: revoke
-                  ? null
-                  : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
-                attendance_availability: {
-                  ...currentAvailability,
-                  can_respond_now: revoke ? isNext : false,
-                  can_report_early_absence: !revoke,
-                  can_revoke_early_absence: revoke,
-                  actions: {
-                    respond: revoke ? isNext : false,
-                    report_early_absence: !revoke,
-                    revoke_early_absence: revoke,
-                  },
-                  closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
-                },
-              }
-            }),
+            ...currentAvailability,
+            can_respond_now: revoke ? isNext : false,
+            can_report_early_absence: !revoke,
+            can_revoke_early_absence: revoke,
+            actions: {
+              respond: revoke ? isNext : false,
+              report_early_absence: !revoke,
+              revoke_early_absence: revoke,
+            },
+            closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
           }
-        : current)
+        : undefined
+      syncAthleteAttendanceCaches(queryClient, accountId, subjectProfileId, {
+        eventId,
+        myAttendance: revoke
+          ? null
+          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+        attendanceAvailability: nextAvailability,
+      })
     }
-  }, [calendarKey, queryClient, selectedProfileId])
+  }, [accountId, events, queryClient, selectedProfileId, subjectProfileId])
 
   const retryLoad = () => { void refetch() }
 
@@ -420,7 +411,15 @@ export default function AthleteCalendarManager() {
           open={earlyAbsenceOpen}
           subjectProfileId={selectedProfileId}
           onClose={() => setEarlyAbsenceOpen(false)}
-          onSaved={() => {
+          onSaved={(eventIds) => {
+            if (accountId && subjectProfileId) {
+              for (const eventId of eventIds) {
+                syncAthleteAttendanceCaches(queryClient, accountId, subjectProfileId, {
+                  eventId,
+                  myAttendance: { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+                })
+              }
+            }
             if (calendarKey) void queryClient.invalidateQueries({ queryKey: calendarKey })
           }}
         />

@@ -4,6 +4,7 @@ import { appendSubjectProfile, useAccessibleProfiles } from '@/context/Accessibl
 import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import { MESSAGE_READ_STATE_CHANGED_EVENT, type MessageReadStateChangedDetail } from '@/lib/messages/read-state-events'
+import { syncAthleteMessageReadCaches } from '@/lib/athlete/cache-synchronization'
 
 const UNREAD_COUNT_STALE_TIME = 15_000
 
@@ -52,12 +53,12 @@ export function useAthleteUnreadMessageCount() {
     const handleReadStateChanged = (event: Event) => {
       const detail = (event as CustomEvent<MessageReadStateChangedDetail>).detail
       if ((detail?.subjectProfileId ?? null) !== (isFamilyView ? selectedProfileId : null)) return
-      const key = athleteKeys.messages.unread(accountId, subjectProfileId)
-      if (detail?.isRead === true) {
-        queryClient.setQueryData<number>(key, (current) => Math.max(0, (current ?? 0) - 1))
-      } else {
-        void queryClient.invalidateQueries({ queryKey: key })
-      }
+      if (detail?.isRead !== true) return
+      syncAthleteMessageReadCaches(queryClient, accountId, subjectProfileId, {
+        messageId: detail.messageId,
+        isRead: detail.isRead === true,
+        readAt: detail.readAt,
+      })
     }
 
     window.addEventListener(MESSAGE_READ_STATE_CHANGED_EVENT, handleReadStateChanged)

@@ -4,6 +4,7 @@ export type MessageReadStateChangedDetail = {
   messageId: string
   subjectProfileId: string | null
   isRead?: boolean
+  readAt?: string | null
 }
 
 export function emitMessageReadStateChanged(detail: MessageReadStateChangedDetail): void {

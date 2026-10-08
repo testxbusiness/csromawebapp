@@ -9,7 +9,7 @@ import { EmptyState, ErrorState, FeedbackState, LoadingState, OfflineState, Pane
 import { AthleteMessageList, type AthleteMessageListItem } from './AthleteMessageList'
 import { filterAthleteMessages, type MessageReadFilter } from '@/lib/athlete/message-filters'
 import { AthleteMessagesQueryError, useAthleteMessageDetailQuery, useAthleteMessagesQuery } from '@/lib/athlete/messages'
-import { athleteKeys } from '@/lib/query-keys'
+import { syncAthleteMessageReadCaches } from '@/lib/athlete/cache-synchronization'
 import { SUBJECT_CONTEXT_CHANGED_EVENT, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useTeamContext } from '@/context/TeamContext'
@@ -130,24 +130,12 @@ export default function AthleteMessagesManager() {
 
   const handleReadStateChange = useCallback((state: MessageReadState) => {
     if (!selectedMessageId || !account?.authUserId) return
-    const listKey = athleteKeys.messages.list(account.authUserId, selectedProfileId ?? account.ownerProfileId)
-    queryClient.setQueryData<{ messages: AthleteMessageContract[]; teams: unknown[] }>(listKey, (current) => current
-      ? {
-          ...current,
-          messages: current.messages.map((message) => message.id === selectedMessageId
-            ? { ...message, is_read: state.is_read, read_state: state }
-            : message),
-        }
-      : current)
-    const detailKey = athleteKeys.messages.detail(account.authUserId, selectedProfileId ?? account.ownerProfileId, selectedMessageId)
-    queryClient.setQueryData<{ messages: AthleteMessageContract[]; teams: unknown[] }>(detailKey, (current) => current
-      ? {
-          ...current,
-          messages: current.messages.map((message) => message.id === selectedMessageId
-            ? { ...message, is_read: state.is_read, read_state: state }
-            : message),
-        }
-      : current)
+    syncAthleteMessageReadCaches(
+      queryClient,
+      account.authUserId,
+      selectedProfileId ?? account.ownerProfileId,
+      { messageId: selectedMessageId, isRead: state.is_read, readAt: state.read_at },
+    )
     setSelectedMessage((current) => current ? { ...current, is_read: state.is_read, read_state: state } : current)
   }, [account?.authUserId, account?.ownerProfileId, queryClient, selectedMessageId, selectedProfileId])
 

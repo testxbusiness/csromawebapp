@@ -75,7 +75,7 @@ export default function MessageDetailModal({
         if (!active) return
         setReadRequest('idle')
         onReadStateChange?.({ is_read: true, read_at: result.read_state.read_at ?? null })
-        emitMessageReadStateChanged({ messageId, subjectProfileId: subjectProfileId ?? null, isRead: true })
+        emitMessageReadStateChanged({ messageId, subjectProfileId: subjectProfileId ?? null, isRead: true, readAt: result.read_state.read_at ?? null })
       })
       .catch(() => {
         if (active) setReadRequest('error')
