@@ -635,6 +635,9 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
           readState={selectedMessage.read_state ?? { is_read: selectedMessage.is_read, read_at: null }}
           onReadStateChange={(state) => {
             if (!dashboardQuery.accountId || !dashboardQuery.subjectProfileId) return
+            setSelectedMessage((current) => current
+              ? { ...current, is_read: state.is_read, read_state: state }
+              : current)
             syncAthleteMessageReadCaches(queryClient, dashboardQuery.accountId, dashboardQuery.subjectProfileId, {
               messageId: selectedMessage.id,
               isRead: state.is_read,
