@@ -766,3 +766,9 @@ Rischio residuo: resta raccomandata una verifica manuale autenticata su staging 
 In `AthleteAdministrationManager` e `AthleteProfileManager` i listener `offline`/`online` restano necessari esclusivamente per lo stato UI locale: mostrano o nascondono il banner offline senza assumere ownership del server state. È stato rimosso il `refetch()` automatico dall'evento `online`, perché il reconnect viene già gestito da TanStack Query tramite `refetchOnReconnect`.
 
 I retry espliciti `Riprova` restano invariati e continuano a invocare `refetch()` direttamente. Il lifecycle push/device del Profile — rilevamento supporto, permission, service worker, subscription e gestione busy/error — non è stato modificato.
+
+## Allineamento offline UI — Messages (8 ottobre 2026)
+
+`AthleteMessagesManager` mantiene ora listener `offline`/`online` esclusivamente per lo stato UI locale, senza refetch automatici. Con lista cached il banner è `Messaggi non aggiornati`, i messaggi restano visibili e `Riprova` è esplicito; senza cache resta `Messaggi non disponibili offline` con lo stesso retry manuale. Il reconnect e il request lifecycle restano ownership di TanStack Query.
+
+Lo stesso comportamento UI-only è stato esteso a Dashboard, Calendario e Campionati. Dashboard e Calendario mantengono il contenuto cached visibile con un banner di dati non aggiornati. Campionati distingue catalogo/girone cached in errore `offline` — pannelli ancora visibili — dall’assenza totale di cache, che mantiene lo stato di errore con retry. Timer di ricalcolo calendario, RSVP, mutation, prefetch convocazioni e retry espliciti non sono stati modificati.

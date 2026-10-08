@@ -226,11 +226,11 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const nextChampionshipMatch = (dashboard?.nextChampionshipMatch ?? null) as ChampionshipMatch | null
   const activeSeason = dashboard?.activeSeason as { name?: string } | null | undefined
   const dashboardStatus = dashboardQuery.isPending ? 'loading' : dashboardQuery.isError && !dashboard ? 'error' : dashboardQuery.isFetching ? 'refreshing' : 'success'
-  const isOffline = dashboardQuery.error?.message === 'offline'
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [accessDenied, setAccessDenied] = useState(false)
+  const [browserOffline, setBrowserOffline] = useState(false)
   const attendanceRequestRef = useRef<AbortController | null>(null)
   const subjectKey = selectedProfileId ?? profile?.id ?? null
   const lastSubjectKeyRef = useRef<string | null>(subjectKey)
@@ -239,6 +239,18 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
   const teamDetailQuery = useAthleteTeamDetailQuery(selectedTeamId)
   const messageDetail = messageDetailQuery.data?.messages?.[0] ?? null
   const teamDetailData = teamDetailQuery.data ?? null
+  const isOffline = browserOffline || dashboardQuery.error?.message === 'offline'
+
+  useEffect(() => {
+    const handleOffline = () => setBrowserOffline(true)
+    const handleOnline = () => setBrowserOffline(false)
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [])
 
   useEffect(() => {
     const handleSubjectChange = (event: globalThis.Event) => {

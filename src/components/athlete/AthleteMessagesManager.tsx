@@ -50,13 +50,14 @@ export default function AthleteMessagesManager() {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [readFilter, setReadFilter] = useState<MessageReadFilter>('all')
   const [deepLinkUnavailable, setDeepLinkUnavailable] = useState(false)
+  const [browserOffline, setBrowserOffline] = useState(false)
   const detailQuery = useAthleteMessageDetailQuery(selectedMessageId)
 
   const messages = useMemo(() => messagesQuery.data?.messages ?? [], [messagesQuery.data?.messages])
   const listTeams = useMemo(() => messagesQuery.data?.teams ?? [], [messagesQuery.data?.teams])
   const queryError = messagesQuery.error instanceof AthleteMessagesQueryError ? messagesQuery.error : null
   const accessDenied = queryError?.status === 403 || (activeArea === 'family' && selectedProfile?.relationship.permissions.receive_messages === false)
-  const offline = queryError?.message === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine && !messagesQuery.data)
+  const offline = browserOffline || queryError?.message === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine && !messagesQuery.data)
   const hasValidAuthContext = Boolean(user && role)
   const initialLoading = authLoading || profileLoading || (messagesQuery.isPending && !messagesQuery.data && hasValidAuthContext && !accessDenied)
   const loadError = !accessDenied && !offline && Boolean(messagesQuery.error)
@@ -66,6 +67,17 @@ export default function AthleteMessagesManager() {
   const selectedDetail = detailQuery.data?.messages?.[0] ?? selectedMessage
   const unreadCount = messages.filter((message) => !message.is_read).length
   const visibleMessages = useMemo(() => filterAthleteMessages(messages, readFilter, selectedTeamId), [messages, readFilter, selectedTeamId])
+
+  useEffect(() => {
+    const handleOffline = () => setBrowserOffline(true)
+    const handleOnline = () => setBrowserOffline(false)
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [])
 
   useEffect(() => {
     if (listTeams.length > 0 || messagesQuery.data) setTeams(listTeams)
@@ -124,6 +136,8 @@ export default function AthleteMessagesManager() {
     setSelectedMessage((current) => current ? { ...current, is_read: state.is_read, read_state: state } : current)
   }, [account?.authUserId, account?.ownerProfileId, queryClient, selectedMessageId, selectedProfileId])
 
+  const retryAction = <button type="button" className="cs-btn cs-btn--primary" onClick={() => void messagesQuery.refetch()}>Riprova</button>
+
   if (!hasValidAuthContext && !authLoading && !profileLoading) return null
   if (initialLoading && !messagesQuery.data) return <LoadingState label="Caricamento messaggi..." />
   if (accessDenied) return <DelegatedAccessDenied section="i messaggi" profileName={selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : undefined} />
@@ -136,8 +150,8 @@ export default function AthleteMessagesManager() {
         {(teams.length > 1 || listTeams.length > 1) ? <div className="cs-athlete-messages__team-filter"><label htmlFor="athlete-messages-team">Squadra</label><select id="athlete-messages-team" className="cs-select" value={selectedTeamId ?? ''} onChange={(event) => setSelectedTeamId(event.target.value || null)}><option value="">Tutte le squadre</option>{(teams.length > 0 ? teams : listTeams).map((team) => <option key={team.id} value={team.id}>{team.name}{team.code ? ` · ${team.code}` : ''}</option>)}</select></div> : null}
       </div>
       <Panel className="cs-athlete-messages__panel overflow-hidden p-0">
-        {offline ? <OfflineState title="Messaggi non disponibili offline" description="I messaggi richiedono una connessione. Quando torni online, riprova." className="rounded-none border-0" /> : null}
-        {loadError ? <ErrorState title="Impossibile caricare i messaggi" description={errorDescription} action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void messagesQuery.refetch()}>Riprova</button>} className="rounded-none border-0" /> : null}
+        {offline ? <OfflineState title={messagesQuery.data ? 'Messaggi non aggiornati' : 'Messaggi non disponibili offline'} description={messagesQuery.data ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I messaggi richiedono una connessione. Quando torni online, riprova.'} action={retryAction} className="rounded-none border-0" /> : null}
+        {loadError ? <ErrorState title="Impossibile caricare i messaggi" description={errorDescription} action={retryAction} className="rounded-none border-0" /> : null}
         {deepLinkUnavailable ? <FeedbackState variant="error" title="Messaggio non disponibile" description="Il messaggio non è disponibile o non hai accesso a questa comunicazione." className="border-b border-[var(--cs-border-canonical)] text-left" /> : null}
         {messagesQuery.data && (visibleMessages.length > 0 ? <AthleteMessageList messages={visibleMessages} onOpen={handleOpenMessage} /> : messages.length > 0 ? <EmptyState filtered title="Nessun messaggio corrisponde ai filtri" description="Prova a cambiare il filtro di lettura o la squadra." /> : <EmptyState title="Nessun messaggio" description="Qui troverai i messaggi indirizzati a te o alle tue squadre." />)}
       </Panel>

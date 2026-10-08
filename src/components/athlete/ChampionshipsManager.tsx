@@ -87,7 +87,19 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const [convocationModalOpen, setConvocationModalOpen] = useState(false)
   const [convocationClubTeamId, setConvocationClubTeamId] = useState<string | null>(null)
   const [convocationMatch, setConvocationMatch] = useState<Match | null>(null)
+  const [browserOffline, setBrowserOffline] = useState(false)
   const { accountId: athleteAccountId, subjectProfileId: athleteSubjectProfileId, subjectProfileQueryParam: athleteSubjectProfileQueryParam } = useAthleteConvocationContext()
+
+  useEffect(() => {
+    const handleOffline = () => setBrowserOffline(true)
+    const handleOnline = () => setBrowserOffline(false)
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [])
 
   useEffect(() => {
     const handleSubjectChange = () => {
@@ -135,8 +147,10 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const nextMatchConvocationQuery = useAthleteConvocationQuery(nextMatch?.id ?? null, nextMatchClubTeam?.id ?? null, false)
   const modalConvocationQuery = useAthleteConvocationQuery(convocationMatch?.id ?? null, convocationClubTeamId, convocationModalOpen)
   const loading = catalogLoading || groupLoading
-  const catalogIssue = mode === 'athlete' && ['error', 'offline', 'denied'].includes(catalogStatus)
-  const showAthletePanels = mode !== 'athlete' || (catalogStatus === 'ready' && Boolean(selectedGroupId) && groupStatus === 'ready')
+  const catalogHasCachedData = mode === 'athlete' && Boolean(athleteCatalog.data)
+  const groupHasCachedData = mode === 'athlete' && Boolean(athleteGroup.data)
+  const catalogIssue = mode === 'athlete' && (['error', 'denied'].includes(catalogStatus) || (catalogStatus === 'offline' && !catalogHasCachedData))
+  const showAthletePanels = mode !== 'athlete' || (Boolean(selectedGroupId) && (catalogStatus === 'ready' || (catalogStatus === 'offline' && catalogHasCachedData)) && (groupStatus === 'ready' || (groupStatus === 'offline' && groupHasCachedData)))
   const renderRetryState = (status: RequestState, onRetry: () => void, title: string) => {
     if (status !== 'error' && status !== 'offline' && status !== 'denied') return null
     return <FeedbackState variant={status} title={title} action={<Button onClick={onRetry}>Riprova</Button>} />
@@ -756,8 +770,9 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         onGroupSelected={(groupId) => { setImportGroupId(groupId); initGroupTeamsSelection(groupId) }}
       />
 
+      {mode === 'athlete' && (browserOffline || (catalogStatus === 'offline' && catalogHasCachedData) || (groupStatus === 'offline' && groupHasCachedData)) ? <FeedbackState variant="offline" title="Campionati non aggiornati" description="Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili." action={<Button onClick={() => { void reloadChampionships(); if (selectedGroupId) void reloadGroupDetails() }}>Riprova</Button>} /> : null}
       {mode === 'athlete' && catalogStatus === 'loading' ? <FeedbackState variant="loading" title="Caricamento campionati..." /> : null}
-      {mode === 'athlete' ? renderRetryState(catalogStatus, () => { void reloadChampionships() }, 'Impossibile caricare i campionati') : null}
+      {mode === 'athlete' ? renderRetryState(catalogStatus === 'offline' && catalogHasCachedData ? 'ready' : catalogStatus, () => { void reloadChampionships() }, 'Impossibile caricare i campionati') : null}
       {mode === 'athlete' && !catalogIssue && catalogStatus === 'ready' && visibleChampionships.length === 0 ? (
         <EmptyState
           filtered={Boolean(selectedTeamId && championships.length > 0)}
@@ -772,7 +787,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         <EmptyState filtered title="Seleziona un girone" description="Scegli il girone da visualizzare per continuare." />
       ) : null}
       {mode === 'athlete' && selectedGroupId && groupStatus === 'loading' ? <FeedbackState variant="loading" title="Caricamento dati del girone..." /> : null}
-      {mode === 'athlete' && selectedGroupId ? renderRetryState(groupStatus, () => { void reloadGroupDetails() }, 'Impossibile caricare il girone') : null}
+      {mode === 'athlete' && selectedGroupId ? renderRetryState(groupStatus === 'offline' && groupHasCachedData ? 'ready' : groupStatus, () => { void reloadGroupDetails() }, 'Impossibile caricare il girone') : null}
 
       {showAthletePanels ? <>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.8fr)]">

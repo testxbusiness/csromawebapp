@@ -45,6 +45,7 @@ export default function AthleteCalendarManager() {
     : null
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
   const [earlyAbsenceOpen, setEarlyAbsenceOpen] = useState(false)
+  const [browserOffline, setBrowserOffline] = useState(false)
 
   const [calendarMode, setCalendarMode] = useState<'agenda' | 'month'>('month')
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
@@ -55,6 +56,17 @@ export default function AthleteCalendarManager() {
   const attendanceRequestRef = useRef<AbortController | null>(null)
   const subjectContextRef = useRef<string | null>(selectedProfileId)
   const nextRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    const handleOffline = () => setBrowserOffline(true)
+    const handleOnline = () => setBrowserOffline(false)
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [])
 
   useEffect(() => {
     const handleSubjectChange = (event: globalThis.Event) => {
@@ -114,7 +126,7 @@ export default function AthleteCalendarManager() {
   const accessDenied = activeArea === 'family' && (
     !selectedProfileId || !selectedProfile?.relationship.permissions.view_schedule
   ) || calendarError instanceof AthleteCalendarQueryError && calendarError.status === 403
-  const isOffline = calendarError instanceof AthleteCalendarQueryError && calendarError.message === 'offline'
+  const isOffline = browserOffline || calendarError instanceof AthleteCalendarQueryError && calendarError.message === 'offline'
   const loadError = calendarError && !isOffline
     ? 'Il calendario non è disponibile al momento. Riprova tra poco.'
     : null
@@ -274,6 +286,7 @@ export default function AthleteCalendarManager() {
 
   return (
     <>
+      {isOffline ? <OfflineState title={calendarData ? 'Calendario non aggiornato' : 'Calendario non disponibile offline'} description={calendarData ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I dati del calendario richiedono una connessione. Quando torni online, riprova.'} action={<button type="button" className="cs-btn cs-btn--outline" onClick={retryLoad}>Riprova</button>} /> : null}
       <div className="cs-card cs-card--primary cs-calendar-shell">
         <div className="cs-calendar-header">
           <h2 className="text-xl font-semibold">I Tuoi Eventi</h2>
