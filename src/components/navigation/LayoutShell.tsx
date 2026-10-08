@@ -80,7 +80,23 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     }
   }
 
+  useEffect(() => {
+    if (showAuthenticatedLayout && !loading && !user) {
+      router.replace('/login')
+    }
+  }, [loading, router, showAuthenticatedLayout, user])
+
   if (!showAuthenticatedLayout) return <>{children}</>
+
+  if (!user) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[color:var(--cs-bg)] px-6">
+        <p className="text-sm text-[color:var(--cs-text-secondary)]">
+          {loading ? 'Verifica sessione...' : 'Sessione terminata. Reindirizzamento...'}
+        </p>
+      </main>
+    )
+  }
 
   const hasUserData = !!user || !!profile
   const shouldShowSkeleton = loading && !hasUserData
