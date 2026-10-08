@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import EventDetailModal, { type EventDetailData } from '@/components/shared/EventDetailModal'
+import EventDetailModal from '@/components/shared/EventDetailModal'
 import MonthlyMobileCalendar, { type MonthlyCalendarEvent } from '@/components/calendar/MonthlyMobileCalendar'
 import FullCalendarWidget, { type CalEvent } from '@/components/calendar/FullCalendarWidget'
 import AthleteAgenda from '@/components/athlete/AthleteAgenda'
@@ -24,6 +24,7 @@ import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { EVENT_KIND_OPTIONS, eventKindVisual } from '@/lib/events/event-kind'
 import EarlyAbsencePeriodModal from '@/components/athlete/EarlyAbsencePeriodModal'
 import { syncAthleteAttendanceCaches } from '@/lib/athlete/cache-synchronization'
+import { useAthleteEventDetailQuery } from '@/lib/athlete/event-detail'
 
 type Event = AthleteCalendarEvent
 interface TeamLite { id: string; name: string; code: string }
@@ -399,7 +400,6 @@ export default function AthleteCalendarManager() {
         <EventDetails
           id={selectedEvent.id}
           onClose={() => setSelectedEvent(null)}
-          selectedProfileId={selectedProfileId}
           canRespond={canConfirmAttendance}
           onAttendanceChange={(status) => saveAttendance(selectedEvent.id, status)}
           onEarlyAbsence={(note) => mutateEarlyAbsence(selectedEvent.id, false, note)}
@@ -418,6 +418,10 @@ export default function AthleteCalendarManager() {
                   eventId,
                   myAttendance: { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
                 })
+                const detailKey = athleteKeys.events.detail(accountId, subjectProfileId, eventId)
+                if (queryClient.getQueryData(detailKey)) {
+                  void queryClient.invalidateQueries({ queryKey: detailKey, refetchType: 'none' })
+                }
               }
             }
             if (calendarKey) void queryClient.invalidateQueries({ queryKey: calendarKey })
@@ -431,7 +435,6 @@ export default function AthleteCalendarManager() {
 function EventDetails({
   id,
   onClose,
-  selectedProfileId,
   canRespond,
   onAttendanceChange,
   onEarlyAbsence,
@@ -439,87 +442,35 @@ function EventDetails({
 }: {
   id: string
   onClose: () => void
-  selectedProfileId: string | null
   canRespond: boolean
   onAttendanceChange: (status: AttendanceStatus) => Promise<void>
   onEarlyAbsence: (note: string) => Promise<void>
   onRevokeEarlyAbsence: () => Promise<void>
 }) {
-  const [data, setData] = useState<EventDetailData | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [retryToken, setRetryToken] = useState(0)
-  const loadDetail = useCallback(async (signal: AbortSignal) => {
-    setData(null)
-    setError(null)
-    try {
-      const res = await fetch(appendSubjectProfile(`/api/athlete/events/detail?id=${id}`, selectedProfileId), { signal })
-      const json = await res.json().catch(() => null) as unknown
-      const responseError = json && typeof json === 'object' && 'error' in json && typeof json.error === 'string'
-        ? json.error
-        : 'Il dettaglio non è disponibile al momento.'
-      if (!res.ok) throw new Error(responseError)
-      if (!json || typeof json !== 'object' || 'error' in json) throw new Error(responseError)
-      setData(json as EventDetailData)
-    } catch (cause: unknown) {
-      if (cause instanceof DOMException && cause.name === 'AbortError') return
-      setError(cause instanceof Error ? cause.message : 'Il dettaglio non è disponibile al momento.')
-    }
-  }, [id, selectedProfileId])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void loadDetail(controller.signal)
-    return () => controller.abort()
-  }, [loadDetail, retryToken])
-
-  const updateLocalAttendance = useCallback((revoke: boolean) => {
-    setData((current) => {
-      if (!current) return current
-      const availability = current.attendance_availability
-      if (!availability) return current
-      const isNext = availability.next_event?.id === id
-      return {
-        ...current,
-        my_attendance: revoke
-          ? null
-          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
-        attendance_availability: {
-          ...availability,
-          can_respond_now: revoke ? isNext : false,
-          can_report_early_absence: revoke,
-          can_revoke_early_absence: !revoke,
-          actions: {
-            respond: revoke ? isNext : false,
-            report_early_absence: revoke,
-            revoke_early_absence: !revoke,
-          },
-          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
-        },
-      }
-    })
-  }, [id])
-
-  const handleEarlyAbsence = useCallback(async (note: string) => {
-    await onEarlyAbsence(note)
-    updateLocalAttendance(false)
-  }, [onEarlyAbsence, updateLocalAttendance])
-
-  const handleRevokeEarlyAbsence = useCallback(async () => {
-    await onRevokeEarlyAbsence()
-    updateLocalAttendance(true)
-  }, [onRevokeEarlyAbsence, updateLocalAttendance])
+  const detailQuery = useAthleteEventDetailQuery(id)
+  const error = detailQuery.data
+    ? null
+    : detailQuery.error?.message === 'offline'
+      ? 'Il dettaglio evento non è disponibile offline.'
+      : detailQuery.error?.status === 403
+        ? 'Non hai accesso a questo evento.'
+        : detailQuery.error?.status === 404
+          ? 'Evento non disponibile.'
+          : detailQuery.error
+            ? 'Il dettaglio non è disponibile al momento.'
+            : null
 
   return (
     <EventDetailModal
       open
       onClose={onClose}
-      data={data}
+      data={detailQuery.data ?? null}
       error={error}
-      onRetry={() => setRetryToken((current) => current + 1)}
+      onRetry={() => void detailQuery.refetch()}
       canRespond={canRespond}
       onAttendanceChange={onAttendanceChange}
-      onEarlyAbsence={handleEarlyAbsence}
-      onRevokeEarlyAbsence={handleRevokeEarlyAbsence}
+      onEarlyAbsence={onEarlyAbsence}
+      onRevokeEarlyAbsence={onRevokeEarlyAbsence}
     />
   )
 }

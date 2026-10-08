@@ -27,6 +27,15 @@ function populateEventCaches(queryClient: QueryClient) {
   })
 }
 
+function populateEventDetailCache(queryClient: QueryClient, subject = subjectProfileId) {
+  queryClient.setQueryData(athleteKeys.events.detail(accountId, subject, eventId), {
+    id: eventId,
+    my_attendance: null,
+    attendance_availability: { can_respond_now: true },
+    description: 'Dettaglio completo',
+  })
+}
+
 describe('athlete cross-query cache synchronization', () => {
   it.each([
     ['Dashboard', 'Calendar'],
@@ -64,6 +73,38 @@ describe('athlete cross-query cache synchronization', () => {
       .toMatchObject({ my_attendance: { is_early_absence: true }, attendance_availability: availability })
     expect(queryClient.getQueryData<{ upcomingEvents: Array<{ my_attendance: unknown; attendance_availability: unknown }> }>(athleteKeys.dashboard(accountId, subjectProfileId))?.upcomingEvents[0])
       .toMatchObject({ my_attendance: { is_early_absence: true }, attendance_availability: availability })
+  })
+
+  it('updates an existing event detail cache without creating absent detail caches', () => {
+    const queryClient = createQueryClient()
+    populateEventDetailCache(queryClient)
+
+    syncAthleteAttendanceCaches(queryClient, accountId, subjectProfileId, {
+      eventId,
+      myAttendance: { status: 'going', responded_at: '2026-10-08T10:00:00.000Z' },
+    })
+
+    expect(queryClient.getQueryData<{ my_attendance: unknown }>(athleteKeys.events.detail(accountId, subjectProfileId, eventId))?.my_attendance)
+      .toEqual({ status: 'going', responded_at: '2026-10-08T10:00:00.000Z' })
+
+    const absentDetailClient = createQueryClient()
+    syncAthleteAttendanceCaches(absentDetailClient, accountId, subjectProfileId, {
+      eventId,
+      myAttendance: { status: 'declined', responded_at: null },
+    })
+    expect(absentDetailClient.getQueryData(athleteKeys.events.detail(accountId, subjectProfileId, eventId))).toBeUndefined()
+  })
+
+  it('does not update another subject event detail cache', () => {
+    const queryClient = createQueryClient()
+    populateEventDetailCache(queryClient, 'athlete-2')
+
+    syncAthleteAttendanceCaches(queryClient, accountId, subjectProfileId, {
+      eventId,
+      myAttendance: { status: 'going', responded_at: null },
+    })
+
+    expect(queryClient.getQueryData(athleteKeys.events.detail(accountId, 'athlete-2', eventId))).toMatchObject({ my_attendance: null })
   })
 
   it('does not invent a Calendar cache when Calendar was not visited', () => {

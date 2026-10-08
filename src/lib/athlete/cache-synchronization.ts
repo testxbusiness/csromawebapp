@@ -58,6 +58,18 @@ export function syncAthleteAttendanceCaches(
       events: updateEventCollection(calendar.events, patch),
     })
   }
+
+  const detailKey = athleteKeys.events.detail(accountId, subjectProfileId, patch.eventId)
+  const detail = queryClient.getQueryData<CacheRecord>(detailKey)
+  if (detail) {
+    queryClient.setQueryData(detailKey, {
+      ...detail,
+      my_attendance: patch.myAttendance,
+      ...(patch.attendanceAvailability !== undefined
+        ? { attendance_availability: patch.attendanceAvailability }
+        : {}),
+    })
+  }
 }
 
 function updateMessage(message: unknown, patch: AthleteMessageReadCachePatch): unknown {
