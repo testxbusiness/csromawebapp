@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { SUBJECT_CONTEXT_CHANGED_EVENT, useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useTeamContext } from '@/context/TeamContext'
-import { Card, CardTitle, CardMeta, Button, Input, Select, toast, Modal, ResponsiveDetail, FeedbackState, EmptyState } from '@/components/ui'
+import { Card, CardTitle, CardMeta, Button, Input, Select, toast, Modal, ResponsiveDetail, FeedbackState, EmptyState, OfflineState } from '@/components/ui'
 import type { RequestState } from '@/lib/http/request-state'
 import { importFromExcel, ImportColumn } from '@/lib/utils/excelImport'
 import { Clock3, MapPin, Trophy, Users } from 'lucide-react'
@@ -758,6 +758,8 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
 
   return (
     <div className="space-y-6 pb-4">
+      {mode === 'athlete' && (browserOffline || (catalogStatus === 'offline' && catalogHasCachedData) || (groupStatus === 'offline' && groupHasCachedData)) ? <OfflineState title="Campionati non aggiornati" description="Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili." action={<Button onClick={() => { void reloadChampionships(); if (selectedGroupId) void reloadGroupDetails() }}>Riprova</Button>} /> : null}
+
       <AthleteChampionshipShell
         teamLabel={selectedTeamId ? teams.find((team) => team.id === selectedTeamId)?.name || 'Squadra selezionata' : 'Tutte le squadre'}
         championships={visibleChampionships}
@@ -770,7 +772,6 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
         onGroupSelected={(groupId) => { setImportGroupId(groupId); initGroupTeamsSelection(groupId) }}
       />
 
-      {mode === 'athlete' && (browserOffline || (catalogStatus === 'offline' && catalogHasCachedData) || (groupStatus === 'offline' && groupHasCachedData)) ? <FeedbackState variant="offline" title="Campionati non aggiornati" description="Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili." action={<Button onClick={() => { void reloadChampionships(); if (selectedGroupId) void reloadGroupDetails() }}>Riprova</Button>} /> : null}
       {mode === 'athlete' && catalogStatus === 'loading' ? <FeedbackState variant="loading" title="Caricamento campionati..." /> : null}
       {mode === 'athlete' ? renderRetryState(catalogStatus === 'offline' && catalogHasCachedData ? 'ready' : catalogStatus, () => { void reloadChampionships() }, 'Impossibile caricare i campionati') : null}
       {mode === 'athlete' && !catalogIssue && catalogStatus === 'ready' && visibleChampionships.length === 0 ? (

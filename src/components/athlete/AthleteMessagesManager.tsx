@@ -137,6 +137,7 @@ export default function AthleteMessagesManager() {
   }, [account?.authUserId, account?.ownerProfileId, queryClient, selectedMessageId, selectedProfileId])
 
   const retryAction = <button type="button" className="cs-btn cs-btn--primary" onClick={() => void messagesQuery.refetch()}>Riprova</button>
+  const offlineBanner = offline ? <OfflineState title={messagesQuery.data ? 'Messaggi non aggiornati' : 'Messaggi non disponibili offline'} description={messagesQuery.data ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I messaggi richiedono una connessione. Quando torni online, riprova.'} action={retryAction} className="rounded-none border-0" /> : null
 
   if (!hasValidAuthContext && !authLoading && !profileLoading) return null
   if (initialLoading && !messagesQuery.data) return <LoadingState label="Caricamento messaggi..." />
@@ -144,13 +145,13 @@ export default function AthleteMessagesManager() {
 
   return (
     <div className="cs-athlete-messages space-y-6">
+      {offlineBanner}
       <div className="cs-athlete-messages__heading"><div><h2 className="text-2xl font-bold tracking-tight">Messaggi</h2><p className="mt-1 text-sm text-secondary">Le comunicazioni della società e delle tue squadre</p></div><span className="cs-athlete-messages__count" aria-live="polite"><span className="font-semibold">{unreadCount}</span> {unreadCount === 1 ? 'non letto' : 'non letti'}</span></div>
       <div className="cs-athlete-messages__filters" aria-label="Filtri messaggi">
         <div className="cs-athlete-messages__tabs" role="group" aria-label="Filtro lettura"><button type="button" className={readFilter === 'all' ? 'is-selected' : ''} aria-pressed={readFilter === 'all'} onClick={() => setReadFilter('all')}>Tutti <span>({messages.length})</span></button><button type="button" className={readFilter === 'unread' ? 'is-selected' : ''} aria-pressed={readFilter === 'unread'} onClick={() => setReadFilter('unread')}>Non letti <span>({unreadCount})</span></button></div>
         {(teams.length > 1 || listTeams.length > 1) ? <div className="cs-athlete-messages__team-filter"><label htmlFor="athlete-messages-team">Squadra</label><select id="athlete-messages-team" className="cs-select" value={selectedTeamId ?? ''} onChange={(event) => setSelectedTeamId(event.target.value || null)}><option value="">Tutte le squadre</option>{(teams.length > 0 ? teams : listTeams).map((team) => <option key={team.id} value={team.id}>{team.name}{team.code ? ` · ${team.code}` : ''}</option>)}</select></div> : null}
       </div>
       <Panel className="cs-athlete-messages__panel overflow-hidden p-0">
-        {offline ? <OfflineState title={messagesQuery.data ? 'Messaggi non aggiornati' : 'Messaggi non disponibili offline'} description={messagesQuery.data ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'I messaggi richiedono una connessione. Quando torni online, riprova.'} action={retryAction} className="rounded-none border-0" /> : null}
         {loadError ? <ErrorState title="Impossibile caricare i messaggi" description={errorDescription} action={retryAction} className="rounded-none border-0" /> : null}
         {deepLinkUnavailable ? <FeedbackState variant="error" title="Messaggio non disponibile" description="Il messaggio non è disponibile o non hai accesso a questa comunicazione." className="border-b border-[var(--cs-border-canonical)] text-left" /> : null}
         {messagesQuery.data && (visibleMessages.length > 0 ? <AthleteMessageList messages={visibleMessages} onOpen={handleOpenMessage} /> : messages.length > 0 ? <EmptyState filtered title="Nessun messaggio corrisponde ai filtri" description="Prova a cambiare il filtro di lettura o la squadra." /> : <EmptyState title="Nessun messaggio" description="Qui troverai i messaggi indirizzati a te o alle tue squadre." />)}

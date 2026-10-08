@@ -7,7 +7,7 @@ import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import EventDetailModal from '@/components/shared/EventDetailModal'
 import MessageDetailModal, { type MessageReadState } from '@/components/shared/MessageDetailModal'
 import TeamDetailModal from '@/components/shared/TeamDetailModal'
-import { Alert, EventKindBadge, FeedbackState, ListRow, LoadingState, Panel, StatusBadge } from '@/components/ui'
+import { Alert, EventKindBadge, FeedbackState, ListRow, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
 import AttendanceControl from './AttendanceControl'
 import { MessagePreviewRow } from './MessagePreviewRow'
 import { MembershipRow } from './MembershipRow'
@@ -444,10 +444,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       data-dashboard-context={isFamilyDashboard ? 'family' : 'personal'}
     >
       {dashboardStatus === 'refreshing' && <FeedbackState variant="refreshing" description="Stai visualizzando i dati già caricati mentre controlliamo gli aggiornamenti." />}
-      {(isOffline || isOfflineFromQuery) && <FeedbackState
-        variant="offline"
-        title={dashboardHasData ? 'Connessione assente' : 'Dashboard non disponibile offline'}
-        description={dashboardHasData ? 'Stai visualizzando gli ultimi dati caricati per questo profilo.' : 'Riconnettiti a internet per caricare i dati della dashboard.'}
+      {(isOffline || isOfflineFromQuery) && <OfflineState
+        title={dashboardHasData ? 'Dashboard non aggiornata' : 'Dashboard non disponibile offline'}
+        description={dashboardHasData ? 'Sei offline. I dati mostrati potrebbero non essere aggiornati; le modifiche non sono disponibili.' : 'Riconnettiti a internet per caricare i dati della dashboard.'}
+        action={<button type="button" className="cs-btn cs-btn--primary" onClick={() => void dashboardQuery.refetch()}>Riprova</button>}
         className="px-4 py-3"
       />}
       <header className="cs-athlete-dashboard__intro space-y-1 border-b border-[color:var(--cs-border)] pb-4">
