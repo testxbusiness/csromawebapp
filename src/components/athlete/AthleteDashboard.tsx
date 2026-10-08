@@ -304,10 +304,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
       const availability = event.attendance_availability
       if (!availability) return event
       const isNext = availability.next_event?.id === eventId
-      const canReportAfterRevoke = true
       const canReportAfterMutation = revoke
-        ? canReportAfterRevoke
-        : availability.attendance_mode !== 'absence_only'
       return {
         ...event,
         my_attendance: revoke

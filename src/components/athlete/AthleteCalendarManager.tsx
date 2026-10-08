@@ -167,14 +167,14 @@ export default function AthleteCalendarManager() {
       const isNext = currentAvailability?.next_event?.id === eventId
       const nextAvailability = currentAvailability
         ? {
-            ...currentAvailability,
+          ...currentAvailability,
             can_respond_now: revoke ? isNext : false,
-            can_report_early_absence: !revoke,
-            can_revoke_early_absence: revoke,
+            can_report_early_absence: revoke,
+            can_revoke_early_absence: !revoke,
             actions: {
               respond: revoke ? isNext : false,
-              report_early_absence: !revoke,
-              revoke_early_absence: revoke,
+              report_early_absence: revoke,
+              revoke_early_absence: !revoke,
             },
             closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
           }
@@ -472,6 +472,43 @@ function EventDetails({
     return () => controller.abort()
   }, [loadDetail, retryToken])
 
+  const updateLocalAttendance = useCallback((revoke: boolean) => {
+    setData((current) => {
+      if (!current) return current
+      const availability = current.attendance_availability
+      if (!availability) return current
+      const isNext = availability.next_event?.id === id
+      return {
+        ...current,
+        my_attendance: revoke
+          ? null
+          : { status: 'declined', responded_at: new Date().toISOString(), is_early_absence: true },
+        attendance_availability: {
+          ...availability,
+          can_respond_now: revoke ? isNext : false,
+          can_report_early_absence: revoke,
+          can_revoke_early_absence: !revoke,
+          actions: {
+            respond: revoke ? isNext : false,
+            report_early_absence: revoke,
+            revoke_early_absence: !revoke,
+          },
+          closure_reason: revoke ? (isNext ? null : 'not_next_event') : 'already_early_absence',
+        },
+      }
+    })
+  }, [id])
+
+  const handleEarlyAbsence = useCallback(async (note: string) => {
+    await onEarlyAbsence(note)
+    updateLocalAttendance(false)
+  }, [onEarlyAbsence, updateLocalAttendance])
+
+  const handleRevokeEarlyAbsence = useCallback(async () => {
+    await onRevokeEarlyAbsence()
+    updateLocalAttendance(true)
+  }, [onRevokeEarlyAbsence, updateLocalAttendance])
+
   return (
     <EventDetailModal
       open
@@ -481,8 +518,8 @@ function EventDetails({
       onRetry={() => setRetryToken((current) => current + 1)}
       canRespond={canRespond}
       onAttendanceChange={onAttendanceChange}
-      onEarlyAbsence={onEarlyAbsence}
-      onRevokeEarlyAbsence={onRevokeEarlyAbsence}
+      onEarlyAbsence={handleEarlyAbsence}
+      onRevokeEarlyAbsence={handleRevokeEarlyAbsence}
     />
   )
 }
