@@ -11,6 +11,10 @@ export type ActiveSeason = {
   is_active: true
 }
 
+export type ActiveSeasonTeamIdsOptions = {
+  filterBySeasonRelation?: boolean
+}
+
 /** Resolves the operational season without relying on `.single()` semantics. */
 export async function resolveActiveSeason(client: SupabaseClient): Promise<ActiveSeason | null> {
   const { data, error } = await client
@@ -36,7 +40,17 @@ export async function resolveActiveSeason(client: SupabaseClient): Promise<Activ
 export async function resolveActiveSeasonTeamIds(
   client: SupabaseClient,
   seasonId: string,
+  options: ActiveSeasonTeamIdsOptions = {},
 ): Promise<string[]> {
+  if (options.filterBySeasonRelation) {
+    const { data: teams, error: teamsError } = await client
+      .from('teams')
+      .select('id, activities!inner(season_id)')
+      .eq('activities.season_id', seasonId)
+    if (teamsError) throw new AccountContextError('Impossibile risolvere le squadre della stagione attiva', 500)
+    return (teams ?? []).map((team) => team.id)
+  }
+
   const { data: activities, error: activitiesError } = await client
     .from('activities')
     .select('id')

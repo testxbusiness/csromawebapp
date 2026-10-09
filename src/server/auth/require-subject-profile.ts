@@ -152,36 +152,49 @@ export async function requireSubjectAthleteContext(
     throw new AccountContextError('Ruolo atleta non abilitato', 403)
   }
   const athleteProfileStartedAt = timing?.now() ?? 0
-  const { data: athleteProfile } = await subject.dataClient
+  const athleteProfilePromise = Promise.resolve(subject.dataClient
     .from('athlete_profiles')
     .select('profile_id')
     .eq('profile_id', subject.profileId)
-    .maybeSingle()
-  timing?.mark('athlete-profile', athleteProfileStartedAt)
+    .maybeSingle())
+    .finally(() => timing?.mark('athlete-profile', athleteProfileStartedAt))
   const activeSeasonStartedAt = timing?.now() ?? 0
-  const activeSeason = await resolveActiveSeason(subject.dataClient)
-  timing?.mark('active-season', activeSeasonStartedAt)
+  const activeSeasonPromise = resolveActiveSeason(subject.dataClient)
+    .finally(() => timing?.mark('active-season', activeSeasonStartedAt))
+  const [{ data: athleteProfile }, activeSeason] = await Promise.all([
+    athleteProfilePromise,
+    activeSeasonPromise,
+  ])
   if (!activeSeason) {
     throw new AccountContextError('Nessuna stagione attiva configurata', 403)
   }
   const seasonMembershipStartedAt = timing?.now() ?? 0
-  const { data: seasonMembership } = await subject.dataClient
+  const seasonMembershipPromise = Promise.resolve(subject.dataClient
     .from('season_profiles')
     .select('profile_id')
     .eq('profile_id', subject.profileId)
     .eq('season_id', activeSeason.id)
     .eq('status', 'active')
     .limit(1)
-    .maybeSingle()
-  timing?.mark('season-membership', seasonMembershipStartedAt)
+    .maybeSingle())
+    .finally(() => timing?.mark('season-membership', seasonMembershipStartedAt))
 
+  const activeTeamsStartedAt = timing?.now() ?? 0
+  const activeTeamIdsPromise = resolveActiveSeasonTeamIds(subject.dataClient, activeSeason.id, { filterBySeasonRelation: true })
+    .finally(() => timing?.mark('active-season-teams', activeTeamsStartedAt))
+  const [seasonMembershipOutcome, activeTeamIdsOutcome] = await Promise.allSettled([
+    seasonMembershipPromise,
+    activeTeamIdsPromise,
+  ])
+
+  if (seasonMembershipOutcome.status === 'rejected') throw seasonMembershipOutcome.reason
+  const { data: seasonMembership } = seasonMembershipOutcome.value
   if (!athleteProfile || !seasonMembership) {
     throw new AccountContextError('Accesso atleta non abilitato: profilo o iscrizione stagionale attiva mancanti', 403)
   }
 
-  const activeTeamsStartedAt = timing?.now() ?? 0
-  const activeTeamIds = await resolveActiveSeasonTeamIds(subject.dataClient, activeSeason.id)
-  timing?.mark('active-season-teams', activeTeamsStartedAt)
+  if (activeTeamIdsOutcome.status === 'rejected') throw activeTeamIdsOutcome.reason
+  const activeTeamIds = activeTeamIdsOutcome.value
   timing?.mark('subject-context', subjectContextStartedAt)
 
   return {

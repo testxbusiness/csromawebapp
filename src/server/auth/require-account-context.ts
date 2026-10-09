@@ -44,11 +44,17 @@ async function resolveAccountContext(supabase: SupabaseClient): Promise<AccountC
     throw new AccountContextError('Autenticazione richiesta', 401)
   }
 
-  const { data: account, error: accountError } = await supabase
-    .from('app_accounts')
-    .select('auth_user_id, owner_profile_id, status, must_change_password')
-    .eq('auth_user_id', user.id)
-    .maybeSingle()
+  const [{ data: account, error: accountError }, { data: roleRows, error: rolesError }] = await Promise.all([
+    supabase
+      .from('app_accounts')
+      .select('auth_user_id, owner_profile_id, status, must_change_password')
+      .eq('auth_user_id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('account_roles')
+      .select('role')
+      .eq('auth_user_id', user.id),
+  ])
 
   if (accountError) {
     throw new AccountContextError('Impossibile risolvere il contesto account', 500)
@@ -61,11 +67,6 @@ async function resolveAccountContext(supabase: SupabaseClient): Promise<AccountC
   if (account.status !== 'active') {
     throw new AccountContextError('Account non attivo', 403)
   }
-
-  const { data: roleRows, error: rolesError } = await supabase
-    .from('account_roles')
-    .select('role')
-    .eq('auth_user_id', user.id)
 
   if (rolesError) {
     throw new AccountContextError('Impossibile risolvere i ruoli account', 500)

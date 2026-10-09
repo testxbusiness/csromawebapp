@@ -553,3 +553,65 @@ Files/areas:
 - athlete query modules and managers — query start/response/parsed/first useful render.
 
 To remove after data collection, remove the diagnostic imports/calls and the helper only; do not remove the functional query or provider code. The server instrumentation is already guarded by environment flag and can remain dormant without changing normal behavior.
+
+## Optimization 1 — Server Subject Context
+
+### Baseline ufficiale
+
+La baseline pre-ottimizzazione è il file immutato `docs/PRE-GOALS granular baseline`. Sui 14 request con `subject-context` misurato, il percorso aveva:
+
+| Phase | Media | Mediana | Min | Max |
+|---|---:|---:|---:|---:|
+| `account-context` | 639,19 ms | 581,62 ms | 400,52 ms | 939,25 ms |
+| `subject-resolution` | 0,05 ms | 0,02 ms | 0,01 ms | 0,35 ms |
+| `athlete-profile` | 286,86 ms | 318,32 ms | 132,87 ms | 370,01 ms |
+| `active-season` | 220,21 ms | 218,92 ms | 115,69 ms | 345,70 ms |
+| `season-membership` | 272,36 ms | 309,55 ms | 115,77 ms | 322,02 ms |
+| `active-season-teams` | 455,46 ms | 441,48 ms | 230,62 ms | 698,23 ms |
+| `subject-context` | 1.874,17 ms | 1.837,34 ms | 1.211,03 ms | 2.643,90 ms |
+
+`subject-resolution` resta intenzionalmente non ottimizzato: nella baseline è trascurabile.
+
+### Causa trovata e dipendenze reali
+
+Il grafo precedente era:
+
+```text
+account-context
+  → subject-resolution
+    → athlete-profile → active-season → season-membership → active-season-teams
+```
+
+Le dipendenze reali sono ora:
+
+```text
+account-context → subject-resolution
+                         ├─ athlete-profile ─┐
+                         └─ active-season ───┴─┬─ season-membership ─┐
+                                               └─ active-season-teams ┴→ subject-context
+```
+
+In particolare, `athlete-profile` non dipende dalla stagione, e `season-membership` e `active-season-teams` dipendono entrambi solo dall'ID della stagione. Anche `app_accounts` e `account_roles` dipendono solo dall'utente autenticato e vengono quindi letti in parallelo dopo `auth.getUser()`.
+
+### Query prima/dopo
+
+| Area | Prima | Dopo |
+|---|---|---|
+| Account | `auth.getUser()` → `app_accounts` → `account_roles` seriali | `auth.getUser()` → `app_accounts` + `account_roles` parallele |
+| Subject self | `athlete_profiles`, stagione, `season_profiles`, `activities`, `teams` seriali | `athlete_profiles` + stagione parallele; `season_profiles` + team IDs parallele |
+| Active-season teams atleta | `activities.select('id')` → `teams.select('id').in('activity_id', ...)` | Il resolver atleta usa l'opzione esplicita `filterBySeasonRelation`: una query `teams.select('id, activities!inner(season_id)').eq('activities.season_id', ...)`; gli altri consumer mantengono il percorso legacy |
+| Subject delegato | relationship, profile e override già parallele | invariato; le verifiche di relationship/permission restano obbligatorie |
+
+Per il percorso self il numero di operazioni server passa da 8 a 7: viene eliminato il round-trip separato su `activities`. Per un subject delegato passa da 11 a 10; le tre query di risoluzione delegata restano tre query parallele. L'opzione è esplicita e confinata al resolver atleta, così i consumer coach/admin del helper condiviso conservano il comportamento precedente. Il numero di chiamate non è stato ridotto artificialmente fondendo controlli autorizzativi non equivalenti.
+
+### Parallelismo e sicurezza
+
+- `MUST_BE_SEQUENTIAL`: autenticazione → account/ruoli; account → subject resolution; stagione → membership/team IDs.
+- `CAN_RUN_IN_PARALLEL`: account e ruoli dopo l'utente; profilo atleta e stagione; membership e team IDs dopo la stagione.
+- La query embedded sui team filtra la relazione FK `teams.activity_id → activities.id` per la stagione richiesta; non aggiunge team né modifica il set autorizzato.
+- Restano invariati account isolation, subject personale/delegato, relazione attiva, permission, ruolo atleta, stagione attiva, membership stagionale e semantica 401/403/404.
+- Non è stato introdotto caching cross-request, Redis, storage client, schema change, indice, modifica RLS o modifica di contratto API.
+
+### Instrumentation e confronto finale
+
+Sono mantenuti senza rinomina `account-context`, `subject-resolution`, `athlete-profile`, `active-season`, `season-membership`, `active-season-teams`, `subject-context` e `route-total`. Il codice non dichiara valori post-ottimizzazione: per confermare il guadagno serve un HAR finale da preview autenticata confrontato con `PRE-GOALS granular baseline`. In particolare vanno verificati durata media/mediana di `account-context`, `active-season-teams` e `subject-context`, oltre all'assenza di regressioni 401/403/404.
