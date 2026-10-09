@@ -815,3 +815,60 @@ Un nuovo HAR autenticato non è disponibile in questa sessione: le metriche post
 | `subject-context` | NOT MEASURED |
 
 La verifica runtime deve includere self, delegated, denied, messaggio non accessibile, team recipient, direct profile recipient, countOnly, read/unread e detail con attachment.
+
+## Optimization 5 — Calendar and Attendance Availability
+
+### Baseline ufficiale
+
+Il baseline read-only è `docs/PRE-GOALS granular baseline` e non è stato modificato.
+
+| Request | API total | `subject-context` | `attendance-availability` | `events` | `event-team-relations` | `teams` | `attendance` | payload |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Calendar | ~5,30 s | ~2,19 s | ~982 ms | ~738 ms | ~361 ms | ~306 ms | ~133 ms | ~112 KB |
+| Event Detail | ~5,91 s | ~1,94 s | ~1,56 s | — | — | — | — | — |
+
+Il transform (`~0,54 ms`) non è un hotspot. `attendance-availability` era il flow condiviso dominante: dopo avere già caricato il dataset, Calendar lo rileggeva tramite membership, `event_teams`, `events` e `event_attendances`.
+
+### Implementazione
+
+Calendar ora:
+
+- avvia `teams` ed `event-team-relations` in parallelo dopo la membership autorizzata;
+- mantiene batching a 100 per le relazioni e deduplica gli event ID prima del fetch;
+- avvia `events` e `event_attendances` in parallelo;
+- mantiene batching a 100 per gli eventi oltre la soglia;
+- passa a `resolveAttendanceAvailability` un seed request-local con team autorizzati, eventi, relazioni e attendance già caricati.
+
+Il resolver conserva il rebuild completo di `buildAttendanceAvailability`, quindi restano invariate permission, early absence, next-event selection e `next_recalculation_at`. Il seed non è una cache cross-request e non sostituisce le verifiche server-side.
+
+Event Detail ora riusa il risultato della membership già verificata per evitare la membership query duplicata del resolver. Il fan-out di gym, team, creator e attendance è concorrente. Il resolver continua comunque a caricare l'insieme degli eventi autorizzati necessario per mantenere la regola del prossimo evento: non è stato ristretto artificialmente al solo evento aperto.
+
+### Query e round-trip prima/dopo
+
+| Flow | Prima | Dopo |
+|---|---|---|
+| Calendar availability | 4 query duplicate: membership, event links, events, attendance | 0 query aggiuntive; rebuild in memoria sul seed della request |
+| Calendar main pipeline | teams → relations; events → attendance separati | teams ∥ relations; events ∥ attendance |
+| Event Detail availability | membership duplicata + event links + events + attendance | membership duplicata eliminata; event links/events/attendance restano necessari per la regola globale del prossimo evento |
+| Event Detail enrichment | gym → teams → creator → attendance sequenziali | gym ∥ teams ∥ creator ∥ attendance |
+
+### Server-Timing e contratto
+
+Restano invariate le label `subject-context`, `team-memberships`, `teams`, `event-team-relations`, `events`, `attendance`, `attendance-availability`, `transform` e `route-total`. Le fasi ora misurano anche i gruppi concorrenti, senza rinominare le metriche necessarie al confronto HAR.
+
+Non sono stati introdotti range API, paginazione, lazy loading mensile, modifiche query key/staleTime, cache cross-request, schema/index/RLS changes o modifiche alle business rule. Il response contract Calendar e Event Detail resta invariato; `response_source` è usato internamente per availability e non viene esposto nel campo `my_attendance`.
+
+### Verifica
+
+Verificati localmente:
+
+- `npx tsc --noEmit` — passato;
+- ESLint sui route/helper/test modificati — passato;
+- `npx jest --runInBand src/server/events/attendance-availability.test.ts src/app/api/athlete/events/detail/route.test.ts src/lib/athlete/calendar-contract.test.ts src/components/athlete/AthleteCalendarManager.test.tsx` — 21 test passati;
+- `git diff --check` — passato.
+
+Non è disponibile un HAR post-ottimizzazione in questa sessione. Le metriche finali da confrontare direttamente sono: Calendar total, `attendance-availability`, `events`, `event-team-relations`, `teams`, `attendance`, `subject-context`; Event Detail total, `attendance-availability`, enrichment e `subject-context`.
+
+### DB candidate future
+
+Nessun EXPLAIN è stato eseguito: dopo la deduplicazione del flow non c'è evidenza sufficiente per introdurre un indice senza una nuova misura staging. Se il tempo resta dominante nel prossimo HAR, analizzare con SELECT-only `EXPLAIN (ANALYZE, BUFFERS)` le query `requireSubjectAthleteContext`, `event_teams` per team autorizzati ed `events` per event ID.

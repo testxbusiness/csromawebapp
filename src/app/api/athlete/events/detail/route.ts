@@ -54,29 +54,27 @@ export async function GET(request: NextRequest) {
     if (!ev) return finishRequestResponse(NextResponse.json({ error: 'Not found' }, { status: 404 }), timing)
 
     const enrichmentStartedAt = timing?.now() ?? 0
-    let gym: any = null
-    if (ev.gym_id) {
-      const { data } = await dataClient.from('gyms').select('name, address, city').eq('id', ev.gym_id).maybeSingle()
-      gym = data
-    }
-    let teams: any[] = []
-    if (authorizedTeamIds.length) {
-      const { data } = await dataClient.from('teams').select('id, name, code').in('id', authorizedTeamIds)
-      teams = data || []
-    }
-    let creator: any = null
-    if (ev.created_by) {
-      const { data } = await admin.from('profiles').select('first_name, last_name').eq('id', ev.created_by).maybeSingle()
-      creator = data
-    }
-
-    // Current user's attendance (if any)
-    const { data: myAtt } = await dataClient
+    const gymPromise = ev.gym_id
+      ? dataClient.from('gyms').select('name, address, city').eq('id', ev.gym_id).maybeSingle()
+      : Promise.resolve({ data: null })
+    const teamsPromise = authorizedTeamIds.length
+      ? dataClient.from('teams').select('id, name, code').in('id', authorizedTeamIds)
+      : Promise.resolve({ data: [] })
+    const creatorPromise = ev.created_by
+      ? admin.from('profiles').select('first_name, last_name').eq('id', ev.created_by).maybeSingle()
+      : Promise.resolve({ data: null })
+    const attendancePromise = dataClient
       .from('event_attendances')
-      .select('status, responded_at, is_early_absence')
+      .select('status, responded_at, is_early_absence, response_source')
       .eq('event_id', id)
       .eq('profile_id', athleteProfileId)
       .maybeSingle()
+    const [{ data: gym }, { data: teams }, { data: creator }, { data: myAtt }] = await Promise.all([
+      gymPromise,
+      teamsPromise,
+      creatorPromise,
+      attendancePromise,
+    ])
 
     timing?.mark('event-enrichment', enrichmentStartedAt)
     const availabilityStartedAt = timing?.now() ?? 0
@@ -87,6 +85,8 @@ export async function GET(request: NextRequest) {
       [id],
       new Date(),
       activeTeamIds,
+      undefined,
+      authorizedTeamIds,
     )
     timing?.mark('attendance-availability', availabilityStartedAt)
 
@@ -100,7 +100,13 @@ export async function GET(request: NextRequest) {
       event_type: ev.event_type,
       requires_confirmation: ev.requires_confirmation,
       confirmation_deadline: ev.confirmation_deadline,
-      my_attendance: myAtt || null,
+      my_attendance: myAtt
+        ? {
+            status: myAtt.status,
+            responded_at: myAtt.responded_at,
+            is_early_absence: myAtt.is_early_absence,
+          }
+        : null,
       attendance_availability: attendanceAvailability.availabilityByEventId.get(id) ?? null,
       gym,
       teams,

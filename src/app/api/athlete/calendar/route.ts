@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { buildCalendarEvents } from '@/lib/athlete/calendar-contract'
-import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
+import { resolveAttendanceAvailability, type AttendanceResolverEvent, type AttendanceResolverResponse } from '@/server/events/attendance-availability'
 import type { AthleteCalendarTeam } from '@/types/athlete-calendar'
 import type { AttendanceStatus } from '@/types/attendance'
 import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
@@ -28,6 +28,7 @@ type AttendanceRow = {
   status: AttendanceStatus
   responded_at: string | null
   is_early_absence: boolean
+  response_source?: string | null
 }
 
 function calendarLoadError() {
@@ -70,57 +71,49 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Get team details
+    // 3. Get event-team relations (batch processing for large arrays)
     const teamsStartedAt = timing?.now() ?? 0
-    const { data: teams, error: teamsErr } = await dataClient
+    const relationsStartedAt = timing?.now() ?? 0
+    const teamsPromise = dataClient
       .from('teams')
       .select('id, name, code')
       .in('id', teamIds)
-    timing?.mark('teams', teamsStartedAt)
+      .then((result) => {
+        timing?.mark('teams', teamsStartedAt)
+        return result
+      })
+    const relationsPromise = (async () => {
+      let allLinks: EventTeamLink[] = []
+      try {
+        for (let i = 0; i < teamIds.length; i += 100) {
+          const batch = teamIds.slice(i, i + 100)
+          const { data: relations, error: relationsError } = await dataClient
+            .from('event_teams')
+            .select('event_id, team_id')
+            .in('team_id', batch)
+          if (relationsError) return { data: [], error: relationsError }
+          allLinks.push(...(relations || []))
+        }
+      } catch (error) {
+        return { data: [], error }
+      }
+      timing?.mark('event-team-relations', relationsStartedAt)
+      return { data: allLinks, error: null }
+    })()
+    const [{ data: teams, error: teamsErr }, relationsResult] = await Promise.all([teamsPromise, relationsPromise])
 
     if (teamsErr) {
       console.error('Error loading athlete teams:', teamsErr)
       return finishRequestResponse(calendarLoadError(), timing)
     }
+    if (relationsResult.error) {
+      console.error('Error loading event-team relations:', relationsResult.error)
+      return finishRequestResponse(calendarLoadError(), timing)
+    }
 
     const teamData: AthleteCalendarTeam[] = (teams || []).map(t => ({ id: t.id, name: t.name, code: t.code }))
-
-    // 3. Get event-team relations (batch processing for large arrays)
-    const relationsStartedAt = timing?.now() ?? 0
-    let eventIds: string[] = []
-    let allEventTeamLinks: EventTeamLink[] = [] // STORE for later reuse
-
-    if (teamIds.length > 100) {
-      // Batch processing
-      for (let i = 0; i < teamIds.length; i += 100) {
-        const batch = teamIds.slice(i, i + 100)
-        const { data: relations, error: relationsError } = await dataClient
-          .from('event_teams')
-          .select('event_id, team_id')
-          .in('team_id', batch)
-
-        if (relationsError) {
-          console.error('Error loading event-team relations:', relationsError)
-          return finishRequestResponse(calendarLoadError(), timing)
-        }
-        allEventTeamLinks.push(...(relations || []))
-        eventIds.push(...(relations || []).map(r => r.event_id))
-      }
-      eventIds = [...new Set(eventIds)]
-    } else {
-      const { data: relations, error: relErr } = await dataClient
-        .from('event_teams')
-        .select('event_id, team_id')
-        .in('team_id', teamIds)
-
-      if (relErr) {
-        console.error('Error loading event-team relations:', relErr)
-        return finishRequestResponse(calendarLoadError(), timing)
-      }
-
-      allEventTeamLinks = relations || []
-      eventIds = [...new Set((relations || []).map(r => r.event_id))]
-    }
-    timing?.mark('event-team-relations', relationsStartedAt)
+    const allEventTeamLinks = relationsResult.data
+    const eventIds = [...new Set(allEventTeamLinks.map((link) => link.event_id))]
 
     if (eventIds.length === 0) {
       return finishRequestResponse(NextResponse.json({ events: [], teams: teamData }), timing)
@@ -128,40 +121,39 @@ export async function GET(request: NextRequest) {
 
     // 4. Get events (batch processing)
     const eventsStartedAt = timing?.now() ?? 0
-    let allEvents: CalendarEventRow[] = []
-
-    if (eventIds.length > 100) {
-      for (let i = 0; i < eventIds.length; i += 100) {
-        const batch = eventIds.slice(i, i + 100)
-        const { data: events, error: eventsError } = await dataClient
+    const attendanceStartedAt = timing?.now() ?? 0
+    const eventsPromise = eventIds.length > 100
+      ? Promise.all(
+          Array.from({ length: Math.ceil(eventIds.length / 100) }, (_, index) =>
+            dataClient
+              .from('events')
+              .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
+              .in('id', eventIds.slice(index * 100, (index + 1) * 100)),
+          ),
+        ).then((batches) => ({
+          data: batches.flatMap((batch) => batch.data || []),
+          error: batches.find((batch) => batch.error)?.error || null,
+        }))
+      : dataClient
           .from('events')
           .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
-          .in('id', batch)
-
-        if (eventsError) {
-          console.error('Error loading athlete events:', eventsError)
-          return finishRequestResponse(calendarLoadError(), timing)
-        }
-        allEvents.push(...(events || []))
-      }
-    } else {
-      const { data: events, error: evErr } = await dataClient
-        .from('events')
-        .select('id, title, description, location, start_time:start_date, end_time:end_date, event_type, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
-        .in('id', eventIds)
-        .order('start_date', { ascending: true })
-
-      if (evErr) {
-        console.error('Error loading events:', evErr)
-        return finishRequestResponse(calendarLoadError(), timing)
-      }
-
-      allEvents = events || []
+          .in('id', eventIds)
+          .order('start_date', { ascending: true })
+    const attendanceQuery = dataClient
+      .from('event_attendances')
+      .select('event_id, status, responded_at, is_early_absence, response_source')
+      .eq('profile_id', athleteProfileId)
+      .in('event_id', eventIds)
+    const [{ data: allEvents, error: eventsError }, { data: attendanceRows, error: attendanceError }] = await Promise.all([eventsPromise, attendanceQuery])
+    if (eventsError) {
+      console.error('Error loading athlete events:', eventsError)
+      return finishRequestResponse(calendarLoadError(), timing)
     }
     timing?.mark('events', eventsStartedAt)
 
     // 5. Build team map for events (reuse stored event_teams data, no new query needed)
     const teamsByEventId = new Map<string, AthleteCalendarTeam[]>()
+    const eventTeamIdsByEventId = new Map<string, string[]>()
     const teamById = new Map(teamData.map(t => [t.id, t]))
 
     // Use the stored event_teams links instead of querying again
@@ -171,21 +163,16 @@ export async function GET(request: NextRequest) {
       const arr = teamsByEventId.get(link.event_id) || []
       if (!arr.some((item) => item.id === team.id)) arr.push(team)
       teamsByEventId.set(link.event_id, arr)
+      const teamIdsForEvent = eventTeamIdsByEventId.get(link.event_id) || []
+      if (!teamIdsForEvent.includes(link.team_id)) teamIdsForEvent.push(link.team_id)
+      eventTeamIdsByEventId.set(link.event_id, teamIdsForEvent)
     }
-
-    // 6. Load only the subject's attendance for events already authorized above.
-    const attendanceStartedAt = timing?.now() ?? 0
-    const { data: attendanceRows, error: attendanceError } = await dataClient
-      .from('event_attendances')
-      .select('event_id, status, responded_at, is_early_absence')
-      .eq('profile_id', athleteProfileId)
-      .in('event_id', eventIds)
-    timing?.mark('attendance', attendanceStartedAt)
 
     if (attendanceError) {
       console.error('Error loading athlete event attendance:', attendanceError)
       return finishRequestResponse(calendarLoadError(), timing)
     }
+    timing?.mark('attendance', attendanceStartedAt)
 
     const attendance = new Map<string, AttendanceRow>(
       ((attendanceRows || []) as AttendanceRow[]).map((row) => [row.event_id, row]),
@@ -198,6 +185,16 @@ export async function GET(request: NextRequest) {
       eventIds,
       new Date(),
       activeTeamIds,
+      {
+        authorizedTeamIds: teamIds,
+        events: (allEvents || []).map((event): AttendanceResolverEvent => ({
+          ...event,
+          team_ids: eventTeamIdsByEventId.get(event.id) || [],
+        })),
+        attendanceByEventId: new Map<string, AttendanceResolverResponse>(
+          ((attendanceRows || []) as AttendanceRow[]).map((row) => [row.event_id, row]),
+        ),
+      },
     )
     timing?.mark('attendance-availability', availabilityStartedAt)
     const transformStartedAt = timing?.now() ?? 0

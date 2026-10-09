@@ -1,4 +1,8 @@
-import { buildAttendanceAvailability, type AttendanceResolverEvent } from './attendance-availability'
+import {
+  buildAttendanceAvailability,
+  resolveAttendanceAvailability,
+  type AttendanceResolverEvent,
+} from './attendance-availability'
 
 const now = new Date('2026-09-10T10:00:00.000Z')
 
@@ -149,6 +153,30 @@ describe('attendance availability resolver', () => {
       can_report_early_absence: false,
       can_revoke_early_absence: true,
       closure_reason: 'already_early_absence',
+    }))
+  })
+
+  it('reuses request-local calendar rows without issuing duplicate availability queries', async () => {
+    const client = { from: jest.fn() }
+    const calendarEvent = event({ id: 'calendar-event' })
+
+    const result = await resolveAttendanceAvailability(
+      client as never,
+      'athlete-1',
+      { view_schedule: true, confirm_attendance: true },
+      [calendarEvent.id],
+      now,
+      ['team-u14'],
+      {
+        authorizedTeamIds: ['team-u14'],
+        events: [calendarEvent],
+        attendanceByEventId: new Map(),
+      },
+    )
+
+    expect(client.from).not.toHaveBeenCalled()
+    expect(result.availabilityByEventId.get(calendarEvent.id)).toEqual(expect.objectContaining({
+      can_respond_now: true,
     }))
   })
 })

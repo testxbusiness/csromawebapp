@@ -30,7 +30,7 @@ export type AttendanceResolverEvent = {
   team_ids: string[]
 }
 
-type AttendanceResolverResponse = {
+export type AttendanceResolverResponse = {
   event_id: string
   status: AttendanceStatus
   responded_at: string | null
@@ -44,6 +44,12 @@ export type AttendanceAvailabilityResult = {
   attendanceByEventId: Map<string, AttendanceResolverResponse>
   availabilityByEventId: Map<string, AttendanceAvailabilityContract>
   nextEvent: AttendanceResolverEvent | null
+}
+
+export type AttendanceAvailabilitySeed = {
+  authorizedTeamIds: string[]
+  events: AttendanceResolverEvent[]
+  attendanceByEventId: Map<string, AttendanceResolverResponse>
 }
 
 type EventTeamLink = { event_id: string; team_id: string }
@@ -218,16 +224,32 @@ async function loadRows(
   eventIds: string[],
   now: Date,
   allowedTeamIds?: string[],
+  seed?: AttendanceAvailabilitySeed,
+  authorizedTeamIdsOverride?: string[],
 ): Promise<AttendanceAvailabilityResult> {
-  let membershipQuery = client
-    .from('team_members')
-    .select('team_id')
-    .eq('profile_id', profileId)
-  if (allowedTeamIds) membershipQuery = membershipQuery.in('team_id', allowedTeamIds)
-  const { data: membershipRows, error: membershipError } = await membershipQuery
-  if (membershipError) throw membershipError
+  if (seed) {
+    const { availabilityByEventId, nextEvent } = buildAttendanceAvailability(
+      seed.events,
+      seed.attendanceByEventId,
+      { view_schedule: true, confirm_attendance: true },
+      now,
+    )
+    return { ...seed, availabilityByEventId, nextEvent }
+  }
 
-  const authorizedTeamIds = uniqueSorted((membershipRows as TeamMembership[] | null ?? []).map((row) => row.team_id).filter(Boolean))
+  let authorizedTeamIds: string[]
+  if (authorizedTeamIdsOverride) {
+    authorizedTeamIds = uniqueSorted(authorizedTeamIdsOverride)
+  } else {
+    let membershipQuery = client
+      .from('team_members')
+      .select('team_id')
+      .eq('profile_id', profileId)
+    if (allowedTeamIds) membershipQuery = membershipQuery.in('team_id', allowedTeamIds)
+    const { data: membershipRows, error: membershipError } = await membershipQuery
+    if (membershipError) throw membershipError
+    authorizedTeamIds = uniqueSorted((membershipRows as TeamMembership[] | null ?? []).map((row) => row.team_id).filter(Boolean))
+  }
   if (authorizedTeamIds.length === 0) {
     return { authorizedTeamIds, events: [], attendanceByEventId: new Map(), availabilityByEventId: new Map(), nextEvent: null }
   }
@@ -288,11 +310,13 @@ export async function resolveAttendanceAvailability(
   eventIds: string[] = [],
   now = new Date(),
   allowedTeamIds?: string[],
+  seed?: AttendanceAvailabilitySeed,
+  authorizedTeamIdsOverride?: string[],
 ): Promise<AttendanceAvailabilityResult> {
   if (!permissions.view_schedule) {
     return { authorizedTeamIds: [], events: [], attendanceByEventId: new Map(), availabilityByEventId: new Map(), nextEvent: null }
   }
-  const result = await loadRows(client, profileId, eventIds, now, allowedTeamIds)
+  const result = await loadRows(client, profileId, eventIds, now, allowedTeamIds, seed, authorizedTeamIdsOverride)
   const rebuilt = buildAttendanceAvailability(result.events, result.attendanceByEventId, permissions, now)
   return { ...result, ...rebuilt }
 }
