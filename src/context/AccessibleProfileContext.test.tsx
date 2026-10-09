@@ -1,5 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { AccessibleProfileProvider, useAccessibleProfiles } from './AccessibleProfileContext'
+import { AccessibleProfileProvider, type AccessibleProfile, useAccessibleProfiles } from './AccessibleProfileContext'
+import { resetClientRefreshCoordinator } from '@/lib/client-refresh-coordinator'
 
 const authMock = jest.fn()
 jest.mock('@/hooks/useAuth', () => ({ useAuth: () => authMock() }))
@@ -18,17 +19,85 @@ const oneProfile = {
 
 function Probe() {
   const context = useAccessibleProfiles()
-  return <><output data-testid="selected">{context.selectedProfileId ?? ''}</output><output data-testid="area">{context.activeArea}</output><button type="button" onClick={() => context.setActiveArea('family')}>Famiglia</button></>
+  return <><output data-testid="selected">{context.selectedProfileId ?? ''}</output><output data-testid="area">{context.activeArea}</output><output data-testid="profiles">{context.profiles.length}</output><button type="button" onClick={() => context.setActiveArea('family')}>Famiglia</button><button type="button" onClick={() => void context.refresh()}>Aggiorna</button></>
 }
 
 describe('AccessibleProfileProvider initial family selection', () => {
   beforeEach(() => {
+    resetClientRefreshCoordinator()
     window.localStorage.clear()
     authMock.mockReturnValue({
       account: { authUserId: 'account-1', roles: ['athlete', 'family_member'] },
       user: { id: 'auth-1' },
       loading: false,
     })
+  })
+
+  it('uses one coordinated request for bootstrap', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ profiles: [oneProfile] }) }) as jest.Mock
+    render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+
+    await waitFor(() => expect(screen.getByTestId('profiles').textContent).toBe('1'))
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('coalesces focus and visibility refreshes while bootstrap is in flight', async () => {
+    let resolveResponse: ((value: { ok: boolean; json: () => Promise<{ profiles: AccessibleProfile[] }> }) => void) | undefined
+    globalThis.fetch = jest.fn().mockImplementation(() => new Promise((resolve) => { resolveResponse = resolve })) as jest.Mock
+    render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1))
+    act(() => {
+      window.dispatchEvent(new Event('focus'))
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+
+    await act(async () => resolveResponse?.({ ok: true, json: async () => ({ profiles: [oneProfile] }) }))
+    await waitFor(() => expect(screen.getByTestId('profiles').textContent).toBe('1'))
+  })
+
+  it('does not refetch when auth object identities change for the same account', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ profiles: [oneProfile] }) }) as jest.Mock
+    const view = render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(1))
+
+    authMock.mockReturnValue({
+      account: { authUserId: 'account-1', roles: ['athlete', 'family_member'] },
+      user: { id: 'auth-1' },
+      loading: false,
+    })
+    view.rerender(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+    await act(async () => {})
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('fetches again when the account changes and cleans state on logout', async () => {
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ profiles: [oneProfile] }) }) as jest.Mock
+    const view = render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+    await waitFor(() => expect(screen.getByTestId('profiles').textContent).toBe('1'))
+
+    authMock.mockReturnValue({ account: { authUserId: 'account-2', roles: ['athlete'] }, user: { id: 'auth-2' }, loading: false })
+    view.rerender(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledTimes(2))
+
+    authMock.mockReturnValue({ account: null, user: null, loading: false })
+    view.rerender(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+    await waitFor(() => expect(screen.getByTestId('profiles').textContent).toBe('0'))
+    expect(screen.getByTestId('selected').textContent).toBe('')
+  })
+
+  it('keeps explicit refresh available to detect delegated access revocation', async () => {
+    const responses = [
+      { profiles: [oneProfile] },
+      { profiles: [] },
+    ]
+    globalThis.fetch = jest.fn().mockImplementation(async () => ({ ok: true, json: async () => responses.shift() ?? { profiles: [] } })) as jest.Mock
+    render(<AccessibleProfileProvider><Probe /></AccessibleProfileProvider>)
+    await waitFor(() => expect(screen.getByTestId('profiles').textContent).toBe('1'))
+
+    act(() => screen.getByRole('button', { name: 'Aggiorna' }).click())
+    await waitFor(() => expect(screen.getByTestId('profiles').textContent).toBe('0'))
   })
 
   it('auto-selects the only profile only after family area activation', async () => {

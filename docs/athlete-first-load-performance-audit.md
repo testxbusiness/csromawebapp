@@ -615,3 +615,33 @@ Per il percorso self il numero di operazioni server passa da 8 a 7: viene elimin
 ### Instrumentation e confronto finale
 
 Sono mantenuti senza rinomina `account-context`, `subject-resolution`, `athlete-profile`, `active-season`, `season-membership`, `active-season-teams`, `subject-context` e `route-total`. Il codice non dichiara valori post-ottimizzazione: per confermare il guadagno serve un HAR finale da preview autenticata confrontato con `PRE-GOALS granular baseline`. In particolare vanno verificati durata media/mediana di `account-context`, `active-season-teams` e `subject-context`, oltre all'assenza di regressioni 401/403/404.
+
+## Optimization 2 — Accessible profiles refresh ownership
+
+### Scope e baseline
+
+Il file read-only `docs/PRE-GOALS granular baseline` è stato analizzato senza modificarlo. La baseline allegata contiene quattro request a `/api/me/accessible-profiles`, di cui due praticamente concorrenti all'avvio; l'audit storico documenta inoltre una sessione precedente con fino a 17 request. Il goal corrente interviene esclusivamente sul client provider e sui test del provider: non modifica endpoint, autorizzazione, database, selected subject UX, TeamProvider o persistenza.
+
+### Mappa dei trigger
+
+| Trigger | Comportamento | Coordinator | Stato locale |
+|---|---|---|---|
+| mount / auth ready / account ready | fetch quando auth e account sono pronti; il cambio di `authLoading`, account ID o user ID riattiva il bootstrap | sì, chiave account-aware | aggiorna profiles, loading, error e `profilesLoaded` |
+| ricreazione callback/auth object | nessun fetch se account ID e user ID restano invariati | non applicabile | nessun cambiamento |
+| focus / `visibilitychange` | refresh solo con document visibile e account attivo | sì, stessa chiave del bootstrap; concorrenza e burst ravvicinati sono coalescati | aggiorna solo dopo una risposta valida |
+| subject change | nessun fetch automatico | non applicabile | valida la selezione contro la lista corrente |
+| logout | nessun endpoint; pulisce profiles e subject locale quando la sessione non è più presente | chiave `anonymous`, senza request | reset di profiles, selected profile e area personale |
+| login / cambio account | nuovo bootstrap per il nuovo account | sì, nuova chiave account | la risposta del vecchio account non può sovrascrivere il nuovo stato |
+| refresh esplicito | nuova verifica anche entro la finestra di freshness | sì, `force=true` | consente di rilevare revoche e aggiornare permissions |
+
+### Implementazione
+
+- Il fetch iniziale passa ora da `runClientRefresh`, come focus e visibility; non esiste più un initial fetch diretto fuori dal coordinator.
+- La callback di esecuzione legge account/sessione da un ref aggiornato a ogni render, quindi la ricreazione degli oggetti auth non riattiva l'effect. L'effect dipende soltanto dagli identificativi semantici (`accountId`, `userId`, `authLoading`).
+- Focus e `visibilitychange` usano listener stabili e la stessa chiave `accessible-profiles:<authUserId>`. Il coordinator mantiene coalescing della request in-flight e freshness di 1,5 secondi per il doppio evento ravvicinato.
+- Le risposte vengono applicate solo se account e user ID sono ancora quelli che hanno iniziato la request; un cambio account o logout non può far ricomparire dati dell'account precedente.
+- Restano invariati `accessible-profiles-fetch-start` e `accessible-profiles-response`, con source `initial-effect` e `focus-visibility`; il refresh esplicito conserva la label `initial-effect` per mantenere confrontabile il conteggio HAR.
+
+### Verifica
+
+Sono stati aggiunti test per bootstrap singolo, focus + visibility concorrenti, rerender con identità auth ricreate, cambio account, logout e revoca delegated rilevata da refresh esplicito. La riduzione runtime effettiva deve essere confermata con un nuovo HAR autenticato: questa modifica non dichiara un miglioramento numerico senza una nuova misura.

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { runClientRefresh } from '@/lib/client-refresh-coordinator'
 import { markAccessibleProfilesFetchEnd, markAccessibleProfilesFetchStart } from '@/lib/performance/athlete-first-load'
@@ -55,6 +55,8 @@ export function appendSubjectProfile(url: string, profileId: string | null) {
 
 export function AccessibleProfileProvider({ children }: { children: React.ReactNode }) {
   const { account, user, loading: authLoading } = useAuth()
+  const authStateRef = useRef({ account, user, authLoading })
+  authStateRef.current = { account, user, authLoading }
   const [profiles, setProfiles] = useState<AccessibleProfile[]>([])
   const [selectedProfileId, setSelectedProfileIdState] = useState<string | null>(null)
   const [activeArea, setActiveAreaState] = useState<'personal' | 'family'>(() => {
@@ -65,18 +67,19 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
   const [profilesLoaded, setProfilesLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async (source: 'initial-effect' | 'focus-visibility' = 'initial-effect') => {
+  const performRefresh = useCallback(async (source: 'initial-effect' | 'focus-visibility' = 'initial-effect') => {
+    const { account: currentAccount, user: currentUser, authLoading: currentAuthLoading } = authStateRef.current
     // Wait for Supabase to restore the session before deciding whether the
     // stored subject is still valid. On a full navigation `user` is briefly
     // null even for an authenticated user; clearing localStorage here would
     // lose the selected athlete before the session/profile request completes.
-    if (authLoading) return
+    if (currentAuthLoading) return
 
     // During a silent auth refresh the user can remain available while the
     // account context is being reloaded. Do not clear the selected subject in
     // that transient state: doing so makes the selector fall back to "Il mio
     // profilo" after navigation or visibility changes.
-    if (!user) {
+    if (!currentUser) {
       setProfiles([])
       setSelectedProfileIdState(null)
       setActiveAreaState('personal')
@@ -84,7 +87,10 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
       return
     }
 
-    if (!account) return
+    if (!currentAccount) return
+
+    const requestAccountId = currentAccount.authUserId
+    const requestUserId = currentUser.id
 
     setLoading(true)
     setProfilesLoaded(false)
@@ -95,26 +101,50 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
       markAccessibleProfilesFetchEnd(source, diagnosticStartedAt, response)
       const payload = await response.json().catch(() => null) as { profiles?: AccessibleProfile[]; error?: string } | null
       if (!response.ok) throw new Error(payload?.error || 'Impossibile caricare i profili accessibili')
+      const latestAuthState = authStateRef.current
+      if (latestAuthState.account?.authUserId !== requestAccountId || latestAuthState.user?.id !== requestUserId) return
       setProfiles(payload?.profiles ?? [])
     } catch (cause) {
+      const latestAuthState = authStateRef.current
+      if (latestAuthState.account?.authUserId !== requestAccountId || latestAuthState.user?.id !== requestUserId) return
       setProfiles([])
       setError(cause instanceof Error ? cause.message : 'Impossibile caricare i profili accessibili')
     } finally {
-      setLoading(false)
-      setProfilesLoaded(true)
+      const latestAuthState = authStateRef.current
+      if (latestAuthState.account?.authUserId === requestAccountId && latestAuthState.user?.id === requestUserId) {
+        setLoading(false)
+        setProfilesLoaded(true)
+      }
     }
-  }, [account, authLoading, user])
+  }, [])
+
+  const accountId = account?.authUserId ?? null
+  const userId = user?.id ?? null
+
+  const refresh = useCallback(() => {
+    const currentAccountId = authStateRef.current.account?.authUserId
+    if (!currentAccountId) return Promise.resolve()
+    return runClientRefresh(
+      `accessible-profiles:${currentAccountId}`,
+      () => performRefresh('initial-effect'),
+      1500,
+      true,
+    )
+  }, [performRefresh])
 
   useEffect(() => {
-    refresh().catch(() => {})
-  }, [refresh])
+    const refreshKey = `accessible-profiles:${accountId ?? 'anonymous'}`
+    void runClientRefresh(refreshKey, () => performRefresh('initial-effect')).catch(() => {})
+  }, [accountId, authLoading, performRefresh, userId])
 
   useEffect(() => {
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') {
+        const currentAccountId = authStateRef.current.account?.authUserId
+        if (!currentAccountId) return
         void runClientRefresh(
-          `accessible-profiles:${account?.authUserId ?? 'anonymous'}`,
-          () => refresh('focus-visibility'),
+          `accessible-profiles:${currentAccountId}`,
+          () => performRefresh('focus-visibility'),
         )
       }
     }
@@ -125,7 +155,7 @@ export function AccessibleProfileProvider({ children }: { children: React.ReactN
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-  }, [account?.authUserId, refresh])
+  }, [performRefresh])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
