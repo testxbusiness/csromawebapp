@@ -712,3 +712,106 @@ Verificati localmente:
 - `git diff --check` — passato.
 
 Un nuovo HAR autenticato non è disponibile in questa sessione, quindi le metriche finali non vengono dichiarate: `dashboard total`, `dashboard-enrichment`, `dashboard-messages`, `events` e `subject-context` sono `NOT MEASURED`. Il confronto runtime deve essere fatto contro `PRE-GOALS granular baseline`, con verifica dei casi teams/zero teams, messaggi presenti/assenti, eventi presenti/assenti, attendance, quote, championship, next match e delegated subject.
+
+## Optimization 4 — Athlete Messages Server
+
+### Baseline ufficiale
+
+Il baseline read-only è `docs/PRE-GOALS granular baseline` e non è stato modificato.
+
+| Request | API total | `subject-context` | `messages-enrichment` | Note |
+|---|---:|---:|---:|---|
+| minimal | ~3,46 s | ~2,16 s | ~567 ms | transform ~0,02–0,06 ms |
+| full detail | ~3,40–4,07 s | ~1,58–1,74 s | ~0,94–1,47 s | payload full molto piccolo |
+
+Il costo del transform JavaScript è irrilevante rispetto al contesto server e alle query del route handler.
+
+### Recipients discovery
+
+La discovery iniziale continua a usare il filtro autorizzativo diretto oppure team autorizzato e mantiene l'ordinamento `created_at DESC`. Per la lista minimal non viene applicato un limite arbitrario alle righe recipient prima di conoscere i messaggi: il limite è sui messaggi ordinati per `messages.created_at`, quindi limitare i recipient cambierebbe la semantica quando esistono più recipient per messaggio.
+
+Per un deep link full con `id`, la discovery ora aggiunge `message_id = id` alla stessa OR autorizzativa. In questo caso il dataset viene ridotto prima della validazione 404 e non vengono scoperti i recipient dell'intero account.
+
+La query mantiene solo le colonne necessarie alla risposta e al filtro (`id`, `message_id`, `team_id`, `profile_id`). La precedente seconda query full includeva anche `is_read` e `read_at`, ma quei valori non erano usati: il read state atleta resta derivato da `message_reads` account + subject.
+
+### Query prima/dopo
+
+Prima:
+
+```text
+subject-context
+  → team_memberships
+    → tutti i message_recipients visibili
+      → messages (limit solo dopo la discovery)
+        → read-state + team catalog
+          → creator profiles
+          → full: nuovo message_recipients per gli stessi message IDs
+            → recipient catalog
+              → attachment metadata
+```
+
+Dopo:
+
+```text
+subject-context
+  → team_memberships
+    → recipient discovery (message-id scoped for full deep link)
+      → messages (limit invariato per minimal)
+        ├─ read-state
+        ├─ team catalog
+        ├─ creator profiles
+        └─ full: attachment metadata
+            → full recipient catalog (solo dopo gli ID/rows necessari)
+              → normalization
+```
+
+Nel full la discovery già filtrata per subject/team viene riusata per i messaggi caricati; è stato eliminato il round-trip duplicato `message_recipients IN (message_ids)`. La visibilità delegated resta filtrata esplicitamente prima del catalogo, perché il `dataClient` delegated è admin e non applica RLS sulle righe recipient.
+
+### Parallelismo
+
+Possono partire insieme dopo `messages`:
+
+- `message_reads` per account + subject;
+- catalogo teams usato dalla lista/contract;
+- creator profiles;
+- attachment metadata full.
+
+Restano sequenziali per dipendenza reale:
+
+- subject context → memberships → recipient discovery;
+- recipient rows/messages → recipient team/profile catalog;
+- catalogo/rows → normalization finale.
+
+Non sono state parallelizzate query che richiedono l'autorizzazione del subject prima di essere eseguite.
+
+### CountOnly, read behavior e attachments
+
+`countOnly=1` continua a leggere solo recipient message IDs e `message_reads`; non carica body, creator, cataloghi o attachment metadata. Il contatore resta basato sulla coppia account + subject.
+
+La sincronizzazione read non cambia: message unread → mutation read → lista/detail/count aggiornati tramite il flusso client esistente; un messaggio già letto non viene decrementato due volte. Gli attachment restano metadata-only nel list/detail e il binary/download URL continua a essere ottenuto on-demand dall'endpoint dedicato subject-authorized.
+
+### Server-Timing
+
+Restano confrontabili le metriche richieste `subject-context`, `team-memberships`/`memberships`, `message-recipients`, `messages-query`, `message-read-state`, `messages-enrichment` e `route-total`. Sono mantenute anche le metriche di dettaglio creator, recipient catalog, attachments e transform; il loro tempo ora riflette il fan-out concorrente dove applicabile.
+
+### Verifica e metriche HAR finale
+
+Verificati localmente:
+
+- `npx tsc --noEmit` — passato;
+- `npx eslint src/app/api/athlete/messages/route.ts src/app/api/athlete/messages/route.test.ts src/lib/athlete/messages-contract.ts` — passato;
+- test route Messages countOnly/minimal/full/not-found, delegated filtering, denied e attachment metadata — 5 passati;
+- `src/lib/athlete/messages-contract.test.ts`, `AthleteMessagesManager.test.tsx`, `MessageDetailModal.test.tsx` — 14 passati;
+- `git diff --check` — passato.
+
+Un nuovo HAR autenticato non è disponibile in questa sessione: le metriche post-ottimizzazione restano `NOT MEASURED` e devono essere confrontate direttamente con `PRE-GOALS granular baseline` per:
+
+| Metriche HAR finale | Stato |
+|---|---|
+| minimal total | NOT MEASURED |
+| full total | NOT MEASURED |
+| `message-recipients` / recipients | NOT MEASURED |
+| `messages-enrichment` | NOT MEASURED |
+| `subject-context` | NOT MEASURED |
+
+La verifica runtime deve includere self, delegated, denied, messaggio non accessibile, team recipient, direct profile recipient, countOnly, read/unread e detail con attachment.

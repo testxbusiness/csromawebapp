@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
     const idFilter = searchParams.get('id') || undefined
     const limitParam = searchParams.get('limit')
     const limit = limitParam ? parseInt(limitParam, 10) : 10
+    const countOnly = searchParams.get('countOnly') === '1'
+    const fullView = view === 'full'
 
     const subject = timing
       ? await requireSubjectAthleteContext(supabase, searchParams.get('subjectProfileId'), 'receive_messages', timing)
@@ -45,9 +47,16 @@ export async function GET(request: NextRequest) {
     if (teamIds.length > 0) orClauses.push(`team_id.in.(${teamIds.join(',')})`)
 
     const recipientsStartedAt = timing?.now() ?? 0
-    const { data: recips, error: recErr } = await dataClient
+    let recipientsQuery = dataClient
       .from('message_recipients')
       .select('id, message_id, team_id, profile_id')
+
+    // A full deep link already identifies the only message that can be
+    // returned. Keep the same authorization OR filter, but avoid discovering
+    // every recipient row for the account before validating that message.
+    if (idFilter && fullView) recipientsQuery = recipientsQuery.eq('message_id', idFilter)
+
+    const { data: recips, error: recErr } = await recipientsQuery
       .or(orClauses.join(','))
       .order('created_at', { ascending: false })
 
@@ -58,7 +67,7 @@ export async function GET(request: NextRequest) {
     timing?.mark('message-recipients', recipientsStartedAt)
 
     if (!recips || recips.length === 0) {
-      if (searchParams.get('countOnly') === '1') {
+      if (countOnly) {
         return finishRequestResponse(NextResponse.json({ unreadMessageCount: 0 }), timing)
       }
       const { data: authorizedTeams } = teamIds.length > 0
@@ -77,7 +86,7 @@ export async function GET(request: NextRequest) {
 
     // The shell only needs the badge count. Avoid loading message bodies and
     // full recipient/attachment metadata for that high-frequency request.
-    if (searchParams.get('countOnly') === '1') {
+    if (countOnly) {
       const readStateStartedAt = timing?.now() ?? 0
       const { data: readRows } = await dataClient
         .from('message_reads')
@@ -111,18 +120,56 @@ export async function GET(request: NextRequest) {
     timing?.mark('messages-query', messagesStartedAt)
 
     const loadedMessageIds = (msgs || []).map((message) => message.id)
-    const [{ data: readRows }, { data: messageTeams }] = await Promise.all([
-      loadedMessageIds.length > 0
-        ? dataClient
-            .from('message_reads')
-            .select('message_id, read_at')
-            .eq('auth_user_id', subject.account.authUserId)
-            .eq('subject_profile_id', athleteProfileId)
-            .in('message_id', loadedMessageIds)
-        : Promise.resolve({ data: [] }),
-      teamIds.length > 0
-        ? dataClient.from('teams').select('id, name, code').in('id', teamIds)
-        : Promise.resolve({ data: [] }),
+    const fullCreatorIds = [...new Set((msgs || []).filter(m => m.created_by).map(m => m.created_by))]
+    const creatorsStartedAt = timing?.now() ?? 0
+    const creatorsPromise = fullCreatorIds.length > 0
+      ? adminClient
+          .from('profiles')
+          .select('id, first_name, last_name, role')
+          .in('id', fullCreatorIds)
+      : Promise.resolve({ data: [] })
+    const creatorsResultPromise = Promise.resolve(creatorsPromise).finally(() => {
+      timing?.mark(fullView ? 'messages-full-creators' : 'messages-minimal-creators', creatorsStartedAt)
+    })
+
+    const readStateStartedAt = timing?.now() ?? 0
+    const readStatePromise = loadedMessageIds.length > 0
+      ? dataClient
+          .from('message_reads')
+          .select('message_id, read_at')
+          .eq('auth_user_id', subject.account.authUserId)
+          .eq('subject_profile_id', athleteProfileId)
+          .in('message_id', loadedMessageIds)
+      : Promise.resolve({ data: [] })
+    const readStateResultPromise = Promise.resolve(readStatePromise).finally(() => {
+      timing?.mark('message-read-state', readStateStartedAt)
+    })
+
+    const messageTeamsPromise = teamIds.length > 0
+      ? dataClient.from('teams').select('id, name, code').in('id', teamIds)
+      : Promise.resolve({ data: [] })
+
+    const attachmentsStartedAt = timing?.now() ?? 0
+    const attachmentsPromise = fullView && loadedMessageIds.length > 0
+      ? adminClient
+          .from('message_attachments')
+          .select('id, message_id, file_path, file_name, mime_type, file_size')
+          .in('message_id', loadedMessageIds)
+      : Promise.resolve({ data: [] })
+    const attachmentsResultPromise = Promise.resolve(attachmentsPromise).finally(() => {
+      if (fullView) timing?.mark('messages-attachments', attachmentsStartedAt)
+    })
+
+    const [
+      { data: readRows },
+      { data: messageTeams },
+      { data: creators },
+      { data: allAttachments },
+    ] = await Promise.all([
+      readStateResultPromise,
+      messageTeamsPromise,
+      creatorsResultPromise,
+      attachmentsResultPromise,
     ])
     const readByMessageId = new Map((readRows || []).map((row: any) => [row.message_id, { read_at: row.read_at }]))
     const teamsById = new Map((messageTeams || []).map((team: any) => [team.id, team]))
@@ -134,21 +181,8 @@ export async function GET(request: NextRequest) {
       athleteProfileId,
     )
 
-    if (!view || view !== 'full') {
+    if (!fullView) {
       // === BATCH AGGREGATION FOR MINIMAL VIEW ===
-      // Collect all creator IDs
-      const creatorIds = [...new Set((msgs || []).filter(m => m.created_by).map(m => m.created_by))]
-
-      // Single query to get all creators
-      const minimalCreatorsStartedAt = timing?.now() ?? 0
-      const { data: creators } = creatorIds.length > 0
-        ? await adminClient
-            .from('profiles')
-            .select('id, first_name, last_name, role')
-            .in('id', creatorIds)
-        : { data: [] }
-
-      timing?.mark('messages-minimal-creators', minimalCreatorsStartedAt)
       const creatorsMap = new Map((creators || []).map(c => [c.id, c]))
 
       const minimalTransformStartedAt = timing?.now() ?? 0
@@ -171,28 +205,13 @@ export async function GET(request: NextRequest) {
 
     // === BATCH AGGREGATION FOR FULL VIEW ===
 
-    // 1. Get all creators
-    const fullCreatorsStartedAt = timing?.now() ?? 0
-    const fullCreatorIds = [...new Set((msgs || []).filter(m => m.created_by).map(m => m.created_by))]
-    const { data: creators } = fullCreatorIds.length > 0
-      ? await adminClient
-          .from('profiles')
-          .select('id, first_name, last_name, role')
-          .in('id', fullCreatorIds)
-      : { data: [] }
-    timing?.mark('messages-full-creators', fullCreatorsStartedAt)
     const creatorsMap = new Map((creators || []).map(c => [c.id, c]))
 
-    // 2. Get all recipients for all messages
+    // 1. The initial recipient discovery is already subject/team scoped and
+    // contains every visible recipient row. Reuse it instead of issuing a
+    // second query for the same message IDs in full view.
     const fullMsgIds = (msgs || []).map(m => m.id)
-    const fullRecipientsStartedAt = timing?.now() ?? 0
-    const { data: allRecipients } = fullMsgIds.length > 0
-      ? await dataClient
-          .from('message_recipients')
-          .select('id, message_id, team_id, profile_id, is_read, read_at')
-          .in('message_id', fullMsgIds)
-      : { data: [] }
-    timing?.mark('messages-full-recipients', fullRecipientsStartedAt)
+    const allRecipients = recips.filter((recipient) => fullMsgIds.includes(recipient.message_id))
 
     // Per un accesso delegato dataClient è un admin client e quindi non applica
     // RLS sulle righe dei destinatari. Replica esplicitamente la visibilità
@@ -204,7 +223,7 @@ export async function GET(request: NextRequest) {
         ))
       : (allRecipients || [])
 
-    // 3. Collect team and profile IDs from recipients
+    // 2. Collect team and profile IDs from recipients
     const teamRecipientIds = [...new Set(visibleRecipients.filter(r => r.team_id).map(r => r.team_id))]
     // A subject may see that a message was sent directly to them, but never
     // receives the identity of unrelated direct recipients.
@@ -214,7 +233,7 @@ export async function GET(request: NextRequest) {
         .map(r => r.profile_id)
     )]
 
-    // 4. Get all teams and profiles in batch
+    // 3. Get all teams and profiles in batch
     const recipientCatalogStartedAt = timing?.now() ?? 0
     const [{ data: teams }, { data: profiles }] = await Promise.all([
       teamRecipientIds.length > 0
@@ -229,7 +248,7 @@ export async function GET(request: NextRequest) {
     const teamsMap = new Map((teams || []).map(t => [t.id, t]))
     const profilesMap = new Map((profiles || []).map(p => [p.id, p]))
 
-    // 5. Create recipients map by message_id
+    // 4. Create recipients map by message_id
     const recipientsByMessage = new Map<string, any[]>()
     for (const rr of visibleRecipients) {
       if (!recipientsByMessage.has(rr.message_id)) {
@@ -250,17 +269,7 @@ export async function GET(request: NextRequest) {
       recipientsByMessage.get(rr.message_id)!.push(item)
     }
 
-    // 6. Get all attachments for all messages
-    const attachmentsStartedAt = timing?.now() ?? 0
-    const { data: allAttachments } = fullMsgIds.length > 0
-      ? await adminClient
-          .from('message_attachments')
-          .select('id, message_id, file_path, file_name, mime_type, file_size')
-          .in('message_id', fullMsgIds)
-      : { data: [] }
-    timing?.mark('messages-attachments', attachmentsStartedAt)
-
-    // 7. Return attachment metadata only. Signed URLs are generated by the
+    // 5. Return attachment metadata only. Signed URLs are generated by the
     // dedicated, subject-authorized endpoint when the user requests a file.
     const attachmentsByMessage = new Map<string, any[]>()
     if (allAttachments && allAttachments.length > 0) {
@@ -277,7 +286,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 8. Enrich messages with aggregated data
+    // 6. Enrich messages with aggregated data
     const fullTransformStartedAt = timing?.now() ?? 0
     const enriched = (msgs || []).map((m: any) => {
       const em: any = { ...m }
