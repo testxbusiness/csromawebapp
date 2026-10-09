@@ -98,25 +98,41 @@ export async function GET(request: NextRequest) {
         .filter(Boolean)
     )]
     const creatorsStartedAt = timing?.now() ?? 0
-    const { data: creatorProfiles, error: creatorProfilesError } = canViewMessages && creatorIds.length > 0
-      ? await createAdminClient()
+    const creatorProfilesPromise = canViewMessages && creatorIds.length > 0
+      ? createAdminClient()
           .from('profiles')
           .select('id, first_name, last_name')
           .in('id', creatorIds)
-      : { data: [], error: null }
-    timing?.mark('dashboard-message-creators', creatorsStartedAt)
-    if (creatorProfilesError) console.error('Error loading dashboard message creators:', creatorProfilesError)
-    const creatorProfilesMap = new Map((creatorProfiles || []).map((creator: any) => [creator.id, creator]))
+          .then((result) => {
+            timing?.mark('dashboard-message-creators', creatorsStartedAt)
+            return result
+          })
+      : Promise.resolve({ data: [], error: null }).then((result) => {
+          timing?.mark('dashboard-message-creators', creatorsStartedAt)
+          return result
+        })
     const readStateStartedAt = timing?.now() ?? 0
-    const { data: readRows } = canViewMessages && messageIds.length > 0
-      ? await dataClient
+    const readRowsPromise = canViewMessages && messageIds.length > 0
+      ? dataClient
           .from('message_reads')
           .select('message_id')
           .eq('auth_user_id', subject.account.authUserId)
           .eq('subject_profile_id', athleteProfileId)
           .in('message_id', messageIds)
-      : { data: [] }
-    timing?.mark('dashboard-message-read-state', readStateStartedAt)
+          .then((result) => {
+            timing?.mark('dashboard-message-read-state', readStateStartedAt)
+            return result
+          })
+      : Promise.resolve({ data: [] }).then((result) => {
+          timing?.mark('dashboard-message-read-state', readStateStartedAt)
+          return result
+        })
+    const [
+      { data: creatorProfiles, error: creatorProfilesError },
+      { data: readRows },
+    ] = await Promise.all([creatorProfilesPromise, readRowsPromise])
+    if (creatorProfilesError) console.error('Error loading dashboard message creators:', creatorProfilesError)
+    const creatorProfilesMap = new Map((creatorProfiles || []).map((creator: any) => [creator.id, creator]))
     const messageTransformStartedAt = timing?.now() ?? 0
     const readMessageIds = new Set((readRows || []).map((row: any) => row.message_id))
     const normalizedMessageRecipients = (msgRecipients || [])
@@ -162,7 +178,7 @@ export async function GET(request: NextRequest) {
       canViewSchedule
         ? dataClient
             .from('event_teams')
-            .select('event_id, team_id, created_at')
+            .select('event_id, team_id')
             .in('team_id', teamIds)
             .order('created_at', { ascending: false })
             .limit(500)
@@ -183,42 +199,37 @@ export async function GET(request: NextRequest) {
     ])
     timing?.mark('team-catalog', catalogStartedAt)
 
-    // Get event IDs
+    // The catalog has resolved all IDs needed by the independent branches below.
     const eventIds = [...new Set((eventTeamLinks || []).map(l => l.event_id).filter(Boolean))]
+    const activityIds = [...new Set((teams || []).map(t => t.activity_id).filter(Boolean))]
+    const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
 
-    // Get events (with batch processing if needed)
-    const eventsStartedAt = timing?.now() ?? 0
-    let allEvents: any[] = []
-    if (eventIds.length > 0) {
-      if (eventIds.length > 100) {
-        for (let i = 0; i < eventIds.length; i += 100) {
-          const batch = eventIds.slice(i, i + 100)
-        const { data: events } = await dataClient
-          .from('events')
-          .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
-          .in('id', batch)
-          .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
-          .order('start_date', { ascending: true })
-          .limit(10)
-        allEvents.push(...(events || []))
-      }
-    } else {
-      const { data: events } = await dataClient
-        .from('events')
-        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
-        .in('id', eventIds)
-        .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
-        .order('start_date', { ascending: true })
-        .limit(10)
-      allEvents = events || []
-    }
-    }
-    timing?.mark('events', eventsStartedAt)
-
-    // Get activities and enriched team data
+    // Events depend on event-team links, while activities, attendance availability,
+    // and championship matches depend only on the catalog/subject IDs. Start those
+    // independent branches before waiting for the event rows.
     const enrichmentStartedAt = timing?.now() ?? 0
     const enrichmentQueriesStartedAt = timing?.now() ?? 0
-    const activityIds = [...new Set((teams || []).map(t => t.activity_id).filter(Boolean))]
+    const eventsStartedAt = timing?.now() ?? 0
+    const eventRowsPromise = (async () => {
+      if (eventIds.length === 0) return []
+      const batches = Array.from({ length: Math.ceil(eventIds.length / 100) }, (_, index) =>
+        eventIds.slice(index * 100, index * 100 + 100)
+      )
+      const eventResults = await Promise.all(batches.map((batch) => dataClient
+        .from('events')
+        .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
+        .in('id', batch)
+        .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
+        .order('start_date', { ascending: true })
+        .limit(10)))
+      return eventResults.flatMap(({ data }) => data || [])
+    })()
+    const eventsPromise = eventRowsPromise.then((events) => {
+      timing?.mark('events', eventsStartedAt)
+      return events
+    })
+
+    // Get activities and enrichment data
     const activitiesPromise = activityIds.length > 0
       ? dataClient
           .from('activities')
@@ -226,22 +237,10 @@ export async function GET(request: NextRequest) {
           .in('id', activityIds)
       : Promise.resolve({ data: [] })
 
-    const gymIds = [...new Set((allEvents || []).map((event) => event.gym_id).filter(Boolean))]
-    const gymsPromise = gymIds.length > 0
-      ? dataClient.from('gyms').select('id, name, city').in('id', gymIds)
-      : Promise.resolve({ data: [] })
-    const attendanceRowsPromise = allEvents.length > 0
-      ? dataClient
-          .from('event_attendances')
-          .select('event_id, status, responded_at, is_early_absence')
-          .eq('profile_id', athleteProfileId)
-          .in('event_id', allEvents.map((event) => event.id))
-      : Promise.resolve({ data: [] })
     const attendanceAvailabilityPromise = canViewSchedule
       ? resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds, new Date(), activeTeamIds)
       : Promise.resolve(null)
 
-    const clubTeamIds = [...new Set((clubTeams || []).map((ct: any) => ct.id).filter(Boolean))]
     const nextChampionshipMatchPromise = clubTeamIds.length > 0
       ? dataClient
           .from('championship_matches')
@@ -260,16 +259,33 @@ export async function GET(request: NextRequest) {
           .then(({ data }) => data || null)
       : Promise.resolve(null)
 
+    const allEventsPromise = eventsPromise.then((events) => {
+      const gymIds = [...new Set(events.map((event) => event.gym_id).filter(Boolean))]
+      const gymsPromise = gymIds.length > 0
+        ? dataClient.from('gyms').select('id, name, city').in('id', gymIds)
+        : Promise.resolve({ data: [] })
+      const attendanceRowsPromise = events.length > 0
+        ? dataClient
+            .from('event_attendances')
+            .select('event_id, status, responded_at, is_early_absence')
+            .eq('profile_id', athleteProfileId)
+            .in('event_id', events.map((event) => event.id))
+        : Promise.resolve({ data: [] })
+      return Promise.all([gymsPromise, attendanceRowsPromise]).then(([{ data: gyms }, { data: attendanceRows }]) => ({
+        events,
+        gyms,
+        attendanceRows,
+      }))
+    })
+
     const [
       { data: activities },
-      { data: gyms },
-      { data: attendanceRows },
+      { events: allEvents, gyms, attendanceRows },
       attendanceAvailability,
       nextChampionshipMatch,
     ] = await Promise.all([
       activitiesPromise,
-      gymsPromise,
-      attendanceRowsPromise,
+      allEventsPromise,
       attendanceAvailabilityPromise,
       nextChampionshipMatchPromise,
     ])

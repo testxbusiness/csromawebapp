@@ -645,3 +645,70 @@ Il file read-only `docs/PRE-GOALS granular baseline` è stato analizzato senza m
 ### Verifica
 
 Sono stati aggiunti test per bootstrap singolo, focus + visibility concorrenti, rerender con identità auth ricreate, cambio account, logout e revoca delegated rilevata da refresh esplicito. La riduzione runtime effettiva deve essere confermata con un nuovo HAR autenticato: questa modifica non dichiara un miglioramento numerico senza una nuova misura.
+
+## Optimization 3 — Dashboard Server
+
+### Baseline ufficiale
+
+Il baseline read-only è `docs/PRE-GOALS granular baseline`. I valori indicati nel goal sono:
+
+| Phase | Dashboard sample 1 | Dashboard sample 2 |
+|---|---:|---:|
+| API total | ~5,41 s | ~7,50 s |
+| `subject-context` | ~1,71 s | ~2,64 s |
+| `dashboard-enrichment` | ~1,43 s | ~1,38 s |
+| `dashboard-messages` | non dominante | ~1,00 s |
+| `events` | ~768 ms | non dominante |
+| response payload | ~12 KB | ~12 KB |
+| `dashboard-response-transform` | ~0,25–0,82 ms | ~0,25–0,82 ms |
+
+Il transform JavaScript non è il bottleneck misurato. Il baseline non è stato modificato.
+
+### Query prima/dopo
+
+Prima del goal, dopo il catalogo, il route handler eseguiva la query events e attendeva il risultato prima di avviare activities, gyms, attendance, attendance availability e championship match. Nel ramo messaggi, recipients, creator profiles e read-state erano sequenziali.
+
+Ora:
+
+- recipients resta sequenziale rispetto alle memberships perché i filtri includono gli ID dei team autorizzati;
+- creator profiles e read-state partono in parallelo dopo che recipients ha restituito message IDs e creator IDs;
+- la query events parte dopo event-team links, mentre activities, attendance availability e next championship match partono immediatamente in parallelo;
+- gyms e `event_attendances` partono appena sono disponibili gli event rows, in parallelo tra loro;
+- event-team links seleziona solo `event_id, team_id`; l'ordinamento `created_at` e il limite 500 restano invariati;
+- event IDs sono deduplicati prima del fetch e i batch da 100 vengono eseguiti in parallelo, mantenendo il limite 10 per batch e il successivo `slice(0, 10)` del contratto.
+
+### Parallelismo e dipendenze
+
+```text
+subject-context
+  → memberships + fees
+    → recipients
+      → creators + read-state
+    → team catalog
+      → event-team IDs
+        → events → gyms + attendance rows
+      → activities
+      → attendance availability
+      → next championship match
+```
+
+`MUST_BE_SEQUENTIAL`: subject-context → memberships/fees → recipients; team catalog → event-team IDs → events; events → gyms/attendance rows. `CAN_RUN_IN_PARALLEL`: memberships e fees; creators e read-state; activities, events, attendance availability e championship match dopo il catalogo; gyms e attendance rows dopo gli events.
+
+### Early exits e sicurezza
+
+L'uscita anticipata esistente per zero team resta invariata: dopo il caricamento dei messaggi diretti, non vengono interrogati catalogo, eventi, activities, gyms, attendance o championship. Restano anche i no-op per zero event IDs, zero activity IDs, zero club-team IDs e zero event rows. Non sono state modificate autorizzazioni, `requireSubjectAthleteContext`, client subject-aware, RLS o response contract. I casi delegated subject, attendance, fees, championship e next match continuano a usare gli stessi dati e le stesse regole.
+
+### Server-Timing
+
+Sono mantenute senza rinomina le metriche esistenti `dashboard-messages`, `dashboard-enrichment`, `events`, `route-total` e le sottofasi `dashboard-message-recipients`, `dashboard-message-creators`, `dashboard-message-read-state`, `dashboard-message-transform`, `dashboard-enrichment-queries` e `dashboard-response-transform`. La semantica dei tempi ora riflette il parallelismo: le fasi aggregate misurano il completamento del gruppo, mentre le sottofasi misurano la rispettiva query.
+
+### Verifica e metriche finali
+
+Verificati localmente:
+
+- `npx tsc --noEmit` — passato;
+- `npx eslint src/app/api/athlete/dashboard/route.ts` — passato;
+- `npx jest --runInBand src/app/api/athlete/dashboard/route.test.ts src/lib/athlete/dashboard-contract.test.ts` — 12 test passati;
+- `git diff --check` — passato.
+
+Un nuovo HAR autenticato non è disponibile in questa sessione, quindi le metriche finali non vengono dichiarate: `dashboard total`, `dashboard-enrichment`, `dashboard-messages`, `events` e `subject-context` sono `NOT MEASURED`. Il confronto runtime deve essere fatto contro `PRE-GOALS granular baseline`, con verifica dei casi teams/zero teams, messaggi presenti/assenti, eventi presenti/assenti, attendance, quote, championship, next match e delegated subject.
