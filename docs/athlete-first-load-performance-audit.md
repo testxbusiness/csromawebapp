@@ -872,3 +872,31 @@ Non è disponibile un HAR post-ottimizzazione in questa sessione. Le metriche fi
 ### DB candidate future
 
 Nessun EXPLAIN è stato eseguito: dopo la deduplicazione del flow non c'è evidenza sufficiente per introdurre un indice senza una nuova misura staging. Se il tempo resta dominante nel prossimo HAR, analizzare con SELECT-only `EXPLAIN (ANALYZE, BUFFERS)` le query `requireSubjectAthleteContext`, `event_teams` per team autorizzati ed `events` per event ID.
+
+## Optimization 6 — Dashboard enrichment orchestration
+
+### Baseline e diagnosi
+
+Il baseline HAR `docs/PRE-GOALS granular baseline` / `docs/POST-GOALS granular baseline` è stato trattato come read-only. Nel POST `dashboard-enrichment` varia da circa 0,89 s a 1,58 s. Il codice mostrava che `resolveAttendanceAvailability` rileggeva, in sequenza, membership, `event_teams`, eventi e presenze, mentre il Dashboard aveva già caricato gli stessi dati o i relativi ID.
+
+### Implementazione
+
+Il Dashboard ora:
+
+- misura separatamente `activities`, `gyms`, `event-attendance`, `attendance-availability` e `championship-match`, mantenendo `dashboard-enrichment` e `dashboard-enrichment-queries` per il confronto HAR;
+- registra nel log diagnostico tecnico i conteggi non sensibili di membership, cataloghi, eventi, palestre, presenze e dati messaggi;
+- riusa un seed request-local per `resolveAttendanceAvailability`, costruito da membership autorizzate, relazioni evento, eventi e presenze già lette;
+- carica l’intero set futuro collegato necessario alla regola del prossimo evento prima del seed, senza limitare artificialmente `event_teams` a 500 righe;
+- mantiene i rami indipendenti in parallelo: activities, eventi/palestre/presenze, availability e championship match.
+
+Non sono state introdotte cache cross-request, modifiche a RLS/schema/indici, cambiamenti al subject-context o modifiche al response contract Dashboard. `response_source` è usato internamente per preservare le regole di availability e non cambia il campo pubblico `my_attendance`.
+
+### Verifica
+
+Verificati localmente:
+
+- `npx tsc --noEmit` — passato;
+- test Dashboard route e attendance availability — 11 passati;
+- `git diff --check` — passato.
+
+Un nuovo HAR post-modifica è ancora necessario per misurare la riduzione effettiva e la variabilità di `dashboard-enrichment`. Il prossimo campionamento deve includere: atleta con più team, nessun team, events sì/no, messages sì/no, attendance, championship e fees, verificando anche i dettagli `Server-Timing` e i conteggi diagnostici.

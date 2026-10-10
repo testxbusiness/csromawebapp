@@ -3,7 +3,12 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { buildUnreadMessages, resolveMatchPerspective } from '@/lib/athlete/dashboard-contract'
-import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
+import {
+  resolveAttendanceAvailability,
+  type AttendanceAvailabilitySeed,
+  type AttendanceResolverEvent,
+  type AttendanceResolverResponse,
+} from '@/server/events/attendance-availability'
 import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
 
 export async function GET(request: NextRequest) {
@@ -48,6 +53,8 @@ export async function GET(request: NextRequest) {
 
     const memberships = memberRes.data
     const feeInstallments = feeRes.data
+    timing?.detail('membership-records', memberships?.length ?? 0)
+    timing?.detail('fee-installment-records', feeInstallments?.length ?? 0)
 
     // Get team IDs
     const teamIds = [...new Set((memberships || []).map(m => m.team_id).filter(Boolean))]
@@ -85,6 +92,7 @@ export async function GET(request: NextRequest) {
       } else {
         msgRecipients = data || []
       }
+      timing?.detail('dashboard-message-recipient-records', msgRecipients.length)
       timing?.mark('dashboard-message-recipients', recipientsStartedAt)
     }
 
@@ -148,6 +156,7 @@ export async function GET(request: NextRequest) {
       }))
     timing?.mark('dashboard-message-transform', messageTransformStartedAt)
     timing?.mark('dashboard-messages', messagesStartedAt)
+    timing?.detail('dashboard-message-records', normalizedMessageRecipients.length)
 
     if (teamIds.length === 0) {
       const directUnreadMessages = buildUnreadMessages(normalizedMessageRecipients, readMessageIds, new Map())
@@ -181,7 +190,6 @@ export async function GET(request: NextRequest) {
             .select('event_id, team_id')
             .in('team_id', teamIds)
             .order('created_at', { ascending: false })
-            .limit(500)
         : Promise.resolve({ data: [], error: null }),
 
       feeInstallments && feeInstallments.length > 0
@@ -198,6 +206,10 @@ export async function GET(request: NextRequest) {
         .in('team_id', teamIds)
     ])
     timing?.mark('team-catalog', catalogStartedAt)
+    timing?.detail('team-records', teams?.length ?? 0)
+    timing?.detail('event-team-link-records', eventTeamLinks?.length ?? 0)
+    timing?.detail('membership-fee-records', membershipFees?.length ?? 0)
+    timing?.detail('championship-club-team-records', clubTeams?.length ?? 0)
 
     // The catalog has resolved all IDs needed by the independent branches below.
     const eventIds = [...new Set((eventTeamLinks || []).map(l => l.event_id).filter(Boolean))]
@@ -220,16 +232,17 @@ export async function GET(request: NextRequest) {
         .select('id, title, start_time:start_date, end_time:end_date, location, gym_id, description, event_kind, requires_confirmation, attendance_mode, confirmation_deadline, generated_from_schedule_id')
         .in('id', batch)
         .gte('start_date', new Date().toISOString().split('T')[0] + 'T00:00:00')
-        .order('start_date', { ascending: true })
-        .limit(10)))
+        .order('start_date', { ascending: true })))
       return eventResults.flatMap(({ data }) => data || [])
     })()
     const eventsPromise = eventRowsPromise.then((events) => {
       timing?.mark('events', eventsStartedAt)
+      timing?.detail('event-records', events.length)
       return events
     })
 
     // Get activities and enrichment data
+    const activitiesStartedAt = timing?.now() ?? 0
     const activitiesPromise = activityIds.length > 0
       ? dataClient
           .from('activities')
@@ -237,10 +250,13 @@ export async function GET(request: NextRequest) {
           .in('id', activityIds)
       : Promise.resolve({ data: [] })
 
-    const attendanceAvailabilityPromise = canViewSchedule
-      ? resolveAttendanceAvailability(dataClient, athleteProfileId, subject.permissions, eventIds, new Date(), activeTeamIds)
-      : Promise.resolve(null)
+    const activitiesQueryPromise = activitiesPromise.then((result) => {
+      timing?.mark('activities', activitiesStartedAt)
+      timing?.detail('activity-records', result.data?.length ?? 0)
+      return result
+    })
 
+    const championshipStartedAt = timing?.now() ?? 0
     const nextChampionshipMatchPromise = clubTeamIds.length > 0
       ? dataClient
           .from('championship_matches')
@@ -258,25 +274,86 @@ export async function GET(request: NextRequest) {
           .maybeSingle()
           .then(({ data }) => data || null)
       : Promise.resolve(null)
+    const timedChampionshipMatchPromise = nextChampionshipMatchPromise.then((match) => {
+      timing?.mark('championship-match', championshipStartedAt)
+      timing?.detail('championship-match-records', match ? 1 : 0)
+      return match
+    })
 
     const allEventsPromise = eventsPromise.then((events) => {
       const gymIds = [...new Set(events.map((event) => event.gym_id).filter(Boolean))]
+      const gymsStartedAt = timing?.now() ?? 0
       const gymsPromise = gymIds.length > 0
         ? dataClient.from('gyms').select('id, name, city').in('id', gymIds)
         : Promise.resolve({ data: [] })
+      const timedGymsPromise = gymsPromise.then((result) => {
+        timing?.mark('gyms', gymsStartedAt)
+        timing?.detail('gym-records', result.data?.length ?? 0)
+        return result
+      })
+      const eventAttendanceStartedAt = timing?.now() ?? 0
       const attendanceRowsPromise = events.length > 0
         ? dataClient
             .from('event_attendances')
-            .select('event_id, status, responded_at, is_early_absence')
+            .select('event_id, status, responded_at, is_early_absence, response_source')
             .eq('profile_id', athleteProfileId)
             .in('event_id', events.map((event) => event.id))
         : Promise.resolve({ data: [] })
-      return Promise.all([gymsPromise, attendanceRowsPromise]).then(([{ data: gyms }, { data: attendanceRows }]) => ({
+      const timedAttendanceRowsPromise = attendanceRowsPromise.then((result) => {
+        timing?.mark('event-attendance', eventAttendanceStartedAt)
+        timing?.detail('event-attendance-records', result.data?.length ?? 0)
+        return result
+      })
+      return Promise.all([timedGymsPromise, timedAttendanceRowsPromise]).then(([{ data: gyms }, { data: attendanceRows }]) => ({
         events,
         gyms,
         attendanceRows,
       }))
     })
+
+    // The dashboard already has the authorized membership, event-team links,
+    // event rows, and attendance rows. Reuse them for availability instead of
+    // making the resolver repeat four sequential reads. The event query above
+    // intentionally loads the complete future linked set so the next-event
+    // rule remains equivalent to the standalone resolver.
+    const attendanceAvailabilityStartedAt = timing?.now() ?? 0
+    const attendanceAvailabilityPromise = canViewSchedule
+      ? allEventsPromise.then(({ events, attendanceRows }) => {
+          const eventTeamIds = new Map<string, string[]>()
+          for (const link of eventTeamLinks || []) {
+            const linkedTeamIds = eventTeamIds.get(link.event_id) ?? []
+            if (!linkedTeamIds.includes(link.team_id)) linkedTeamIds.push(link.team_id)
+            eventTeamIds.set(link.event_id, linkedTeamIds)
+          }
+          const seed: AttendanceAvailabilitySeed = {
+            authorizedTeamIds: teamIds,
+            events: events.map((event) => ({
+              ...event,
+              event_type: null,
+              team_ids: eventTeamIds.get(event.id) ?? [],
+            } as AttendanceResolverEvent)),
+            attendanceByEventId: new Map(
+              (attendanceRows || []).map((row) => [row.event_id, row as AttendanceResolverResponse]),
+            ),
+          }
+          return resolveAttendanceAvailability(
+            dataClient,
+            athleteProfileId,
+            subject.permissions,
+            eventIds,
+            new Date(),
+            activeTeamIds,
+            seed,
+          )
+        }).then((result) => {
+          timing?.mark('attendance-availability', attendanceAvailabilityStartedAt)
+          timing?.detail('attendance-availability-event-records', result.events.length)
+          return result
+        })
+      : Promise.resolve(null).then((result) => {
+          timing?.mark('attendance-availability', attendanceAvailabilityStartedAt)
+          return result
+        })
 
     const [
       { data: activities },
@@ -284,10 +361,10 @@ export async function GET(request: NextRequest) {
       attendanceAvailability,
       nextChampionshipMatch,
     ] = await Promise.all([
-      activitiesPromise,
+      activitiesQueryPromise,
       allEventsPromise,
       attendanceAvailabilityPromise,
-      nextChampionshipMatchPromise,
+      timedChampionshipMatchPromise,
     ])
     timing?.mark('dashboard-enrichment-queries', enrichmentQueriesStartedAt)
 
@@ -317,7 +394,15 @@ export async function GET(request: NextRequest) {
     const teamsMap = new Map((teams || []).map(t => [t.id, t]))
     const membershipFeesMap = new Map((membershipFees || []).map(f => [f.id, f]))
     const gymsMap = new Map((gyms || []).map((gym) => [gym.id, gym]))
-    const attendanceMap = new Map((attendanceRows || []).map((attendance) => [attendance.event_id, attendance]))
+    const attendanceMap = new Map<string, any>((attendanceRows || []).map((attendance) => [
+      attendance.event_id,
+      {
+        event_id: attendance.event_id,
+        status: attendance.status,
+        responded_at: attendance.responded_at,
+        is_early_absence: attendance.is_early_absence,
+      },
+    ]))
     if (attendanceAvailability) {
       for (const [eventId, response] of attendanceAvailability.attendanceByEventId) {
         if (!attendanceMap.has(eventId)) attendanceMap.set(eventId, response)

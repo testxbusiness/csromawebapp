@@ -5,10 +5,16 @@ type TimingEntry = {
   durationMs: number
 }
 
+type TimingDetail = {
+  name: string
+  value: number | string | boolean | null
+}
+
 export type RequestTiming = {
   requestId: string
   route: string
   mark: (name: string, startedAt: number) => void
+  detail: (name: string, value: number | string | boolean | null) => void
   now: () => number
   finish: <T extends Response>(response: T) => T
 }
@@ -36,6 +42,7 @@ export function startRequestTiming(request: Request | undefined, route: string):
   const requestId = request?.headers?.get(REQUEST_ID_HEADER) || createRequestId()
   const startedAt = performance.now()
   const entries: TimingEntry[] = []
+  const details: TimingDetail[] = []
 
   return {
     requestId,
@@ -43,6 +50,9 @@ export function startRequestTiming(request: Request | undefined, route: string):
     now: () => performance.now(),
     mark(name, phaseStartedAt) {
       entries.push({ name, durationMs: toMilliseconds(performance.now() - phaseStartedAt) })
+    },
+    detail(name, value) {
+      details.push({ name, value })
     },
     finish(response) {
       const totalMs = toMilliseconds(performance.now() - startedAt)
@@ -62,6 +72,7 @@ export function startRequestTiming(request: Request | undefined, route: string):
         requestId,
         durationMs: totalMs,
         phases: serverTiming,
+        details,
       }))
       return response
     },
