@@ -841,7 +841,7 @@ Calendar ora:
 
 Il resolver conserva il rebuild completo di `buildAttendanceAvailability`, quindi restano invariate permission, early absence, next-event selection e `next_recalculation_at`. Il seed non è una cache cross-request e non sostituisce le verifiche server-side.
 
-Event Detail ora riusa il risultato della membership già verificata per evitare la membership query duplicata del resolver. Il fan-out di gym, team, creator e attendance è concorrente. Il resolver continua comunque a caricare l'insieme degli eventi autorizzati necessario per mantenere la regola del prossimo evento: non è stato ristretto artificialmente al solo evento aperto.
+Event Detail ora riusa il risultato della membership già verificata per evitare la membership query duplicata del resolver. Il fan-out di gym, team, creator e attendance è concorrente. Il percorso detail riusa inoltre, request-scoped, l'evento e l'attendance già caricati: il resolver carica soltanto gli eventi circostanti necessari per mantenere la regola del prossimo evento e non rilegge l'evento aperto né la sua attendance. Il set autorizzato e la selezione del prossimo evento restano invariati.
 
 ### Query e round-trip prima/dopo
 
@@ -849,7 +849,7 @@ Event Detail ora riusa il risultato della membership già verificata per evitare
 |---|---|---|
 | Calendar availability | 4 query duplicate: membership, event links, events, attendance | 0 query aggiuntive; rebuild in memoria sul seed della request |
 | Calendar main pipeline | teams → relations; events → attendance separati | teams ∥ relations; events ∥ attendance |
-| Event Detail availability | membership duplicata + event links + events + attendance | membership duplicata eliminata; event links/events/attendance restano necessari per la regola globale del prossimo evento |
+| Event Detail availability | membership duplicata + event links + events + attendance | membership e attendance dell'evento aperto riusate; event links + soli eventi circostanti restano necessari per la regola globale del prossimo evento |
 | Event Detail enrichment | gym → teams → creator → attendance sequenziali | gym ∥ teams ∥ creator ∥ attendance |
 
 ### Server-Timing e contratto
@@ -864,7 +864,7 @@ Verificati localmente:
 
 - `npx tsc --noEmit` — passato;
 - ESLint sui route/helper/test modificati — passato;
-- `npx jest --runInBand src/server/events/attendance-availability.test.ts src/app/api/athlete/events/detail/route.test.ts src/lib/athlete/calendar-contract.test.ts src/components/athlete/AthleteCalendarManager.test.tsx` — 21 test passati;
+- `npx jest --runInBand src/server/events/attendance-availability.test.ts src/app/api/athlete/events/detail/route.test.ts src/lib/athlete/calendar-contract.test.ts src/components/athlete/AthleteCalendarManager.test.tsx` — 22 test passati;
 - `git diff --check` — passato.
 
 Non è disponibile un HAR post-ottimizzazione in questa sessione. Le metriche finali da confrontare direttamente sono: Calendar total, `attendance-availability`, `events`, `event-team-relations`, `teams`, `attendance`, `subject-context`; Event Detail total, `attendance-availability`, enrichment e `subject-context`.

@@ -52,6 +52,12 @@ export type AttendanceAvailabilitySeed = {
   attendanceByEventId: Map<string, AttendanceResolverResponse>
 }
 
+export type AttendanceAvailabilityDetailContext = {
+  authorizedTeamIds: string[]
+  knownEvent: AttendanceResolverEvent
+  knownAttendance: AttendanceResolverResponse | null
+}
+
 type EventTeamLink = { event_id: string; team_id: string }
 type TeamMembership = { team_id: string }
 
@@ -226,7 +232,62 @@ async function loadRows(
   allowedTeamIds?: string[],
   seed?: AttendanceAvailabilitySeed,
   authorizedTeamIdsOverride?: string[],
+  detailContext?: AttendanceAvailabilityDetailContext,
 ): Promise<AttendanceAvailabilityResult> {
+  if (detailContext) {
+    const authorizedTeamIds = uniqueSorted(detailContext.authorizedTeamIds)
+    if (authorizedTeamIds.length === 0) {
+      return { authorizedTeamIds, events: [], attendanceByEventId: new Map(), availabilityByEventId: new Map(), nextEvent: null }
+    }
+
+    // Event Detail has already authorized and loaded the requested event and
+    // its attendance. Only load the surrounding event set needed to preserve
+    // the existing next-event rule; do not re-read the known event/attendance.
+    const { data: linkRows, error: linksError } = await client
+      .from('event_teams')
+      .select('event_id, team_id')
+      .in('team_id', authorizedTeamIds)
+    if (linksError) throw linksError
+
+    const links = (linkRows as EventTeamLink[] | null ?? []).filter((link) => authorizedTeamIds.includes(link.team_id))
+    const eventTeamIds = new Map<string, string[]>()
+    for (const link of links) {
+      const teamIds = eventTeamIds.get(link.event_id) ?? []
+      if (!teamIds.includes(link.team_id)) teamIds.push(link.team_id)
+      eventTeamIds.set(link.event_id, teamIds)
+    }
+
+    const surroundingEventIds = uniqueSorted(
+      [...eventTeamIds.keys()].filter((eventId) => eventId !== detailContext.knownEvent.id),
+    )
+    const { data: eventRows, error: eventsError } = surroundingEventIds.length === 0
+      ? { data: [], error: null }
+      : await client
+        .from('events')
+        .select(EVENT_SELECT)
+        .in('id', surroundingEventIds)
+    if (eventsError) throw eventsError
+
+    const surroundingEvents = (eventRows as RawEvent[] | null ?? [])
+      .filter((event) => eventTeamIds.has(event.id))
+      .map((event) => ({ ...event, team_ids: uniqueSorted(eventTeamIds.get(event.id) ?? []) }))
+    const events = [
+      { ...detailContext.knownEvent, team_ids: uniqueSorted(detailContext.knownEvent.team_ids) },
+      ...surroundingEvents,
+    ]
+    const attendanceByEventId = new Map<string, AttendanceResolverResponse>()
+    if (detailContext.knownAttendance) {
+      attendanceByEventId.set(detailContext.knownAttendance.event_id, detailContext.knownAttendance)
+    }
+    const { availabilityByEventId, nextEvent } = buildAttendanceAvailability(
+      events,
+      attendanceByEventId,
+      { view_schedule: true, confirm_attendance: true },
+      now,
+    )
+    return { authorizedTeamIds, events, attendanceByEventId, availabilityByEventId, nextEvent }
+  }
+
   if (seed) {
     const { availabilityByEventId, nextEvent } = buildAttendanceAvailability(
       seed.events,
@@ -312,11 +373,12 @@ export async function resolveAttendanceAvailability(
   allowedTeamIds?: string[],
   seed?: AttendanceAvailabilitySeed,
   authorizedTeamIdsOverride?: string[],
+  detailContext?: AttendanceAvailabilityDetailContext,
 ): Promise<AttendanceAvailabilityResult> {
   if (!permissions.view_schedule) {
     return { authorizedTeamIds: [], events: [], attendanceByEventId: new Map(), availabilityByEventId: new Map(), nextEvent: null }
   }
-  const result = await loadRows(client, profileId, eventIds, now, allowedTeamIds, seed, authorizedTeamIdsOverride)
+  const result = await loadRows(client, profileId, eventIds, now, allowedTeamIds, seed, authorizedTeamIdsOverride, detailContext)
   const rebuilt = buildAttendanceAvailability(result.events, result.attendanceByEventId, permissions, now)
   return { ...result, ...rebuilt }
 }

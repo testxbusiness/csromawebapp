@@ -179,4 +179,56 @@ describe('attendance availability resolver', () => {
       can_respond_now: true,
     }))
   })
+
+  it('reuses Event Detail rows while preserving the cross-team next-event rule', async () => {
+    const knownEvent = event({ id: 'known-event', start_time: '2026-09-15T18:00:00.000Z' })
+    const earlierEvent = event({ id: 'earlier-event', start_time: '2026-09-12T18:00:00.000Z', team_ids: ['team-u16'] })
+    const client = {
+      from: jest.fn((table: string) => {
+        if (table === 'event_teams') return queryBuilder({ data: [{ event_id: earlierEvent.id, team_id: 'team-u16' }] })
+        if (table === 'events') return queryBuilder({ data: [{ ...earlierEvent, team_ids: undefined }] })
+        return queryBuilder({ data: [] })
+      }),
+    }
+    const attendance = {
+      event_id: knownEvent.id,
+      status: 'going' as const,
+      responded_at: now.toISOString(),
+      is_early_absence: false,
+    }
+
+    const result = await resolveAttendanceAvailability(
+      client as never,
+      'athlete-1',
+      { view_schedule: true, confirm_attendance: true },
+      [knownEvent.id],
+      now,
+      ['team-u14'],
+      undefined,
+      ['team-u14'],
+      { authorizedTeamIds: ['team-u14', 'team-u16'], knownEvent, knownAttendance: attendance },
+    )
+
+    expect(result.nextEvent?.id).toBe(earlierEvent.id)
+    expect(result.availabilityByEventId.get(knownEvent.id)?.closure_reason).toBe('already_responded')
+    expect(client.from).toHaveBeenCalledTimes(2)
+    expect(client.from).not.toHaveBeenCalledWith('event_attendances')
+  })
 })
+
+function queryBuilder<T>(result: { data: T; error?: null }) {
+  type QueryBuilder = {
+    select: () => QueryBuilder
+    eq: () => QueryBuilder
+    in: () => QueryBuilder
+    maybeSingle: () => Promise<typeof result>
+    then: (resolve: (value: typeof result) => unknown) => Promise<unknown>
+  }
+  const builder = {} as QueryBuilder
+  builder.select = jest.fn(() => builder)
+  builder.eq = jest.fn(() => builder)
+  builder.in = jest.fn(() => builder)
+  builder.maybeSingle = jest.fn(() => Promise.resolve(result))
+  builder.then = (resolve) => Promise.resolve(result).then(resolve)
+  return builder
+}

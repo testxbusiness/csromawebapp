@@ -72,6 +72,11 @@ describe('GET /api/athlete/events/detail', () => {
       ['team-1'],
       undefined,
       ['team-1'],
+      expect.objectContaining({
+        authorizedTeamIds: ['team-1'],
+        knownEvent: expect.objectContaining({ id: 'event-1', team_ids: ['team-1'] }),
+        knownAttendance: null,
+      }),
     )
   })
 })

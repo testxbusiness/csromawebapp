@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
-import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
+import { resolveAttendanceAvailability, type AttendanceResolverEvent, type AttendanceResolverResponse } from '@/server/events/attendance-availability'
 import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
 
 export async function GET(request: NextRequest) {
@@ -78,6 +78,24 @@ export async function GET(request: NextRequest) {
 
     timing?.mark('event-enrichment', enrichmentStartedAt)
     const availabilityStartedAt = timing?.now() ?? 0
+    const resolverEvent: AttendanceResolverEvent = {
+      id: ev.id,
+      start_time: ev.start_date,
+      end_time: ev.end_date,
+      title: ev.title,
+      description: ev.description,
+      location: ev.location,
+      event_kind: ev.event_kind,
+      event_type: ev.event_type,
+      requires_confirmation: ev.requires_confirmation,
+      attendance_mode: ev.attendance_mode,
+      confirmation_deadline: ev.confirmation_deadline,
+      generated_from_schedule_id: ev.generated_from_schedule_id,
+      team_ids: authorizedTeamIds,
+    }
+    const knownAttendance: AttendanceResolverResponse | null = myAtt
+      ? { event_id: id, ...myAtt }
+      : null
     const attendanceAvailability = await resolveAttendanceAvailability(
       dataClient,
       athleteProfileId,
@@ -87,6 +105,7 @@ export async function GET(request: NextRequest) {
       activeTeamIds,
       undefined,
       authorizedTeamIds,
+      { authorizedTeamIds, knownEvent: resolverEvent, knownAttendance },
     )
     timing?.mark('attendance-availability', availabilityStartedAt)
 
