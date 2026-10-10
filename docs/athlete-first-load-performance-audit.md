@@ -900,3 +900,89 @@ Verificati localmente:
 - `git diff --check` — passato.
 
 Un nuovo HAR post-modifica è ancora necessario per misurare la riduzione effettiva e la variabilità di `dashboard-enrichment`. Il prossimo campionamento deve includere: atleta con più team, nessun team, events sì/no, messages sì/no, attendance, championship e fees, verificando anche i dettagli `Server-Timing` e i conteggi diagnostici.
+
+## Optimization 8 — Athlete Profile Pipeline
+
+### Baseline e dependency graph
+
+I baseline HAR `docs/PRE-GOALS granular baseline` e `docs/POST-GOALS granular baseline` sono stati usati in sola lettura. Il campione POST di riferimento per `/api/athlete/profile` misura:
+
+| Fase | Durata POST round 1 |
+|---|---:|
+| `subject-context` | ~987 ms |
+| `profile-athlete-memberships` | ~314 ms |
+| `teams` | ~310 ms |
+| `activities` | ~306 ms |
+| `documents` | ~320 ms |
+| `route-total` | ~2,24 s |
+
+Il payload è inferiore a 1 KB. Il percorso prima della modifica era:
+
+```text
+subject-context
+  → profiles ∥ athlete_profiles ∥ team_members
+    → teams
+      → activities
+        → personal documents ∥ team documents
+          → response transform
+```
+
+Dipendenze effettive e campi usati:
+
+| Fase | Input | Query / SELECT | Output usato dopo |
+|---|---|---|---|
+| Profile | `subject.profileId` | `profiles`: `id, first_name, last_name, email, phone, birth_date` | subject response |
+| Athlete profile | `subject.profileId` | `athlete_profiles`: `profile_id, membership_number, medical_certificate_expiry` | membership number, medical status |
+| Memberships | `subject.profileId`, `activeTeamIds` | `team_members`: `id, team_id, jersey_number` | team IDs, jersey number |
+| Teams | deduplicated membership team IDs | `teams`: `id, name, code, activity_id` | team response, activity IDs, document team IDs |
+| Activities | deduplicated team activity IDs | `activities`: `id, name` | membership response |
+| Documents | subject profile ID and team IDs; permission `view_documents` | `documents`: `id, title, status, file_name, created_at`, status `generated/sent` | document metadata response |
+
+`subject-context` continua a fornire autorizzazione, active season e active team IDs, ma non il catalogo completo di `teams`/`activities` richiesto dal response contract. Non è stata duplicata né ampliata la query del resolver per tutte le altre route.
+
+### Implementazione e dependency graph dopo
+
+Il route handler mantiene in parallelo le tre query base. Dopo la loro conclusione, il documento personale — che richiede soltanto profile ID e `view_documents` — viene avviato prima della query teams. Dopo `teams`, `activities` e documenti-team partono insieme:
+
+```text
+subject-context
+  → profiles ∥ athlete_profiles ∥ team_members
+    → personal documents ────────────────┐
+    → teams                               │
+      → activities ∥ team documents ─────┴→ response transform
+```
+
+La query `documents` resta condizionata da `view_documents`; i documenti personali e team sono ancora uniti e deduplicati per `document.id`. Le permission, il data client delegated e i filtri di stato non sono cambiati.
+
+La trasformazione del contract resta sincrona e non è stata ottimizzata: il payload è piccolo e il costo non è indicato come hotspot nei baseline. `push/device state` resta completamente fuori dal server handler e invariato.
+
+### Query eliminate, request-scoped reuse e sicurezza
+
+- Non sono state eliminate query necessarie al contract: `teams` e `activities` contengono campi non presenti nel solo subject context ma richiesti dalla pagina.
+- Non sono state introdotte cache cross-request o modifiche a schema, indici, RLS, API contract, client AthleteProfileManager o staleTime.
+- Non è stato aggiunto request-scoped reuse dal subject context perché il resolver non possiede le righe complete di teams/activities e renderlo più pesante avrebbe penalizzato tutte le route.
+- È stato eliminato il vincolo seriale artificiale `activities → documents`; il documento personale può sovrapporsi alla risoluzione teams e documenti-team può sovrapporsi ad activities.
+- Per un subject delegato i documenti continuano a essere letti con il client/autorizzazione già stabiliti dal context; i metadata sono restituiti solo quando `view_documents` è concesso.
+
+### Server-Timing e verifica
+
+Restano le label confrontabili `subject-context`, `profile-athlete-memberships`, `teams`, `activities`, `documents` e `route-total`. Dopo questa modifica, le durate delle fasi possono sovrapporsi: la somma delle fasi non rappresenta il critical path. Il prossimo HAR deve quindi confrontare sia `route-total` sia le singole durate e la loro sovrapposizione.
+
+Verificati localmente:
+
+- `npm exec tsc -- --noEmit` — passato;
+- `npm run lint` — passato, nessun warning/error ESLint;
+- `npm test -- --runInBand src/app/api/athlete/profile/route.test.ts src/server/profile/athlete-profile.test.ts` — 6 test passati;
+- `git diff --check` — passato.
+
+Il nuovo HAR autenticato non è stato generato in questa sessione. Il prossimo campionamento deve includere self athlete, subject delegato, più team, zero team, attività presenti/assenti, nessun documento, documenti personali, documenti team e permission `view_documents` negata, verificando:
+
+| Metriche HAR finale | Stato |
+|---|---|
+| Profile API total | DA MISURARE |
+| `route-total` | DA MISURARE |
+| `subject-context` | DA MISURARE / invariato rispetto al goal precedente |
+| `profile-athlete-memberships` | DA MISURARE |
+| `teams` | DA MISURARE |
+| `activities` | DA MISURARE |
+| `documents` | DA MISURARE |

@@ -33,6 +33,14 @@ export async function GET(request: NextRequest) {
 
     const safeMemberships = memberships ?? []
     const teamIds = [...new Set(safeMemberships.map((membership) => membership.team_id))]
+    const documentsStartedAt = timing?.now() ?? 0
+    const personalDocumentsPromise = subject.permissions.view_documents
+      ? Promise.resolve(client.from('documents')
+          .select('id, title, status, file_name, created_at')
+          .eq('target_user_id', subject.profileId)
+          .in('status', ['generated', 'sent']))
+      : Promise.resolve({ data: [], error: null })
+
     const teamsStartedAt = timing?.now() ?? 0
     const { data: teams, error: teamsError } = teamIds.length
       ? await client.from('teams').select('id, name, code, activity_id').in('id', teamIds)
@@ -46,37 +54,30 @@ export async function GET(request: NextRequest) {
     const safeTeams = teams ?? []
     const activityIds = [...new Set(safeTeams.map((team) => team.activity_id))]
     const activitiesStartedAt = timing?.now() ?? 0
-    const { data: activities, error: activitiesError } = activityIds.length
-      ? await client.from('activities').select('id, name').in('id', activityIds)
-      : { data: [], error: null }
+    const activitiesPromise = activityIds.length
+      ? client.from('activities').select('id, name').in('id', activityIds)
+      : Promise.resolve({ data: [], error: null })
+    const teamDocumentsPromise = subject.permissions.view_documents && safeTeams.length
+      ? client.from('documents')
+          .select('id, title, status, file_name, created_at')
+          .in('target_team_id', safeTeams.map((team) => team.id))
+          .in('status', ['generated', 'sent'])
+      : Promise.resolve({ data: [], error: null })
+    const [{ data: activities, error: activitiesError }, [personalDocuments, teamDocuments]] = await Promise.all([
+      activitiesPromise,
+      Promise.all([personalDocumentsPromise, teamDocumentsPromise]),
+    ])
     timing?.mark('activities', activitiesStartedAt)
+    timing?.mark('documents', documentsStartedAt)
+    const documents = {
+      rows: [...(personalDocuments.data ?? []), ...(teamDocuments.data ?? [])]
+        .filter((document, index, all) => all.findIndex((candidate) => candidate.id === document.id) === index),
+      error: personalDocuments.error ?? teamDocuments.error,
+    }
     if (activitiesError) {
       console.error('Errore caricamento attività profilo atleta:', activitiesError)
       return finishRequestResponse(noStoreJson({ error: 'Impossibile caricare le attività del profilo' }, 500), timing)
     }
-
-    const documentsStartedAt = timing?.now() ?? 0
-    const documents = subject.permissions.view_documents
-      ? await Promise.all([
-          client.from('documents')
-            .select('id, title, status, file_name, created_at')
-            .eq('target_user_id', subject.profileId)
-            .in('status', ['generated', 'sent']),
-          safeTeams.length
-            ? client.from('documents')
-                .select('id, title, status, file_name, created_at')
-                .in('target_team_id', safeTeams.map((team) => team.id))
-                .in('status', ['generated', 'sent'])
-            : Promise.resolve({ data: [], error: null }),
-        ]).then(([personal, team]) => {
-          const rows = [...(personal.data ?? []), ...(team.data ?? [])]
-          return {
-            rows: rows.filter((document, index, all) => all.findIndex((candidate) => candidate.id === document.id) === index),
-            error: personal.error ?? team.error,
-          }
-        })
-      : { rows: [], error: null }
-    timing?.mark('documents', documentsStartedAt)
     if (documents.error) {
       console.error('Errore caricamento documenti profilo atleta:', documents.error)
       return finishRequestResponse(noStoreJson({ error: 'Impossibile caricare i documenti del profilo' }, 500), timing)
