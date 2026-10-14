@@ -63,7 +63,11 @@ export function BottomNavigation({ unreadCount = 0 }: { unreadCount?: number }) 
   return (
       <nav className="cs-bottomnav cs-bottom-navigation" data-item-count={items.length} aria-label={isFamilyView ? 'Navigazione area familiare' : 'Navigazione atleta'}>
       {items.map(({ href, label, icon: Icon }) => {
-        const active = href === '/dashboard' ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
+        const active = href === '/dashboard'
+          ? pathname === href
+          : href === '/athlete/profile'
+            ? pathname === href || pathname.startsWith(`${href}/`) || pathname === '/athlete/fees' || pathname.startsWith('/athlete/fees/')
+            : pathname === href || pathname.startsWith(`${href}/`)
         return (
           <Link key={href} href={href} className={cn('cs-bottom-navigation__item', active && 'is-active')} aria-current={active ? 'page' : undefined}>
             <span className="cs-bottom-navigation__icon"><Icon aria-hidden="true" /></span>

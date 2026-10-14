@@ -14,12 +14,13 @@ type AppHeaderProps = {
   onMenuOpen?: () => void
   onBack?: () => void
   onSignOut?: () => void
+  showMobileSignOut?: boolean
   account?: React.ReactNode
   context?: React.ReactNode
   utilities?: React.ReactNode
 }
 
-export default function AppHeader({ variant = 'desktop', brandTreatment = 'default', onMenuOpen, onBack, onSignOut, account, context, utilities }: AppHeaderProps) {
+export default function AppHeader({ variant = 'desktop', brandTreatment = 'default', onMenuOpen, onBack, onSignOut, showMobileSignOut = false, account, context, utilities }: AppHeaderProps) {
   const isDetail = variant === 'mobile-detail'
   return (
     <header className={`cs-navbar cs-app-header ${variant === 'admin' ? 'cs-admin-topbar' : ''} ${brandTreatment === 'athlete-dashboard' ? 'cs-app-header--athlete-dashboard' : ''}`}>
@@ -27,9 +28,9 @@ export default function AppHeader({ variant = 'desktop', brandTreatment = 'defau
         <div className="cs-app-header__leading">
           {isDetail ? (
             <Button variant="ghost" size="icon" className="cs-app-header__back" onClick={onBack} aria-label="Torna indietro"><ArrowLeft className="h-5 w-5" aria-hidden="true" /></Button>
-          ) : (
+          ) : onMenuOpen ? (
             <Button variant="ghost" size="icon" className="lg:!hidden" onClick={onMenuOpen} aria-label="Apri navigazione"><Menu className="h-5 w-5" aria-hidden="true" /></Button>
-          )}
+          ) : null}
           <Link href="/dashboard" className="cs-app-header__brand" aria-label="CSRoma – Vai alla home">
             <span className="relative h-8 w-8 lg:h-10 lg:w-10"><Image src="/images/new_csroma_logo_no_bg.svg" alt="CSRoma" fill className="object-contain select-none" sizes="40px" priority /></span>
             <span className="cs-app-header__brand-copy">
@@ -41,6 +42,7 @@ export default function AppHeader({ variant = 'desktop', brandTreatment = 'defau
         </div>
         <div className="cs-app-header__actions">
           {utilities}
+          {onSignOut && showMobileSignOut ? <button type="button" onClick={onSignOut} className="inline-flex sm:hidden cs-btn cs-btn--secondary cs-app-header__mobile-signout">Esci</button> : null}
           {onSignOut ? <button type="button" onClick={onSignOut} className="hidden sm:inline-flex cs-btn cs-btn--primary">Esci</button> : null}
           {account ? <div className="hidden sm:block">{account}</div> : null}
         </div>

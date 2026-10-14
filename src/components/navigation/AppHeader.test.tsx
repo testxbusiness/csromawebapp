@@ -22,4 +22,17 @@ describe('AppHeader brand treatment', () => {
 
     expect(screen.queryByRole('button', { name: 'Notifiche' })).toBeNull()
   })
+
+  it('can omit the mobile menu trigger for the personal athlete shell', () => {
+    render(<AppHeader variant="mobile-root" />)
+
+    expect(screen.queryByRole('button', { name: 'Apri navigazione' })).toBeNull()
+  })
+
+  it('exposes mobile logout when the shell moves it out of the drawer', () => {
+    const onSignOut = jest.fn()
+    render(<AppHeader variant="mobile-detail" onSignOut={onSignOut} showMobileSignOut />)
+
+    expect(screen.getAllByRole('button', { name: 'Esci' })).toHaveLength(2)
+  })
 })

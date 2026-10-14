@@ -170,6 +170,14 @@ describe('AthleteProfileManager', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('provides an entry point to administration from the profile', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => data }) as jest.Mock
+
+    renderManager()
+
+    expect(await screen.findByRole('link', { name: 'Apri Amministrazione' })).toHaveAttribute('href', '/athlete/fees')
+  })
+
   it('keeps cached profile visible while a background refetch is running', async () => {
     const queryClient = createQueryClient()
     queryClient.setQueryData(athleteKeys.profile('auth-1', 'profile-1'), data)

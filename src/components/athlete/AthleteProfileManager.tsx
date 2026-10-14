@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { usePush } from '@/hooks/usePush'
 import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, StatusBadge } from '@/components/ui'
@@ -106,6 +107,14 @@ export default function AthleteProfileManager() {
         <h1 className="text-2xl font-bold text-[color:var(--cs-text)]">{subject.first_name} {subject.last_name}</h1>
         {subject.delegated && delegatedName ? <p className="mt-1 text-sm text-[color:var(--cs-text-secondary)]">Stai visualizzando {delegatedName}</p> : null}
       </header>
+
+      <Panel className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-semibold text-[color:var(--cs-text)]">Amministrazione</p>
+          <p className="text-sm text-[color:var(--cs-text-secondary)]">Quote, certificato e domanda di iscrizione.</p>
+        </div>
+        <Link href="/athlete/fees" className="cs-btn cs-btn--secondary">Apri Amministrazione</Link>
+      </Panel>
 
       <Panel className="flex flex-wrap items-center gap-4">
         <div className="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-[color:var(--cs-brand-red)] text-xl font-bold text-white" aria-label={`Iniziali di ${subject.first_name} ${subject.last_name}`}>{initials(subject)}</div>

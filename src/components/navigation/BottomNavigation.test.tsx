@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BottomNavigation } from './BottomNavigation'
 import { MESSAGE_READ_STATE_CHANGED_EVENT } from '@/lib/messages/read-state-events'
 
-jest.mock('next/navigation', () => ({ usePathname: () => '/athlete/messages' }))
+const pathnameMock = jest.fn(() => '/athlete/messages')
+jest.mock('next/navigation', () => ({ usePathname: () => pathnameMock() }))
 const authMock = jest.fn()
 jest.mock('@/hooks/useAuth', () => ({ useAuth: () => authMock() }))
 const profilesMock = jest.fn()
@@ -19,6 +20,7 @@ describe('BottomNavigation', () => {
   }
 
   beforeEach(() => {
+    pathnameMock.mockReturnValue('/athlete/messages')
     authMock.mockReturnValue({ role: 'athlete', user: { id: 'auth-1' }, account: { authUserId: 'auth-1', ownerProfileId: 'athlete-1' } })
     profilesMock.mockReturnValue({ activeArea: 'personal', selectedProfileId: null, selectedProfile: null })
   })
@@ -93,5 +95,15 @@ describe('BottomNavigation', () => {
     expect(screen.getByRole('link', { name: 'Messaggi' }).getAttribute('href')).toBe('/coach/messages')
     expect(screen.getByRole('link', { name: 'Altro' }).getAttribute('href')).toBe('/coach/profile')
     expect(screen.getByRole('navigation').getAttribute('aria-label')).toBe('Navigazione coach')
+  })
+
+  it('marks Profilo active for the separate administration route', () => {
+    pathnameMock.mockReturnValue('/athlete/fees')
+    globalThis.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ unreadMessageCount: 0 }) } as Response)
+
+    renderWithQueryClient()
+
+    expect(screen.getByRole('link', { name: 'Profilo' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.queryByRole('link', { name: 'Amministrazione' })).toBeNull()
   })
 })

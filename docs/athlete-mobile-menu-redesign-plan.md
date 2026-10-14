@@ -1,6 +1,6 @@
 # Athlete Mobile Menu Redesign — audit e piano operativo
 
-Stato: Goal 0 completato il 14/10/2026  
+Stato: Goal 1 completato il 14/10/2026
 Branch: `athlete-mobile-menu-redesign`  
 Perimetro: audit del repository e piano di implementazione. Nessuna modifica funzionale o visuale è stata introdotta con questo goal.
 
@@ -544,5 +544,42 @@ Goal 1–4 completati.
 
 ## 10. Prossimo goal raccomandato
 
-Goal 1 — Navigation architecture + burger removal.
+Goal 2 — Profile hub redesign.
+
+## 11. Verifica Goal 1 — Navigation architecture + burger removal
+
+Stato: completato il 14/10/2026.
+
+### Implementazione
+
+- Athlete personale mobile non passa più `onMenuOpen` a `AppHeader`: il pulsante burger non viene renderizzato e `LayoutShell` non monta overlay/drawer in questo contesto.
+- Il drawer e `RoleSidebar` mobile restano disponibili per Coach e famiglia; la sidebar desktop e i flussi Admin restano invariati.
+- La bottom navigation personale mantiene esattamente cinque destinazioni: Oggi, Calendario, Campionato, Messaggi, Profilo.
+- `/athlete/fees` attiva Profilo nella bottom navigation senza aggiungere una voce Amministrazione.
+- Il Profile corrente espone il link deterministico `Apri Amministrazione` verso `/athlete/fees`.
+- Il logout Athlete personale resta raggiungibile nell’header mobile; tema, logo, back, subject switcher e team switcher restano slot della shell esistente.
+
+### Censimento azioni prima disponibili nel drawer
+
+| Azione | Destinazione alternativa | Verifica |
+| --- | --- | --- |
+| Oggi, Calendario, Campionato, Messaggi | Bottom navigation personale | test BottomNavigation |
+| Profilo | Bottom navigation personale | test BottomNavigation |
+| Amministrazione | Link dal Profilo a `/athlete/fees`; area attiva Profilo | test Profile + BottomNavigation |
+| Logout | Pulsante `Esci` nell’header mobile Athlete | test AppHeader |
+| Tema | Utility `ThemeToggle` già presente nell’header | nessuna modifica al contratto |
+| Squadra / soggetto | Switcher esistenti nell’header contestuale | nessuna modifica al permission filtering |
+| Account/ruolo informativo | Header desktop/account badge; non è una destinazione operativa mobile | nessuna funzione persa |
+
+### Test e note
+
+- Jest mirato: 4 suite, 25 test superati (`AppHeader`, `BottomNavigation`, `RoleSidebar`, `AthleteProfileManager`).
+- `npx tsc --noEmit`: superato.
+- `git diff --check`: superato.
+- Build e smoke browser non eseguiti in questo passaggio.
+- Il launcher Impeccable locale è stato trovato ma non eseguito fino al context perché l’engine 0.1.11 richiede rete e scrittura in `~/.impeccable`; è stato applicato il fallback documentato nella skill.
+
+### Prossimo goal raccomandato
+
+Goal 2 — Profile hub redesign.
 

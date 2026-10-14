@@ -122,6 +122,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   const roleLabel = role ? roleName(role) : user ? 'Utente' : ''
   const isAdminShell = role === 'admin' && (/^\/admin(\/|$)/.test(pathname) || pathname === '/dashboard')
   const isPersonalAthleteDashboard = pathname === '/dashboard' && role === 'athlete' && activeArea === 'personal' && !selectedProfile
+  const isPersonalAthleteShell = role === 'athlete' && activeArea === 'personal' && !selectedProfile
   const profileHref = role === 'admin' ? '/admin/profile' : role === 'coach' ? '/coach/profile' : role === 'athlete' ? '/athlete/profile' : '/dashboard'
   const showBottomNavigation = role === 'coach' || ((role === 'athlete' || role === 'family_member') && (activeArea === 'personal' || (activeArea === 'family' && Boolean(selectedProfile))))
 
@@ -163,9 +164,10 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       <AppHeader
         variant={isAdminShell ? 'admin' : pathname === '/dashboard' ? 'mobile-root' : 'mobile-detail'}
         brandTreatment={isPersonalAthleteDashboard ? 'athlete-dashboard' : 'default'}
-        onMenuOpen={() => setMobileMenuOpen(true)}
+        onMenuOpen={isPersonalAthleteShell ? undefined : () => setMobileMenuOpen(true)}
         onBack={() => router.back()}
         onSignOut={handleSignOut}
+        showMobileSignOut={isPersonalAthleteShell}
         account={<UserBadge />}
         context={headerContextMounted ? (
           <>
@@ -199,7 +201,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
 
       <BottomNavigation />
 
-      {mobileMenuOpen && (
+      {mobileMenuOpen && !isPersonalAthleteShell && (
         <div className="lg:hidden">
           <div className="cs-overlay" aria-hidden="false" onClick={() => setMobileMenuOpen(false)} />
           <div className="cs-drawer" aria-hidden="false">
