@@ -793,3 +793,20 @@ Decisioni principali:
 - Nessun polling frequente, persistent query cache, realtime nuovo o endpoint modificato è stato introdotto.
 
 `AthleteFeesManager` conserva un vecchio fetch manuale, ma non è montato dalla route attiva `/athlete/fees`; la route usa la query Administration. La rimozione è lasciata a un goal separato per non mescolare cleanup architetturale e tuning della policy.
+
+## Goal 3 — Administration summary nel Profilo (14 ottobre 2026)
+
+`AthleteProfileManager` riusa `useAthleteAdministrationQuery`, con la stessa key account/subject già usata dalla pagina `/athlete/fees`. Le due query del Profilo (`profile` e `administration`) partono in parallelo: il summary non introduce un waterfall e un contratto Administration già in cache non genera un secondo GET.
+
+`selectAthleteAdministrationSummary` in `src/lib/athlete/administration.ts` è un selector puro. Le sezioni `null` del contratto sono omesse perché rappresentano dati non esposti dai permessi server-side; non vengono trasformate in stato vuoto o valido. Gli stati autorizzati restano distinti (`missing`, `expired`, `expiring`, `overdue`, `due_soon`, oltre a stati completi/vuoti) e il Profilo mostra il blocco `Da completare` solo per elementi azionabili.
+
+Il blocco collega ancora alla pagina separata `/athlete/fees?section=...`; `AthleteFeesContent` resta l’unica UI di dettaglio quote raggiunta dalla route Administration. Non sono state aggiunte mutation, invalidazioni globali, query amministrative nuove o modifiche al loader legacy `/api/athlete/fees`.
+
+In caso di `403` durante un refetch Administration, il Profilo non usa la risposta cached precedente per il summary: il blocco viene nascosto, mantenendo la distinzione tra cache stale e accesso revocato.
+
+Test aggiunti/verificati:
+
+- selector puro: isolamento delle sezioni non autorizzate e distinzione degli stati;
+- Profilo: integrazione parallela della query Administration, cache hit e summary famiglia per sezioni autorizzate;
+- Administration: cache remount, background refetch, permessi e cambio subject;
+- `npx tsc --noEmit`.

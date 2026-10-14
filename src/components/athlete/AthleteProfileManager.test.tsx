@@ -6,6 +6,7 @@ import { usePush } from '@/hooks/usePush'
 import type { AthleteProfileContract } from '@/types/athlete-profile'
 import AthleteProfileManager from './AthleteProfileManager'
 import { athleteKeys } from '@/lib/query-keys'
+import type { AthleteAdministrationContract } from '@/types/athlete-administration'
 
 jest.mock('@/hooks/useAuth', () => ({ useAuth: jest.fn() }))
 jest.mock('@/context/AccessibleProfileContext', () => ({ appendSubjectProfile: (url: string) => url, useAccessibleProfiles: jest.fn() }))
@@ -39,6 +40,18 @@ const data: AthleteProfileContract = {
     { id: 'membership-1', jersey_number: 7, team: { id: 'team-1', name: 'U16', code: 'U16-E', activity: { id: 'activity-1', name: 'Volley' } } },
     { id: 'membership-2', jersey_number: 12, team: { id: 'team-2', name: 'U18', code: 'U18-E', activity: { id: 'activity-1', name: 'Volley' } } },
   ],
+}
+
+const administrationData: AthleteAdministrationContract = {
+  enrollment_application: { delivered: true },
+  medical_certificate: { status: 'valid', expires_at: '2026-12-31' },
+  fees: { installments: [] },
+}
+
+const administrationAttentionData: AthleteAdministrationContract = {
+  enrollment_application: { delivered: false },
+  medical_certificate: { status: 'expiring', expires_at: '2026-10-20' },
+  fees: { installments: [] },
 }
 
 describe('AthleteProfileManager', () => {
@@ -92,7 +105,7 @@ describe('AthleteProfileManager', () => {
     await waitFor(() => expect(screen.getByText('Non è stato possibile caricare il profilo')).toBeTruthy())
     expect(screen.getByRole('button', { name: 'Riprova' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Riprova' }))
-    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(global.fetch).toHaveBeenCalledTimes(3)
   })
 
   it('renders a denied state when the subject profile request is forbidden', async () => {
@@ -137,12 +150,13 @@ describe('AthleteProfileManager', () => {
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
     fireEvent(window, new Event('online'))
     await waitFor(() => expect(screen.queryByText('Profilo non aggiornato')).toBeNull())
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
   it('does not manually refetch cached profile on reconnect', async () => {
     const queryClient = createQueryClient()
     queryClient.setQueryData(athleteKeys.profile('auth-1', 'profile-1'), data)
+    queryClient.setQueryData(athleteKeys.administration('auth-1', 'profile-1'), administrationData)
     renderManager(queryClient)
 
     expect(screen.getByText('Identità sportiva')).toBeTruthy()
@@ -161,13 +175,13 @@ describe('AthleteProfileManager', () => {
     const queryClient = createQueryClient()
     const firstRender = renderManager(queryClient)
     await waitFor(() => expect(screen.getByText('Identità sportiva')).toBeTruthy())
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledTimes(2)
 
     firstRender.unmount()
     renderManager(queryClient)
 
     expect(screen.getByText('Identità sportiva')).toBeTruthy()
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
   it('provides an entry point to administration from the profile', async () => {
@@ -176,6 +190,47 @@ describe('AthleteProfileManager', () => {
     renderManager()
 
     expect(await screen.findByRole('link', { name: /Amministrazione/ })).toHaveAttribute('href', '/athlete/fees')
+  })
+
+  it('renders the authorized administration summary without a second administration fetch', async () => {
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => data })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => administrationAttentionData }) as jest.Mock
+
+    renderManager()
+
+    expect(await screen.findByRole('heading', { name: 'Da completare' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Certificato medico in scadenza/ })).toHaveAttribute('href', '/athlete/fees?section=certificate')
+    expect(screen.getByRole('link', { name: /Domanda di iscrizione da consegnare/ })).toHaveAttribute('href', '/athlete/fees?section=enrollment')
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders only the independently authorized family administration summary sections', async () => {
+    profilesMock.mockReturnValue({ profiles: [], selectedProfile: { profile: { id: 'profile-2', first_name: 'Luca', last_name: 'Rossi', email: null }, relationship: { id: 'relationship-1', type: 'parent', verified_at: '2026-01-01', permissions: { view_schedule: true, confirm_attendance: false, view_payments: false, view_medical_status: true, view_documents: false, sign_documents: false, receive_messages: false } } }, selectedProfileId: 'profile-2', setSelectedProfileId: jest.fn(), activeArea: 'family', setActiveArea: jest.fn(), loading: false, error: null, refresh: jest.fn() })
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ...data, subject: { ...data.subject, id: 'profile-2', delegated: true } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ enrollment_application: null, medical_certificate: { status: 'expired', expires_at: null }, fees: null }) }) as jest.Mock
+
+    renderManager()
+
+    expect(await screen.findByRole('heading', { name: 'Da completare' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Certificato medico scaduto/ })).toBeTruthy()
+    expect(screen.queryByRole('link', { name: /Domanda di iscrizione/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Quote associative/ })).toBeNull()
+  })
+
+  it('does not show cached administration summary after a current authorization failure', async () => {
+    const queryClient = createQueryClient()
+    queryClient.setQueryData(athleteKeys.administration('auth-1', 'profile-1'), administrationAttentionData)
+    queryClient.invalidateQueries({ queryKey: athleteKeys.administration('auth-1', 'profile-1'), refetchType: 'none' })
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => String(input).includes('/api/athlete/administration')
+      ? Promise.resolve({ ok: false, status: 403 })
+      : Promise.resolve({ ok: true, status: 200, json: async () => data })) as jest.Mock
+
+    renderManager(queryClient)
+
+    await waitFor(() => expect(screen.getByText('Identità sportiva')).toBeTruthy())
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Da completare' })).toBeNull())
   })
 
   it('exposes authorized profile subsections without creating additional requests', async () => {
@@ -187,7 +242,7 @@ describe('AthleteProfileManager', () => {
     expect(await screen.findByRole('link', { name: /Documenti/ })).toHaveAttribute('href', '#documenti')
     expect(screen.getByRole('link', { name: /Dati sportivi/ })).toHaveAttribute('href', '#dati-sportivi')
     expect(screen.getByRole('link', { name: /Account e app/ })).toHaveAttribute('href', '#account-app')
-    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 
   it('keeps cached profile visible while a background refetch is running', async () => {
@@ -199,7 +254,7 @@ describe('AthleteProfileManager', () => {
     expect(screen.getByText('Identità sportiva')).toBeTruthy()
 
     void queryClient.invalidateQueries({ queryKey: athleteKeys.profile('auth-1', 'profile-1') })
-    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
     expect(screen.getByText('Identità sportiva')).toBeTruthy()
     expect(screen.queryByText('Caricamento profilo...')).toBeNull()
   })

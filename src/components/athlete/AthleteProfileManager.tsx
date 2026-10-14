@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, Sta
 import InstallPwaButton from '@/components/pwa/InstallPwaButton'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
 import { AthleteProfileQueryError, useAthleteProfileQuery } from '@/lib/athlete/profile'
+import { AthleteAdministrationQueryError, isAthleteAdministrationSummaryActionable, selectAthleteAdministrationSummary, useAthleteAdministrationQuery } from '@/lib/athlete/administration'
 import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
 import type { AthleteProfileContract } from '@/types/athlete-profile'
 
@@ -36,6 +37,7 @@ export default function AthleteProfileManager() {
   const { selectedProfile } = useAccessibleProfiles()
   const { subscribe, unsubscribe } = usePush()
   const profileQuery = useAthleteProfileQuery()
+  const administrationQuery = useAthleteAdministrationQuery()
   useAthleteFirstLoadDiagnostics('profile', profileQuery.enabled, Boolean(profileQuery.data))
   const { data, refetch } = profileQuery
   const [pushSupported, setPushSupported] = useState(false)
@@ -102,6 +104,10 @@ export default function AthleteProfileManager() {
 
   const { subject, athlete, memberships, permissions } = data
   const delegatedName = selectedProfile ? `${selectedProfile.profile.first_name} ${selectedProfile.profile.last_name}` : null
+  const administrationDenied = administrationQuery.error instanceof AthleteAdministrationQueryError && administrationQuery.error.status === 403
+  const administrationSummary = administrationQuery.data && !administrationDenied
+    ? selectAthleteAdministrationSummary(administrationQuery.data).filter(isAthleteAdministrationSummaryActionable)
+    : []
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 pb-4">
@@ -128,6 +134,16 @@ export default function AthleteProfileManager() {
           <ProfileLink href="#account-app" icon={<Smartphone className="h-5 w-5" />} eyebrow="Preferenze" title="Account e app" description="Gestisci notifiche e accesso all’app dal dispositivo." />
         </nav>
       </Panel>
+
+      {administrationSummary.length > 0 ? <Panel id="da-completare" aria-labelledby="da-completare-title">
+        <SectionIntro eyebrow="Amministrazione" title="Da completare" titleId="da-completare-title" />
+        <div className="mt-4 space-y-3">
+          {administrationSummary.map((item) => <Link key={item.kind} href={item.href} className="group flex min-h-11 items-center justify-between gap-3 rounded-[var(--cs-control-radius)] border border-[color:var(--cs-border-canonical)] bg-[color:var(--cs-surface)] p-4 transition hover:border-[color:var(--cs-brand-red)] hover:bg-[color:var(--cs-surface-selected)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--cs-focus-ring)]">
+            <span className="min-w-0"><span className="block font-semibold text-[color:var(--cs-text)]">{item.label}</span><span className="mt-1 block text-sm text-[color:var(--cs-text-secondary)]">Apri Amministrazione per i dettagli.</span></span>
+            <ArrowRight className="h-5 w-5 shrink-0 text-[color:var(--cs-text-secondary)] transition group-hover:translate-x-0.5 group-hover:text-[color:var(--cs-brand-red)]" aria-hidden="true" />
+          </Link>)}
+        </div>
+      </Panel> : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel><SectionIntro eyebrow="Dati essenziali" title="Contatti" /><dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2"><DetailValue label="Email" value={subject.email ?? 'Non disponibile'} /><DetailValue label="Telefono" value={subject.phone ?? 'Non disponibile'} /><DetailValue label="Data di nascita" value={subject.birth_date ? formatDate(subject.birth_date) : 'Non disponibile'} /></dl></Panel>
