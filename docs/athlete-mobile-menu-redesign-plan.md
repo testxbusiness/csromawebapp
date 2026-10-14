@@ -359,6 +359,16 @@ Creare il nuovo hub `/athlete/profile` con overview personale e entry point alle
 
 Goal 1 per il corretto ingresso e active state; query attuali già disponibili.
 
+**Stato implementazione — completato il 14/10/2026**
+
+- `AthleteProfileManager` ora presenta un hub mobile-first con identità, dati essenziali, dati sportivi e accessi rapidi alle sottosezioni.
+- L’entry point Amministrazione punta alla route esistente `/athlete/fees`; Documenti, Dati sportivi e Account e app usano ancore locali e non introducono query aggiuntive.
+- La sezione Documenti resta condizionata a `permissions.view_documents`; i dati tecnici di account (ruoli, stato interno e flag cambio password) non vengono più esposti nell’overview.
+- Push e installazione PWA restano azioni locali del browser. Gli stati Profile loading/error/offline/403, cache/background refetch e isolamento subject sono invariati.
+- Aggiornati i test manager per entry point, accessibilità semantica delle heading/link e assenza di fetch amministrativi duplicati.
+- Verifiche: `npm test -- --runInBand src/components/athlete/AthleteProfileManager.test.tsx` (14/14), `npx tsc --noEmit`, `npm run build`, `git diff --check`; smoke autenticato Playwright a 375×812, 390×844, 768×1024 e 1440×900 con scroll width coerente, heading/link/focus verificati, zero errori console e una sola `GET /api/athlete/profile` senza richieste Administration/Fees.
+- Nessun summary dinamico “Da completare” e nessuna modifica a endpoint, contratto API, permessi o `src/types/athlete-profile.ts`.
+
 ### Goal 3 — Administration summary / cache integration
 
 **Obiettivo**

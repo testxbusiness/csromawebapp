@@ -78,7 +78,7 @@ describe('AthleteProfileManager', () => {
     profilesMock.mockReturnValue({ profiles: [], selectedProfile: { profile: { id: 'profile-2', first_name: 'Luca', last_name: 'Rossi', email: null }, relationship: { id: 'relationship-1', type: 'parent', verified_at: '2026-01-01', permissions: { view_schedule: true, confirm_attendance: false, view_payments: false, view_medical_status: false, view_documents: true, sign_documents: true, receive_messages: false } } }, selectedProfileId: 'profile-2', setSelectedProfileId: jest.fn(), activeArea: 'family', setActiveArea: jest.fn(), loading: false, error: null, refresh: jest.fn() })
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ ...data, subject: { ...data.subject, id: 'profile-2', delegated: true }, permissions: { view_medical_status: false, view_documents: true, sign_documents: true }, athlete: { ...data.athlete, medical: { status: 'hidden', expires_at: null }, documents: { can_view: true, can_sign: true, items: [{ id: 'document-1', title: 'Modulo iscrizione', status: 'generated', file_name: 'modulo.pdf', created_at: '2026-08-20T10:00:00Z' }] } } }) }) as jest.Mock
     renderManager()
-    await waitFor(() => expect(screen.getByText('Documenti')).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Documenti' })).toBeTruthy())
     expect(screen.getByText('Modulo iscrizione')).toBeTruthy()
     expect(screen.getByText(/File disponibile/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: /firma/i })).toBeNull()
@@ -175,7 +175,19 @@ describe('AthleteProfileManager', () => {
 
     renderManager()
 
-    expect(await screen.findByRole('link', { name: 'Apri Amministrazione' })).toHaveAttribute('href', '/athlete/fees')
+    expect(await screen.findByRole('link', { name: /Amministrazione/ })).toHaveAttribute('href', '/athlete/fees')
+  })
+
+  it('exposes authorized profile subsections without creating additional requests', async () => {
+    const queryData = { ...data, permissions: { ...data.permissions, view_documents: true }, athlete: { ...data.athlete, documents: { ...data.athlete.documents, can_view: true } } }
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => queryData }) as jest.Mock
+
+    renderManager()
+
+    expect(await screen.findByRole('link', { name: /Documenti/ })).toHaveAttribute('href', '#documenti')
+    expect(screen.getByRole('link', { name: /Dati sportivi/ })).toHaveAttribute('href', '#dati-sportivi')
+    expect(screen.getByRole('link', { name: /Account e app/ })).toHaveAttribute('href', '#account-app')
+    expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 
   it('keeps cached profile visible while a background refetch is running', async () => {
