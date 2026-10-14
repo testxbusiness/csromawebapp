@@ -662,6 +662,58 @@ Stato: completato il 14/10/2026 con limitazione runtime autenticata documentata.
 - Ripetere la matrice browser autenticata quando Chromium e le credenziali Athlete/famiglia saranno disponibili.
 - I due failure Coach mutation restano da gestire in un goal separato.
 
+## 14. Verifica Goal — Final Profile Hub Simplification
+
+Stato: completato il 14/10/2026.
+
+### Implementazione
+
+- La root `/athlete/profile` è stata ridotta a identità atleta, accessi rapidi
+  e dati personali essenziali. La sezione “Da completare” e ogni elenco di
+  alert amministrativi sono stati rimossi; gli alert di Oggi e la business
+  logic Amministrazione non sono stati modificati.
+- Amministrazione resta un entry point deterministico verso `/athlete/fees`.
+  Il Profile non monta più `useAthleteAdministrationQuery`: la rimozione del
+  summary ha eliminato il fetch Administration dal mount della root.
+- Sono state aggiunte le sottosezioni `/athlete/profile/sports`,
+  `/athlete/profile/documents` e `/athlete/profile/account`, tutte basate
+  sulla query profilo già account/subject-scoped, senza nuovi endpoint o
+  fetch per card.
+- Push, PWA, tema e logout sono stati spostati nella sottosezione Account e
+  app senza cambiare le rispettive logiche. Il link Documenti resta soggetto
+  a `permissions.view_documents`.
+- La root Profile usa l’header root senza freccia back; le sottosezioni usano
+  il back deterministico verso Profile. Bottom navigation e active state per
+  Profile/Amministrazione restano invariati.
+
+### File modificati
+
+- `src/components/athlete/AthleteProfileManager.tsx`
+- `src/components/athlete/AthleteProfileManager.test.tsx`
+- `src/app/athlete/profile/sports/page.tsx`
+- `src/app/athlete/profile/documents/page.tsx`
+- `src/app/athlete/profile/account/page.tsx`
+- `src/components/navigation/LayoutShell.tsx`
+- `docs/athlete-mobile-menu-redesign-plan.md`
+
+### Verifiche
+
+- Test mirati: 3 suite / 18 test superati (`AthleteProfileManager`,
+  `BottomNavigation`, `AppHeader`). Suite Athlete + navigation: 20 suite / 121
+  test superati.
+- `./node_modules/.bin/tsc --noEmit`: superato.
+- `npm run lint`: superato senza warning/errori; Next segnala soltanto la
+  deprecazione futura di `next lint`.
+- `npm run build`: superato; le quattro route Profile risultano generate.
+- `git diff --check`: superato.
+
+### Note
+
+- La sottosezione Documenti mantiene il confine di autorizzazione esistente:
+  un soggetto delegato senza `view_documents` non riceve un link né i dati.
+- Non sono state modificate Dashboard/Oggi, Administration, API, schema,
+  RLS, query key, Coach o Admin.
+
 ### Prossimo goal raccomandato
 
 Nessun ulteriore goal di redesign menu: il gate è chiuso con limitazione runtime esplicita. Eventuali interventi successivi devono essere un goal separato per la suite Coach o per l’infrastruttura E2E.
