@@ -35,4 +35,11 @@ describe('AppHeader brand treatment', () => {
 
     expect(screen.getAllByRole('button', { name: 'Esci' })).toHaveLength(2)
   })
+
+  it('keeps the regular logout control desktop-scoped', () => {
+    render(<AppHeader variant="mobile-detail" onSignOut={jest.fn()} />)
+
+    expect(screen.getByRole('button', { name: 'Esci' })).toHaveClass('cs-app-header__desktop-signout')
+    expect(screen.queryByRole('button', { name: 'Apri navigazione' })).toBeNull()
+  })
 })

@@ -167,7 +167,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         onMenuOpen={isPersonalAthleteShell ? undefined : () => setMobileMenuOpen(true)}
         onBack={() => router.back()}
         onSignOut={handleSignOut}
-        showMobileSignOut={isPersonalAthleteShell}
+        showMobileSignOut={false}
         account={<UserBadge />}
         context={headerContextMounted ? (
           <>
@@ -186,7 +186,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             ) : null}
           </>
         ) : null}
-        utilities={<ThemeToggle />}
+        utilities={<span className={isPersonalAthleteShell ? 'hidden lg:block' : undefined}><ThemeToggle /></span>}
       />
 
       <div className={isAdminShell ? 'cs-layout cs-admin-layout' : 'cs-layout'}>

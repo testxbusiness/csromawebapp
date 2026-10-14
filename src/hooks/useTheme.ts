@@ -8,7 +8,7 @@ export type Theme = 'light' | 'dark'
 function getPreferredTheme(): Theme {
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
   if (storedTheme === 'dark' || storedTheme === 'light') return storedTheme
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 export function applyTheme(theme: Theme): void {

@@ -42,8 +42,8 @@ export default function AppHeader({ variant = 'desktop', brandTreatment = 'defau
         </div>
         <div className="cs-app-header__actions">
           {utilities}
-          {onSignOut && showMobileSignOut ? <button type="button" onClick={onSignOut} className="inline-flex sm:hidden cs-btn cs-btn--secondary cs-app-header__mobile-signout">Esci</button> : null}
-          {onSignOut ? <button type="button" onClick={onSignOut} className="hidden sm:inline-flex cs-btn cs-btn--primary">Esci</button> : null}
+          {onSignOut && showMobileSignOut ? <button type="button" onClick={onSignOut} className="cs-btn cs-btn--secondary cs-app-header__mobile-signout">Esci</button> : null}
+          {onSignOut ? <button type="button" onClick={onSignOut} className="cs-btn cs-btn--primary cs-app-header__desktop-signout">Esci</button> : null}
           {account ? <div className="hidden sm:block">{account}</div> : null}
         </div>
       </div>

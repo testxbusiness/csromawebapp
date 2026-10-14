@@ -997,6 +997,9 @@ button.cs-list-row{ font:inherit; }
 .cs-app-header .cs-btn--ghost{ color:var(--cs-ink-muted); }
 .cs-app-header .cs-btn--ghost:hover{ color:var(--cs-brand-red); background:var(--cs-surface-selected); }
 .cs-app-header .cs-btn--primary{ min-height:40px; border-radius:var(--cs-control-radius); }
+.cs-app-header__desktop-signout{ display:none; }
+.cs-app-header__mobile-signout{ display:inline-flex; }
+@media (min-width:640px){ .cs-app-header__desktop-signout{ display:inline-flex; } .cs-app-header__mobile-signout{ display:none; } }
 @media (min-width:1024px){ .cs-app-header__back{ display:none; } }
 @media (min-width:1024px){ .cs-app-header__brand-copy{ display:flex; } .cs-app-header__context{ display:flex; } }
 .cs-main--with-bottomnav{ padding-bottom:calc(var(--cs-sp-6) + var(--cs-bottom-nav-space)); }

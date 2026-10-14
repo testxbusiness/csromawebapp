@@ -593,3 +593,34 @@ Stato: completato il 14/10/2026.
 
 Goal 2 — Profile hub redesign.
 
+## 12. Verifica Goal 4 — Mobile header cleanup
+
+Stato: completato il 14/10/2026.
+
+### Implementazione
+
+- Nel contesto Athlete personale, il tema non viene più mostrato nell’header mobile; resta visibile nell’header desktop e continua a essere disponibile nel Profile sotto “Account e app”.
+- Il logout non viene più mostrato nell’header mobile Athlete personale; il Profile espone “Esci dall’account” e riusa `useAuth().signOut()` seguito dal redirect pubblico esistente a `/login`.
+- Coach, Admin, famiglia e header desktop conservano gli slot e il comportamento precedenti; non sono stati modificati service worker, persistenza o query key.
+- Logo, back, subject/team switcher e bottom navigation restano invariati. Notifiche push e installazione PWA restano nello stesso gruppo “Account e app”.
+- `useTheme` ora usa il tema chiaro come fallback quando `matchMedia` non è disponibile, senza cambiare il comportamento dei browser supportati.
+- Il logout desktop dell’header usa classi CSS responsive dedicate: il precedente `hidden sm:inline-flex` veniva sovrascritto dalla specificità di `.cs-btn` e lasciava “Esci” visibile a 375px.
+
+### Test e note
+
+- Jest mirato: 4 suite, 26 test superati (`ThemeToggle`, `AppHeader`, `AthleteProfileManager`, `QuerySessionCacheBoundary`), inclusi label/aria, focus tastiera, visibilità responsive del logout e clear cache al cambio account.
+- `npx tsc --noEmit`: superato.
+- `npm run lint`: superato; Next segnala solo il warning già previsto sulla deprecazione futura di `next lint`.
+- `git diff --check`: superato.
+- Il comportamento della session cache boundary/account switching non è stato alterato: `signOut()` continua a pulire auth/PWA state e `QuerySessionCacheBoundary` resta responsabile del clear QueryClient al cambio sessione.
+- Smoke browser autenticato parziale: il Profile è stato verificato a 1200px e 375px con bottom navigation, controlli tema/logout nel Profile, overflow e focus tema; il primo passaggio ha evidenziato il bug CSS del logout desktop, poi corretto. Il test CLI Playwright completo non ha potuto avviare Chromium nell’ambiente locale (`SIGTRAP` del browser), quindi la matrice completa resta nel Goal 5.
+
+### Rischi / questioni aperte
+
+- Il controllo tema resta icon-only ma ha label ARIA dinamica; il controllo logout ha un’etichetta esplicita e focusabile.
+- Il Profile è il punto di accesso mobile per tema/logout; sul desktop i controlli restano volutamente nell’header per evitare regressioni e duplicazioni visive.
+
+### Prossimo goal raccomandato
+
+Goal 5 — Final regression audit.
+

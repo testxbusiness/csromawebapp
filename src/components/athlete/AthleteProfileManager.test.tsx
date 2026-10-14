@@ -79,6 +79,21 @@ describe('AthleteProfileManager', () => {
     expect(screen.queryByText('Accesso ai documenti')).toBeNull()
   })
 
+  it('keeps theme and logout available in the mobile account area', async () => {
+    renderManager()
+
+    const themeButton = await screen.findByRole('button', { name: /Attiva tema/ })
+    const signOutButton = screen.getByRole('button', { name: 'Esci dall’account' })
+    expect(themeButton).toBeTruthy()
+    expect(signOutButton).toBeTruthy()
+    expect(signOutButton.closest('.lg\\:hidden')).toBeTruthy()
+
+    themeButton.focus()
+    expect(themeButton).toHaveFocus()
+    signOutButton.focus()
+    expect(signOutButton).toHaveFocus()
+  })
+
   it('does not render the medical card for a delegated subject', async () => {
     profilesMock.mockReturnValue({ profiles: [], selectedProfile: { profile: { id: 'profile-2', first_name: 'Luca', last_name: 'Rossi', email: null }, relationship: { id: 'relationship-1', type: 'parent', verified_at: '2026-01-01', permissions: { view_schedule: true, confirm_attendance: false, view_payments: false, view_medical_status: true, view_documents: false, sign_documents: false, receive_messages: false } } }, selectedProfileId: 'profile-2', setSelectedProfileId: jest.fn(), activeArea: 'family', setActiveArea: jest.fn(), loading: false, error: null, refresh: jest.fn() })
     global.fetch = jest.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ ...data, subject: { ...data.subject, id: 'profile-2', delegated: true }, athlete: { ...data.athlete, medical: { status: 'expiring', expires_at: null } } }) }) as jest.Mock
