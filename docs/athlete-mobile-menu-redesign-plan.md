@@ -624,3 +624,45 @@ Stato: completato il 14/10/2026.
 
 Goal 5 — Final regression audit.
 
+## 13. Verifica Goal 5 — Final regression audit
+
+Stato: completato il 14/10/2026 con limitazione runtime autenticata documentata.
+
+### Esito
+
+- Matrice route/ruolo/viewport/theme e controlli deep link sono documentati in [`docs/athlete-mobile-menu-redesign-goal5-evidence.md`](athlete-mobile-menu-redesign-goal5-evidence.md).
+- I cinque item Athlete personali mantengono route, label e `aria-current`; `/athlete/fees` attiva Profilo e resta raggiungibile dal Profile senza duplicare Amministrazione nella bottom navigation.
+- Il drawer/burger Athlete personale non viene montato; famiglia, Coach, Admin e sidebar desktop restano isolati nei rispettivi rami di `LayoutShell`.
+- Account/subject safety, logout/account switch, stati offline/error/403 e background refetch risultano coperti dai test esistenti e non sono stati alterati.
+- `silentRefresh()` è stato mantenuto: aggiorna il contratto sessione/account/profile quando si entra in Dashboard/Profile da un’altra route; non sostituisce né duplica i query fetch di pagina. Il dettaglio di richieste e impatto UX/cache è nella scheda evidenze.
+- Logo CSRoma, unread badge, tema, back history-based e link amministrativi sono coperti dai test di navigazione/Profile.
+
+### Verifiche eseguite
+
+- Jest mirato: 5 suite / 41 test superati.
+- Suite Jest completa: 122 suite / 499 test superati; 2 failure preesistenti fuori perimetro in `src/app/api/coach/championships/mutations/route.test.ts`.
+- `./node_modules/.bin/tsc --noEmit`: superato.
+- `npm run build`: superato.
+- `git diff --check`: superato.
+- `npx playwright test --list`: 42 test scoperti.
+- Playwright runtime autenticato del browser gestito: bloccato prima dell’esecuzione da `SIGTRAP` di Chromium in `tests/e2e/global-setup.ts`.
+- Smoke autenticato bounded con Chrome di sistema: superato sui viewport 375×812, 390×844, 390×905, 768×1024, 1024×768 e 1440×900; verificati cinque item, assenza burger/overflow, deep link `section=fees`, focus amministrazione e back.
+- Tema verificato a 390×844: toggle da `Attiva tema scuro` a `Attiva tema chiaro` e classe root `theme-dark`.
+- Verifica `silentRefresh()`: transizione autenticata Profile → Dashboard con cache calda ha prodotto 0 richieste aggiuntive `/api/me/profile`; la funzione è stata mantenuta per il controllo sessione/account/profile quando il cache path non è già risolto.
+- Account famiglia locale non dual-role: la voce `Area familiare` non è disponibile, quindi subject A → B non è stato eseguito via browser; restano le coperture test/server-side.
+- Browser manuale: verificata la fallback offline locale.
+
+### File modificati
+
+- `docs/athlete-mobile-menu-redesign-plan.md`
+- `docs/athlete-mobile-menu-redesign-goal5-evidence.md`
+
+### Rischi residui
+
+- Ripetere la matrice browser autenticata quando Chromium e le credenziali Athlete/famiglia saranno disponibili.
+- I due failure Coach mutation restano da gestire in un goal separato.
+
+### Prossimo goal raccomandato
+
+Nessun ulteriore goal di redesign menu: il gate è chiuso con limitazione runtime esplicita. Eventuali interventi successivi devono essere un goal separato per la suite Coach o per l’infrastruttura E2E.
+
