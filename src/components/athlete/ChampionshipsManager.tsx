@@ -561,9 +561,6 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
   const nextMatchSide = nextMatchClubTeam
     ? nextMatchClubTeam.id === nextMatch?.home_club_team_id ? 'Casa' : 'Trasferta'
     : undefined
-  const nextMatchOpponentId = nextMatch && nextMatchClubTeam
-    ? nextMatchClubTeam.id === nextMatch.home_club_team_id ? nextMatch.away_club_team_id : nextMatch.home_club_team_id
-    : null
   const athleteProfileId = selectedProfileId || account?.ownerProfileId || null
   const nextMatchConvocation = nextMatchConvocationQuery.data ?? null
   const nextMatchConvocationStatus = mode !== 'athlete'
@@ -791,7 +788,7 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
       {mode === 'athlete' && selectedGroupId ? renderRetryState(groupStatus === 'offline' && groupHasCachedData ? 'ready' : groupStatus, () => { void reloadGroupDetails() }, 'Impossibile caricare il girone') : null}
 
       {showAthletePanels ? <>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.8fr)]">
+      <div className="grid gap-4">
         <NextMatchPanel
           empty={!nextMatch}
           matchDateLabel={nextMatch ? `${nextMatch.match_date ? new Date(nextMatch.match_date).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Data da definire'}${nextMatch.start_time ? ` · ${nextMatch.start_time.slice(0, 5)}` : ''}` : ''}
@@ -799,33 +796,28 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
           matchupLabel={nextMatch ? `${clubTeamPlainName(nextMatch.home_club_team_id, nextMatch.home_club_team)} vs ${clubTeamPlainName(nextMatch.away_club_team_id, nextMatch.away_club_team)}` : ''}
           locationLabel={nextMatch?.location_text || 'Luogo da definire'}
           sideLabel={nextMatchSide}
-          opponentLabel={nextMatchOpponentId ? clubTeamPlainName(
-            nextMatchOpponentId,
-            nextMatchClubTeam?.id === nextMatch?.home_club_team_id ? nextMatch?.away_club_team : nextMatch?.home_club_team,
-          ) : undefined}
           convocationStatusLabel={nextMatchConvocationStatus}
-          meetingLabel="Ritrovo non indicato"
           onOpenConvocations={() => nextMatch && openConvocationModal(nextMatch)}
-        />
-
-        <ChampionshipInfoPanel
-          description="Riepilogo rapido del contesto competitivo selezionato."
-          items={selectedChampionship ? [
-            { label: 'Nome', value: selectedChampionship.name },
-            { label: 'Sport e stato', value: `${selectedChampionship.sport} · ${selectedChampionship.status}` },
-            { label: 'Periodo', value: `${formatDate(selectedChampionship.start_date)} - ${formatDate(selectedChampionship.end_date)}` },
-            { label: 'Gironi', value: String(currentGroups.length) },
-          ] : null}
-          emptyText="Nessun campionato selezionato."
         />
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+      <div className="grid gap-4">
         <StandingsPanel rows={sortedStandings} />
       </div>
 
       <RecentResultsPanel matches={matches} teamName={clubTeamPlainName} />
       <ChampionshipSchedulePanel matches={matches} teamName={clubTeamPlainName} />
+      <ChampionshipInfoPanel
+        title="Info campionato"
+        description="Dettagli essenziali del girone selezionato."
+        items={selectedChampionship ? [
+          { label: 'Campionato', value: selectedChampionship.name },
+          { label: 'Sport', value: selectedChampionship.sport },
+          { label: 'Periodo', value: `${formatDate(selectedChampionship.start_date)} - ${formatDate(selectedChampionship.end_date)}` },
+          { label: 'Gironi', value: String(currentGroups.length) },
+        ] : null}
+        emptyText="Nessun campionato selezionato."
+      />
       </> : null}
 
       <Modal
@@ -878,12 +870,16 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
             setConvocationMatch(null)
           }
         }}
-        title="Convocazioni"
-        description={convocationMatch ? `${clubTeamPlainName(convocationMatch.home_club_team_id, convocationMatch.home_club_team)} vs ${clubTeamPlainName(convocationMatch.away_club_team_id, convocationMatch.away_club_team)}` : ''}
+        title="Convocazione"
+        description={convocationMatch ? `${clubTeamPlainName(convocationMatch.home_club_team_id, convocationMatch.home_club_team)} — ${clubTeamPlainName(convocationMatch.away_club_team_id, convocationMatch.away_club_team)}` : ''}
       >
         {!convocationMatch && <div className="text-sm text-slate-500">Seleziona una partita</div>}
         {convocationMatch && (
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 rounded-xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-subdued)] px-3 py-3 text-sm">
+              <div><div className="cs-type-label">Quando</div><div className="mt-1 font-semibold text-[color:var(--cs-ink)]">{convocationMatch.match_date ? formatDate(convocationMatch.match_date) : 'Data da definire'}{convocationMatch.start_time ? ` · ${convocationMatch.start_time.slice(0, 5)}` : ''}</div></div>
+              <div><div className="cs-type-label">Dove</div><div className="mt-1 truncate font-semibold text-[color:var(--cs-ink)]">{convocationMatch.location_text || 'Luogo da definire'}</div></div>
+            </div>
             {convocationCSRTeams.length > 1 && (
               <div>
                 <label className="cs-label">Squadra CSR da convocare</label>
@@ -930,13 +926,9 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
             {!convocationLoading && convocationStatus !== 'error' && convocationStatus !== 'offline' && convocationStatus !== 'denied' && mode === 'athlete' && (
               <>
                 <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-subdued)] px-4 py-3">
-                  <StatusBadge
-                    status={isProfileConvoked(convocation, athleteProfileId) ? 'going' : convocation ? 'declined' : 'pending'}
-                  />
-                  <span className="text-sm text-[color:var(--cs-text-secondary)]">
-                    {convocation ? 'La convocazione pubblicata per questa gara.' : 'La convocazione non è ancora stata pubblicata.'}
-                  </span>
+                  <StatusBadge status={isProfileConvoked(convocation, athleteProfileId) ? 'going' : 'pending'} label={isProfileConvoked(convocation, athleteProfileId) ? 'Sei convocato' : 'Non convocato'} />
                 </div>
+                <h3 className="text-sm font-semibold text-[color:var(--cs-ink)]">Convocati · {convocation?.championship_match_convocation_members?.length ?? 0}</h3>
                 <ConvocationPublishedList
                   members={(convocation?.championship_match_convocation_members || []).map((cm) => {
                     const labelFromProfile = cm.profiles?.first_name || cm.profiles?.last_name
@@ -948,11 +940,13 @@ export default function ChampionshipsManager({ mode = 'athlete' }: Championships
                     const label = labelFromProfile || labelFromTMProfile || 'Atleta'
                     return {
                       id: cm.team_member_id,
+                      profileId: cm.profile_id || cm.team_members?.profile_id,
                       label,
                       jerseyNumber: cm.team_members?.jersey_number ? `#${cm.team_members.jersey_number}` : undefined,
                     }
                   })}
                   emptyText="Le convocazioni non sono ancora state pubblicate"
+                  currentProfileId={athleteProfileId}
                 />
               </>
             )}

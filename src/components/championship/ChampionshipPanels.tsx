@@ -43,6 +43,7 @@ export type StandingRow = {
 type ConvocationMemberView = {
   id: string
   label: string
+  profileId?: string | null
   jerseyNumber?: string
   selected?: boolean
 }
@@ -133,7 +134,7 @@ export function NextMatchPanel({
   opponentLabel,
   convocationStatusLabel = 'Convocazione da verificare',
   meetingLabel = 'Ritrovo non indicato',
-  helperText = 'Apri la convocazione per vedere subito chi è stato inserito per la gara.',
+  helperText,
   empty = false,
   emptyText = 'Nessuna prossima partita CSRoma disponibile.',
 }: NextMatchCardProps) {
@@ -141,8 +142,8 @@ export function NextMatchPanel({
     <Card variant="primary" className="overflow-hidden">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <CardTitle>Prossima partita CSRoma</CardTitle>
-          <CardMeta>Accesso rapido a convocazioni e dati operativi della prossima gara.</CardMeta>
+      <CardTitle>Prossima partita</CardTitle>
+          <CardMeta>La prossima gara della squadra selezionata.</CardMeta>
         </div>
         <div className="hidden h-12 w-12 items-center justify-center rounded-xl bg-[color:var(--cs-surface-selected)] text-[color:var(--cs-primary)] sm:flex">
           <CalendarDays className="h-5 w-5" aria-hidden="true" />
@@ -166,21 +167,20 @@ export function NextMatchPanel({
             {sideLabel ? <Badge variant="neutral">{sideLabel}</Badge> : null}
             <span className="text-lg font-semibold text-[color:var(--cs-ink)] sm:text-xl">{matchupLabel}</span>
           </div>
-          {opponentLabel ? <div className="text-sm text-secondary">Avversario: <span className="font-semibold text-[color:var(--cs-ink)]">{opponentLabel}</span></div> : null}
           <div className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-4 text-sm text-secondary">
             <MapPin className="h-4 w-4 text-[color:var(--cs-primary)]" aria-hidden="true" />
             {locationLabel}
           </div>
           <div className="flex flex-wrap gap-2 text-sm">
-            <Badge variant="neutral" className="min-h-10 px-3">{convocationStatusLabel}</Badge>
-            <Badge variant="neutral" className="min-h-10 px-3">{meetingLabel}</Badge>
+            <Badge variant={convocationStatusLabel === 'Sei convocato' ? 'success' : 'neutral'} className="min-h-10 px-3">{convocationStatusLabel}</Badge>
+            {meetingLabel && meetingLabel !== 'Ritrovo non indicato' ? <Badge variant="neutral" className="min-h-10 px-3">{meetingLabel}</Badge> : null}
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <Button className="min-h-11 sm:min-w-52" onClick={onOpenConvocations}>
               <Users className="h-4 w-4" aria-hidden="true" />
               Vedi convocazione
             </Button>
-            <div className="text-sm text-secondary">{helperText}</div>
+            {helperText ? <div className="text-sm text-secondary">{helperText}</div> : null}
           </div>
         </div>
       )}
@@ -204,7 +204,7 @@ export function StandingsPanel({
       <div className="flex items-start justify-between gap-3">
         <div>
           <CardTitle className="text-lg">Classifica</CardTitle>
-          <CardMeta>Prime cinque posizioni in evidenza; apri la classifica completa quando serve.</CardMeta>
+          <CardMeta>{rows.length > 0 ? `${rows.length} squadre nel girone.` : 'Nessun dato disponibile.'}</CardMeta>
         </div>
         <div className="cs-card cs-card--subdued px-3 py-2 text-center">
           <div className="cs-type-label">Squadre</div>
@@ -249,35 +249,22 @@ export function StandingsPanel({
           </tbody>
         </Table>
       </div>
-      <div className="mt-4 space-y-3 md:hidden">
+      <div className="mt-4 md:hidden">
+        <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_repeat(4,1.65rem)] gap-1 px-1 pb-2 text-[10px] font-bold uppercase tracking-wide text-secondary">
+          <span>#</span><span>Squadra</span><span className="text-center">G</span><span className="text-center">V</span><span className="text-center">P</span><span className="text-center">Pt</span>
+        </div>
         {rows.length === 0 && (
           <EmptyState title={emptyText} />
         )}
         {visibleRows.map((row, index) => (
-          <Card key={row.club_team_id} variant={row.is_csr ? 'subdued' : 'default'} className={`p-4 ${row.is_csr ? 'border-[color:var(--cs-primary)] bg-[color:var(--cs-surface-selected)]' : ''}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="cs-type-label">Posizione {index + 1}</div>
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-[color:var(--cs-ink)]">
-                  <span>{row.team_name}</span>
-                  {row.is_csr ? <span className="rounded-full border border-[color:var(--cs-primary)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[color:var(--cs-primary)]">CSRoma</span> : null}
-                </div>
-              </div>
-              <div className="cs-card cs-card--subdued px-3 py-2 text-center">
-                <div className="cs-type-label">Pts</div>
-                <div className="text-lg font-bold leading-none tabular-nums">{row.class_points}</div>
-              </div>
-            </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-              <div className="cs-card cs-card--subdued px-3 py-2"><div className="cs-type-label">G</div><div className="font-semibold tabular-nums text-[color:var(--cs-ink)]">{row.matches_played}</div></div>
-              <div className="cs-card cs-card--subdued px-3 py-2"><div className="cs-type-label">V</div><div className="font-semibold tabular-nums text-[color:var(--cs-ink)]">{row.wins}</div></div>
-              <div className="cs-card cs-card--subdued px-3 py-2"><div className="cs-type-label">P</div><div className="font-semibold tabular-nums text-[color:var(--cs-ink)]">{row.losses}</div></div>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-              <div className="cs-card cs-card--subdued px-3 py-2"><div className="cs-type-label">Set</div><div className="font-semibold tabular-nums text-[color:var(--cs-ink)]">{row.sets_for}-{row.sets_against}</div></div>
-              <div className="cs-card cs-card--subdued px-3 py-2"><div className="cs-type-label">Punti</div><div className="font-semibold tabular-nums text-[color:var(--cs-ink)]">{row.points_for}-{row.points_against}</div></div>
-            </div>
-          </Card>
+          <div key={row.club_team_id} className={`grid grid-cols-[1.5rem_minmax(0,1fr)_repeat(4,1.65rem)] items-center gap-1 border-b border-[color:var(--cs-border)] px-1 py-3 text-xs last:border-b-0 ${row.is_csr ? 'rounded-lg bg-[color:var(--cs-surface-selected)] font-semibold' : ''}`}>
+            <span className="tabular-nums text-secondary">{index + 1}</span>
+            <span className="min-w-0 truncate text-[color:var(--cs-ink)]">{row.team_name}{row.is_csr ? ' · CSR' : ''}</span>
+            <span className="text-center font-semibold tabular-nums" title="Gare">{row.matches_played}</span>
+            <span className="text-center font-semibold tabular-nums" title="Vittorie">{row.wins}</span>
+            <span className="text-center font-semibold tabular-nums" title="Sconfitte">{row.losses}</span>
+            <span className="text-center font-bold tabular-nums" title="Punti">{row.class_points}</span>
+          </div>
         ))}
       </div>
       {hasOverflow ? (
@@ -305,6 +292,11 @@ function matchDateLabel(match: Match) {
   return time ? `${date} · ${time}` : date
 }
 
+function matchDateTimeValue(match: Match) {
+  const value = match.match_date ? `${match.match_date}T${match.start_time || '00:00:00'}` : ''
+  return value ? new Date(value).getTime() : Number.MAX_SAFE_INTEGER
+}
+
 export function RecentResultsPanel({ matches, teamName }: MatchListPanelProps) {
   const recentResults = [...matches]
     .filter((match) => match.status === 'completed' || match.status === 'forfeit')
@@ -314,6 +306,8 @@ export function RecentResultsPanel({ matches, teamName }: MatchListPanelProps) {
       return dateB - dateA || (b.match_day ?? 0) - (a.match_day ?? 0)
     })
     .slice(0, 3)
+
+  if (recentResults.length === 0) return null
 
   return (
     <Card variant="primary">
@@ -325,11 +319,7 @@ export function RecentResultsPanel({ matches, teamName }: MatchListPanelProps) {
         <Trophy className="mt-1 h-5 w-5 text-[color:var(--cs-accent)]" aria-hidden="true" />
       </div>
       <div className="mt-4 space-y-2">
-        {recentResults.length === 0 ? (
-          <div className="border-t border-[color:var(--cs-border)] px-1 py-5 text-sm text-[color:var(--cs-text-secondary)]">
-            Nessun risultato recente disponibile.
-          </div>
-        ) : recentResults.map((match) => (
+        {recentResults.map((match) => (
           <ListRow key={match.id} className="rounded-none border-0 border-b last:border-b-0 px-1 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--cs-text-secondary)]">
@@ -352,24 +342,36 @@ export function RecentResultsPanel({ matches, teamName }: MatchListPanelProps) {
 
 export function ChampionshipSchedulePanel({ matches, teamName }: MatchListPanelProps) {
   const [showSchedule, setShowSchedule] = useState(false)
+  const previewMatches = [...matches]
+    .sort((a, b) => {
+      const aScheduled = a.status === 'scheduled' ? 0 : 1
+      const bScheduled = b.status === 'scheduled' ? 0 : 1
+      return aScheduled - bScheduled || (matchDateTimeValue(a) - matchDateTimeValue(b))
+    })
+    .slice(0, 3)
 
   return (
     <>
       <Card variant="primary" className="h-fit">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle>Calendario completo</CardTitle>
-            <CardMeta>Partite del girone selezionato, consultabili quando servono.</CardMeta>
+            <CardTitle>Prossime partite</CardTitle>
+            <CardMeta>{matches.length === 0 ? 'Nessuna partita disponibile.' : 'Le prossime gare del girone selezionato.'}</CardMeta>
           </div>
           <CalendarDays className="mt-1 h-5 w-5 text-[color:var(--cs-primary)]" aria-hidden="true" />
         </div>
         <div className="mt-4 space-y-4">
-          <div className="border-y border-[color:var(--cs-border)] px-1 py-4 text-sm text-[color:var(--cs-text-secondary)]">
-            {matches.length === 0 ? 'Nessuna partita disponibile nel girone selezionato.' : `${matches.length} partite nel calendario del girone.`}
-          </div>
+          {previewMatches.length === 0 ? <div className="border-y border-[color:var(--cs-border)] px-1 py-4 text-sm text-[color:var(--cs-text-secondary)]">Nessuna partita disponibile nel girone selezionato.</div> : (
+            <div className="divide-y divide-[color:var(--cs-border)] border-y border-[color:var(--cs-border)]">
+              {previewMatches.map((match) => <div key={match.id} className="flex items-start justify-between gap-3 px-1 py-3 text-sm">
+                <div className="min-w-0"><div className="text-xs font-semibold uppercase tracking-[0.12em] text-secondary">{match.match_day ? `Giornata ${match.match_day}` : 'Giornata'} · {matchDateLabel(match)}</div><div className="mt-1 truncate font-semibold text-[color:var(--cs-ink)]">{matchLabel(match, teamName)}</div><div className="mt-1 truncate text-xs text-secondary">{match.location_text || 'Luogo da definire'}</div></div>
+                <span className="shrink-0 rounded-full bg-[color:var(--cs-surface-subdued)] px-2.5 py-1 text-xs font-bold tabular-nums text-[color:var(--cs-ink)]">{formatMatchScore(match.championship_match_sets)}</span>
+              </div>)}
+            </div>
+          )}
           <Button variant="outline" block onClick={() => setShowSchedule((current) => !current)} aria-expanded={showSchedule}>
             <CalendarDays className="h-4 w-4" aria-hidden="true" />
-            {showSchedule ? 'Nascondi calendario' : 'Mostra calendario'}
+            {showSchedule ? 'Nascondi calendario' : `Mostra tutte${matches.length > 3 ? ` le ${matches.length} partite` : ''}`}
             {showSchedule ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
           </Button>
         </div>
@@ -377,8 +379,8 @@ export function ChampionshipSchedulePanel({ matches, teamName }: MatchListPanelP
 
       {showSchedule ? (
         <Card variant="primary" className="xl:col-span-2">
-          <CardTitle>Partite del girone</CardTitle>
-          <CardMeta>Calendario completo del contesto selezionato.</CardMeta>
+          <CardTitle>Calendario completo</CardTitle>
+          <CardMeta>Tutte le partite del girone selezionato.</CardMeta>
           <div className="mt-4 overflow-x-auto hidden md:block">
             <Table compact className="min-w-full">
               <thead><tr><th>Giornata</th><th>Data/Ora</th><th>Partita</th><th>Stato</th><th>Risultato</th><th>Set</th></tr></thead>
@@ -425,22 +427,25 @@ export function CalendarSyncBadge({ synced }: { synced: boolean }) {
   )
 }
 
-export function ConvocationPublishedList({ members, emptyText }: { members: ConvocationMemberView[]; emptyText: string }) {
+export function ConvocationPublishedList({ members, emptyText, currentProfileId }: { members: ConvocationMemberView[]; emptyText: string; currentProfileId?: string | null }) {
   if (members.length === 0) {
     return <div className="border-t border-[color:var(--cs-border)] px-1 py-6 text-sm text-[color:var(--cs-text-secondary)]">{emptyText}</div>
   }
 
   return (
-    <div className="max-h-[min(24rem,calc(100vh-20rem))] divide-y divide-[color:var(--cs-border)] overflow-y-auto pr-1">
-      {members.map((member) => (
+    <div className="max-h-[min(28rem,calc(100vh-18rem))] divide-y divide-[color:var(--cs-border)] overflow-y-auto pr-1">
+      {members.map((member) => {
+        const isCurrent = Boolean(currentProfileId && member.profileId === currentProfileId)
+        return (
         <ListRow
           key={member.id}
-          className="rounded-none border-0 px-1 py-3"
-          trailing={member.jerseyNumber ? <span className="rounded-full border border-[color:var(--cs-border)] bg-[color:var(--cs-surface-subdued)] px-3 py-1 text-xs font-semibold text-[color:var(--cs-text-secondary)]">{member.jerseyNumber}</span> : undefined}
+          className={`min-h-11 rounded-none border-0 px-1 py-2.5 ${isCurrent ? 'rounded-lg bg-[color:var(--cs-surface-selected)]' : ''}`}
+          trailing={<span className="flex items-center gap-2">{isCurrent ? <span className="text-[10px] font-bold uppercase tracking-wide text-[color:var(--cs-primary)]">Tu</span> : null}{member.jerseyNumber ? <span className="min-w-8 text-right text-xs font-semibold tabular-nums text-[color:var(--cs-text-secondary)]">{member.jerseyNumber}</span> : null}</span>}
         >
-          <span className="font-medium text-[color:var(--cs-text)]">{member.label}</span>
+          <span className="truncate font-medium text-[color:var(--cs-text)]">{member.label}</span>
         </ListRow>
-      ))}
+        )
+      })}
     </div>
   )
 }

@@ -17,7 +17,7 @@ const standingRows: StandingRow[] = Array.from({ length: 6 }, (_, index) => ({
 }))
 
 describe('NextMatchPanel', () => {
-  it('shows match context, personal convocation state, meeting status and accessible CTA', () => {
+  it('shows the compact match context, personal convocation state and accessible CTA', () => {
     const onOpenConvocations = jest.fn()
     render(
       <NextMatchPanel
@@ -34,7 +34,7 @@ describe('NextMatchPanel', () => {
     )
 
     expect(screen.getByText('Trasferta')).toBeTruthy()
-    expect(screen.getByText('Avversario:')).toBeTruthy()
+    expect(screen.queryByText('Avversario:')).toBeNull()
     expect(screen.getByText('Sei convocato')).toBeTruthy()
     expect(screen.getByText('Ritrovo 17:15')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Vedi convocazione' }))
@@ -64,7 +64,7 @@ describe('StandingsPanel', () => {
 
     expect(screen.getAllByText('Squadra 5').length).toBeGreaterThan(0)
     expect(screen.queryByText('Squadra 6')).toBeNull()
-    expect(screen.getAllByText('CSRoma').length).toBe(2)
+    expect(screen.getAllByText(/CSR/).length).toBeGreaterThan(0)
     expect(screen.getAllByText('18').some((element) => element.className.includes('tabular-nums'))).toBe(true)
 
     const toggle = screen.getByRole('button', { name: 'Mostra classifica completa (6)' })
@@ -93,6 +93,13 @@ const matchRows: Match[] = [
 ]
 
 describe('Championship match panels', () => {
+  it('omits recent results when the group has no completed matches', () => {
+    render(<RecentResultsPanel matches={matchRows.filter((match) => match.status === 'scheduled')} teamName={(id) => id} />)
+
+    expect(screen.queryByText('Risultati recenti')).toBeNull()
+    expect(screen.queryByText('Nessun risultato recente disponibile.')).toBeNull()
+  })
+
   it('keeps recent results compact and excludes the next scheduled match', () => {
     render(<RecentResultsPanel matches={matchRows} teamName={(id) => id === 'csr' ? 'CSRoma' : `Team ${id}`} />)
 
@@ -106,8 +113,8 @@ describe('Championship match panels', () => {
   it('loads the full selected-group calendar only after opening it', () => {
     render(<ChampionshipSchedulePanel matches={matchRows} teamName={(id) => id === 'csr' ? 'CSRoma' : `Team ${id}`} />)
 
-    expect(screen.queryByText('Pala A')).toBeNull()
-    const toggle = screen.getByRole('button', { name: 'Mostra calendario' })
+    expect(screen.getByText('Pala A')).toBeTruthy()
+    const toggle = screen.getByRole('button', { name: 'Mostra tutte' })
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
 
     fireEvent.click(toggle)
