@@ -7,6 +7,7 @@ import { AlertTriangle, BarChart3, XCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { exportToExcel } from '@/lib/utils/excelExport'
 import MembershipFeeModal from '@/components/admin/MembershipFeeModal'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/Dialog'
 
 interface MembershipFee {
   id?: string
@@ -107,6 +108,13 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
   const [flatInstallments, setFlatInstallments] = useState<any[]>([])
   const [flatLoadState, setFlatLoadState] = useState<'idle' | 'loading' | LoadState>('idle')
   const [selectedInstallments, setSelectedInstallments] = useState<Set<string>>(new Set())
+  const [feeRemoval, setFeeRemoval] = useState<{
+    profileId: string
+    membershipFeeId: string
+    athleteName: string
+    feeName: string
+  } | null>(null)
+  const [removingFee, setRemovingFee] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const seasonTeams = useMemo(
@@ -355,6 +363,33 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
     toast.success('Rate selezionate segnate come pagate')
   }
 
+  const removeFeeFromAthlete = async () => {
+    if (!feeRemoval) return
+    setRemovingFee(true)
+    try {
+      const response = await fetch(
+        `/api/admin/athletes/${encodeURIComponent(feeRemoval.profileId)}/membership-fees/${encodeURIComponent(feeRemoval.membershipFeeId)}`,
+        { method: 'DELETE' },
+      )
+      const result = await response.json()
+      if (!response.ok) {
+        toast.error(result.error || 'Impossibile rimuovere la quota dall’atleta')
+        return
+      }
+
+      setFeeRemoval(null)
+      await Promise.all([loadFlatInstallments(), loadFees()])
+      toast.success(result.deleted_installments > 0
+        ? `Quota rimossa dall’atleta: ${result.deleted_installments} rate eliminate`
+        : 'La quota era già stata rimossa dall’atleta')
+    } catch (error) {
+      console.error('Errore di rete durante la rimozione quota atleta:', error)
+      toast.error('Errore di rete durante la rimozione della quota')
+    } finally {
+      setRemovingFee(false)
+    }
+  }
+
   const updateInstallmentDetails = async (installmentId: string, dueDate: string, amount: number) => {
     try {
       const requestBody = {
@@ -565,6 +600,27 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
   onUpdate={handleUpdateFee}
 />
 
+      <Dialog open={feeRemoval !== null} onOpenChange={(open) => { if (!open && !removingFee) setFeeRemoval(null) }}>
+        <DialogContent className="cs-modal--centered cs-modal--md">
+          <DialogHeader>
+            <DialogTitle>Rimuovere questa quota da {feeRemoval?.athleteName}?</DialogTitle>
+            <DialogDescription>
+              Verranno eliminate solo le rate non pagate di questa quota associate all’atleta.
+              La squadra e le altre quote dell’atleta non verranno modificate.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+            <strong>Quota:</strong> {feeRemoval?.feeName || '—'}
+          </div>
+          <DialogFooter>
+            <button type="button" className="cs-btn cs-btn--ghost" onClick={() => setFeeRemoval(null)} disabled={removingFee}>Annulla</button>
+            <button type="button" className="cs-btn cs-btn--danger" onClick={() => void removeFeeFromAthlete()} disabled={removingFee}>
+              {removingFee ? 'Rimozione…' : 'Rimuovi quota'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {tab==='fees' ? (
       <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}
@@ -764,11 +820,25 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
                     <td className="px-3 py-2">€{Number(row.amount).toFixed(2)}</td>
                     <td className="px-3 py-2"><span className={`cs-badge ${row.status==='paid'?'cs-badge--success': row.status==='overdue'?'cs-badge--danger': row.status==='due_soon'?'cs-badge--warning':'cs-badge--neutral'}`}>{getStatusText(row.status)}</span></td>
                     <td className="px-3 py-2">
-                      {row.status !== 'paid' ? (
-                        <button onClick={async ()=>{ const ok = await updateInstallmentStatus(row.id, 'paid'); if (ok) loadFlatInstallments() }} className="cs-btn cs-btn--primary cs-btn--sm">Segna pagata</button>
-                      ) : (
-                        <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
-                      )}
+                      <div className="flex flex-wrap gap-2">
+                        {row.status !== 'paid' ? (
+                          <button onClick={async ()=>{ const ok = await updateInstallmentStatus(row.id, 'paid'); if (ok) loadFlatInstallments() }} className="cs-btn cs-btn--primary cs-btn--sm">Segna pagata</button>
+                        ) : (
+                          <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
+                        )}
+                        <button
+                          type="button"
+                          className="cs-btn cs-btn--danger cs-btn--sm"
+                          onClick={() => setFeeRemoval({
+                            profileId: row.profile_id,
+                            membershipFeeId: row.membership_fee_id,
+                            athleteName: row.profile ? `${row.profile.first_name} ${row.profile.last_name}` : 'questo atleta',
+                            feeName: row.membership_fee?.name || 'questa quota',
+                          })}
+                        >
+                          Rimuovi quota dall’atleta
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -801,11 +871,25 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
                   </div>
                 </div>
                 <div className="mt-3">
-                  {row.status !== 'paid' ? (
-                    <button onClick={async ()=>{ const ok = await updateInstallmentStatus(row.id, 'paid'); if (ok) loadFlatInstallments() }} className="cs-btn cs-btn--primary cs-btn--sm w-full">Segna pagata</button>
-                  ) : (
-                    <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {row.status !== 'paid' ? (
+                      <button onClick={async ()=>{ const ok = await updateInstallmentStatus(row.id, 'paid'); if (ok) loadFlatInstallments() }} className="cs-btn cs-btn--primary cs-btn--sm">Segna pagata</button>
+                    ) : (
+                      <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
+                    )}
+                    <button
+                      type="button"
+                      className="cs-btn cs-btn--danger cs-btn--sm"
+                      onClick={() => setFeeRemoval({
+                        profileId: row.profile_id,
+                        membershipFeeId: row.membership_fee_id,
+                        athleteName: row.profile ? `${row.profile.first_name} ${row.profile.last_name}` : 'questo atleta',
+                        feeName: row.membership_fee?.name || 'questa quota',
+                      })}
+                    >
+                      Rimuovi quota dall’atleta
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
