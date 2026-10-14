@@ -3,8 +3,9 @@ import { appendSubjectProfile, useAccessibleProfiles } from '@/context/Accessibl
 import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { TeamDetailData } from '@/components/shared/TeamDetailModal'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-const TEAM_DETAIL_STALE_TIME = 10 * 60 * 1000
+const TEAM_DETAIL_STALE_TIME = athleteQueryPolicy.teamDetail.staleTime
 
 export class AthleteTeamDetailQueryError extends Error {
   readonly status: number | null
@@ -42,7 +43,7 @@ export function athleteTeamDetailQueryOptions(input: AthleteTeamDetailQueryInput
     ...options,
     queryKey: athleteKeys.teamDetail(input.accountId, input.subjectProfileId, input.teamId),
     queryFn: ({ signal }) => fetchTeamDetail(input, signal),
-    staleTime: TEAM_DETAIL_STALE_TIME,
+    ...athleteQueryPolicy.teamDetail,
     retry: false,
   }
 }
@@ -61,7 +62,7 @@ export function useAthleteTeamDetailQuery(teamId: string | null) {
   return useQuery<TeamDetailData, AthleteTeamDetailQueryError>({
     ...(input
       ? athleteTeamDetailQueryOptions(input)
-      : { queryKey, queryFn: async () => { throw new AthleteTeamDetailQueryError('team_detail_context_unavailable') }, staleTime: TEAM_DETAIL_STALE_TIME, retry: false }),
+      : { queryKey, queryFn: async () => { throw new AthleteTeamDetailQueryError('team_detail_context_unavailable') }, ...athleteQueryPolicy.teamDetail, retry: false }),
     enabled,
   })
 }

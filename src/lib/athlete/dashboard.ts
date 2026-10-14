@@ -4,9 +4,10 @@ import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { AthleteDashboardAdministrativeAlert, AthleteDashboardContract } from '@/types/athlete-dashboard'
 import { markAthleteQueryParsed, markAthleteQueryResponse, markAthleteQueryStart } from '@/lib/performance/athlete-first-load'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-export const ATHLETE_DASHBOARD_STALE_TIME = 90 * 1000
-export const ATHLETE_DASHBOARD_ALERTS_STALE_TIME = 3 * 60 * 1000
+export const ATHLETE_DASHBOARD_STALE_TIME = athleteQueryPolicy.dashboard.staleTime
+export const ATHLETE_DASHBOARD_ALERTS_STALE_TIME = athleteQueryPolicy.dashboardAlerts.staleTime
 
 export class AthleteDashboardQueryError extends Error {
   readonly status: number | null
@@ -105,7 +106,7 @@ export function useAthleteDashboardQuery() {
     queryFn: ({ signal }) => fetchDashboard(context.isFamilyView ? context.subjectProfileId : null, signal),
     enabled: context.enabled,
     retry: false,
-    staleTime: ATHLETE_DASHBOARD_STALE_TIME,
+    ...athleteQueryPolicy.dashboard,
   })
   return { ...query, ...context }
 }
@@ -120,7 +121,7 @@ export function useAthleteDashboardAlertsQuery() {
     queryFn: ({ signal }) => fetchDashboardAlerts(context.isFamilyView ? context.subjectProfileId : null, signal),
     enabled: context.enabled,
     retry: false,
-    staleTime: ATHLETE_DASHBOARD_ALERTS_STALE_TIME,
+    ...athleteQueryPolicy.dashboardAlerts,
   })
   return { ...query, ...context }
 }

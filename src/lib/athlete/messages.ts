@@ -4,9 +4,10 @@ import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { AthleteMessageContract, AthleteMessageTeam } from '@/types/athlete-messages'
 import { markAthleteQueryParsed, markAthleteQueryResponse, markAthleteQueryStart } from '@/lib/performance/athlete-first-load'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-const ATHLETE_MESSAGES_LIST_STALE_TIME = 45 * 1000
-const ATHLETE_MESSAGE_DETAIL_STALE_TIME = 3 * 60 * 1000
+const ATHLETE_MESSAGES_LIST_STALE_TIME = athleteQueryPolicy.messagesList.staleTime
+const ATHLETE_MESSAGE_DETAIL_STALE_TIME = athleteQueryPolicy.messageDetail.staleTime
 
 export type AthleteMessagesResponse = {
   messages: AthleteMessageContract[]
@@ -88,7 +89,7 @@ export function useAthleteMessagesQuery() {
     queryFn: ({ signal }) => fetchAthleteMessages(isFamilyView ? subjectProfileId : null, 'minimal', signal),
     enabled,
     retry: false,
-    staleTime: ATHLETE_MESSAGES_LIST_STALE_TIME,
+    ...athleteQueryPolicy.messagesList,
   })
   return { ...query, enabled }
 }
@@ -105,6 +106,6 @@ export function useAthleteMessageDetailQuery(messageId: string | null) {
     queryFn: ({ signal }) => fetchAthleteMessages(isFamilyView ? subjectProfileId : null, 'full', signal, messageId ?? undefined),
     enabled: detailEnabled,
     retry: false,
-    staleTime: ATHLETE_MESSAGE_DETAIL_STALE_TIME,
+    ...athleteQueryPolicy.messageDetail,
   })
 }

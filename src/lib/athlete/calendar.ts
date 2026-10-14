@@ -4,8 +4,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { AthleteCalendarContract } from '@/types/athlete-calendar'
 import { markAthleteQueryParsed, markAthleteQueryResponse, markAthleteQueryStart } from '@/lib/performance/athlete-first-load'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-export const ATHLETE_CALENDAR_STALE_TIME = 2 * 60 * 1000
+export const ATHLETE_CALENDAR_STALE_TIME = athleteQueryPolicy.calendar.staleTime
 
 export class AthleteCalendarQueryError extends Error {
   readonly status: number | null
@@ -68,7 +69,7 @@ export function useAthleteCalendarQuery() {
     queryFn: ({ signal }) => fetchAthleteCalendar(isFamilyView ? selectedProfileId : null, signal),
     enabled,
     retry: false,
-    staleTime: ATHLETE_CALENDAR_STALE_TIME,
+    ...athleteQueryPolicy.calendar,
   })
 
   return { ...query, accountId, subjectProfileId, canViewSchedule, isFamilyView, enabled }

@@ -3,8 +3,9 @@ import { appendSubjectProfile, useAccessibleProfiles } from '@/context/Accessibl
 import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { EventDetailData } from '@/components/shared/EventDetailModal'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-export const ATHLETE_EVENT_DETAIL_STALE_TIME = 60 * 1000
+export const ATHLETE_EVENT_DETAIL_STALE_TIME = athleteQueryPolicy.eventDetail.staleTime
 
 export class AthleteEventDetailQueryError extends Error {
   readonly status: number | null
@@ -57,7 +58,7 @@ export function athleteEventDetailQueryOptions(
     ...options,
     queryKey: athleteKeys.events.detail(input.accountId, input.subjectProfileId, input.eventId),
     queryFn: ({ signal }) => fetchAthleteEventDetail(input, signal),
-    staleTime: ATHLETE_EVENT_DETAIL_STALE_TIME,
+    ...athleteQueryPolicy.eventDetail,
     retry: false,
   }
 }
@@ -84,7 +85,7 @@ export function useAthleteEventDetailQuery(eventId: string | null) {
   const query = useQuery<EventDetailData, AthleteEventDetailQueryError>({
     ...(input
       ? athleteEventDetailQueryOptions(input)
-      : { queryKey, queryFn: async () => { throw new AthleteEventDetailQueryError('event_detail_context_unavailable') }, staleTime: ATHLETE_EVENT_DETAIL_STALE_TIME, retry: false }),
+      : { queryKey, queryFn: async () => { throw new AthleteEventDetailQueryError('event_detail_context_unavailable') }, ...athleteQueryPolicy.eventDetail, retry: false }),
     enabled,
   })
 

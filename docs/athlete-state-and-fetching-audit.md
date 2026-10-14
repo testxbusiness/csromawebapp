@@ -778,3 +778,18 @@ Il banner offline cached è ora il primo elemento della pagina in tutte le sezio
 ## BottomNavigation unread event contract — test correction (8 ottobre 2026)
 
 `MessageDetailModal` emette `MESSAGE_READ_STATE_CHANGED_EVENT` con `isRead: true` solo dopo la conferma server della lettura. `useAthleteUnreadMessageCount` ignora correttamente eventi con `isRead` assente o diverso da `true`. Il test `BottomNavigation.test.tsx` è stato corretto per usare la shape confermata e verificare il decremento cache da 2 a 1; è stato aggiunto un test negativo per eventi non confermati. L’idempotenza degli eventi duplicati resta coperta da `cache-synchronization.test.ts`.
+
+## Athlete Freshness & Refetch Policy (14 ottobre 2026)
+
+La policy completa, la matrice query/mutation e la checklist manuale sono mantenute in [`docs/query-freshness-policy.md`](query-freshness-policy.md). La policy è centralizzata in `src/lib/athlete/query-policy.ts` e applicata esplicitamente alle query atleta; i default globali del `QueryClient` non sono stati modificati perché servono anche Coach/Admin.
+
+Decisioni principali:
+
+- Profile, team detail e cataloghi campionati hanno freshness lunga e non fanno refetch su focus/reconnect.
+- Administration, alert dashboard e dati metadata si aggiornano su reconnect ma non su ogni focus.
+- Dashboard, Calendar, event detail, championship group e convocation usano freshness media con refetch su focus/reconnect solo quando stale.
+- Messages list/unread hanno freshness breve; message read aggiorna immediatamente list, detail, unread e Dashboard con `setQueryData` mirato.
+- Attendance/early absence aggiornano immediatamente Dashboard, Calendar e detail; il timer `next_recalculation_at` resta limitato alla query del subject corrente.
+- Nessun polling frequente, persistent query cache, realtime nuovo o endpoint modificato è stato introdotto.
+
+`AthleteFeesManager` conserva un vecchio fetch manuale, ma non è montato dalla route attiva `/athlete/fees`; la route usa la query Administration. La rimozione è lasciata a un goal separato per non mescolare cleanup architetturale e tuning della policy.

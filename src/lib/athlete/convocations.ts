@@ -3,8 +3,9 @@ import { appendSubjectProfile, useAccessibleProfiles } from '@/context/Accessibl
 import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { Convocation } from '@/components/championship/types'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-const ATHLETE_CONVOCATION_STALE_TIME = 60 * 1000
+const ATHLETE_CONVOCATION_STALE_TIME = athleteQueryPolicy.convocation.staleTime
 
 export class AthleteConvocationQueryError extends Error {
   readonly status: number | null
@@ -86,7 +87,7 @@ export function athleteConvocationQueryOptions(
     ...options,
     queryKey: athleteKeys.championships.convocation(input.accountId, input.subjectProfileId, input.matchId, input.clubTeamId),
     queryFn: ({ signal }) => fetchAthleteConvocation(input, signal),
-    staleTime: ATHLETE_CONVOCATION_STALE_TIME,
+    ...athleteQueryPolicy.convocation,
     retry: false,
   }
 }
@@ -125,7 +126,7 @@ export function useAthleteConvocationQuery(
     : {
         queryKey,
         queryFn: async () => null,
-        staleTime: ATHLETE_CONVOCATION_STALE_TIME,
+        ...athleteQueryPolicy.convocation,
         retry: false,
       }
 

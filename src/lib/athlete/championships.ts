@@ -3,6 +3,7 @@ import { useAccessibleProfilesOptional } from '@/context/AccessibleProfileContex
 import { useAuthOptional } from '@/hooks/useAuth'
 import { requestErrorState, type RequestState } from '@/lib/http/request-state'
 import { athleteKeys } from '@/lib/query-keys'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 import { firstRelation, type Activity, type Championship, type Match, type Season, type Standing, type Team } from '@/components/championship/types'
 
 type AthleteChampionshipCatalog = {
@@ -132,7 +133,7 @@ export function useAthleteChampionshipCatalogQuery(enabled: boolean) {
     queryKey,
     queryFn: async ({ signal }) => normalizeCatalog(await fetchAthleteChampionship({ subjectProfileId: input?.subjectProfileId ?? null, subjectProfileQueryParam: input?.subjectProfileQueryParam ?? null, view: 'catalog' }, signal)),
     enabled: queryEnabled,
-    staleTime: 5 * 60 * 1000,
+    ...athleteQueryPolicy.championshipCatalog,
     retry: false,
   })
   return { ...query, status: !queryEnabled ? 'idle' as RequestState : query.isPending ? 'loading' as RequestState : query.error ? query.error.message === 'offline' ? 'offline' as RequestState : query.error.status === 403 ? 'denied' as RequestState : requestErrorState(query.error) : 'ready' as RequestState, reload: query.refetch }
@@ -147,7 +148,7 @@ export function useAthleteChampionshipGroupQuery(groupId: string | null, enabled
     queryKey,
     queryFn: async ({ signal }) => normalizeGroup(await fetchAthleteChampionship({ subjectProfileId: input?.subjectProfileId ?? null, subjectProfileQueryParam: input?.subjectProfileQueryParam ?? null, view: 'group', groupId: input?.groupId }, signal)),
     enabled: queryEnabled,
-    staleTime: 3 * 60 * 1000,
+    ...athleteQueryPolicy.championshipGroup,
     retry: false,
   })
   return { ...query, status: !queryEnabled ? 'idle' as RequestState : !groupId ? 'ready' as RequestState : query.isPending ? 'loading' as RequestState : query.error ? query.error.message === 'offline' ? 'offline' as RequestState : query.error.status === 403 ? 'denied' as RequestState : requestErrorState(query.error) : 'ready' as RequestState, reload: query.refetch }

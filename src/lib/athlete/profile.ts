@@ -4,8 +4,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import type { AthleteProfileContract } from '@/types/athlete-profile'
 import { markAthleteQueryParsed, markAthleteQueryResponse, markAthleteQueryStart } from '@/lib/performance/athlete-first-load'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-const ATHLETE_PROFILE_STALE_TIME = 5 * 60 * 1000
+const ATHLETE_PROFILE_STALE_TIME = athleteQueryPolicy.profile.staleTime
 
 export class AthleteProfileQueryError extends Error {
   readonly status: number | null
@@ -61,7 +62,7 @@ export function useAthleteProfileQuery() {
     queryFn: () => fetchAthleteProfile(isFamilyView ? selectedProfileId : null),
     enabled,
     retry: false,
-    staleTime: ATHLETE_PROFILE_STALE_TIME,
+    ...athleteQueryPolicy.profile,
   })
   return { ...query, enabled }
 }

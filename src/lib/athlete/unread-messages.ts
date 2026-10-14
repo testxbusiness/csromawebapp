@@ -5,8 +5,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { athleteKeys } from '@/lib/query-keys'
 import { MESSAGE_READ_STATE_CHANGED_EVENT, type MessageReadStateChangedDetail } from '@/lib/messages/read-state-events'
 import { syncAthleteMessageReadCaches } from '@/lib/athlete/cache-synchronization'
+import { athleteQueryPolicy } from '@/lib/athlete/query-policy'
 
-const UNREAD_COUNT_STALE_TIME = 15_000
+const UNREAD_COUNT_STALE_TIME = athleteQueryPolicy.unreadMessages.staleTime
 
 type UnreadMessagesResponse = {
   unreadMessageCount?: number
@@ -44,7 +45,7 @@ export function useAthleteUnreadMessageCount() {
     queryKey,
     queryFn: () => fetchUnreadMessageCount(isFamilyView ? selectedProfileId : null),
     enabled,
-    staleTime: UNREAD_COUNT_STALE_TIME,
+    ...athleteQueryPolicy.unreadMessages,
   })
 
   useEffect(() => {
