@@ -47,6 +47,7 @@ export default function ChampionshipsManager() {
   const [selectedChampionshipId, setSelectedChampionshipId] = useState<string | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [savingResult, setSavingResult] = useState(false)
+  const [championshipStatusUpdating, setChampionshipStatusUpdating] = useState(false)
   const [resultInput, setResultInput] = useState<string>('')
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -300,6 +301,26 @@ export default function ChampionshipsManager() {
       toast.error('Impossibile creare il campionato')
     } finally {
       setSavingResult(false)
+    }
+  }
+
+  const handleUpdateChampionshipStatus = async (status: string) => {
+    if (!selectedChampionshipId || !['draft', 'published', 'archived'].includes(status)) return
+    setChampionshipStatusUpdating(true)
+    try {
+      const response = await fetch('/api/coach/championships/mutations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_status', championship_id: selectedChampionshipId, status }),
+      })
+      if (!response.ok) throw new Error('status_update_failed')
+      toast.success('Stato del campionato aggiornato')
+      await reloadChampionships()
+    } catch (error) {
+      console.error('Errore aggiornamento stato campionato', error)
+      toast.error('Impossibile aggiornare lo stato del campionato')
+    } finally {
+      setChampionshipStatusUpdating(false)
     }
   }
 
@@ -770,6 +791,13 @@ export default function ChampionshipsManager() {
             )}
             actions={(
               <>
+                <label className="sr-only" htmlFor="coach-championship-status">Stato campionato</label>
+                <Select id="coach-championship-status" value={selectedChampionship?.status ?? ''} onChange={(event) => void handleUpdateChampionshipStatus(event.target.value)} disabled={!selectedChampionshipId || championshipStatusUpdating}>
+                  <option value="" disabled>Stato</option>
+                  <option value="draft">Bozza</option>
+                  <option value="published">Pubblicato</option>
+                  <option value="archived">Archiviato</option>
+                </Select>
                 {mode !== 'athlete' && (
                   <Button size="icon" variant="outline" title="Aggiungi girone" aria-label="Aggiungi girone" onClick={() => setShowGroupModal(true)} disabled={!selectedChampionshipId}>
                     <Plus className="h-4 w-4" aria-hidden="true" />

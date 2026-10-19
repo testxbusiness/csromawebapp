@@ -73,6 +73,20 @@ async function authorizeChampionshipSetup(context: CoachMutationContext, champio
 
 async function handleMutation(context: CoachMutationContext, body: Record<string, unknown>) {
   const action = body.action
+  if (action === 'update_status') {
+    const championshipId = typeof body.championship_id === 'string' ? body.championship_id : ''
+    const status = body.status
+    if (!championshipId || !['draft', 'published', 'archived'].includes(String(status))) {
+      throw new AccountContextError('Stato campionato non valido', 400)
+    }
+    await authorizeChampionship(context, championshipId)
+    const { error } = await context.admin
+      .from('championships')
+      .update({ status: String(status), updated_at: new Date().toISOString() })
+      .eq('id', championshipId)
+    if (error) throw new Error('Impossibile aggiornare lo stato del campionato')
+    return { ok: true }
+  }
   if (action === 'create_championship') {
     if (body.season_id !== context.activeSeasonId) {
       throw new AccountContextError('Il campionato deve appartenere alla stagione attiva', 403)
