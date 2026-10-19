@@ -24,16 +24,29 @@ async function getContext(): Promise<CoachMutationContext> {
 }
 
 async function authorizeGroup(context: CoachMutationContext, groupId: string) {
-  const { data, error } = await context.admin
-    .from('championship_group_teams')
-    .select('championship_club_teams(team_id)')
-    .eq('championship_group_id', groupId)
+  const { data: group, error: groupError } = await context.admin
+    .from('championship_groups')
+    .select('id, championship_id, championships!inner(season_id)')
+    .eq('id', groupId)
+    .maybeSingle()
+  if (groupError) throw new AccountContextError('Impossibile verificare il girone', 500)
+  if (!group) throw new AccountContextError('Girone non autorizzato per il coach', 403)
+
+  const championship = Array.isArray(group.championships) ? group.championships[0] : group.championships
+  if (championship?.season_id !== context.activeSeasonId) throw new AccountContextError('Girone non autorizzato per il coach', 403)
+
+  const { data: championshipGroups, error } = await context.admin
+    .from('championship_groups')
+    .select('championship_group_teams(championship_club_teams(team_id))')
+    .eq('championship_id', group.championship_id)
   if (error) throw new AccountContextError('Impossibile verificare il girone', 500)
-  const allowed = (data ?? []).some((row) => {
-    const relation = Array.isArray(row.championship_club_teams) ? row.championship_club_teams[0] : row.championship_club_teams
-    return relation?.team_id && context.teamIds.has(relation.team_id as string)
-  })
-  if (!allowed) throw new AccountContextError('Girone non autorizzato per il coach', 403)
+  const allowed = (championshipGroups ?? []).some((candidate) =>
+    (candidate.championship_group_teams ?? []).some((groupTeam) => {
+      const relation = Array.isArray(groupTeam.championship_club_teams) ? groupTeam.championship_club_teams[0] : groupTeam.championship_club_teams
+      return Boolean(relation?.team_id && context.teamIds.has(relation.team_id as string))
+    }),
+  )
+  if (!allowed) throw new AccountContextError('Campionato non autorizzato per il coach', 403)
 }
 
 async function authorizeMatch(context: CoachMutationContext, matchId: string) {
