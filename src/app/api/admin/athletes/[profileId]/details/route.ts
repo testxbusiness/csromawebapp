@@ -3,21 +3,21 @@ import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
 
-type RouteContext = { params: Promise<{ id: string }> }
+type RouteContext = { params: Promise<{ profileId: string }> }
 
 export async function GET(request: Request, { params }: RouteContext) {
   try {
     const client = await createClient()
     await requireGlobalRole(client, 'admin')
-    const { id } = await params
+    const { profileId } = await params
     const seasonId = new URL(request.url).searchParams.get('seasonId')
     if (!seasonId) return NextResponse.json({ error: 'Stagione richiesta' }, { status: 400 })
 
     const admin = createAdminClient()
     const [{ data: profile, error: profileError }, { data: athleteProfile, error: athleteError }, { data: seasonProfile, error: seasonProfileError }] = await Promise.all([
-      admin.from('profiles').select('id, first_name, last_name, email, phone, birth_date').eq('id', id).maybeSingle(),
-      admin.from('athlete_profiles').select('membership_number, medical_certificate_expiry').eq('profile_id', id).maybeSingle(),
-      admin.from('season_profiles').select('enrollment_application_delivered').eq('profile_id', id).eq('season_id', seasonId).maybeSingle(),
+      admin.from('profiles').select('id, first_name, last_name, email, phone, birth_date').eq('id', profileId).maybeSingle(),
+      admin.from('athlete_profiles').select('membership_number, medical_certificate_expiry').eq('profile_id', profileId).maybeSingle(),
+      admin.from('season_profiles').select('enrollment_application_delivered').eq('profile_id', profileId).eq('season_id', seasonId).maybeSingle(),
     ])
 
     if (profileError || athleteError || seasonProfileError) {
@@ -28,9 +28,9 @@ export async function GET(request: Request, { params }: RouteContext) {
 
     const [{ data: season }, { data: account }, { data: memberships, error: membershipsError }, { data: rawInstallments, error: installmentsError }] = await Promise.all([
       admin.from('seasons').select('id, name').eq('id', seasonId).maybeSingle(),
-      admin.from('app_accounts').select('auth_user_id, status').eq('owner_profile_id', id).maybeSingle(),
-      admin.from('team_members').select('jersey_number, role, teams(id, name, code, activity_id, activities(id, name, season_id))').eq('profile_id', id),
-      admin.from('fee_installments').select('id, installment_number, due_date, amount, status, paid_at, membership_fees(id, name, team_id, teams(id, name, activity_id, activities(id, name, season_id)))').eq('profile_id', id).order('due_date', { ascending: true }),
+      admin.from('app_accounts').select('auth_user_id, status').eq('owner_profile_id', profileId).maybeSingle(),
+      admin.from('team_members').select('jersey_number, role, teams(id, name, code, activity_id, activities(id, name, season_id))').eq('profile_id', profileId),
+      admin.from('fee_installments').select('id, installment_number, due_date, amount, status, paid_at, membership_fees(id, name, team_id, teams(id, name, activity_id, activities(id, name, season_id)))').eq('profile_id', profileId).order('due_date', { ascending: true }),
     ])
 
     if (membershipsError || installmentsError) {
