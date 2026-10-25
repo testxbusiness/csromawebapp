@@ -551,3 +551,11 @@ La situazione economica deriva esclusivamente da `fee_installments` associate al
 Il modello registra la scadenza del certificato in `athlete_profiles`, ma non uno stato separato di consegna né una relazione documentale che identifichi con certezza il certificato medico. La UI applica quindi la classificazione esistente: con data mostra stato e scadenza; senza data indica “Non consegnato” e chiarisce che il modello non distingue consegna e scadenza mancante. La domanda d’iscrizione usa `season_profiles.enrollment_application_delivered` per la stagione selezionata. Upload e gestione documenti restano esclusi.
 
 La modifica anagrafica esistente resta raggiungibile dal drawer senza cambiare la logica. Verificati test mirati dell’aggregazione economica, autorizzazione admin e regressione del manager Atleti; typecheck e lint sui file interessati. Nessuno schema, RLS, dato staging/produzione o flusso di assegnazione quote/incasso è stato modificato.
+
+## 18. Rettifica di un pagamento quota registrato per errore — 25 ottobre 2026
+
+In `Quote > Atleti`, le rate pagate espongono ora l’azione singola `Annulla pagamento`. La conferma richiede un motivo e mostra atleta, quota, rata, importo e scadenza; la rettifica non rappresenta un rimborso.
+
+Il Route Handler verifica ruolo admin e stato corrente `paid`, poi aggiorna condizionando anche sullo stato per evitare di sovrascrivere una modifica concorrente. Rimuove `paid_at`, `paid_by_auth_user_id` e `payment_source`, e ripristina lo stato in base alla scadenza e alle stesse soglie esistenti: `overdue` per scadenze odierne/passate, `due_soon` entro 30 giorni, altrimenti `not_due`. Le rate non pagate non possono essere rettificate da questa azione. Le mutation singole e bulk ordinarie accettano ora solo la marcatura `paid`; per la rettifica è obbligatorio usare l’azione dedicata con audit.
+
+La correzione viene registrata come `repair_required` in `account_lifecycle_audit`, con motivo, attore, dati precedenti e nuovo stato. Se il salvataggio della rata riesce ma l’inserimento audit fallisce, l’interfaccia segnala esplicitamente che la rettifica è avvenuta senza audit. Nessuna tabella, policy RLS o dato Supabase viene modificato da questa implementazione.

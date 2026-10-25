@@ -86,6 +86,22 @@ interface FeeInstallment {
   }
 }
 
+type InstallmentStatus = 'not_due' | 'due_soon' | 'overdue' | 'partially_paid' | 'paid'
+
+interface FlatInstallment {
+  id: string
+  membership_fee_id: string
+  profile_id: string
+  installment_number: number
+  due_date: string
+  amount: number
+  status: InstallmentStatus
+  paid_at: string | null
+  profile: { id: string; first_name: string; last_name: string } | null
+  membership_fee: { id: string; name: string } | null
+  team: { id: string; name: string; code: string } | null
+}
+
 export default function MembershipFeesManager({ embedded = false }: { embedded?: boolean }) {
   const [fees, setFees] = useState<MembershipFee[]>([])
   const [teams, setTeams] = useState<Team[]>([])
@@ -105,7 +121,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
   const [filterFrom, setFilterFrom] = useState<string>('')
   const [filterTo, setFilterTo] = useState<string>('')
   const [teamAthletes, setTeamAthletes] = useState<{ id: string; first_name: string; last_name: string }[]>([])
-  const [flatInstallments, setFlatInstallments] = useState<any[]>([])
+  const [flatInstallments, setFlatInstallments] = useState<FlatInstallment[]>([])
   const [flatLoadState, setFlatLoadState] = useState<'idle' | 'loading' | LoadState>('idle')
   const [selectedInstallments, setSelectedInstallments] = useState<Set<string>>(new Set())
   const [feeRemoval, setFeeRemoval] = useState<{
@@ -115,6 +131,12 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
     feeName: string
   } | null>(null)
   const [removingFee, setRemovingFee] = useState(false)
+  const [paymentReversal, setPaymentReversal] = useState<{
+    installment: FlatInstallment
+    athleteName: string
+  } | null>(null)
+  const [paymentReversalReason, setPaymentReversalReason] = useState('')
+  const [reversingPayment, setReversingPayment] = useState(false)
   const supabase = useMemo(() => createClient(), [])
 
   const seasonTeams = useMemo(
@@ -347,6 +369,50 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
       console.error('Errore aggiornamento stato rata:', error)
       import('@/components/ui/Toast').then(({ toast }) => toast.error('Errore di rete durante l\'aggiornamento dello stato rata')).catch(()=>{})
       return false
+    }
+  }
+
+  const openPaymentReversal = (installment: FlatInstallment) => {
+    const athleteName = installment.profile
+      ? `${installment.profile.first_name} ${installment.profile.last_name}`
+      : 'atleta'
+    setPaymentReversal({ installment, athleteName })
+    setPaymentReversalReason('')
+  }
+
+  const reverseInstallmentPayment = async () => {
+    if (!paymentReversal || paymentReversalReason.trim().length < 5) return
+    setReversingPayment(true)
+    try {
+      const response = await fetch('/api/admin/membership-fees', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'reverse_installment_payment',
+          installment_id: paymentReversal.installment.id,
+          reason: paymentReversalReason.trim(),
+        }),
+      })
+      const payload: unknown = await response.json()
+      const result = payload && typeof payload === 'object' ? payload as { error?: unknown; auditRecorded?: unknown } : {}
+      if (!response.ok) {
+        toast.error(typeof result.error === 'string' ? result.error : 'Impossibile annullare il pagamento')
+        return
+      }
+
+      setPaymentReversal(null)
+      setPaymentReversalReason('')
+      await Promise.all([loadFlatInstallments(), loadFees()])
+      if (result.auditRecorded === true) {
+        toast.success('Pagamento annullato e rettifica registrata')
+      } else {
+        toast.error('La rata è stata rettificata, ma il registro audit non è stato aggiornato. Avvisa un amministratore.')
+      }
+    } catch (error) {
+      console.error('Errore di rete durante la rettifica del pagamento:', error)
+      toast.error('Errore di rete durante la rettifica del pagamento')
+    } finally {
+      setReversingPayment(false)
     }
   }
 
@@ -621,6 +687,53 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
         </DialogContent>
       </Dialog>
 
+      <Dialog open={paymentReversal !== null} onOpenChange={(open) => {
+        if (!open && !reversingPayment) {
+          setPaymentReversal(null)
+          setPaymentReversalReason('')
+        }
+      }}>
+        <DialogContent className="cs-modal--centered cs-modal--md">
+          <DialogHeader>
+            <DialogTitle>Annullare il pagamento registrato?</DialogTitle>
+            <DialogDescription>
+              Usa questa rettifica solo se il pagamento è stato segnato per errore. La rata tornerà non pagata; non è un rimborso.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm space-y-1">
+            <div><strong>Atleta:</strong> {paymentReversal?.athleteName}</div>
+            <div><strong>Quota:</strong> {paymentReversal?.installment.membership_fee?.name || '—'}</div>
+            <div><strong>Rata:</strong> {paymentReversal?.installment.installment_number}</div>
+            <div><strong>Importo:</strong> €{paymentReversal?.installment.amount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</div>
+            <div><strong>Scadenza:</strong> {paymentReversal ? new Date(`${paymentReversal.installment.due_date}T00:00:00`).toLocaleDateString('it-IT') : '—'}</div>
+          </div>
+          <label htmlFor="payment-reversal-reason" className="cs-field__label">Motivo della rettifica</label>
+          <textarea
+            id="payment-reversal-reason"
+            value={paymentReversalReason}
+            onChange={(event) => setPaymentReversalReason(event.target.value)}
+            maxLength={500}
+            rows={3}
+            required
+            className="cs-input w-full"
+            placeholder="Es. Pagamento segnato per errore"
+          />
+          <DialogFooter>
+            <button type="button" className="cs-btn cs-btn--ghost" onClick={() => setPaymentReversal(null)} disabled={reversingPayment}>
+              Annulla
+            </button>
+            <button
+              type="button"
+              className="cs-btn cs-btn--danger"
+              onClick={() => void reverseInstallmentPayment()}
+              disabled={reversingPayment || paymentReversalReason.trim().length < 5}
+            >
+              {reversingPayment ? 'Rettifica…' : 'Conferma rettifica'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {tab==='fees' ? (
       <div className="cs-card cs-card--primary overflow-hidden">
         {/* Desktop */}
@@ -807,7 +920,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
                 </tr>
               </thead>
               <tbody>
-                {flatInstallments.map((row:any)=> (
+                {flatInstallments.map((row) => (
                   <tr key={row.id}>
                     <td className="px-3 py-2"><input type="checkbox" checked={selectedInstallments.has(row.id)} onChange={(e)=>{
                       setSelectedInstallments(prev => { const n = new Set(prev); if (e.target.checked) n.add(row.id); else n.delete(row.id); return n })
@@ -824,7 +937,12 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
                         {row.status !== 'paid' ? (
                           <button onClick={async ()=>{ const ok = await updateInstallmentStatus(row.id, 'paid'); if (ok) loadFlatInstallments() }} className="cs-btn cs-btn--primary cs-btn--sm">Segna pagata</button>
                         ) : (
-                          <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
+                          <>
+                            <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
+                            <button type="button" onClick={() => openPaymentReversal(row)} className="cs-btn cs-btn--outline cs-btn--sm">
+                              Annulla pagamento
+                            </button>
+                          </>
                         )}
                         <button
                           type="button"
@@ -850,7 +968,7 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
           </div>
           {/* Mobile cards */}
           <div className={flatLoadState === 'error' || flatLoadState === 'offline' || flatLoadState === 'denied' || flatLoadState === 'loading' ? 'hidden' : 'md:hidden space-y-3'}>
-            {flatInstallments.map((row:any)=> (
+            {flatInstallments.map((row) => (
               <div key={row.id} className="cs-card">
                 <div className="flex items-start gap-3">
                   <input type="checkbox" checked={selectedInstallments.has(row.id)} onChange={(e)=>{
@@ -875,7 +993,12 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
                     {row.status !== 'paid' ? (
                       <button onClick={async ()=>{ const ok = await updateInstallmentStatus(row.id, 'paid'); if (ok) loadFlatInstallments() }} className="cs-btn cs-btn--primary cs-btn--sm">Segna pagata</button>
                     ) : (
-                      <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
+                      <>
+                        <span className="text-xs text-secondary">Pagata {row.paid_at ? new Date(row.paid_at).toLocaleDateString('it-IT') : ''}</span>
+                        <button type="button" onClick={() => openPaymentReversal(row)} className="cs-btn cs-btn--outline cs-btn--sm">
+                          Annulla pagamento
+                        </button>
+                      </>
                     )}
                     <button
                       type="button"
