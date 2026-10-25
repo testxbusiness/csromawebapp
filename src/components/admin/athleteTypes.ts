@@ -18,6 +18,16 @@ export interface Athlete {
   } | null
 }
 
+export interface AthleteWithDetails extends Athlete {
+  teams: Array<{
+    id: string
+    name: string
+    jersey_number?: string
+    activity_id?: string
+    season_id?: string
+  }>
+}
+
 export interface AthleteCreateData {
   id?: string
   first_name: string
