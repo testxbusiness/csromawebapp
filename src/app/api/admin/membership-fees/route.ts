@@ -3,6 +3,8 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { membershipActionSchema, membershipFeeSchema, membershipFeeUpdateSchema } from '@/lib/validation/membershipFees'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireGlobalRole } from '@/server/auth/require-global-role'
+import { getAccountActorSnapshot, recordAccountLifecycleAudit } from '@/server/audit/account-lifecycle'
+import { getUnpaidInstallmentStatus } from '@/server/admin/fee-installment-status'
 
 async function teamBelongsToSeason(adminClient: ReturnType<typeof createAdminClient>, teamId: string, seasonId: string) {
   const { data: team } = await adminClient.from('teams').select('activity_id').eq('id', teamId).maybeSingle()
@@ -364,6 +366,85 @@ export async function PATCH(request: NextRequest) {
     const parsed = membershipActionSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json({ error: 'Parametri quota non validi' }, { status: 400 })
     const body = parsed.data
+
+    if (body.action === 'reverse_installment_payment') {
+      const { data: installment, error: installmentError } = await adminClient
+        .from('fee_installments')
+        .select('id, profile_id, membership_fee_id, installment_number, due_date, amount, status, paid_at, paid_by_auth_user_id, payment_source')
+        .eq('id', body.installment_id)
+        .maybeSingle()
+
+      if (installmentError) {
+        console.error('Errore caricamento rata per rettifica pagamento:', installmentError)
+        return NextResponse.json({ error: 'Impossibile caricare la rata da rettificare' }, { status: 500 })
+      }
+      if (!installment) return NextResponse.json({ error: 'Rata non trovata' }, { status: 404 })
+      if (installment.status !== 'paid') {
+        return NextResponse.json({ error: 'È possibile annullare solo una rata registrata come pagata' }, { status: 409 })
+      }
+
+      const newStatus = getUnpaidInstallmentStatus(installment.due_date)
+      const { data: updatedInstallment, error: updateError } = await adminClient
+        .from('fee_installments')
+        .update({
+          status: newStatus,
+          paid_at: null,
+          paid_by_auth_user_id: null,
+          payment_source: null,
+        })
+        .eq('id', installment.id)
+        .eq('status', 'paid')
+        .select('id')
+        .maybeSingle()
+
+      if (updateError) {
+        console.error('Errore rettifica pagamento rata:', updateError)
+        return NextResponse.json({ error: 'Impossibile rettificare il pagamento della rata' }, { status: 500 })
+      }
+      if (!updatedInstallment) {
+        return NextResponse.json({ error: 'Lo stato della rata è cambiato. Aggiorna l’elenco e riprova.' }, { status: 409 })
+      }
+
+      let auditRecorded = true
+      try {
+        const actor = await getAccountActorSnapshot(adminClient, account.ownerProfileId)
+        await recordAccountLifecycleAudit(adminClient, {
+          eventType: 'repair_required',
+          subjectProfileId: installment.profile_id,
+          performedByAuthUserId: account.authUserId,
+          performedByProfileId: account.ownerProfileId,
+          ...actor,
+          details: {
+            action: 'fee_installment_payment_reversed',
+            installment_id: installment.id,
+            membership_fee_id: installment.membership_fee_id,
+            profile_id: installment.profile_id,
+            installment_number: installment.installment_number,
+            amount: installment.amount,
+            due_date: installment.due_date,
+            previous_status: installment.status,
+            previous_paid_at: installment.paid_at,
+            previous_paid_by_auth_user_id: installment.paid_by_auth_user_id,
+            previous_payment_source: installment.payment_source,
+            new_status: newStatus,
+            reason: body.reason,
+          },
+        })
+      } catch (auditError) {
+        auditRecorded = false
+        console.error('Errore audit rettifica pagamento rata:', auditError)
+      }
+
+      return NextResponse.json({
+        success: true,
+        status: newStatus,
+        auditRecorded,
+        message: auditRecorded
+          ? 'Pagamento annullato e rettifica registrata'
+          : 'Rata rettificata, ma non è stato possibile registrare la rettifica nel registro audit',
+      })
+    }
+
     const { action } = body
     const fee_id = 'fee_id' in body ? body.fee_id : undefined
 
@@ -440,17 +521,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (action === 'update_installment_status') {
-      const { installment_id, status } = body
-
-      const updateData: any = { status }
-      if (status === 'paid') {
-        updateData.paid_at = new Date().toISOString()
-        updateData.paid_by_auth_user_id = account.authUserId
-        updateData.payment_source = 'admin'
-      } else {
-        updateData.paid_at = null
-        updateData.paid_by_auth_user_id = null
-        updateData.payment_source = null
+      const { installment_id } = body
+      const updateData = {
+        status: 'paid' as const,
+        paid_at: new Date().toISOString(),
+        paid_by_auth_user_id: account.authUserId,
+        payment_source: 'admin' as const,
       }
 
       const { error: updateError } = await adminClient
@@ -521,16 +597,12 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (action === 'bulk_update_installments') {
-      const { installment_ids, status } = body
-      const updateData: any = { status }
-      if (status === 'paid') {
-        updateData.paid_at = new Date().toISOString()
-        updateData.paid_by_auth_user_id = account.authUserId
-        updateData.payment_source = 'admin'
-      } else {
-        updateData.paid_at = null
-        updateData.paid_by_auth_user_id = null
-        updateData.payment_source = null
+      const { installment_ids } = body
+      const updateData = {
+        status: 'paid' as const,
+        paid_at: new Date().toISOString(),
+        paid_by_auth_user_id: account.authUserId,
+        payment_source: 'admin' as const,
       }
 
       const { error: updErr } = await adminClient

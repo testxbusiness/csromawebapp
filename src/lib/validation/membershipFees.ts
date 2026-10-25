@@ -26,11 +26,11 @@ export const membershipFeeSchema = z.object({
 
 export const membershipFeeUpdateSchema = membershipFeeSchema.extend({ id: uuid }).strict()
 
-const installmentStatus = z.enum(['not_due', 'due_soon', 'overdue', 'paid'])
 export const membershipActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('generate_installments'), fee_id: uuid }).strict(),
-  z.object({ action: z.literal('update_installment_status'), installment_id: uuid, status: installmentStatus, paid_at: z.string().datetime({ offset: true }).optional().nullable() }).strict(),
+  z.object({ action: z.literal('update_installment_status'), installment_id: uuid, status: z.literal('paid') }).strict(),
+  z.object({ action: z.literal('reverse_installment_payment'), installment_id: uuid, reason: z.string().trim().min(5).max(500) }).strict(),
   z.object({ action: z.literal('recalculate_installment_statuses') }).strict(),
-  z.object({ action: z.literal('bulk_update_installments'), installment_ids: z.array(uuid).min(1).max(1000), status: installmentStatus }).strict(),
+  z.object({ action: z.literal('bulk_update_installments'), installment_ids: z.array(uuid).min(1).max(1000), status: z.literal('paid') }).strict(),
   z.object({ action: z.literal('update_installment_details'), installment_id: uuid, due_date: date.optional(), amount: money.optional() }).strict().refine((v) => v.due_date !== undefined || v.amount !== undefined, { message: 'Nessun dato da aggiornare' }),
 ])
