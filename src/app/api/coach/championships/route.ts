@@ -50,21 +50,28 @@ async function resolveCoachContext(): Promise<CoachChampionshipContext> {
 async function authorizeGroup(context: CoachChampionshipContext, groupId: string) {
   const { data: group, error } = await context.admin
     .from('championship_groups')
-    .select(`
-      id, championship_id,
-      championships!inner(season_id),
-      championship_group_teams(championship_club_teams(team_id))
-    `)
+    .select('id, championship_id, championships!inner(season_id)')
     .eq('id', groupId)
     .maybeSingle()
   if (error) throw new AccountContextError('Impossibile verificare il girone', 500)
   const championship = firstRelation(group?.championships)
-  const authorized = championship?.season_id === context.activeSeason.id
-    && (group?.championship_group_teams ?? []).some((groupTeam) => {
+  if (!group || championship?.season_id !== context.activeSeason.id) {
+    throw new AccountContextError('Girone non autorizzato per il coach', 403)
+  }
+
+  const { data: championshipGroups, error: groupsError } = await context.admin
+    .from('championship_groups')
+    .select('championship_group_teams(championship_club_teams(team_id))')
+    .eq('championship_id', group.championship_id)
+  if (groupsError) throw new AccountContextError('Impossibile verificare il campionato', 500)
+
+  const authorized = (championshipGroups ?? []).some((candidate) =>
+    (candidate.championship_group_teams ?? []).some((groupTeam) => {
       const clubTeam = firstRelation(groupTeam.championship_club_teams)
       return Boolean(clubTeam?.team_id && context.teamIds.has(clubTeam.team_id as string))
-    })
-  if (!group || !authorized) throw new AccountContextError('Girone non autorizzato per il coach', 403)
+    }),
+  )
+  if (!authorized) throw new AccountContextError('Campionato non autorizzato per il coach', 403)
   return group
 }
 
@@ -131,13 +138,13 @@ async function loadCatalog(context: CoachChampionshipContext) {
   }
 
   const visibleChampionships = (championships ?? []).flatMap((championship) => {
-    const visibleGroups = (championship.championship_groups ?? []).filter((group) =>
+    const hasAuthorizedGroup = (championship.championship_groups ?? []).some((group) =>
       (group.championship_group_teams ?? []).some((groupTeam) => {
         const clubTeam = firstRelation(groupTeam.championship_club_teams)
         return Boolean(clubTeam?.team_id && context.teamIds.has(clubTeam.team_id as string))
       }),
     )
-    return visibleGroups.length > 0 ? [{ ...championship, championship_groups: visibleGroups }] : []
+    return hasAuthorizedGroup ? [championship] : []
   })
 
   return {

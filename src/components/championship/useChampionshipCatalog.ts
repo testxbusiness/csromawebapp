@@ -173,13 +173,13 @@ export function useChampionshipCatalog({
         const filtered = allowedTeamIds.size === 0
           ? []
           : (payload?.championships ?? []).flatMap((championship: any) => {
-            const visibleGroups = (championship.championship_groups ?? []).filter((group: any) =>
+            const hasAuthorizedGroup = (championship.championship_groups ?? []).some((group: any) =>
               (group.championship_group_teams ?? []).some((groupTeam: any) => {
                 const clubTeam = firstRelation(groupTeam.championship_club_teams)
                 return Boolean(clubTeam?.team_id && allowedTeamIds.has(clubTeam.team_id))
               }),
             )
-            return visibleGroups.length > 0 ? [{ ...championship, championship_groups: visibleGroups }] : []
+            return hasAuthorizedGroup ? [championship] : []
           })
 
         setSeasons(payload?.seasons ?? [])
