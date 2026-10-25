@@ -541,3 +541,13 @@ con conferma esplicita e usa l’audit esistente (`repair_required` con
 Questo hotfix non introduce `athlete_fee_assignments`, non risolve il modello
 definitivo di assegnazione/cambio piano e non modifica rate pagate. Il futuro
 assignment storico resta necessario.
+
+## 17. Implementazione Dettaglio Atleta 360° — 25 ottobre 2026
+
+`/admin/atleti` apre ora un unico drawer read-only per identità, account, stagione, squadre, quote effettivamente emesse, rate e documentazione. I dati vengono caricati all’apertura tramite `GET /api/admin/athletes/[id]/details?seasonId=...`; il Route Handler verifica il ruolo admin prima di creare il client privilegiato e limita le query al profilo e alla stagione richiesti.
+
+La situazione economica deriva esclusivamente da `fee_installments` associate al profilo e collegate alla stagione via `membership_fees.team_id → teams.activity_id → activities.season_id`. Le rate sono raggruppate per piano emesso, non per appartenenza squadra, così membership multiple non duplicano importi. Più piani emessi nella stessa attività vengono segnalati senza modificare record. Il pagato segue la convenzione KPI Incassi: l’importo rata è considerato pagato quando `paid_at` è presente. `payments` non viene usata come registro di entrate atleta. Per `partially_paid` non si stima un importo: il residuo resta quello dell’intera rata e la UI espone il limite.
+
+Il modello registra la scadenza del certificato in `athlete_profiles`, ma non uno stato separato di consegna né una relazione documentale che identifichi con certezza il certificato medico. La UI applica quindi la classificazione esistente: con data mostra stato e scadenza; senza data indica “Non consegnato” e chiarisce che il modello non distingue consegna e scadenza mancante. La domanda d’iscrizione usa `season_profiles.enrollment_application_delivered` per la stagione selezionata. Upload e gestione documenti restano esclusi.
+
+La modifica anagrafica esistente resta raggiungibile dal drawer senza cambiare la logica. Verificati test mirati dell’aggregazione economica, autorizzazione admin e regressione del manager Atleti; typecheck e lint sui file interessati. Nessuno schema, RLS, dato staging/produzione o flusso di assegnazione quote/incasso è stato modificato.

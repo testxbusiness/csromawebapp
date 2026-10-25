@@ -4,24 +4,14 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { toast } from '@/components/ui'
 import { createClient } from '@/lib/supabase/client'
-import type { Athlete, AthleteCreateData, Team, Activity, Season } from './athleteTypes'
+import type { AthleteCreateData, Team, Activity, Season, AthleteWithDetails } from './athleteTypes'
 import BulkOperationsModal from './BulkOperationsModal'
 import TeamAssignmentModal from './TeamAssignmentModal'
-import DetailsDrawer from '@/components/shared/DetailsDrawer'
 import AthleteCreateModal from './AthleteCreateModal'
 import AthleteImportModal from './AthleteImportModal'
 import CollaboratorAccountActions from './CollaboratorAccountActions'
 import { getCertificateStatus, type CertificateStatus } from '@/lib/admin/certificate-status'
-
-interface AthleteWithDetails extends Athlete {
-  teams: Array<{
-    id: string
-    name: string
-    jersey_number?: string
-    activity_id?: string
-    season_id?: string
-  }>
-}
+import Athlete360Details from './Athlete360Details'
 
 export default function AthletesManager({ embedded = false }: { embedded?: boolean }) {
   const [athletes, setAthletes] = useState<AthleteWithDetails[]>([])
@@ -447,58 +437,13 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
         onClose={() => setShowImportModal(false)}
       />
 
-<DetailsDrawer
+<Athlete360Details
   open={showDetails}
+  athlete={detailsAthlete}
+  seasonId={selectedSeason}
   onClose={() => setShowDetails(false)}
-  title="Dettaglio Atleta"
-  size="lg"
->
-  {detailsAthlete && (
-    <div className="cs-grid cs-grid--2-1" style={{ gap: 16 }}>
-      {/* Colonna sinistra: anagrafica */}
-      <div className="cs-card">
-        <h3 className="cs-card__title">
-          {detailsAthlete.first_name} {detailsAthlete.last_name}
-        </h3>
-        <div className="cs-card__meta" style={{ marginTop: 6 }}>
-          {detailsAthlete.email}
-        </div>
-
-        <div className="cs-grid" style={{ marginTop: 12, gap: 12 }}>
-          <div>
-            <div className="text-secondary text-sm">Tessera</div>
-            <div className="font-semibold">{detailsAthlete.membership_number || '—'}</div>
-          </div>
-
-          <div>
-            <div className="text-secondary text-sm">Certificato medico</div>
-            <div className="font-semibold">
-              {detailsAthlete.medical_certificate_expiry
-                ? new Date(detailsAthlete.medical_certificate_expiry).toLocaleDateString('it-IT')
-                : '—'}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Colonna destra: squadre */}
-      <div className="cs-card">
-        <h4 className="font-semibold mb-2">Squadre</h4>
-        {detailsAthlete.teams?.length ? (
-          <div className="flex flex-wrap gap-2">
-            {teamsForSelectedSeason(detailsAthlete.teams).map(t => (
-              <span key={t.id} className="cs-badge cs-badge--neutral">
-                {t.name}{t.jersey_number ? ` #${t.jersey_number}` : ''}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <div className="text-secondary text-sm">Nessuna squadra</div>
-        )}
-      </div>
-    </div>
-  )}
-</DetailsDrawer>
+  onEdit={(athlete) => { setShowDetails(false); openAthleteEdit(athlete) }}
+/>
 
       {/* Filtri di contesto */}
       <section className="cs-card cs-card--primary p-6">
