@@ -23,3 +23,5 @@ Sentry.init({
   replaysOnErrorSampleRate: 0,
   beforeSend: sanitizeSentryEvent,
 })
+
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
