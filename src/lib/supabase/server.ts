@@ -1,5 +1,6 @@
 import 'server-only'
 
+import * as Sentry from '@sentry/nextjs'
 import { createServerClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
@@ -7,7 +8,7 @@ import { cookies } from 'next/headers'
 export async function createClient() {
   const cookieStore = await cookies()
 
-  return createServerClient(
+  const client = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -29,11 +30,13 @@ export async function createClient() {
       },
     }
   )
+  Sentry.instrumentSupabaseClient(client)
+  return client
 }
 
 // Client admin per operazioni che richiedono bypass RLS
 export function createAdminClient() {
-  return createSupabaseClient(
+  const client = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
@@ -43,4 +46,6 @@ export function createAdminClient() {
       }
     }
   )
+  Sentry.instrumentSupabaseClient(client)
+  return client
 }
