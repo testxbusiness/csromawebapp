@@ -89,9 +89,6 @@ module.exports = withSentryConfig(nextConfig, {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
   widenClientFileUpload: true,
-  webpack: {
-    excludeServerRoutes: ['/api/sentry-source-map-check'],
-  },
   sourcemaps: {
     deleteSourcemapsAfterUpload: true,
   },
