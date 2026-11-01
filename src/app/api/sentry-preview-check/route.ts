@@ -11,7 +11,7 @@ export async function POST() {
   }
 
   const eventId = Sentry.captureException(new Error('sentry-preview-server-check'))
-  await Sentry.flush(2_000)
+  const flushed = await Sentry.flush(2_000)
 
-  return NextResponse.json({ accepted: Boolean(eventId) }, { status: 202 })
+  return NextResponse.json({ eventId, flushed }, { status: 202 })
 }
