@@ -8,6 +8,7 @@ function eventWithMessage(message: string): ErrorEvent {
     transaction: '/reset-password?token=private-token',
     user: { id: 'athlete-id', email: 'athlete@example.com' },
     request: { url: 'https://example.test/reset-password?token=private-token', headers: { cookie: 'session=secret' } },
+    server_name: '169.254.45.21',
     extra: { medical_note: 'private data' },
     tags: { profile_id: 'athlete-id' },
     breadcrumbs: [{ message: 'Private message content', timestamp: 1 }],
@@ -27,6 +28,7 @@ describe('sanitizeSentryEvent', () => {
     })
     expect(sanitized?.user).toBeUndefined()
     expect(sanitized?.request).toBeUndefined()
+    expect(sanitized?.server_name).toBeUndefined()
     expect(sanitized?.extra).toBeUndefined()
     expect(sanitized?.tags).toBeUndefined()
     expect(sanitized?.transaction).toBeUndefined()

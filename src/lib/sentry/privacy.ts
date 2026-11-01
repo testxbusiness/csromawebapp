@@ -30,6 +30,7 @@ export function sanitizeSentryEvent(event: ErrorEvent, hint: EventHint): ErrorEv
 
   event.user = undefined
   event.request = undefined
+  event.server_name = undefined
   event.extra = undefined
   event.tags = undefined
   event.breadcrumbs = []
