@@ -4,8 +4,9 @@ import { athleteAttendanceSchema } from '@/lib/validation/events'
 import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
+import { captureUnexpectedServerError, captureSupabaseError, withSentryOperation } from '@/lib/sentry/server-capture'
 
-export async function POST(req: NextRequest) {
+async function post(req: NextRequest) {
   try {
     const supabase = await createClient()
     const body = await req.json().catch(() => null)
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
       if (error.code === 'P0001' || error.code === '23514') {
         return NextResponse.json({ error: 'L’evento non è più disponibile per una risposta' }, { status: 409 })
       }
+      captureSupabaseError(error, 'absence', 'update', 'server', false)
       return NextResponse.json({ error: 'Impossibile salvare la risposta' }, { status: 500 })
     }
     return NextResponse.json({ success: true })
@@ -77,7 +79,10 @@ export async function POST(req: NextRequest) {
     if (e instanceof AccountContextError) {
       return NextResponse.json({ error: e.message }, { status: e.status })
     }
+    captureUnexpectedServerError(e, 'absence', 'update')
     console.error('RSVP error', e)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withSentryOperation('absence', 'update', post)

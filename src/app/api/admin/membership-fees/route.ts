@@ -320,19 +320,28 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID quota richiesto' }, { status: 400 })
     }
 
-    // 1. Elimina le rate predefinite
-    await adminClient
+    // A plan with any issued installment is historical financial data. Block
+    // deletion entirely so FK cascades or a later cleanup cannot erase it.
+    const { data: issuedInstallments, error: issuedError } = await adminClient
+      .from('fee_installments')
+      .select('id')
+      .eq('membership_fee_id', feeId)
+    if (issuedError) return NextResponse.json({ error: 'Impossibile verificare le rate emesse' }, { status: 500 })
+    if ((issuedInstallments ?? []).length) {
+      return NextResponse.json({
+        error: `Impossibile eliminare il piano: risultano già emesse ${(issuedInstallments ?? []).length} rate. I piani utilizzati devono essere conservati.`,
+        code: 'FEE_HAS_ISSUED_INSTALLMENTS',
+        installmentCount: issuedInstallments!.length,
+      }, { status: 409 })
+    }
+
+    const { error: templateError } = await adminClient
       .from('predefined_installments')
       .delete()
       .eq('membership_fee_id', feeId)
+    if (templateError) return NextResponse.json({ error: 'Impossibile eliminare le rate predefinite del piano' }, { status: 500 })
 
-    // 2. Elimina le rate assegnate agli atleti
-    await adminClient
-      .from('fee_installments')
-      .delete()
-      .eq('membership_fee_id', feeId)
-
-    // 3. Elimina la quota
+    // No issued installments exist, so only the unused plan can be removed.
     const { error: feeError } = await adminClient
       .from('membership_fees')
       .delete()
@@ -484,6 +493,23 @@ export async function PATCH(request: NextRequest) {
 
       if (membersError) {
         return NextResponse.json({ error: 'Errore recupero membri squadra' }, { status: 400 })
+      }
+
+      const memberIds = [...new Set((teamMembers ?? []).map((member) => member.profile_id))]
+      if (memberIds.length) {
+        const { data: existingInstallments, error: existingError } = await adminClient
+          .from('fee_installments')
+          .select('id, profile_id, status, paid_at')
+          .eq('membership_fee_id', fee_id)
+          .in('profile_id', memberIds)
+        if (existingError) return NextResponse.json({ error: 'Impossibile verificare le rate già emesse' }, { status: 500 })
+        if ((existingInstallments ?? []).length) {
+          return NextResponse.json({
+            error: `Generazione bloccata: esistono già ${(existingInstallments ?? []).length} rate per ${(new Set(existingInstallments!.map((row) => row.profile_id))).size} atleti. Nessuna rata è stata modificata.`,
+            code: 'INSTALLMENTS_ALREADY_EXIST',
+            conflicts: existingInstallments,
+          }, { status: 409 })
+        }
       }
 
       // Genera le rate per ogni atleta basandosi sulle rate predefinite

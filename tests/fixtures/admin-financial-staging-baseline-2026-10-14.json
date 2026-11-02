@@ -1,0 +1,57 @@
+{
+  "project": "csromawebapp-staging",
+  "projectRef": "kibtvkuiedoxgppnnxkf",
+  "migrationCount": 70,
+  "latestMigration": "20261001170720",
+  "counts": {
+    "profiles": 15,
+    "athleteProfiles": 5,
+    "seasonProfiles": 18,
+    "seasons": 3,
+    "activities": 4,
+    "teams": 13,
+    "teamMembers": 10,
+    "membershipFees": 4,
+    "predefinedInstallments": 12,
+    "feeInstallments": 12,
+    "payments": 13,
+    "documents": 0,
+    "profileRelationships": 8,
+    "accountLifecycleAudit": 39
+  },
+  "feeInstallments": {
+    "statuses": {
+      "not_due": 5,
+      "overdue": 1,
+      "paid": 6
+    },
+    "scheduledAmount": 1744.5,
+    "paidAmount": 900,
+    "unpaidAmount": 844.5,
+    "feeTemplateTotal": 1744.5,
+    "feeTemplateCount": 4,
+    "templateMismatches": 0
+  },
+  "payments": {
+    "coach_payment": {
+      "paid": { "count": 2, "amount": 200 },
+      "pending": { "count": 11, "amount": 1100 }
+    }
+  },
+  "anomalies": {
+    "feeWithoutIssuedInstallments": 0,
+    "feeWithoutPredefinedInstallments": 0,
+    "installmentDuplicateBusinessKey": 0,
+    "installmentMissingFee": 0,
+    "installmentMissingProfile": 0,
+    "installmentPaidWithoutActor": 0,
+    "installmentPaidWithoutPaidAt": 0,
+    "installmentPaidWithoutPaymentSource": 0,
+    "installmentUnpaidWithPaidAt": 0,
+    "installmentWithoutCurrentTeamMembership": 0,
+    "profileHasMultipleFeePlansSameTeam": 0,
+    "paymentReceiptDocuments": 0,
+    "paymentsIncomingLike": 0,
+    "monitoredNotDueInstallments": 5
+  }
+}

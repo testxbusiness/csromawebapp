@@ -157,7 +157,27 @@ async function handleTeamAssignment(adminClient: ReturnType<typeof createAdminCl
     membershipFee = feeData
   }
 
+  // Preflight the financial side. Existing rows block fee regeneration, but
+  // do not block the independent sport-team assignment.
+  let existingInstallments: { id: string; profile_id: string; installment_number: number; status: string; paid_at: string | null }[] = []
+  if (membershipFeeId) {
+    const { data: existingRows, error: existingError } = await adminClient
+      .from('fee_installments')
+      .select('id, profile_id, installment_number, status, paid_at')
+      .eq('membership_fee_id', membershipFeeId)
+      .in('profile_id', athleteIds)
+    if (existingError) return NextResponse.json({ error: 'Impossibile verificare le rate già emesse; assegnazione non eseguita.' }, { status: 500 })
+    existingInstallments = existingRows ?? []
+  }
+
   if (dryRun) {
+    if (existingInstallments.length) {
+      return NextResponse.json({
+        error: `Conflitto preflight: esistono già ${existingInstallments.length} rate per ${(new Set(existingInstallments.map((row) => row.profile_id))).size} atleti sul piano selezionato. Il dry-run non ha eseguito modifiche.`,
+        code: 'INSTALLMENTS_ALREADY_EXIST',
+        conflicts: existingInstallments,
+      }, { status: 409 })
+    }
     const feeMessage = membershipFee ? ` con piano di pagamento "${membershipFee.name}"` : ''
     return NextResponse.json({
       message: `DRY RUN: ${athleteIds.length} atleti verrebbero assegnati alla squadra "${team.name}"${feeMessage}`,
@@ -183,15 +203,20 @@ async function handleTeamAssignment(adminClient: ReturnType<typeof createAdminCl
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
 
+  // The sport membership is independent from fee issuance. Preserve a valid
+  // team assignment, while refusing to regenerate any existing installments.
+  if (existingInstallments.length) {
+    return NextResponse.json({
+      error: `Atleti assegnati alla squadra "${team.name}", ma piano non assegnato: esistono già ${existingInstallments.length} rate per ${(new Set(existingInstallments.map((row) => row.profile_id))).size} atleti. Le rate esistenti sono state conservate.`,
+      code: 'INSTALLMENTS_ALREADY_EXIST',
+      teamAssigned: true,
+      feeAssignmentBlocked: true,
+      conflicts: existingInstallments,
+    }, { status: 409 })
+  }
+
   // Assegna il piano di pagamento se specificato
   if (membershipFeeId) {
-    // Prima rimuovi eventuali installments esistenti per questi atleti
-    await adminClient
-      .from('fee_installments')
-      .delete()
-      .in('profile_id', athleteIds)
-      .eq('membership_fee_id', membershipFeeId)
-
     // Recupera le rate predefinite del piano di pagamento
     const { data: predefinedInstallments, error: predefinedError } = await adminClient
       .from('predefined_installments')

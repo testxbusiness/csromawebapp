@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { captureUnexpectedServerError, captureSupabaseError, withSentryOperation } from '@/lib/sentry/server-capture'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { coachMessageCreateSchema, coachMessageUpdateSchema } from '@/lib/validation/messages'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 import { notifyMessageRecipients } from '@/server/messages/push-notifications'
 import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 
-export async function GET(request: NextRequest) {
+async function get(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
@@ -245,12 +246,13 @@ export async function GET(request: NextRequest) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
+    captureUnexpectedServerError(error, 'messages', 'read')
     console.error('Error in coach messages API:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function POST(request: NextRequest) {
+async function post(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
@@ -348,14 +350,16 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     if (error instanceof AccountContextError) {
+      if (error.status >= 500) captureUnexpectedServerError(error, 'messages', 'create')
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
+    captureUnexpectedServerError(error, 'messages', 'create')
     console.error('Error in coach messages POST:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function PUT(request: NextRequest) {
+async function put(request: NextRequest) {
   try {
     const supabase = await createClient()
     const adminClient = createAdminClient()
@@ -430,7 +434,7 @@ export async function PUT(request: NextRequest) {
         const { error: delStorErr } = await adminClient
           // @ts-ignore
           .storage.from('message-attachments').remove(toDelete.map((d: any) => d.file_path))
-        if (delStorErr) console.error('Coach delete att storage:', delStorErr)
+        if (delStorErr) { captureSupabaseError(delStorErr, 'messages', 'update', 'server', false); console.error('Coach delete att storage:', delStorErr) }
       }
 
       const existingPaths = new Set((existing || []).map((e: any) => e.file_path))
@@ -471,12 +475,13 @@ export async function PUT(request: NextRequest) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
+    captureUnexpectedServerError(error, 'messages', 'update')
     console.error('Error in coach messages PUT:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
-export async function DELETE(request: NextRequest) {
+async function remove(request: NextRequest) {
   try {
     const supabase = await createClient()
     const account = await requireAccountContext(supabase)
@@ -499,7 +504,13 @@ export async function DELETE(request: NextRequest) {
     if (error instanceof AccountContextError) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
+    captureUnexpectedServerError(error, 'messages', 'delete')
     console.error('Error in coach messages DELETE:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export const GET = withSentryOperation('messages', 'read', get)
+export const POST = withSentryOperation('messages', 'create', post)
+export const PUT = withSentryOperation('messages', 'update', put)
+export const DELETE = withSentryOperation('messages', 'delete', remove)

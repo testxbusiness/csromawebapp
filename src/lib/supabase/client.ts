@@ -1,13 +1,16 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import * as Sentry from '@sentry/nextjs'
 
 let recoveryClient: ReturnType<typeof createSupabaseClient> | null = null
 
 export function createClient() {
-  return createBrowserClient(
+  const client = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
+  Sentry.instrumentSupabaseClient(client)
+  return client
 }
 
 // Password recovery is initiated by an administrator and the recipient may
@@ -30,5 +33,6 @@ export function createRecoveryClient() {
     )
   }
 
+  Sentry.instrumentSupabaseClient(recoveryClient)
   return recoveryClient
 }

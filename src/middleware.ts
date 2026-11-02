@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import * as Sentry from '@sentry/nextjs'
 import { performanceDiagnosticsEnabled, performanceDiagnosticHeaders } from '@/server/performance/request-timing'
 
 // Le decisioni di dominio restano nelle route/server layer e in RLS.
@@ -60,6 +61,7 @@ export async function middleware(req: NextRequest) {
       },
     }
   )
+  Sentry.instrumentSupabaseClient(supabase)
 
   const {
     data: { user },

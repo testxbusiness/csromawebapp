@@ -5,6 +5,7 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { resolveAthleteChampionshipContext, type AthleteChampionship } from '@/server/championships/resolve-athlete-championship'
 import { noStoreJson } from '@/server/http/no-store'
 import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
+import { captureUnexpectedServerError, withSentryOperation } from '@/lib/sentry/server-capture'
 
 const uuid = z.string().uuid()
 const querySchema = z.object({
@@ -28,6 +29,7 @@ function jsonError(error: unknown) {
   if (error instanceof AccountContextError) {
     return noStoreJson({ error: error.message }, error.status)
   }
+  captureUnexpectedServerError(error, 'convocations', 'read')
   console.error('Errore endpoint campionati atleta:', error)
   return noStoreJson({ error: 'Errore interno del server' }, 500)
 }
@@ -43,7 +45,7 @@ function findAuthorizedGroup(
   return null
 }
 
-export async function GET(request: NextRequest) {
+async function get(request: NextRequest) {
   const timing = startRequestTiming(request, '/api/athlete/championships')
   try {
     const raw = Object.fromEntries(new URL(request.url).searchParams.entries())
@@ -179,3 +181,5 @@ export async function GET(request: NextRequest) {
     return finishRequestResponse(response, timing)
   }
 }
+
+export const GET = withSentryOperation('convocations', 'read', get)

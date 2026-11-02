@@ -1,6 +1,7 @@
 // next.config.js
 /** @type {import('next').NextConfig} */
 const path = require('path')
+const { withSentryConfig } = require('@sentry/nextjs/config')
 
 // ricava l'hostname di Supabase dalla env (fallback al placeholder)
 const SUPABASE_HOST =
@@ -9,6 +10,13 @@ const SUPABASE_HOST =
     : '<PROJECT_REF>.supabase.co'
 
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_SENTRY_ENVIRONMENT:
+      process.env.SENTRY_ENVIRONMENT || process.env.VERCEL_ENV || process.env.NODE_ENV,
+    NEXT_PUBLIC_SENTRY_RELEASE:
+      process.env.SENTRY_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA || '',
+  },
+
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
@@ -75,4 +83,13 @@ const nextConfig = {
   reactStrictMode: true,
 }
 
-module.exports = nextConfig
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
+})

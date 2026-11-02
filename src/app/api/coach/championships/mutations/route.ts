@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AccountContextError, requireAccountContext } from '@/server/auth/require-account-context'
 import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
+import { captureUnexpectedServerError, withSentryOperation } from '@/lib/sentry/server-capture'
 
 type CoachMutationContext = {
   admin: ReturnType<typeof createAdminClient>
@@ -311,14 +312,19 @@ async function handleMutation(context: CoachMutationContext, body: Record<string
   throw new AccountContextError('Mutation coach non riconosciuta', 400)
 }
 
-export async function POST(request: NextRequest) {
+async function post(request: NextRequest) {
   try {
     const context = await getContext()
     const body = await request.json() as Record<string, unknown>
     return NextResponse.json(await handleMutation(context, body))
   } catch (error) {
-    if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof AccountContextError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    captureUnexpectedServerError(error, 'convocations', 'update')
     console.error('Coach championship mutation error:', error)
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal server error' }, { status: 500 })
   }
 }
+
+export const POST = withSentryOperation('convocations', 'update', post)

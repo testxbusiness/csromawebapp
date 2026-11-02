@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { loginPayloadSchema } from '@/lib/validation/auth'
+import { captureUnexpectedServerError, withSentryOperation } from '@/lib/sentry/server-capture'
+import { runSdkOwnedOperation } from '@/lib/sentry/sdk-owned-error'
 import {
   AccountContext,
   AccountContextError,
   requireAccountContext,
 } from '@/server/auth/require-account-context'
 
-export async function POST(request: NextRequest) {
+async function post(request: NextRequest) {
   try {
     const parsed = loginPayloadSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
@@ -17,10 +19,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    const { data: authData, error: authError } = await runSdkOwnedOperation(() => supabase.auth.signInWithPassword({
       email,
       password,
-    })
+    }))
 
     if (authError) {
       console.error('Login error:', authError)
@@ -43,7 +45,6 @@ export async function POST(request: NextRequest) {
       .select('*')
       .eq('id', account.ownerProfileId)
       .maybeSingle()
-
     return NextResponse.json({
       success: true,
       user: authData.user,
@@ -57,6 +58,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.error('Login exception:', error)
+    captureUnexpectedServerError(error, 'auth', 'login')
     return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 })
   }
 }
+
+export const POST = withSentryOperation('auth', 'login', post)

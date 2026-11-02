@@ -1,12 +1,17 @@
 import type { NextRequest } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { requireAccountContext } from '@/server/auth/require-account-context'
+import { resolveActiveSeason, resolveActiveSeasonTeamIds } from '@/server/seasons/active-season'
 import { POST } from './route'
 
 jest.mock('@/lib/supabase/server', () => ({ createClient: jest.fn(), createAdminClient: jest.fn() }))
 jest.mock('@/server/auth/require-account-context', () => ({
   requireAccountContext: jest.fn(),
   AccountContextError: class AccountContextError extends Error { status: number; constructor(message: string, status: number) { super(message); this.status = status } },
+}))
+jest.mock('@/server/seasons/active-season', () => ({
+  resolveActiveSeason: jest.fn(),
+  resolveActiveSeasonTeamIds: jest.fn(),
 }))
 jest.mock('next/server', () => ({
   NextResponse: { json: (body: unknown, init?: { status?: number }) => ({ status: init?.status ?? 200, body }) },
@@ -15,6 +20,8 @@ jest.mock('next/server', () => ({
 const createClientMock = createClient as jest.MockedFunction<typeof createClient>
 const createAdminClientMock = createAdminClient as jest.MockedFunction<typeof createAdminClient>
 const accountMock = requireAccountContext as jest.MockedFunction<typeof requireAccountContext>
+const activeSeasonMock = resolveActiveSeason as jest.MockedFunction<typeof resolveActiveSeason>
+const activeSeasonTeamIdsMock = resolveActiveSeasonTeamIds as jest.MockedFunction<typeof resolveActiveSeasonTeamIds>
 
 function query(data: unknown, error: unknown = null) {
   const chain = { data, error, select: jest.fn(), eq: jest.fn(), in: jest.fn(), update: jest.fn(), insert: jest.fn(), upsert: jest.fn(), delete: jest.fn(), maybeSingle: jest.fn(), single: jest.fn() }
@@ -23,7 +30,13 @@ function query(data: unknown, error: unknown = null) {
 }
 
 describe('POST /api/coach/championships/mutations', () => {
-  beforeEach(() => { createClientMock.mockReset(); createAdminClientMock.mockReset(); accountMock.mockReset() })
+  beforeEach(() => {
+    createClientMock.mockReset()
+    createAdminClientMock.mockReset()
+    accountMock.mockReset()
+    activeSeasonMock.mockReset()
+    activeSeasonTeamIdsMock.mockReset()
+  })
 
   it('rejects accounts without the coach role before touching mutations', async () => {
     accountMock.mockResolvedValue({ ownerProfileId: 'athlete-a', roles: ['athlete'] } as Awaited<ReturnType<typeof requireAccountContext>>)
@@ -37,12 +50,17 @@ describe('POST /api/coach/championships/mutations', () => {
   it('rejects a match belonging only to another coach team', async () => {
     accountMock.mockResolvedValue({ ownerProfileId: 'coach-a', roles: ['coach'] } as Awaited<ReturnType<typeof requireAccountContext>>)
     createClientMock.mockResolvedValue({} as Awaited<ReturnType<typeof createClient>>)
+    activeSeasonMock.mockResolvedValue({ id: 'season-a', name: '2026/2027', start_date: '2026-09-01', end_date: '2027-08-31', is_active: true })
+    activeSeasonTeamIdsMock.mockResolvedValue(['team-a'])
+    let groupReads = 0
     createAdminClientMock.mockReturnValue({
       from: jest.fn((table: string) => table === 'team_coaches'
         ? query([{ team_id: 'team-a' }])
         : table === 'championship_matches'
           ? query({ championship_group_id: 'group-a' })
-          : query([{ championship_club_teams: { team_id: 'team-b' } }])),
+          : query(groupReads++ === 0
+            ? { id: 'group-a', championship_id: 'championship-a', championships: { season_id: 'season-a' } }
+            : [{ championship_group_teams: [{ championship_club_teams: { team_id: 'team-b' } }] }])),
     } as unknown as ReturnType<typeof createAdminClient>)
 
     const response = await POST({ json: async () => ({ action: 'match_status', match_id: 'match-a', status: 'completed' }) } as unknown as NextRequest)
@@ -53,10 +71,12 @@ describe('POST /api/coach/championships/mutations', () => {
   it('requires an explicit assigned team before creating the first group', async () => {
     accountMock.mockResolvedValue({ ownerProfileId: 'coach-a', roles: ['coach'] } as Awaited<ReturnType<typeof requireAccountContext>>)
     createClientMock.mockResolvedValue({} as Awaited<ReturnType<typeof createClient>>)
+    activeSeasonMock.mockResolvedValue({ id: 'season-a', name: '2026/2027', start_date: '2026-09-01', end_date: '2027-08-31', is_active: true })
+    activeSeasonTeamIdsMock.mockResolvedValue(['team-a', 'team-b'])
     const from = jest.fn((table: string) => table === 'team_coaches' ? query([{ team_id: 'team-a' }, { team_id: 'team-b' }]) : query(null))
     createAdminClientMock.mockReturnValue({ from } as unknown as ReturnType<typeof createAdminClient>)
 
-    const response = await POST({ json: async () => ({ action: 'create_championship', name: 'Amatoriale', create_group: true, group_name: 'Girone A' }) } as unknown as NextRequest)
+    const response = await POST({ json: async () => ({ action: 'create_championship', name: 'Amatoriale', season_id: 'season-a', create_group: true, group_name: 'Girone A' }) } as unknown as NextRequest)
 
     expect(response.status).toBe(400)
     expect(from).not.toHaveBeenCalledWith('championships')

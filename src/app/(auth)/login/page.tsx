@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { captureSupabaseError, captureUnexpectedServerError } from '@/lib/sentry/server-capture'
 
 export default function LoginPage() {
   return (
@@ -60,6 +61,7 @@ function LoginPageInner() {
         })
 
         if (sessionError) {
+          captureSupabaseError(sessionError, 'auth', 'login', 'client', false)
           console.error('Failed to synchronize browser session:', sessionError)
           setError('Sessione non sincronizzata. Riprova ad accedere.')
           return
@@ -92,6 +94,7 @@ function LoginPageInner() {
         window.location.assign(nextPath)
       }
     } catch (err) {
+      captureUnexpectedServerError(err, 'auth', 'login', 'client')
       setError('Si è verificato un errore durante il login')
     } finally {
       setLoading(false)
