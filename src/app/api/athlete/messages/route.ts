@@ -4,8 +4,9 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { buildAthleteMessages } from '@/lib/athlete/messages-contract'
 import { finishRequestResponse, startRequestTiming } from '@/server/performance/request-timing'
+import { captureUnexpectedServerError, withSentryOperation } from '@/lib/sentry/server-capture'
 
-export async function GET(request: NextRequest) {
+async function get(request: NextRequest) {
   const timing = startRequestTiming(request, '/api/athlete/messages')
   try {
     const supabase = await createClient()
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
       if (countOnly) {
         return finishRequestResponse(NextResponse.json({ unreadMessageCount: 0 }), timing)
       }
-      const { data: authorizedTeams } = teamIds.length > 0
+      const { data: authorizedTeams, error: authorizedTeamsError } = teamIds.length > 0
         ? await dataClient.from('teams').select('id, name, code').in('id', teamIds)
         : { data: [] }
       return finishRequestResponse(NextResponse.json({ messages: [], teams: authorizedTeams || [], read_state_scope: 'account_subject' }), timing)
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
     // full recipient/attachment metadata for that high-frequency request.
     if (countOnly) {
       const readStateStartedAt = timing?.now() ?? 0
-      const { data: readRows } = await dataClient
+      const { data: readRows, error: readRowsError } = await dataClient
         .from('message_reads')
         .select('message_id')
         .eq('auth_user_id', subject.account.authUserId)
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest) {
           .from('profiles')
           .select('id, first_name, last_name, role')
           .in('id', fullCreatorIds)
-      : Promise.resolve({ data: [] })
+      : Promise.resolve({ data: [], error: null })
     const creatorsResultPromise = Promise.resolve(creatorsPromise).finally(() => {
       timing?.mark(fullView ? 'messages-full-creators' : 'messages-minimal-creators', creatorsStartedAt)
     })
@@ -140,14 +141,14 @@ export async function GET(request: NextRequest) {
           .eq('auth_user_id', subject.account.authUserId)
           .eq('subject_profile_id', athleteProfileId)
           .in('message_id', loadedMessageIds)
-      : Promise.resolve({ data: [] })
+      : Promise.resolve({ data: [], error: null })
     const readStateResultPromise = Promise.resolve(readStatePromise).finally(() => {
       timing?.mark('message-read-state', readStateStartedAt)
     })
 
     const messageTeamsPromise = teamIds.length > 0
       ? dataClient.from('teams').select('id, name, code').in('id', teamIds)
-      : Promise.resolve({ data: [] })
+      : Promise.resolve({ data: [], error: null })
 
     const attachmentsStartedAt = timing?.now() ?? 0
     const attachmentsPromise = fullView && loadedMessageIds.length > 0
@@ -155,22 +156,24 @@ export async function GET(request: NextRequest) {
           .from('message_attachments')
           .select('id, message_id, file_path, file_name, mime_type, file_size')
           .in('message_id', loadedMessageIds)
-      : Promise.resolve({ data: [] })
+      : Promise.resolve({ data: [], error: null })
     const attachmentsResultPromise = Promise.resolve(attachmentsPromise).finally(() => {
       if (fullView) timing?.mark('messages-attachments', attachmentsStartedAt)
     })
 
     const [
-      { data: readRows },
-      { data: messageTeams },
-      { data: creators },
-      { data: allAttachments },
+      { data: readRows, error: readRowsError },
+      { data: messageTeams, error: messageTeamsError },
+      { data: creators, error: creatorsError },
+      { data: allAttachments, error: attachmentsError },
     ] = await Promise.all([
       readStateResultPromise,
       messageTeamsPromise,
       creatorsResultPromise,
       attachmentsResultPromise,
     ])
+    for (const error of [readRowsError, messageTeamsError, creatorsError, attachmentsError]) {
+    }
     const readByMessageId = new Map((readRows || []).map((row: any) => [row.message_id, { read_at: row.read_at }]))
     const teamsById = new Map((messageTeams || []).map((team: any) => [team.id, team]))
     const contractMessages = buildAthleteMessages(
@@ -235,14 +238,16 @@ export async function GET(request: NextRequest) {
 
     // 3. Get all teams and profiles in batch
     const recipientCatalogStartedAt = timing?.now() ?? 0
-    const [{ data: teams }, { data: profiles }] = await Promise.all([
+    const [{ data: teams, error: teamsError }, { data: profiles, error: profilesError }] = await Promise.all([
       teamRecipientIds.length > 0
         ? dataClient.from('teams').select('id, name').in('id', teamRecipientIds)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
       profileRecipientIds.length > 0
         ? dataClient.from('profiles').select('id, first_name, last_name, email').in('id', profileRecipientIds)
-        : Promise.resolve({ data: [] })
+        : Promise.resolve({ data: [], error: null })
     ])
+    for (const error of [teamsError, profilesError]) {
+    }
     timing?.mark('messages-recipient-catalog', recipientCatalogStartedAt)
 
     const teamsMap = new Map((teams || []).map(t => [t.id, t]))
@@ -321,7 +326,10 @@ export async function GET(request: NextRequest) {
     if (error instanceof AccountContextError) {
       return finishRequestResponse(NextResponse.json({ error: error.message }, { status: error.status }), timing)
     }
+    captureUnexpectedServerError(error, 'messages', 'read')
     console.error('Athlete messages API error:', error)
     return finishRequestResponse(NextResponse.json({ error: 'Internal server error' }, { status: 500 }), timing)
   }
 }
+
+export const GET = withSentryOperation('messages', 'read', get)

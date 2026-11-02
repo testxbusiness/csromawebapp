@@ -328,15 +328,20 @@ export default function MembershipFeesManager({ embedded = false }: { embedded?:
   }
 
   const handleDeleteFee = async (id: string) => {
-    if (window.confirm('Sei sicuro di voler eliminare questa quota associativa?')) {
-      const { error } = await supabase
-        .from('membership_fees')
-        .delete()
-        .eq('id', id)
+    if (!window.confirm('Sei sicuro di voler eliminare questa quota associativa?')) return
 
-      if (!error) {
-        loadFees()
+    try {
+      const response = await fetch(`/api/admin/membership-fees?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      const result = await response.json()
+      if (!response.ok) {
+        toast.error(result.error || 'Impossibile eliminare la quota')
+        return
       }
+      toast.success(result.message || 'Quota associativa eliminata con successo')
+      await loadFees()
+    } catch (error) {
+      console.error('Errore eliminazione quota:', error)
+      toast.error('Errore di rete durante l’eliminazione della quota')
     }
   }
 

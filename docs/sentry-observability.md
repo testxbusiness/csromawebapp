@@ -64,6 +64,33 @@ Exclude Preview and known expected auth/validation failures from production
 alerts. Alert on error count and affected users together to avoid paging for a
 single isolated client failure.
 
+## Fase 1: copertura operativa e alert consigliati
+
+La cattura server della Fase 1 usa solo tag statici allowlistati (`feature`,
+`operation`, `runtime`, `status_class`). Non imposta fingerprint personalizzati:
+il grouping predefinito Sentry mantiene la distinzione basata sullo stack e non
+accorpa automaticamente tutti gli errori della stessa feature/operazione. Non
+usare route con parametri, query string, ID, email o payload come tag o
+fingerprint. Le catture manuali usano un errore sintetico con messaggio statico
+e conservano lo stack originale quando disponibile.
+
+Per le regole consigliate, configurare nel progetto Sentry senza includere
+Preview nei canali di paging:
+
+- **Auth P0:** errori `feature=auth` con `status_class=5xx`, almeno 5% in 5
+  minuti o 20 utenti in 5 minuti; escludere credenziali errate, validazioni,
+  account negati e problemi di rete.
+- **Mutazioni assenze/convocazioni P1:** `feature=absence` o
+  `feature=convocations` e `operation=create|update|revoke`, almeno 1% in 15
+  minuti o 5 utenti in 30 minuti; solo errori inattesi.
+- **Messaggi P1:** `feature=messages`, almeno 1% in 15 minuti o 5 utenti in 30
+  minuti per errori inattesi ripetuti; digest per i singoli eventi isolati.
+- **Letture P2:** `operation=read`, almeno 10 eventi in 24 ore o trend crescente
+   a 7 giorni. Separare l'ambiente production da preview.
+
+Queste sono indicazioni documentali: non sono state create o modificate regole
+nel progetto Sentry.
+
 ## Remaining operational steps
 
 The repository integration alone does not activate a Sentry project or Vercel

@@ -226,6 +226,11 @@ export default function AthletesManager({ embedded = false }: { embedded?: boole
 
       if (!response.ok) {
         console.error('Errore operazione massiva:', result.error)
+        if (result.teamAssigned) {
+          await loadAthletes(selectedSeason)
+          setSelectedAthletes(new Set())
+          setBulkOperation(null)
+        }
         toast.error(`Errore: ${result.error}`)
         return
       }

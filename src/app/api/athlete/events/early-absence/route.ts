@@ -5,10 +5,16 @@ import { AccountContextError } from '@/server/auth/require-account-context'
 import { requireSubjectAthleteContext } from '@/server/auth/require-subject-profile'
 import { resolveAttendanceAvailability } from '@/server/events/attendance-availability'
 import { selectableEarlyAbsenceEvents } from '@/server/events/early-absence'
+import { captureUnexpectedServerError, captureSupabaseError, withSentryOperation } from '@/lib/sentry/server-capture'
 
 type TeamLabel = { id: string; name: string; code: string | null }
 
-function domainError(error: unknown, fallback: string) {
+function isPostgrestError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && typeof (error as { code?: unknown }).code === 'string'
+    && ('details' in error || 'hint' in error))
+}
+
+function domainError(error: unknown, fallback: string, capture = true) {
   const details = error && typeof error === 'object'
     ? error as { code?: string; message?: string; details?: string; hint?: string }
     : {}
@@ -20,6 +26,7 @@ function domainError(error: unknown, fallback: string) {
       hint: details.hint,
     })
   }
+  if (capture) captureSupabaseError(error, 'absence', fallback.includes('caricare') ? 'read' : fallback.includes('revocare') ? 'revoke' : 'create', 'server', false)
 
   if (details.code === 'P0001') {
     const errorByMessage: Record<string, string> = {
@@ -35,7 +42,7 @@ function domainError(error: unknown, fallback: string) {
   return NextResponse.json({ error: fallback }, { status: 500 })
 }
 
-export async function GET(request: NextRequest) {
+async function get(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const parsed = earlyAbsencePeriodSchema.safeParse(Object.fromEntries(searchParams.entries()))
@@ -66,7 +73,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ...page, events, limit: parsed.data.limit, offset: parsed.data.offset })
   } catch (error) {
     if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })
-    return domainError(error, 'Impossibile caricare gli eventi selezionabili')
+    // A returned PostgREST error has already been captured by the instrumented
+    // client before this handler throws it into the response mapping.
+    if (!isPostgrestError(error)) captureUnexpectedServerError(error, 'absence', 'read')
+    return domainError(error, 'Impossibile caricare gli eventi selezionabili', false)
   }
 }
 
@@ -96,9 +106,11 @@ async function mutate(request: NextRequest, revoke: boolean) {
     return NextResponse.json({ success: true, event_ids: eventIds })
   } catch (error) {
     if (error instanceof AccountContextError) return NextResponse.json({ error: error.message }, { status: error.status })
-    return domainError(error, revoke ? 'Impossibile revocare l’assenza' : 'Impossibile salvare l’assenza')
+    captureUnexpectedServerError(error, 'absence', revoke ? 'revoke' : 'create')
+    return domainError(error, revoke ? 'Impossibile revocare l’assenza' : 'Impossibile salvare l’assenza', false)
   }
 }
 
-export async function POST(request: NextRequest) { return mutate(request, false) }
-export async function DELETE(request: NextRequest) { return mutate(request, true) }
+export const GET = withSentryOperation('absence', 'read', get)
+export const POST = withSentryOperation('absence', 'create', (request: NextRequest) => mutate(request, false))
+export const DELETE = withSentryOperation('absence', 'revoke', (request: NextRequest) => mutate(request, true))

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { captureSupabaseError, captureUnexpectedServerError } from '@/lib/sentry/server-capture'
 
 function safeNextPath(value: string | null) {
   if (
@@ -32,6 +33,7 @@ export default function AuthCallbackPage() {
         // here would consume the one-time code twice and always fail.
         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
         if (sessionError || !session) {
+          if (sessionError) captureSupabaseError(sessionError, 'auth', 'login', 'client', false)
           setError('Il link di autenticazione non è valido o è scaduto.')
           return
         }
@@ -53,6 +55,7 @@ export default function AuthCallbackPage() {
           refresh_token: refreshToken,
         })
         if (sessionError) {
+          captureSupabaseError(sessionError, 'auth', 'login', 'client', false)
           setError('La sessione del link di invito non è valida o è scaduta.')
           return
         }
@@ -63,7 +66,10 @@ export default function AuthCallbackPage() {
       window.location.replace(next)
     }
 
-    completeAuth().catch(() => setError('Errore durante la verifica del link di invito.'))
+    completeAuth().catch((caught) => {
+      captureUnexpectedServerError(caught, 'auth', 'login', 'client')
+      setError('Errore durante la verifica del link di invito.')
+    })
   }, [])
 
   return (

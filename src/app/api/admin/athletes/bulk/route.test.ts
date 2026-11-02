@@ -116,3 +116,46 @@ describe('POST /api/admin/athletes/bulk enrollment application', () => {
     expect(rpc).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('POST /api/admin/athletes/bulk team assignment with an existing fee', () => {
+  it('keeps the team assignment but blocks fee re-issuance when installments already exist', async () => {
+    jest.resetAllMocks()
+    createClientMock.mockResolvedValue({} as Awaited<ReturnType<typeof createClient>>)
+    requireGlobalRoleMock.mockResolvedValue({} as Awaited<ReturnType<typeof requireGlobalRole>>)
+    const teamId = '33333333-3333-4333-8333-333333333333'
+    const feeId = '44444444-4444-4444-8444-444444444444'
+    const query = (result: unknown = { data: null, error: null }) => ({
+      select: jest.fn().mockReturnThis(), eq: jest.fn().mockReturnThis(), in: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue(result), maybeSingle: jest.fn().mockResolvedValue(result),
+      upsert: jest.fn().mockResolvedValue(result),
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve),
+    })
+    const teamQuery = query({ data: { id: teamId, name: 'Prima squadra', activity_id: 'activity-1' }, error: null })
+    const activityQuery = query({ data: { season_id: seasonId }, error: null })
+    const feeQuery = query({ data: { id: feeId, name: 'Piano annuale', team_id: teamId }, error: null })
+    const issuedQuery = query({ data: [{ id: 'installment-1', profile_id: athleteId, installment_number: 1, status: 'paid', paid_at: '2026-10-01' }], error: null })
+    const teamMembersQuery = query()
+    const from = jest.fn((table: string) => ({
+      teams: teamQuery,
+      activities: activityQuery,
+      membership_fees: feeQuery,
+      fee_installments: issuedQuery,
+      team_members: teamMembersQuery,
+    } as Record<string, ReturnType<typeof query>>)[table])
+    createAdminClientMock.mockReturnValue({ from } as unknown as ReturnType<typeof createAdminClient>)
+
+    const response = await POST(request({
+      operation: 'assign_to_team',
+      athleteIds: [athleteId],
+      parameters: { teamId, seasonId, membershipFeeId: feeId },
+    }))
+
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({ teamAssigned: true, feeAssignmentBlocked: true })
+    expect(teamMembersQuery.upsert).toHaveBeenCalledWith([
+      { profile_id: athleteId, team_id: teamId, jersey_number: null },
+    ], { onConflict: 'profile_id,team_id' })
+    expect(from).not.toHaveBeenCalledWith('predefined_installments')
+    expect(from).toHaveBeenCalledTimes(5)
+  })
+})

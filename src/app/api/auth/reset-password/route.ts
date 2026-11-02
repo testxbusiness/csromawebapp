@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { resetPasswordPayloadSchema } from '@/lib/validation/auth'
 import { AccountContextError } from '@/server/auth/require-account-context'
+import { captureUnexpectedServerError, captureSupabaseError, withSentryOperation } from '@/lib/sentry/server-capture'
+import { runSdkOwnedOperation } from '@/lib/sentry/sdk-owned-error'
 
-export async function POST(req: Request) {
+async function post(req: Request) {
   try {
     const parsed = resetPasswordPayloadSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) {
@@ -12,7 +14,8 @@ export async function POST(req: Request) {
     const { password } = parsed.data
 
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError) captureSupabaseError(userError, 'auth', 'reset_password', 'server', false)
     if (!user) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 })
 
     // Aggiorna password e metadati server-controlled via Admin API.
@@ -29,13 +32,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Account non abilitato' }, { status: 403 })
     }
 
-    const { error: updErr } = await admin.auth.admin.updateUserById(user.id, {
+    const { error: updErr } = await runSdkOwnedOperation(() => admin.auth.admin.updateUserById(user.id, {
       password,
       app_metadata: {
         ...user.app_metadata,
         must_change_password: false,
       },
-    })
+    }))
     if (updErr) {
       return NextResponse.json({ error: updErr.message || 'Errore aggiornamento password' }, { status: 400 })
     }
@@ -58,6 +61,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: error.status })
     }
 
+    captureUnexpectedServerError(error, 'auth', 'reset_password')
     return NextResponse.json({ error: 'Errore inatteso' }, { status: 500 })
   }
 }
+
+export const POST = withSentryOperation('auth', 'reset_password', post)
