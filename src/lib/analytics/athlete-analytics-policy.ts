@@ -14,7 +14,7 @@ export type AthleteAnalyticsEvent =
 export function sanitizeAthleteAnalyticsProperties(eventName: string, properties: Record<string, unknown> | undefined): Record<string, unknown> {
   const values = properties ?? {}
   const allowed = eventName === '$pageview'
-    ? ['page', 'environment', '$geoip_disable']
+    ? ['page', '$current_url', 'environment', '$geoip_disable']
     : eventName === '$identify'
       ? ['$anon_distinct_id', '$geoip_disable']
       : eventName === 'athlete_attendance_response_saved'
@@ -23,10 +23,20 @@ export function sanitizeAthleteAnalyticsProperties(eventName: string, properties
           ? ['scope', 'environment', '$geoip_disable']
           : eventName === 'athlete_message_opened'
             ? ['source', 'environment', '$geoip_disable']
+          : eventName === 'athlete_analytics_diagnostic'
+            ? ['diagnostic', 'environment', '$geoip_disable']
             : []
   const sanitized = Object.fromEntries(allowed.filter((key) => key in values).map((key) => [key, values[key]]))
   if (eventName === '$pageview' && !['dashboard', 'championships', 'calendar', 'messages', 'fees', 'profile'].includes(String(sanitized.page))) {
     delete sanitized.page
+  }
+  if (eventName === '$pageview' && typeof sanitized.$current_url === 'string') {
+    try {
+      const url = new URL(sanitized.$current_url)
+      sanitized.$current_url = `${url.origin}/analytics/${String(sanitized.page ?? 'unknown')}`
+    } catch {
+      delete sanitized.$current_url
+    }
   }
   return sanitized
 }

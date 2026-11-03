@@ -19,6 +19,7 @@ import {
 import {
   startAthleteAnalytics,
   stopAthleteAnalytics,
+  trackAthleteAnalyticsDiagnostic,
   trackAthletePageView,
 } from '@/lib/analytics/athlete-analytics'
 
@@ -32,6 +33,7 @@ export default function AthleteAnalyticsController() {
   const [minorAuthorizationConfirmed, setMinorAuthorizationConfirmed] = useState(false)
   const [debugMode, setDebugMode] = useState(false)
   const [sdkStartState, setSdkStartState] = useState<'idle' | 'starting' | 'started' | 'blocked' | 'error'>('idle')
+  const [diagnosticCaptureState, setDiagnosticCaptureState] = useState<'idle' | 'sent'>('idle')
   const lastPageViewRef = useRef<string | null>(null)
 
   const eligible = useMemo(() => isEligibleAthleteExperience({
@@ -147,6 +149,21 @@ export default function AthleteAnalyticsController() {
           </ul>
           <p className="mt-2">Idoneità complessiva: {eligible ? 'sì' : 'no'}</p>
           <p>Consenso: {consent ?? 'nessuna scelta'} · Avvio SDK: {sdkStartState}</p>
+          {eligible && consent === 'accepted' && sdkStartState === 'started' ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="cs-btn cs-btn--secondary min-h-9"
+                onClick={() => {
+                  trackAthleteAnalyticsDiagnostic()
+                  setDiagnosticCaptureState('sent')
+                }}
+              >
+                Invia evento di verifica
+              </button>
+              <span>Evento diagnostico: {diagnosticCaptureState === 'sent' ? 'inoltrato all’SDK' : 'non inviato'}</span>
+            </div>
+          ) : null}
         </aside>
       ) : null}
       {canShowConsentPrompt ? <aside

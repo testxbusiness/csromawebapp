@@ -10,6 +10,7 @@ const allowedEvents = new Set([
   'athlete_attendance_response_saved',
   'athlete_absence_reported',
   'athlete_message_opened',
+  'athlete_analytics_diagnostic',
 ])
 let initialized = false
 let activeIdentity: string | null = null
@@ -91,6 +92,17 @@ export function trackAthletePageView(section: AthleteAnalyticsSection): void {
   if (!initialized || !activeIdentity || posthog.has_opted_out_capturing()) return
   posthog.capture('$pageview', {
     page: section,
+    // Keep the hostname for PostHog Web Analytics, but avoid route identifiers
+    // and query-string data by using a semantic path.
+    '$current_url': `${window.location.origin}/analytics/${section}`,
     environment: analyticsEnvironment(),
+  }, { send_instantly: true })
+}
+
+export function trackAthleteAnalyticsDiagnostic(): void {
+  if (!initialized || !activeIdentity || posthog.has_opted_out_capturing()) return
+  posthog.capture('athlete_analytics_diagnostic', {
+    environment: analyticsEnvironment(),
+    diagnostic: true,
   }, { send_instantly: true })
 }
