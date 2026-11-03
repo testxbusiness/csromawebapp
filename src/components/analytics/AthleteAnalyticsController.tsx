@@ -31,6 +31,7 @@ export default function AthleteAnalyticsController() {
   const [consentLoadedFor, setConsentLoadedFor] = useState<string | null>(null)
   const [minorAuthorizationConfirmed, setMinorAuthorizationConfirmed] = useState(false)
   const [debugMode, setDebugMode] = useState(false)
+  const [sdkStartState, setSdkStartState] = useState<'idle' | 'starting' | 'started' | 'blocked' | 'error'>('idle')
   const lastPageViewRef = useRef<string | null>(null)
 
   const eligible = useMemo(() => isEligibleAthleteExperience({
@@ -78,12 +79,15 @@ export default function AthleteAnalyticsController() {
     const trackingAllowed = eligible && isAthleteAnalyticsEnabled() && consentBelongsToAccount && consent === 'accepted'
 
     if (!trackingAllowed || !authUserId) {
+      setSdkStartState('idle')
       stopAthleteAnalytics()
       if (!eligible || !consentBelongsToAccount || consent !== 'accepted') lastPageViewRef.current = null
       return
     }
 
+    setSdkStartState('starting')
     void startAthleteAnalytics(authUserId).then((started) => {
+      setSdkStartState(started ? 'started' : 'blocked')
       if (cancelled || !started) return
       const section = athleteAnalyticsSection(pathname)
       const pageKey = `${authUserId}:${pathname}`
@@ -92,6 +96,7 @@ export default function AthleteAnalyticsController() {
         lastPageViewRef.current = pageKey
       }
     }).catch(() => {
+      setSdkStartState('error')
       // Analytics must never interfere with application behavior.
       stopAthleteAnalytics()
     })
@@ -102,11 +107,15 @@ export default function AthleteAnalyticsController() {
   }, [authUserId, consent, consentLoadedFor, eligible, pathname])
 
   const analyticsEnabled = isAthleteAnalyticsEnabled()
+  const configuredHost = (process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || 'https://eu.i.posthog.com').replace(/\/$/, '')
   const canShowConsentPrompt = pathname === '/dashboard' && eligible && analyticsEnabled && Boolean(authUserId) && consentLoadedFor === authUserId && consent === null
   if (!canShowConsentPrompt && !debugMode) return null
 
   const debugChecks = [
     ['Flag PostHog = true', process.env.NEXT_PUBLIC_POSTHOG_ENABLED === 'true'],
+    ['Project token configurato', Boolean(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim())],
+    ['Host EU corretto', configuredHost === 'https://eu.i.posthog.com'],
+    ['Web Crypto disponibile', Boolean(globalThis.crypto?.subtle)],
     ['Ambiente diverso da production', analyticsEnvironment() !== 'production'],
     ['Analytics abilitati', analyticsEnabled],
     ['Sessione caricata', !loading && Boolean(user)],
@@ -137,6 +146,7 @@ export default function AthleteAnalyticsController() {
             {debugChecks.map(([label, passed]) => <li key={label}>{passed ? '✓' : '✗'} {label}</li>)}
           </ul>
           <p className="mt-2">Idoneità complessiva: {eligible ? 'sì' : 'no'}</p>
+          <p>Consenso: {consent ?? 'nessuna scelta'} · Avvio SDK: {sdkStartState}</p>
         </aside>
       ) : null}
       {canShowConsentPrompt ? <aside
