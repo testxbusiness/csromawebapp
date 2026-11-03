@@ -38,13 +38,12 @@ export default function AthleteAnalyticsController() {
     userId: authUserId,
     account,
     role,
-    profileRole: profile?.role ?? null,
     activeArea,
     selectedProfileId,
     pathname,
     loading,
     profileLoading,
-  }), [account, activeArea, authUserId, loading, pathname, profile?.role, profileLoading, role, selectedProfileId])
+  }), [account, activeArea, authUserId, loading, pathname, profileLoading, role, selectedProfileId])
 
   useEffect(() => {
     const debugRequested = new URLSearchParams(window.location.search).get('analytics-debug') === '1'
@@ -111,7 +110,6 @@ export default function AthleteAnalyticsController() {
     ['Profilo caricato', !profileLoading && Boolean(profile)],
     ['Account associato alla sessione', Boolean(user && account?.authUserId === user.id)],
     ['Ruolo account atleta', role === 'athlete'],
-    ['Ruolo profilo atleta', profile?.role === 'athlete'],
     ['Account senza ruoli privilegiati', Boolean(account && !account.roles.some((item) => ['admin', 'coach', 'staff'].includes(item)))],
     ['Area personale', activeArea === 'personal'],
     ['Percorso atleta supportato', pathname === '/dashboard' || pathname === '/athlete' || pathname.startsWith('/athlete/')],

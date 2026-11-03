@@ -9,7 +9,6 @@ const eligible = {
   userId: 'auth-1',
   account: { authUserId: 'auth-1', roles: ['athlete'] },
   role: 'athlete',
-  profileRole: 'athlete',
   activeArea: 'personal' as const,
   selectedProfileId: null,
   pathname: '/athlete/calendar',

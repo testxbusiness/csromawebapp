@@ -40,7 +40,6 @@ export function isEligibleAthleteExperience(input: {
   userId: string | null
   account: AnalyticsAccount
   role: string | null
-  profileRole: string | null
   activeArea: 'personal' | 'family'
   selectedProfileId: string | null
   pathname: string
@@ -48,7 +47,8 @@ export function isEligibleAthleteExperience(input: {
   profileLoading: boolean
 }): boolean {
   if (input.loading || input.profileLoading || !input.userId || !input.account) return false
-  if (input.account.authUserId !== input.userId || input.role !== 'athlete' || input.profileRole !== 'athlete') return false
+  // AccountSummary.roles is authoritative; the legacy profile role can be stale or unset.
+  if (input.account.authUserId !== input.userId || input.role !== 'athlete') return false
   if (!input.account.roles.includes('athlete') || input.account.roles.some((role) => ['admin', 'coach', 'staff'].includes(role))) return false
   // The selected family profile can remain cached while the user is back in
   // their personal area. The active area is the source of truth for this gate.
