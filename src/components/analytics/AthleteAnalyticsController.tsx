@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useAuth } from '@/hooks/useAuth'
 import {
+  analyticsEnvironment,
   athleteAnalyticsSection,
   isAthleteAnalyticsEnabled,
   isEligibleAthleteExperience,
@@ -30,6 +31,7 @@ export default function AthleteAnalyticsController() {
   const [consentLoadedFor, setConsentLoadedFor] = useState<string | null>(null)
   const [editingConsent, setEditingConsent] = useState(false)
   const [minorAuthorizationConfirmed, setMinorAuthorizationConfirmed] = useState(false)
+  const [debugMode, setDebugMode] = useState(false)
   const lastPageViewRef = useRef<string | null>(null)
 
   const eligible = useMemo(() => isEligibleAthleteExperience({
@@ -43,6 +45,11 @@ export default function AthleteAnalyticsController() {
     loading,
     profileLoading,
   }), [account, activeArea, authUserId, loading, pathname, profile?.role, profileLoading, role, selectedProfileId])
+
+  useEffect(() => {
+    const debugRequested = new URLSearchParams(window.location.search).get('analytics-debug') === '1'
+    setDebugMode(debugRequested && analyticsEnvironment() !== 'production')
+  }, [])
 
   useEffect(() => {
     setConsent(null)
@@ -92,7 +99,24 @@ export default function AthleteAnalyticsController() {
     }
   }, [authUserId, consent, consentLoadedFor, eligible, pathname])
 
-  if (!eligible || !isAthleteAnalyticsEnabled() || !authUserId || consentLoadedFor !== authUserId) return null
+  const analyticsEnabled = isAthleteAnalyticsEnabled()
+  const canShowConsent = eligible && analyticsEnabled && Boolean(authUserId) && consentLoadedFor === authUserId
+  if (!canShowConsent && !debugMode) return null
+
+  const debugChecks = [
+    ['Flag PostHog = true', process.env.NEXT_PUBLIC_POSTHOG_ENABLED === 'true'],
+    ['Ambiente diverso da production', analyticsEnvironment() !== 'production'],
+    ['Analytics abilitati', analyticsEnabled],
+    ['Sessione caricata', !loading && Boolean(user)],
+    ['Profilo caricato', !profileLoading && Boolean(profile)],
+    ['Account associato alla sessione', Boolean(user && account?.authUserId === user.id)],
+    ['Ruolo account atleta', role === 'athlete'],
+    ['Ruolo profilo atleta', profile?.role === 'athlete'],
+    ['Account senza ruoli privilegiati', Boolean(account && !account.roles.some((item) => ['admin', 'coach', 'staff'].includes(item)))],
+    ['Area personale', activeArea === 'personal'],
+    ['Percorso atleta supportato', pathname === '/dashboard' || pathname === '/athlete' || pathname.startsWith('/athlete/')],
+    ['Consenso caricato per account', Boolean(authUserId && consentLoadedFor === authUserId)],
+  ] as const
 
   const saveChoice = (choice: Exclude<ConsentChoice, null>) => {
     try {
@@ -109,7 +133,18 @@ export default function AthleteAnalyticsController() {
   const showChoice = consent === null || editingConsent
 
   return (
-    <aside
+    <>
+      {debugMode ? (
+        <aside aria-label="Diagnostica analytics" className="mx-auto my-3 w-full max-w-5xl rounded-lg border border-amber-500 bg-amber-50 px-4 py-3 text-sm text-slate-900">
+          <strong>Diagnostica analytics (solo esiti, nessun dato identificativo)</strong>
+          <p className="mt-1">Ambiente rilevato: {analyticsEnvironment()}</p>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+            {debugChecks.map(([label, passed]) => <li key={label}>{passed ? '✓' : '✗'} {label}</li>)}
+          </ul>
+          <p className="mt-2">Idoneità complessiva: {eligible ? 'sì' : 'no'}</p>
+        </aside>
+      ) : null}
+      {canShowConsent ? <aside
       aria-label="Preferenze analytics"
       className="mx-auto my-3 w-full max-w-5xl rounded-lg border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-4 py-3 text-sm text-[color:var(--cs-text)]"
     >
@@ -151,6 +186,7 @@ export default function AthleteAnalyticsController() {
           <button type="button" className="cs-btn cs-btn--outline min-h-11" onClick={() => setEditingConsent(true)}>Modifica preferenza</button>
         </div>
       )}
-    </aside>
+    </aside> : null}
+    </>
   )
 }
