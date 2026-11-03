@@ -27,6 +27,9 @@ export function sanitizeAthleteAnalyticsProperties(eventName: string, properties
             ? ['diagnostic', 'environment', '$geoip_disable']
             : []
   const sanitized = Object.fromEntries(allowed.filter((key) => key in values).map((key) => [key, values[key]]))
+  // PostHog requires its project token in event properties for ingestion.
+  // Preserve that SDK-owned field while continuing to discard other unknown data.
+  if ('token' in values) sanitized.token = values.token
   if (eventName === '$pageview' && !['dashboard', 'championships', 'calendar', 'messages', 'fees', 'profile'].includes(String(sanitized.page))) {
     delete sanitized.page
   }
