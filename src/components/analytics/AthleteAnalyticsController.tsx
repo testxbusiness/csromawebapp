@@ -119,6 +119,7 @@ export default function AthleteAnalyticsController() {
   ] as const
 
   const saveChoice = (choice: Exclude<ConsentChoice, null>) => {
+    if (!authUserId) return
     try {
       window.localStorage.setItem(consentStorageKey(authUserId), choice)
     } catch {
