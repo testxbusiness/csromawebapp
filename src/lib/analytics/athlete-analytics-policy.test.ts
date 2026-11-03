@@ -25,7 +25,7 @@ describe('athlete analytics policy', () => {
     expect(isEligibleAthleteExperience({ ...eligible, role: 'coach' })).toBe(false)
     expect(isEligibleAthleteExperience({ ...eligible, role: null })).toBe(false)
     expect(isEligibleAthleteExperience({ ...eligible, userId: null })).toBe(false)
-    expect(isEligibleAthleteExperience({ ...eligible, selectedProfileId: 'delegated-profile' })).toBe(false)
+    expect(isEligibleAthleteExperience({ ...eligible, selectedProfileId: 'cached-family-profile' })).toBe(true)
     expect(isEligibleAthleteExperience({ ...eligible, activeArea: 'family' })).toBe(false)
     expect(isEligibleAthleteExperience({ ...eligible, pathname: '/admin/incassi' })).toBe(false)
     expect(isEligibleAthleteExperience({ ...eligible, loading: true })).toBe(false)

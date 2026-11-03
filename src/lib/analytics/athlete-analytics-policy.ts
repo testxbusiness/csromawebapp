@@ -50,7 +50,9 @@ export function isEligibleAthleteExperience(input: {
   if (input.loading || input.profileLoading || !input.userId || !input.account) return false
   if (input.account.authUserId !== input.userId || input.role !== 'athlete' || input.profileRole !== 'athlete') return false
   if (!input.account.roles.includes('athlete') || input.account.roles.some((role) => ['admin', 'coach', 'staff'].includes(role))) return false
-  if (input.activeArea !== 'personal' || input.selectedProfileId) return false
+  // The selected family profile can remain cached while the user is back in
+  // their personal area. The active area is the source of truth for this gate.
+  if (input.activeArea !== 'personal') return false
   return input.pathname === '/dashboard' || input.pathname === '/athlete' || input.pathname.startsWith('/athlete/')
 }
 
