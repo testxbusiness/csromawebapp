@@ -1,0 +1,74 @@
+export type AthleteAnalyticsSection =
+  | 'dashboard'
+  | 'championships'
+  | 'calendar'
+  | 'messages'
+  | 'fees'
+  | 'profile'
+
+export type AthleteAnalyticsEvent =
+  | { event: 'athlete_attendance_response_saved'; properties: { response: 'going' | 'maybe' | 'declined' } }
+  | { event: 'athlete_absence_reported'; properties: { scope: 'single' | 'period' } }
+  | { event: 'athlete_message_opened'; properties: { source: 'messages' | 'dashboard' } }
+
+export function sanitizeAthleteAnalyticsProperties(eventName: string, properties: Record<string, unknown> | undefined): Record<string, unknown> {
+  const values = properties ?? {}
+  const allowed = eventName === '$pageview'
+    ? ['page', 'environment', '$geoip_disable']
+    : eventName === '$identify'
+      ? ['$anon_distinct_id', '$geoip_disable']
+      : eventName === 'athlete_attendance_response_saved'
+        ? ['response', 'environment', '$geoip_disable']
+        : eventName === 'athlete_absence_reported'
+          ? ['scope', 'environment', '$geoip_disable']
+          : eventName === 'athlete_message_opened'
+            ? ['source', 'environment', '$geoip_disable']
+            : []
+  const sanitized = Object.fromEntries(allowed.filter((key) => key in values).map((key) => [key, values[key]]))
+  if (eventName === '$pageview' && !['dashboard', 'championships', 'calendar', 'messages', 'fees', 'profile'].includes(String(sanitized.page))) {
+    delete sanitized.page
+  }
+  return sanitized
+}
+
+type AnalyticsAccount = {
+  authUserId: string
+  roles: readonly string[]
+} | null
+
+export function isEligibleAthleteExperience(input: {
+  userId: string | null
+  account: AnalyticsAccount
+  role: string | null
+  profileRole: string | null
+  activeArea: 'personal' | 'family'
+  selectedProfileId: string | null
+  pathname: string
+  loading: boolean
+  profileLoading: boolean
+}): boolean {
+  if (input.loading || input.profileLoading || !input.userId || !input.account) return false
+  if (input.account.authUserId !== input.userId || input.role !== 'athlete' || input.profileRole !== 'athlete') return false
+  if (!input.account.roles.includes('athlete') || input.account.roles.some((role) => ['admin', 'coach', 'staff'].includes(role))) return false
+  if (input.activeArea !== 'personal' || input.selectedProfileId) return false
+  return input.pathname === '/dashboard' || input.pathname === '/athlete' || input.pathname.startsWith('/athlete/')
+}
+
+export function athleteAnalyticsSection(pathname: string): AthleteAnalyticsSection | null {
+  if (pathname === '/dashboard') return 'dashboard'
+  if (pathname.startsWith('/athlete/calendar')) return 'calendar'
+  if (pathname.startsWith('/athlete/campionati')) return 'championships'
+  if (pathname.startsWith('/athlete/messages')) return 'messages'
+  if (pathname.startsWith('/athlete/fees')) return 'fees'
+  if (pathname.startsWith('/athlete/profile')) return 'profile'
+  return null
+}
+
+export function analyticsEnvironment(): string {
+  return process.env.NEXT_PUBLIC_ANALYTICS_ENV || process.env.NODE_ENV || 'unknown'
+}
+
+export function isAthleteAnalyticsEnabled(): boolean {
+  // Production is deliberately held behind a code-level release gate until privacy review and approval.
+  return process.env.NEXT_PUBLIC_POSTHOG_ENABLED === 'true' && analyticsEnvironment() !== 'production'
+}

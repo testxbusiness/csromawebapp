@@ -11,6 +11,7 @@ const SUPABASE_HOST =
 
 const nextConfig = {
   env: {
+    NEXT_PUBLIC_ANALYTICS_ENV: process.env.VERCEL_ENV || process.env.NODE_ENV,
     NEXT_PUBLIC_SENTRY_ENVIRONMENT:
       process.env.SENTRY_ENVIRONMENT || process.env.VERCEL_ENV || process.env.NODE_ENV,
     NEXT_PUBLIC_SENTRY_RELEASE:
