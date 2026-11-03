@@ -39,6 +39,8 @@ function initialize(token: string): void {
     capture_pageleave: false,
     capture_exceptions: false,
     capture_performance: false,
+    capture_heatmaps: false,
+    capture_dead_clicks: false,
     disable_session_recording: true,
     disable_surveys: true,
     disable_external_dependency_loading: true,
