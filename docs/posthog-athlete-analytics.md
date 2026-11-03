@@ -55,8 +55,9 @@ nomi o email.
 Gli eventi delle mutation vengono registrati dopo risposta HTTP positiva e
 verifica che il contesto soggetto non sia cambiato; l’apertura messaggi viene
 registrata sull’azione esplicita o sul deep link caricato una sola volta. Gli
-eventi non dipendono da query/refetch e non includono contenuti, motivazioni,
-date, ID o conteggi degli elementi.
+eventi vengono richiesti con `send_instantly` per evitare che il basso volume di
+traffico lasci gli invii in attesa del batch. Non dipendono da query/refetch e
+non includono contenuti, motivazioni, date, ID o conteggi degli elementi.
 Le sezioni Quote e Profilo sono misurate dalle pageview delle route `/athlete/fees`
 e `/athlete/profile`. I flussi familiari delegati non vengono conteggiati.
 

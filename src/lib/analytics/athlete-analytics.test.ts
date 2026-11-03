@@ -84,9 +84,9 @@ describe('athlete analytics client', () => {
     expect(config.before_send({ event: '$autocapture', properties: { text: 'private' } })).toBeNull()
 
     trackAthletePageView('fees')
-    expect(mockPosthog.capture).toHaveBeenCalledWith('$pageview', { page: 'fees', environment: 'preview' })
+    expect(mockPosthog.capture).toHaveBeenCalledWith('$pageview', { page: 'fees', environment: 'preview' }, { send_instantly: true })
     trackAthleteEvent({ event: 'athlete_absence_reported', properties: { scope: 'period' } })
-    expect(mockPosthog.capture).toHaveBeenCalledWith('athlete_absence_reported', { scope: 'period', environment: 'preview' })
+    expect(mockPosthog.capture).toHaveBeenCalledWith('athlete_absence_reported', { scope: 'period', environment: 'preview' }, { send_instantly: true })
     stopAthleteAnalytics()
     mockPosthog.capture.mockClear()
     trackAthletePageView('fees')

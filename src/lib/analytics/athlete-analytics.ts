@@ -84,7 +84,7 @@ export function trackAthleteEvent(event: AthleteAnalyticsEvent): void {
   posthog.capture(event.event, {
     ...event.properties,
     environment: analyticsEnvironment(),
-  })
+  }, { send_instantly: true })
 }
 
 export function trackAthletePageView(section: AthleteAnalyticsSection): void {
@@ -92,5 +92,5 @@ export function trackAthletePageView(section: AthleteAnalyticsSection): void {
   posthog.capture('$pageview', {
     page: section,
     environment: analyticsEnvironment(),
-  })
+  }, { send_instantly: true })
 }
