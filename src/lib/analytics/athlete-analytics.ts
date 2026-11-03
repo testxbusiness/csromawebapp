@@ -98,6 +98,7 @@ export function trackAthletePageView(section: AthleteAnalyticsSection): void {
     // Keep the hostname for PostHog Web Analytics, but avoid route identifiers
     // and query-string data by using a semantic path.
     '$current_url': `${window.location.origin}/analytics/${section}`,
+    '$pathname': `/analytics/${section}`,
     environment: analyticsEnvironment(),
   }, { send_instantly: true })
 }

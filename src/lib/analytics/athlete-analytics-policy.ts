@@ -14,7 +14,7 @@ export type AthleteAnalyticsEvent =
 export function sanitizeAthleteAnalyticsProperties(eventName: string, properties: Record<string, unknown> | undefined): Record<string, unknown> {
   const values = properties ?? {}
   const allowed = eventName === '$pageview'
-    ? ['page', '$current_url', 'environment', '$geoip_disable']
+    ? ['page', '$current_url', '$pathname', 'environment', '$geoip_disable']
     : eventName === '$identify'
       ? ['$anon_distinct_id', '$geoip_disable']
       : eventName === 'athlete_attendance_response_saved'
@@ -33,15 +33,23 @@ export function sanitizeAthleteAnalyticsProperties(eventName: string, properties
   for (const key of ['token', 'distinct_id', '$session_id', '$window_id']) {
     if (key in values) sanitized[key] = values[key]
   }
-  if (eventName === '$pageview' && !['dashboard', 'championships', 'calendar', 'messages', 'fees', 'profile'].includes(String(sanitized.page))) {
-    delete sanitized.page
-  }
-  if (eventName === '$pageview' && typeof sanitized.$current_url === 'string') {
-    try {
-      const url = new URL(sanitized.$current_url)
-      sanitized.$current_url = `${url.origin}/analytics/${String(sanitized.page ?? 'unknown')}`
-    } catch {
+  if (eventName === '$pageview') {
+    const sections = ['dashboard', 'championships', 'calendar', 'messages', 'fees', 'profile']
+    if (!sections.includes(String(sanitized.page))) {
+      delete sanitized.page
+      delete sanitized.$pathname
       delete sanitized.$current_url
+    } else {
+      const path = `/analytics/${String(sanitized.page)}`
+      sanitized.$pathname = path
+      if (typeof sanitized.$current_url === 'string') {
+        try {
+          const url = new URL(sanitized.$current_url)
+          sanitized.$current_url = `${url.origin}${path}`
+        } catch {
+          delete sanitized.$current_url
+        }
+      }
     }
   }
   return sanitized
