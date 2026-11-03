@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AthleteAnalyticsController from './AthleteAnalyticsController'
+import { saveAthleteAnalyticsConsent } from '@/lib/analytics/athlete-analytics-consent'
 
 const mockUseAuth = jest.fn()
 const mockUseAccessibleProfiles = jest.fn()
@@ -45,6 +46,7 @@ describe('AthleteAnalyticsController', () => {
   })
 
   it('does not initialize or track an eligible athlete before consent', async () => {
+    mockUsePathname.mockReturnValue('/dashboard')
     render(<AthleteAnalyticsController />)
     expect(await screen.findByText(/misurazione facoltativa/i)).toBeInTheDocument()
     expect(mockStart).not.toHaveBeenCalled()
@@ -52,6 +54,7 @@ describe('AthleteAnalyticsController', () => {
   })
 
   it('keeps tracking disabled after the athlete refuses consent', async () => {
+    mockUsePathname.mockReturnValue('/dashboard')
     render(<AthleteAnalyticsController />)
     expect(await screen.findByText(/misurazione facoltativa/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Rifiuta' }))
@@ -61,6 +64,7 @@ describe('AthleteAnalyticsController', () => {
   })
 
   it('tracks a consented athlete page once, despite rerenders', async () => {
+    mockUsePathname.mockReturnValue('/dashboard')
     const view = render(<AthleteAnalyticsController />)
     expect(await screen.findByText(/misurazione facoltativa/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox'))
@@ -68,7 +72,7 @@ describe('AthleteAnalyticsController', () => {
 
     await waitFor(() => expect(mockTrackPageView).toHaveBeenCalledTimes(1))
     expect(mockStart).toHaveBeenCalledWith('auth-1')
-    expect(mockTrackPageView).toHaveBeenCalledWith('calendar')
+    expect(mockTrackPageView).toHaveBeenCalledWith('dashboard')
     view.rerender(<AthleteAnalyticsController />)
     await Promise.resolve()
     expect(mockTrackPageView).toHaveBeenCalledTimes(1)
@@ -87,6 +91,7 @@ describe('AthleteAnalyticsController', () => {
   })
 
   it('stops tracking when the active subject changes to a delegated profile', async () => {
+    mockUsePathname.mockReturnValue('/dashboard')
     const view = render(<AthleteAnalyticsController />)
     expect(await screen.findByText(/misurazione facoltativa/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox'))
@@ -99,12 +104,13 @@ describe('AthleteAnalyticsController', () => {
   })
 
   it('supports consent revocation', async () => {
+    mockUsePathname.mockReturnValue('/dashboard')
     render(<AthleteAnalyticsController />)
     expect(await screen.findByText(/misurazione facoltativa/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(screen.getByRole('button', { name: 'Consenti analytics' }))
     await waitFor(() => expect(mockStart).toHaveBeenCalled())
-    fireEvent.click(screen.getByRole('button', { name: 'Revoca consenso' }))
+    saveAthleteAnalyticsConsent('auth-1', 'denied')
     expect(mockStop).toHaveBeenCalled()
     expect(window.localStorage.getItem('csroma:athlete-analytics-consent:v1:auth-1')).toBe('denied')
   })

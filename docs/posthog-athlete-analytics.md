@@ -4,9 +4,9 @@
 
 Integrazione client-side limitata all’esperienza personale di un account atleta.
 La cattura richiede contemporaneamente: flag abilitato, build non-production,
-sessione Supabase risolta, account e UUID autenticato coerenti, ruolo effettivo e
-profilo personale atleta, area `personal`, nessun profilo delegato selezionato e
-consenso esplicito salvato per quello stesso account. Coach, admin e staff sono
+sessione Supabase risolta, account e UUID autenticato coerenti, ruolo account
+atleta, area `personal`, nessun profilo delegato selezionato e consenso esplicito
+salvato per quello stesso account. Coach, admin e staff sono
 esclusi anche quando l’account ha più ruoli. L’area familiare/delegata è esclusa.
 Logout, cambio account, ruolo/area o profilo disattivano e resettano la sessione
 PostHog; un cambio account richiede il consenso già registrato per quell’account.
@@ -24,6 +24,11 @@ che la scelta provenga da chi è autorizzato, ma non verifica l’identità del
 tutore né sostituisce CMP, informativa o valutazione della base giuridica. La
 raccolta in produzione è bloccata nel codice fino a una revisione privacy e a
 un’approvazione esplicita. Non attivare production prima di questi passaggi.
+
+La richiesta iniziale di consenso appare in cima alla Dashboard solo finché
+l’account non ha espresso una scelta. Stato, modifica e revoca del consenso sono
+gestiti in `Profilo > Account e app`, subito dopo le impostazioni delle notifiche
+push. La preferenza resta associata all’account sul dispositivo.
 
 PostHog è inizializzato soltanto dopo consenso e verifica del contesto. Il
 progetto EU usa `https://eu.i.posthog.com`; Replay, autocapture, pageview

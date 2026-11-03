@@ -5,6 +5,12 @@ import { usePathname } from 'next/navigation'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { useAuth } from '@/hooks/useAuth'
 import {
+  ATHLETE_ANALYTICS_CONSENT_CHANGED,
+  readAthleteAnalyticsConsent,
+  saveAthleteAnalyticsConsent,
+  type AthleteAnalyticsConsentChoice,
+} from '@/lib/analytics/athlete-analytics-consent'
+import {
   analyticsEnvironment,
   athleteAnalyticsSection,
   isAthleteAnalyticsEnabled,
@@ -16,20 +22,13 @@ import {
   trackAthletePageView,
 } from '@/lib/analytics/athlete-analytics'
 
-type ConsentChoice = 'accepted' | 'denied' | null
-
-function consentStorageKey(authUserId: string): string {
-  return `csroma:athlete-analytics-consent:v1:${authUserId}`
-}
-
 export default function AthleteAnalyticsController() {
   const pathname = usePathname() ?? ''
   const { user, profile, account, role, loading, profileLoading } = useAuth()
   const { activeArea, selectedProfileId } = useAccessibleProfiles()
   const authUserId = user?.id ?? null
-  const [consent, setConsent] = useState<ConsentChoice>(null)
+  const [consent, setConsent] = useState<AthleteAnalyticsConsentChoice>(null)
   const [consentLoadedFor, setConsentLoadedFor] = useState<string | null>(null)
-  const [editingConsent, setEditingConsent] = useState(false)
   const [minorAuthorizationConfirmed, setMinorAuthorizationConfirmed] = useState(false)
   const [debugMode, setDebugMode] = useState(false)
   const lastPageViewRef = useRef<string | null>(null)
@@ -53,21 +52,25 @@ export default function AthleteAnalyticsController() {
   useEffect(() => {
     setConsent(null)
     setConsentLoadedFor(null)
-    setEditingConsent(false)
     setMinorAuthorizationConfirmed(false)
     lastPageViewRef.current = null
     if (!authUserId || !eligible) return
 
-    let stored: ConsentChoice = null
-    try {
-      const value = window.localStorage.getItem(consentStorageKey(authUserId))
-      stored = value === 'accepted' || value === 'denied' ? value : null
-    } catch {
-      // If browser storage is unavailable, require a fresh explicit choice for this page load.
-    }
-    setConsent(stored)
+    setConsent(readAthleteAnalyticsConsent(authUserId))
     setConsentLoadedFor(authUserId)
   }, [authUserId, eligible])
+
+  useEffect(() => {
+    const handleConsentChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ authUserId: string; choice: AthleteAnalyticsConsentChoice }>).detail
+      if (!authUserId || detail?.authUserId !== authUserId) return
+      setConsent(detail.choice)
+      setConsentLoadedFor(authUserId)
+      if (detail.choice !== 'accepted') stopAthleteAnalytics()
+    }
+    window.addEventListener(ATHLETE_ANALYTICS_CONSENT_CHANGED, handleConsentChange)
+    return () => window.removeEventListener(ATHLETE_ANALYTICS_CONSENT_CHANGED, handleConsentChange)
+  }, [authUserId])
 
   useEffect(() => {
     let cancelled = false
@@ -99,8 +102,8 @@ export default function AthleteAnalyticsController() {
   }, [authUserId, consent, consentLoadedFor, eligible, pathname])
 
   const analyticsEnabled = isAthleteAnalyticsEnabled()
-  const canShowConsent = eligible && analyticsEnabled && Boolean(authUserId) && consentLoadedFor === authUserId
-  if (!canShowConsent && !debugMode) return null
+  const canShowConsentPrompt = pathname === '/dashboard' && eligible && analyticsEnabled && Boolean(authUserId) && consentLoadedFor === authUserId && consent === null
+  if (!canShowConsentPrompt && !debugMode) return null
 
   const debugChecks = [
     ['Flag PostHog = true', process.env.NEXT_PUBLIC_POSTHOG_ENABLED === 'true'],
@@ -116,20 +119,13 @@ export default function AthleteAnalyticsController() {
     ['Consenso caricato per account', Boolean(authUserId && consentLoadedFor === authUserId)],
   ] as const
 
-  const saveChoice = (choice: Exclude<ConsentChoice, null>) => {
+  const saveChoice = (choice: Exclude<AthleteAnalyticsConsentChoice, null>) => {
     if (!authUserId) return
-    try {
-      window.localStorage.setItem(consentStorageKey(authUserId), choice)
-    } catch {
-      // The in-memory choice applies until navigation; without persistence the user can choose again later.
-    }
+    saveAthleteAnalyticsConsent(authUserId, choice)
     if (choice === 'denied') stopAthleteAnalytics()
     setConsent(choice)
-    setEditingConsent(false)
     setMinorAuthorizationConfirmed(false)
   }
-
-  const showChoice = consent === null || editingConsent
 
   return (
     <>
@@ -143,11 +139,10 @@ export default function AthleteAnalyticsController() {
           <p className="mt-2">Idoneità complessiva: {eligible ? 'sì' : 'no'}</p>
         </aside>
       ) : null}
-      {canShowConsent ? <aside
+      {canShowConsentPrompt ? <aside
       aria-label="Preferenze analytics"
       className="mx-auto my-3 w-full max-w-5xl rounded-lg border border-[color:var(--cs-border)] bg-[color:var(--cs-surface)] px-4 py-3 text-sm text-[color:var(--cs-text)]"
     >
-      {showChoice ? (
         <div className="space-y-3">
           <p>
             La misurazione facoltativa aiuta CSRoma a capire quali sezioni dell’area atleta vengono usate. Registra soltanto eventi d’uso essenziali; non raccoglie messaggi, dati anagrafici, sanitari o pagamenti. Session Replay e raccolta automatica sono disattivati.
@@ -171,20 +166,8 @@ export default function AthleteAnalyticsController() {
             <button type="button" className="cs-btn cs-btn--secondary min-h-11" onClick={() => saveChoice('denied')}>
               Rifiuta
             </button>
-            {consent !== null ? <button type="button" className="cs-btn cs-btn--ghost min-h-11" onClick={() => setEditingConsent(false)}>Annulla</button> : null}
           </div>
         </div>
-      ) : consent === 'accepted' ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p role="status">Misurazione d’uso attiva per l’area atleta.</p>
-          <button type="button" className="cs-btn cs-btn--outline min-h-11" onClick={() => saveChoice('denied')}>Revoca consenso</button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p role="status">Misurazione d’uso disattivata.</p>
-          <button type="button" className="cs-btn cs-btn--outline min-h-11" onClick={() => setEditingConsent(true)}>Modifica preferenza</button>
-        </div>
-      )}
     </aside> : null}
     </>
   )
