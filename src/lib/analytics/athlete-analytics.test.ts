@@ -80,11 +80,22 @@ describe('athlete analytics client', () => {
         '$geoip_country_name': 'Italy',
       },
     }) as { properties: Record<string, unknown> }
-    expect(filtered.properties).toEqual({ page: 'fees', environment: 'preview', '$geoip_disable': true })
+    expect(filtered.properties).toEqual({
+      page: 'fees',
+      environment: 'preview',
+      '$current_url': 'https://preview.example/analytics/fees',
+      '$pathname': '/analytics/fees',
+      '$geoip_disable': true,
+    })
     expect(config.before_send({ event: '$autocapture', properties: { text: 'private' } })).toBeNull()
 
     trackAthletePageView('fees')
-    expect(mockPosthog.capture).toHaveBeenCalledWith('$pageview', { page: 'fees', environment: 'preview' }, { send_instantly: true })
+    expect(mockPosthog.capture).toHaveBeenCalledWith('$pageview', {
+      page: 'fees',
+      '$current_url': `${window.location.origin}/analytics/fees`,
+      '$pathname': '/analytics/fees',
+      environment: 'preview',
+    }, { send_instantly: true })
     trackAthleteEvent({ event: 'athlete_absence_reported', properties: { scope: 'period' } })
     expect(mockPosthog.capture).toHaveBeenCalledWith('athlete_absence_reported', { scope: 'period', environment: 'preview' }, { send_instantly: true })
     stopAthleteAnalytics()

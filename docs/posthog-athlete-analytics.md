@@ -3,8 +3,8 @@
 ## Stato e confini
 
 Integrazione client-side limitata all’esperienza personale di un account atleta.
-La cattura richiede contemporaneamente: flag abilitato, build non-production,
-sessione Supabase risolta, account e UUID autenticato coerenti, ruolo account
+La cattura richiede contemporaneamente: flag abilitato, sessione Supabase
+risolta, account e UUID autenticato coerenti, ruolo account
 atleta, area `personal`, nessun profilo delegato selezionato e consenso esplicito
 salvato per quello stesso account. Coach, admin e staff sono
 esclusi anche quando l’account ha più ruoli. L’area familiare/delegata è esclusa.
@@ -19,11 +19,15 @@ ai rami di risposta riuscita senza cambiare query, cache o comportamento delle
 mutation.
 
 Il consenso in questa versione è un opt-in tecnico per account sul dispositivo,
-con scelta di rifiuto e revoca. Per gli account di minorenni l’interfaccia chiede
-che la scelta provenga da chi è autorizzato, ma non verifica l’identità del
-tutore né sostituisce CMP, informativa o valutazione della base giuridica. La
-raccolta in produzione è bloccata nel codice fino a una revisione privacy e a
-un’approvazione esplicita. Non attivare production prima di questi passaggi.
+con scelta di rifiuto e revoca. L’utente riferisce che la domanda d’iscrizione,
+firmata da un genitore per tutti gli iscritti, illustra le tutele GDPR. Il testo
+non è stato revisionato in questo repository: va verificato che descriva anche
+in modo specifico l’analytics facoltativa PostHog e la relativa scelta/revoca.
+Per gli account di minorenni l’interfaccia chiede una conferma di autorizzazione;
+la società raccoglie inoltre una domanda d’iscrizione firmata da un genitore,
+secondo quanto riferito dall’utente. Il 12 novembre 2026 l’utente ha confermato
+la compliance GDPR e ha autorizzato l’attivazione del tracking PostHog in
+produzione. L’opt-in analytics in-app resta necessario e facoltativo.
 
 La richiesta iniziale di consenso appare in cima alla Dashboard solo finché
 l’account non ha espresso una scelta. Stato, modifica e revoca del consenso sono
@@ -34,11 +38,13 @@ PostHog è inizializzato soltanto dopo consenso e verifica del contesto. Il
 progetto EU usa `https://eu.i.posthog.com`; Replay, autocapture, pageview
 automatiche, pageleave, eccezioni, GeoIP, surveys e dipendenze runtime esterne
 sono disabilitati. Il filtro `before_send` applica una allowlist stretta di
-eventi e proprietà e aggiunge `$geoip_disable`. Nel progetto PostHog va inoltre
-abilitato **Discard client IP data** nelle impostazioni IP data capture prima di
-qualsiasi rollout: l’SDK browser non può impedire al server di ricevere l’IP
-necessario alla richiesta HTTP. Le pageview manuali inviano soltanto la sezione
-e l’ambiente; URL, query string e referrer vengono rimossi. Gli ID
+eventi e proprietà e aggiunge `$geoip_disable`. L’utente ha verificato che
+**Discard client IP data** è attivo nelle impostazioni IP data capture del
+progetto PostHog (screenshot 2026-11-12); l’SDK browser da solo non può impedire
+al server di ricevere l’IP necessario alla richiesta HTTP. Le pageview manuali
+inviano la sezione e l’ambiente, più `$current_url` ricostruito con l’origine
+del sito e `/analytics/<sezione>` e `$pathname` con lo stesso percorso
+semantico. Route originali, query string e referrer vengono rimossi. Gli ID
 messaggio, evento, profilo atleta e account non sono proprietà degli eventi.
 L’identificativo PostHog è SHA-256 dell’UUID Supabase Auth e non sono inviati
 nomi o email.
@@ -47,7 +53,7 @@ nomi o email.
 
 | Evento | Punto di emissione | Proprietà |
 | --- | --- | --- |
-| `$pageview` | Navigazione a una route atleta o Dashboard personale dopo opt-in | `page` (sezione), `environment`; nessun URL |
+| `$pageview` | Navigazione a una route atleta o Dashboard personale dopo opt-in | `page` (sezione), `environment`, `$current_url` e `$pathname` normalizzati |
 | `athlete_attendance_response_saved` | Dopo la risposta RSVP salvata dal calendario o Dashboard | `response`: `going`, `maybe`, `declined`; `environment` |
 | `athlete_absence_reported` | Dopo il POST riuscito per assenza singola o dal modal di periodo | `scope`: `single` o `period`; `environment` |
 | `athlete_message_opened` | Apertura esplicita da Messaggi o preview Dashboard | `source`: `messages` o `dashboard`; `environment` |
@@ -65,15 +71,16 @@ e `/athlete/profile`. I flussi familiari delegati non vengono conteggiati.
 
 | Variabile | Valore | Target |
 | --- | --- | --- |
-| `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | Project token pubblico del progetto PostHog Cloud EU | Preview; in Production non valorizzare prima dell’approvazione |
-| `NEXT_PUBLIC_POSTHOG_HOST` | `https://eu.i.posthog.com` | Preview; stesso host solo dopo approvazione Production |
-| `NEXT_PUBLIC_POSTHOG_ENABLED` | `true` per Preview di verifica; `false`/assente altrove | Preview e Development |
+| `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` | Project token pubblico del progetto PostHog Cloud EU | Production e Preview |
+| `NEXT_PUBLIC_POSTHOG_HOST` | `https://eu.i.posthog.com` | Production e Preview |
+| `NEXT_PUBLIC_POSTHOG_ENABLED` | `true` | Production e Preview |
 
 Se il token è assente o il flag non è esattamente `true`, non avviene alcuna
-cattura. Anche con flag `true`, `NEXT_PUBLIC_ANALYTICS_ENV=production` mantiene
-la cattura disabilitata. Questo valore è derivato in build da `VERCEL_ENV`.
-Configurare le variabili Preview e creare un nuovo deployment preview per
-incorporarle. Non aggiungere il token al repository.
+cattura. `NEXT_PUBLIC_ANALYTICS_ENV` viene valorizzata in build da `VERCEL_ENV`
+e distingue i dati `preview` da `production`, ma non disabilita la raccolta.
+Le variabili `NEXT_PUBLIC_*` sono incorporate nel bundle client: ogni modifica
+richiede un nuovo deployment nell’ambiente interessato. Non aggiungere il token
+al repository; usare il project token pubblico, mai una Personal API Key.
 
 ## Configurazione PostHog Cloud EU
 
@@ -111,8 +118,10 @@ hanno consentito il tracking, non tutti gli atleti iscritti.
 
 ## Verifica Preview e checklist privacy
 
-Richiede un Preview deployment con le variabili configurate e l’accesso al
-progetto PostHog. Eseguire questi scenari in un account di test autorizzato:
+L’utente conferma di aver già testato l’integrazione su Preview. I casi specifici
+e un report di esecuzione non sono registrati nel repository; la checklist
+seguente resta il riferimento per le regressioni e per future verifiche in un
+account di test autorizzato:
 
 - atleta personale senza consenso: nessuna chiamata di ingestione;
 - atleta personale dopo opt-in: pageview e azione RSVP/assenza/apertura messaggio
@@ -121,7 +130,7 @@ progetto PostHog. Eseguire questi scenari in un account di test autorizzato:
 - anonimo, coach, admin, staff, account multi-ruolo admin/coach e area delegata:
   nessun evento;
 - cambio account: nuova identità hash e consenso richiesto/letto per account;
-- navigazione singola: una coppia `$pageview`/`athlete_page_viewed` per route;
+- navigazione singola: un solo `$pageview` per route supportata;
 - refetch e rerender: nessun nuovo evento azione;
 - payload: nessun nome, email, ID di dominio, URL con query, testo, date,
   motivazione, dato sanitario o finanziario;
@@ -130,21 +139,25 @@ progetto PostHog. Eseguire questi scenari in un account di test autorizzato:
 
 La dashboard non è stata creata via API: nell’ambiente non è disponibile un
 connettore PostHog autenticato e non va usata una Personal API Key nel browser.
-La verifica di ricezione in Live Events/Network non è completabile dal solo
-workspace senza Preview deploy e accesso PostHog; va registrata prima di
-considerare l’obiettivo operativo completo.
+La ricezione su Preview è stata testata dall’utente; il repository non contiene
+ancora i dettagli degli scenari verificati o uno screenshot/report di Live
+Events/Network.
 
-## Questioni necessarie prima della produzione
+## Attivazione production
 
-- Approvare informativa, finalità, retention, base giuridica e flusso di consenso
-  per utenti minorenni con il referente privacy.
-- Definire un modo affidabile per acquisire/gestire il consenso del genitore o
-  tutore, se necessario, oltre all’autodichiarazione tecnica.
-- Verificare requisiti cookie/ePrivacy applicabili, CMP e durata della scelta.
-- Dopo approvazione esplicita, rimuovere il blocco production nel modulo
-  `athlete-analytics-policy.ts`, configurare le variabili Production e fare un
-  deploy separato sottoposto a review. Questa modifica non fa parte della prima
-  attivazione Preview.
+- Il gate software che escludeva `production` è stato rimosso. La raccolta
+  richiede ancora `NEXT_PUBLIC_POSTHOG_ENABLED=true`, un project token valido,
+  il contesto atleta personale idoneo e il consenso analytics esplicito.
+- L’utente riferisce che token, host EU e flag sono configurati in Vercel per
+  Production e Preview; il valore del token resta segreto e non è verificabile
+  dal repository.
+- L’utente ha verificato che **Discard client IP data** è attivo nel progetto
+  PostHog. L’attestazione e la conferma GDPR sono state fornite dall’utente il
+  12 novembre 2026; non costituiscono una verifica indipendente del contenuto
+  della domanda d’iscrizione.
+- Questa modifica non effettua un deploy. La raccolta production inizierà con
+  un deployment che contiene il gate rimosso; gli account devono comunque
+  accettare l’opt-in in-app.
 
 ## Documentazione SDK
 

@@ -118,7 +118,6 @@ export default function AthleteAnalyticsController() {
     ['Project token configurato', Boolean(process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN?.trim())],
     ['Host EU corretto', configuredHost === 'https://eu.i.posthog.com'],
     ['Web Crypto disponibile', Boolean(globalThis.crypto?.subtle)],
-    ['Ambiente diverso da production', analyticsEnvironment() !== 'production'],
     ['Analytics abilitati', analyticsEnabled],
     ['Sessione caricata', !loading && Boolean(user)],
     ['Profilo caricato', !profileLoading && Boolean(profile)],

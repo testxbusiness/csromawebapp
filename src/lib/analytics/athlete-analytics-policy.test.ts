@@ -40,16 +40,21 @@ describe('athlete analytics policy', () => {
     expect(athleteAnalyticsSection('/admin/atleti/uuid')).toBeNull()
   })
 
-  it('keeps analytics disabled in production even if the environment toggle is set', () => {
-    const enabled = process.env.NEXT_PUBLIC_POSTHOG_ENABLED
-    const environment = process.env.NEXT_PUBLIC_ANALYTICS_ENV
-    process.env.NEXT_PUBLIC_POSTHOG_ENABLED = 'true'
-    process.env.NEXT_PUBLIC_ANALYTICS_ENV = 'production'
-    expect(isAthleteAnalyticsEnabled()).toBe(false)
-    process.env.NEXT_PUBLIC_ANALYTICS_ENV = 'preview'
-    expect(isAthleteAnalyticsEnabled()).toBe(true)
-    process.env.NEXT_PUBLIC_POSTHOG_ENABLED = enabled
-    process.env.NEXT_PUBLIC_ANALYTICS_ENV = environment
+  it('allows analytics in production when the feature flag is enabled', () => {
+    const originalEnabled = process.env.NEXT_PUBLIC_POSTHOG_ENABLED
+    const originalEnvironment = process.env.NEXT_PUBLIC_ANALYTICS_ENV
+    try {
+      process.env.NEXT_PUBLIC_POSTHOG_ENABLED = 'true'
+      process.env.NEXT_PUBLIC_ANALYTICS_ENV = 'production'
+      expect(isAthleteAnalyticsEnabled()).toBe(true)
+      process.env.NEXT_PUBLIC_POSTHOG_ENABLED = 'false'
+      expect(isAthleteAnalyticsEnabled()).toBe(false)
+    } finally {
+      if (originalEnabled === undefined) delete process.env.NEXT_PUBLIC_POSTHOG_ENABLED
+      else process.env.NEXT_PUBLIC_POSTHOG_ENABLED = originalEnabled
+      if (originalEnvironment === undefined) delete process.env.NEXT_PUBLIC_ANALYTICS_ENV
+      else process.env.NEXT_PUBLIC_ANALYTICS_ENV = originalEnvironment
+    }
   })
 
   it('allows only the documented non-sensitive event properties', () => {
@@ -59,7 +64,12 @@ describe('athlete analytics policy', () => {
     expect(sanitizeAthleteAnalyticsProperties('$pageview', {
       '$current_url': 'https://example.test/athlete/fees?token=secret', page: 'fees', environment: 'preview',
       '$referrer': 'https://example.test/?token=sensitive', '$initial_current_url': 'private',
-    })).toEqual({ page: 'fees', environment: 'preview' })
+    })).toEqual({
+      page: 'fees',
+      environment: 'preview',
+      '$current_url': 'https://example.test/analytics/fees',
+      '$pathname': '/analytics/fees',
+    })
     expect(sanitizeAthleteAnalyticsProperties('$pageview', { page: '/athlete/profile/child-id', environment: 'preview' }))
       .toEqual({ environment: 'preview' })
   })

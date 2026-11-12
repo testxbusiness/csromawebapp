@@ -95,6 +95,5 @@ export function analyticsEnvironment(): string {
 }
 
 export function isAthleteAnalyticsEnabled(): boolean {
-  // Production is deliberately held behind a code-level release gate until privacy review and approval.
-  return process.env.NEXT_PUBLIC_POSTHOG_ENABLED === 'true' && analyticsEnvironment() !== 'production'
+  return process.env.NEXT_PUBLIC_POSTHOG_ENABLED === 'true'
 }
