@@ -208,10 +208,10 @@ export async function GET(request: NextRequest) {
         confirmation_deadline: ev.confirmation_deadline
       }))
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-      .slice(0, 10)
+    const events = isCalendarRange ? transformedEvents : transformedEvents.slice(0, 10)
 
     return NextResponse.json({
-      events: transformedEvents,
+      events,
       teams: teamData,
       gyms: gymCatalog
     })

@@ -24,6 +24,7 @@ import { useAthleteTeamDetailQuery } from '@/lib/athlete/team-detail'
 import { athleteKeys } from '@/lib/query-keys'
 import { syncAthleteAttendanceCaches, syncAthleteMessageReadCaches } from '@/lib/athlete/cache-synchronization'
 import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
+import { trackAthleteEvent } from '@/lib/analytics/athlete-analytics'
 
 interface User {
   id: string
@@ -287,6 +288,8 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
 
       if (controller.signal.aborted || lastSubjectKeyRef.current !== requestSubjectKey) return
 
+      trackAthleteEvent({ event: 'athlete_attendance_response_saved', properties: { response: status } })
+
       const respondedAt = new Date().toISOString()
       if (dashboardQuery.accountId && dashboardQuery.subjectProfileId) {
         syncAthleteAttendanceCaches(queryClient, dashboardQuery.accountId, dashboardQuery.subjectProfileId, {
@@ -313,6 +316,7 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
     const result = await response.json().catch(() => null) as { error?: string } | null
     if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
     if (lastSubjectKeyRef.current !== subjectKey) return
+    if (!revoke) trackAthleteEvent({ event: 'athlete_absence_reported', properties: { scope: 'single' } })
     const updateEvent = (event: Event): Event => {
       if (event.id !== eventId) return event
       const availability = event.attendance_availability
@@ -586,7 +590,10 @@ export default function AthleteDashboard({ user, profile, delegatedView = false 
             <div className="cs-athlete-dashboard__service-list divide-y divide-[color:var(--cs-border)]">
               {visibleMessages.slice(0, 3).map((message, index) => (
                 <div key={message.id} className={index === 2 ? 'cs-athlete-dashboard__message-preview--third' : undefined}>
-                  <MessagePreviewRow message={message} showReadState={false} onOpen={() => setSelectedMessage(message)} />
+                  <MessagePreviewRow message={message} showReadState={false} onOpen={() => {
+                    trackAthleteEvent({ event: 'athlete_message_opened', properties: { source: 'dashboard' } })
+                    setSelectedMessage(message)
+                  }} />
                 </div>
               ))}
             </div>

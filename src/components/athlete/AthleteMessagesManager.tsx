@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'next/navigation'
 import MessageDetailModal, { type MessageDetailData, type MessageReadState } from '@/components/shared/MessageDetailModal'
@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useTeamContext } from '@/context/TeamContext'
 import type { AthleteMessageContract } from '@/types/athlete-messages'
 import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
+import { trackAthleteEvent } from '@/lib/analytics/athlete-analytics'
 
 function toDetailData(message: AthleteMessageContract | AthleteMessageListItem | null): MessageDetailData | null {
   if (!message) return null
@@ -52,6 +53,7 @@ export default function AthleteMessagesManager() {
   const [readFilter, setReadFilter] = useState<MessageReadFilter>('all')
   const [deepLinkUnavailable, setDeepLinkUnavailable] = useState(false)
   const [browserOffline, setBrowserOffline] = useState(false)
+  const trackedDeepLinkMessageRef = useRef<string | null>(null)
   const detailQuery = useAthleteMessageDetailQuery(selectedMessageId)
   useAthleteFirstLoadDiagnostics('messages', messagesQuery.enabled, Boolean(messagesQuery.data))
 
@@ -96,6 +98,10 @@ export default function AthleteMessagesManager() {
   }, [])
 
   useEffect(() => {
+    trackedDeepLinkMessageRef.current = null
+  }, [deepLinkMessageId, selectedProfileId])
+
+  useEffect(() => {
     if (!deepLinkSubjectProfileId || !profiles.some((profile) => profile.profile.id === deepLinkSubjectProfileId)) return
     if (role === 'family_member' || activeArea === 'family') {
       setActiveArea('family')
@@ -109,10 +115,21 @@ export default function AthleteMessagesManager() {
     if (linkedMessage) {
       setSelectedMessage(linkedMessage)
       setSelectedMessageId(linkedMessage.id)
+      if (trackedDeepLinkMessageRef.current !== linkedMessage.id) {
+        trackAthleteEvent({ event: 'athlete_message_opened', properties: { source: 'messages' } })
+        trackedDeepLinkMessageRef.current = linkedMessage.id
+      }
     } else if (messagesQuery.isSuccess) {
       setSelectedMessageId(deepLinkMessageId)
     }
   }, [deepLinkMessageId, messages, messagesQuery.isSuccess, selectedMessageId])
+
+  useEffect(() => {
+    if (!deepLinkMessageId || selectedMessageId !== deepLinkMessageId || !detailQuery.isSuccess || !detailQuery.data?.messages?.[0]) return
+    if (trackedDeepLinkMessageRef.current === deepLinkMessageId) return
+    trackAthleteEvent({ event: 'athlete_message_opened', properties: { source: 'messages' } })
+    trackedDeepLinkMessageRef.current = deepLinkMessageId
+  }, [deepLinkMessageId, detailQuery.data?.messages, detailQuery.isSuccess, selectedMessageId])
 
   useEffect(() => {
     if (!deepLinkMessageId || selectedMessageId !== deepLinkMessageId || !detailQuery.isError) return
@@ -123,6 +140,7 @@ export default function AthleteMessagesManager() {
 
   const handleOpenMessage = useCallback((message: AthleteMessageListItem) => {
     setDeepLinkUnavailable(false)
+    trackAthleteEvent({ event: 'athlete_message_opened', properties: { source: 'messages' } })
     setSelectedMessage(message)
     setSelectedMessageId(message.id)
   }, [])

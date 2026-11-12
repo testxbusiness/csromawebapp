@@ -9,6 +9,7 @@ import { usePush } from '@/hooks/usePush'
 import { EmptyState, ErrorState, ListRow, LoadingState, OfflineState, Panel, StatusBadge, ThemeToggle } from '@/components/ui'
 import InstallPwaButton from '@/components/pwa/InstallPwaButton'
 import DelegatedAccessDenied from './DelegatedAccessDenied'
+import AthleteAnalyticsSettings from '@/components/analytics/AthleteAnalyticsSettings'
 import { AthleteProfileQueryError, useAthleteProfileQuery } from '@/lib/athlete/profile'
 import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
 import type { AthleteProfileContract } from '@/types/athlete-profile'
@@ -53,10 +54,85 @@ function AccountDetails() {
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushError, setPushError] = useState<string | null>(null)
-  useEffect(() => { const supported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window; setPushSupported(supported); if (!supported) return; setPushPermission(Notification.permission); navigator.serviceWorker.getRegistration().then(async (registration) => { setIsSubscribed(Boolean(await registration?.pushManager.getSubscription())) }).catch(() => setIsSubscribed(false)) }, [])
-  const handlePush = async (enabled: boolean) => { setPushBusy(true); setPushError(null); try { if (enabled) { await subscribe('Dispositivo personale'); setPushPermission(Notification.permission); setIsSubscribed(true) } else { await unsubscribe(); setIsSubscribed(false) } } catch (caught) { setPushError(caught instanceof Error && caught.message === 'Permission denied' ? 'Permesso notifiche non concesso. Puoi abilitarlo dalle impostazioni del sito nel browser.' : 'Impossibile aggiornare le notifiche su questo dispositivo. Riprova quando hai una connessione disponibile.') } finally { setPushBusy(false) } }
-  const handleSignOut = async () => { try { await signOut() } finally { window.location.replace('/login') } }
-  return <div className="space-y-5"><Panel><SectionIntro eyebrow="Preferenze account" title="Notifiche e app" /><div className="mt-5 space-y-4"><div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><Bell className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--cs-brand-red)]" aria-hidden="true" /><div><p className="font-medium">Notifiche push</p><p className="text-sm text-[color:var(--cs-text-secondary)]">{!pushSupported ? 'Non supportate da questo browser.' : pushPermission === 'denied' ? 'Permesso negato dal browser. Abilitalo dalle impostazioni del sito per riattivarle.' : isSubscribed ? 'Attive su questo dispositivo.' : 'Non attive.'}</p>{pushError ? <p role="alert" className="mt-2 text-sm text-[color:var(--cs-danger)]">{pushError}</p> : null}</div></div>{pushSupported && pushPermission !== 'denied' ? <button type="button" disabled={pushBusy} className="cs-btn cs-btn--secondary min-h-11 shrink-0" onClick={() => void handlePush(!isSubscribed)}>{pushBusy ? 'Aggiornamento...' : isSubscribed ? 'Disattiva' : 'Attiva'}</button> : null}</div><div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--cs-border-canonical)] pt-4"><div><p className="font-medium">Installazione PWA</p><p className="text-sm text-[color:var(--cs-text-secondary)]">Accesso rapido e notifiche dal dispositivo.</p></div><InstallPwaButton /></div><div className="flex min-h-11 items-center justify-between gap-3 border-t border-[color:var(--cs-border-canonical)] pt-4"><div><p className="font-medium">Aspetto</p><p className="text-sm text-[color:var(--cs-text-secondary)]">Scegli il tema dell’app.</p></div><ThemeToggle /></div></div></Panel><Panel><SectionIntro eyebrow="Account" title="Impostazioni e sicurezza" /><p className="mt-4 text-sm text-[color:var(--cs-text-secondary)]">Le impostazioni dell’account e della sicurezza sono disponibili nell’area personale.</p><button type="button" onClick={() => void handleSignOut()} className="cs-btn cs-btn--secondary mt-5 min-h-11 w-full sm:w-auto">Esci dall’account</button></Panel></div>
+  useEffect(() => {
+    const supported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+    setPushSupported(supported)
+    if (!supported) return
+    setPushPermission(Notification.permission)
+    navigator.serviceWorker.getRegistration()
+      .then(async (registration) => setIsSubscribed(Boolean(await registration?.pushManager.getSubscription())))
+      .catch(() => setIsSubscribed(false))
+  }, [])
+
+  const handlePush = async (enabled: boolean) => {
+    setPushBusy(true)
+    setPushError(null)
+    try {
+      if (enabled) {
+        await subscribe('Dispositivo personale')
+        setPushPermission(Notification.permission)
+        setIsSubscribed(true)
+      } else {
+        await unsubscribe()
+        setIsSubscribed(false)
+      }
+    } catch (caught) {
+      setPushError(caught instanceof Error && caught.message === 'Permission denied'
+        ? 'Permesso notifiche non concesso. Puoi abilitarlo dalle impostazioni del sito nel browser.'
+        : 'Impossibile aggiornare le notifiche su questo dispositivo. Riprova quando hai una connessione disponibile.')
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+    } finally {
+      window.location.replace('/login')
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Panel>
+        <SectionIntro eyebrow="Preferenze account" title="Notifiche e app" />
+        <div className="mt-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-start gap-3">
+              <Bell className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--cs-brand-red)]" aria-hidden="true" />
+              <div>
+                <p className="font-medium">Notifiche push</p>
+                <p className="text-sm text-[color:var(--cs-text-secondary)]">
+                  {!pushSupported ? 'Non supportate da questo browser.' : pushPermission === 'denied' ? 'Permesso negato dal browser. Abilitalo dalle impostazioni del sito per riattivarle.' : isSubscribed ? 'Attive su questo dispositivo.' : 'Non attive.'}
+                </p>
+                {pushError ? <p role="alert" className="mt-2 text-sm text-[color:var(--cs-danger)]">{pushError}</p> : null}
+              </div>
+            </div>
+            {pushSupported && pushPermission !== 'denied' ? (
+              <button type="button" disabled={pushBusy} className="cs-btn cs-btn--secondary min-h-11 shrink-0" onClick={() => void handlePush(!isSubscribed)}>
+                {pushBusy ? 'Aggiornamento...' : isSubscribed ? 'Disattiva' : 'Attiva'}
+              </button>
+            ) : null}
+          </div>
+          <AthleteAnalyticsSettings />
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--cs-border-canonical)] pt-4">
+            <div><p className="font-medium">Installazione PWA</p><p className="text-sm text-[color:var(--cs-text-secondary)]">Accesso rapido e notifiche dal dispositivo.</p></div>
+            <InstallPwaButton />
+          </div>
+          <div className="flex min-h-11 items-center justify-between gap-3 border-t border-[color:var(--cs-border-canonical)] pt-4">
+            <div><p className="font-medium">Aspetto</p><p className="text-sm text-[color:var(--cs-text-secondary)]">Scegli il tema dell’app.</p></div>
+            <ThemeToggle />
+          </div>
+        </div>
+      </Panel>
+      <Panel>
+        <SectionIntro eyebrow="Account" title="Impostazioni e sicurezza" />
+        <p className="mt-4 text-sm text-[color:var(--cs-text-secondary)]">Le impostazioni dell’account e della sicurezza sono disponibili nell’area personale.</p>
+        <button type="button" onClick={() => void handleSignOut()} className="cs-btn cs-btn--secondary mt-5 min-h-11 w-full sm:w-auto">Esci dall’account</button>
+      </Panel>
+    </div>
+  )
 }
 
 export default function AthleteProfileManager({ section = 'overview' }: { section?: AthleteProfileSection }) {

@@ -13,6 +13,8 @@ import { BottomNavigation } from './BottomNavigation'
 import { useAccessibleProfiles } from '@/context/AccessibleProfileContext'
 import { SubjectSwitcher } from './SubjectSwitcher'
 import { TeamSwitcher } from './TeamSwitcher'
+import AthleteAnalyticsController from '@/components/analytics/AthleteAnalyticsController'
+import { stopAthleteAnalytics } from '@/lib/analytics/athlete-analytics'
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || ''
@@ -73,6 +75,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   }, [account?.mustChangePassword, profile, pathname, router])
 
   const handleSignOut = async () => {
+    stopAthleteAnalytics()
     try {
       await signOut()
     } finally {
@@ -197,6 +200,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
         </aside>
 
         <main className={isAdminShell ? 'cs-main cs-admin-workspace' : showBottomNavigation ? 'cs-main cs-main--athlete cs-main--with-bottomnav' : 'cs-main'}>
+          <AthleteAnalyticsController />
           <NextStepViewport id="app-viewport">{children}</NextStepViewport>
         </main>
       </div>

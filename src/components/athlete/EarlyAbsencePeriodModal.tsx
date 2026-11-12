@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Modal from '@/components/ui/Modal'
 import { appendSubjectProfile } from '@/context/AccessibleProfileContext'
 import type { AthleteCalendarEvent } from '@/types/athlete-calendar'
+import { trackAthleteEvent } from '@/lib/analytics/athlete-analytics'
 
 const PAGE_SIZE = 20
 
@@ -164,6 +165,7 @@ export default function EarlyAbsencePeriodModal({ open, subjectProfileId, onClos
         setError(staleError)
         return
       }
+      trackAthleteEvent({ event: 'athlete_absence_reported', properties: { scope: from === to ? 'single' : 'period' } })
       onSaved(selectedEvents.map((event) => event.id))
       onClose()
     } catch (cause: unknown) {

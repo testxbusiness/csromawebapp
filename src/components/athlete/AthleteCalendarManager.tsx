@@ -26,6 +26,7 @@ import EarlyAbsencePeriodModal from '@/components/athlete/EarlyAbsencePeriodModa
 import { syncAthleteAttendanceCaches } from '@/lib/athlete/cache-synchronization'
 import { useAthleteEventDetailQuery } from '@/lib/athlete/event-detail'
 import { useAthleteFirstLoadDiagnostics } from '@/lib/performance/athlete-first-load'
+import { trackAthleteEvent } from '@/lib/analytics/athlete-analytics'
 
 type Event = AthleteCalendarEvent
 interface TeamLite { id: string; name: string; code: string }
@@ -152,6 +153,8 @@ export default function AthleteCalendarManager() {
       if (!response.ok) throw new Error(result?.error || 'Impossibile salvare la risposta')
       if (controller.signal.aborted || subjectContextRef.current !== selectedProfileId) return
 
+      trackAthleteEvent({ event: 'athlete_attendance_response_saved', properties: { response: status } })
+
       const respondedAt = new Date().toISOString()
       if (accountId && subjectProfileId) {
         syncAthleteAttendanceCaches(queryClient, accountId, subjectProfileId, {
@@ -176,6 +179,7 @@ export default function AthleteCalendarManager() {
     const result = await response.json().catch(() => null) as { error?: string } | null
     if (!response.ok) throw new Error(result?.error || 'Impossibile aggiornare l’assenza')
     if (subjectContextRef.current !== selectedProfileId) return
+    if (!revoke) trackAthleteEvent({ event: 'athlete_absence_reported', properties: { scope: 'single' } })
     if (accountId && subjectProfileId) {
       const currentEvent = events.find((event) => event.id === eventId)
       const currentAvailability = currentEvent?.attendance_availability
